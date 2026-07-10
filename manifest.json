@@ -1,0 +1,27 @@
+{
+  "name": "THE VESSEL CODE — TVC-PMS",
+  "short_name": "TVC-PMS",
+  "description": "THE VESSEL CODE — Offline-first Planned Maintenance System for vessels",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c1929",
+  "theme_color": "#1a365d",
+  "lang": "ko",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

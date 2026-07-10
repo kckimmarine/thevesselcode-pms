@@ -1,0 +1,21 @@
+{
+  "name": "thevesselcode-offline-pms",
+  "version": "2.0.0",
+  "description": "THE VESSEL CODE — Unified PMS + SPICS (Offline-First)",
+  "scripts": {
+    "import-xlsx": "python scripts/import-pms-xlsx.py",
+    "serve": "npx --yes serve . -p 3000",
+    "start": "npx --yes serve . -p 3000",
+    "vendor-sync": "node scripts/vendor-sync.mjs",
+    "verify-rbac": "node scripts/verify-rbac.mjs",
+    "verify-sync-vessel": "node scripts/verify-sync-vessel.mjs",
+    "verify-all": "node scripts/verify-rbac.mjs && node scripts/verify-sync-vessel.mjs"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "exceljs": "^4.4.0",
+    "jszip": "^3.10.1",
+    "uuid": "^14.0.0",
+    "xlsx": "^0.18.5"
+  }
+}

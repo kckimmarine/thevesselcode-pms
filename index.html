@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <meta name="theme-color" content="#1a365d">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="TVC-PMS">
+    <meta name="application-name" content="TVC-PMS">
+    <meta name="description" content="THE VESSEL CODE — Offline-first Planned Maintenance System">
+    <title>THE VESSEL CODE — TVC-PMS</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+    <link rel="stylesheet" href="css/app.css?v=20260710-reqhead">
+</head>
+<body>
+
+<!-- 1. Login -->
+<div id="loginScreen" class="login-screen">
+    <div id="loginFileBanner" class="login-file-banner hidden">
+        ⚠️ <b>file:// 로 열렸습니다</b> — 데이터·재고가 비어 보일 수 있습니다.
+        <code>START-TVC-PMS.bat</code> 더블클릭 또는 <code>npm start</code> → localhost:3000
+    </div>
+
+    <header class="login-brand" aria-label="THE VESSEL CODE">
+        <div class="login-logo" aria-hidden="true">
+            <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="24" cy="24" r="22" stroke="currentColor" stroke-width="1.5" opacity="0.35"/>
+                <path d="M24 8v32M8 24h32" stroke="currentColor" stroke-width="1" opacity="0.2"/>
+                <path d="M14 30c3-6 7-9 10-9s7 3 10 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+                <path d="M24 14v6M21 17h6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <div class="login-brand-text">
+            <span class="login-brand-name">THE VESSEL CODE</span>
+            <span class="login-brand-tag">Command Center for Global Shipping.</span>
+        </div>
+    </header>
+
+    <main class="login-main">
+        <div class="login-card">
+            <div class="login-card-head">
+                <h2 class="login-card-title">Sign in</h2>
+                <p class="login-card-sub">Enter your credentials to access the platform</p>
+            </div>
+            <form class="login-form" onsubmit="event.preventDefault();TVC_App.handleLogin();">
+                <div class="login-field">
+                    <label for="loginUser">Username</label>
+                    <input id="loginUser" type="text" placeholder="officer" autocomplete="username">
+                </div>
+                <div class="login-field">
+                    <label for="loginPass">Password</label>
+                    <input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">
+                </div>
+                <div class="login-field">
+                    <label for="loginDept">Department</label>
+                    <select id="loginDept">
+                        <option value="">— Select Department —</option>
+                        <option value="DECK">Deck</option>
+                        <option value="ENGINE">Engine</option>
+                    </select>
+                </div>
+                <button type="submit" class="login-submit">Sign In</button>
+                <div id="loginErr" class="login-err" role="alert"></div>
+            </form>
+            <div class="login-hint">
+                <span class="login-hint-label">Demo access</span>
+                Password <strong>0000</strong>
+                <ul class="login-hint-list">
+                    <li><b>Deck</b> · officer / captain</li>
+                    <li><b>Engine</b> · engineer / ce</li>
+                    <li><b>HQ</b> · hq (no department required)</li>
+                </ul>
+            </div>
+        </div>
+    </main>
+
+    <footer class="login-footer">v2.0.0 &nbsp;|&nbsp; © 2026 K-TECH</footer>
+</div>
+
+<div id="appShell" class="hidden">
+    <div id="fileProtocolBanner" class="file-protocol-banner hidden">
+        ⚠️ <b>file:// 모드</b> — localhost와 저장소가 다릅니다. <code>START-TVC-PMS.bat</code> 사용 권장
+    </div>
+    <div id="seedBanner" class="hidden">
+        ⚠️ Load seed: <input type="file" id="seedFile" accept=".json" hidden onchange="TVC_App.loadSeedFile(this.files[0])">
+        <button class="btn-sm" onclick="document.getElementById('seedFile').click()">pms-unified.json</button>
+        or <code>npx serve .</code>
+    </div>
+
+    <!-- Persistent Header: Ship info (left) + Department toggle & actions (right) -->
+    <header class="cmaxs-header">
+        <button type="button" id="mobileNavBtn" class="mobile-nav-btn" aria-label="Open navigation menu" aria-expanded="false" aria-controls="tabBar">
+            <span class="mobile-nav-icon" aria-hidden="true"></span>
+        </button>
+        <div class="cmaxs-ship">
+            <span class="ship-flag">⚓</span>
+            <div class="ship-fields">
+                <div class="ship-name-row">
+                    <span class="fld-label">Ship's Name</span>
+                    <strong id="cmaxsShipName" class="fld-value ship-name">—</strong>
+                </div>
+                <div class="ship-meta">
+                    <span><span class="fld-label">Code</span> <span id="cmaxsShipCode" class="fld-value">—</span></span>
+                    <span><span class="fld-label">Delivery</span> <span id="cmaxsShipDelivery" class="fld-value">—</span></span>
+                    <span><span class="fld-label">User</span> <span class="userNameEl fld-value title-badge">—</span></span>
+                    <span class="userBadgeEl pill ok">—</span>
+                </div>
+            </div>
+        </div>
+        <div class="cmaxs-toprite">
+            <div class="dept-toggle" role="group" aria-label="Department">
+                <span class="dept-label">Department</span>
+            </div>
+            <button class="btn btn-ghost cmaxs-action-print" onclick="TVC_App.printCurrentTab(false)">🖨 Print</button>
+            <button class="btn btn-ghost cmaxs-action-print" onclick="TVC_App.printCurrentTab(true)">👁 Preview</button>
+            <button class="btn btn-red" onclick="TVC_App.handleLogout()">End</button>
+        </div>
+    </header>
+
+    <div id="pwaOfflineBadge" class="pwa-offline-badge hidden" role="status" aria-live="polite">
+        📡 Offline mode — local data available
+    </div>
+
+    <div id="mobileNavBackdrop" class="mobile-nav-backdrop" aria-hidden="true"></div>
+
+    <!-- Persistent Tab Bar -->
+    <nav id="tabBar" class="tab-bar" role="tablist">
+        <button class="tab-btn active" data-tab="menu" onclick="TVC_App.switchTab('menu')">📑 Menu</button>
+        <button class="tab-btn" data-tab="original" onclick="TVC_App.switchTab('original')">📅 Original Plan</button>
+        <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 Actual Plan</button>
+        <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Work History</button>
+        <button class="tab-btn" data-tab="runhrs" onclick="TVC_App.switchTab('runhrs')">⚙️ Equipment Run Hrs</button>
+        <button class="tab-btn" data-tab="spare" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
+        <button class="tab-btn" data-tab="notice" onclick="TVC_App.switchTab('notice')">📢 Preparation Notice</button>
+    </nav>
+
+    <div id="tabContent">
+        <!-- TAB: Menu (CMAXS main menu home) -->
+        <section id="tab-menu" class="tab-pane">
+            <div class="cmaxs-legend">How to use this system. [ ] shows authority. &nbsp;
+                <b>[A]</b> Administrator &nbsp; <b>[B]</b> Approve &nbsp; <b>[C]</b> Input &nbsp; <b>[D]</b> Review
+            </div>
+            <div class="cmaxs-body" id="cmaxsMenuBody">
+                <aside id="fleetListPanel" class="fleet-list-panel hidden">
+                    <div class="fleet-list-head">🚢 Ship List</div>
+                    <div class="fleet-list-toolbar">
+                        <button class="fleet-view-btn active" data-fview="all" onclick="TVC_App.setFleetView('all')">View: All</button>
+                        <button class="fleet-view-btn" data-fview="selected" onclick="TVC_App.setFleetView('selected')">Selected</button>
+                    </div>
+                    <div class="fleet-search-bar">
+                        <input class="search-input" id="fleetSearch" placeholder="Search ship name / code…" oninput="TVC_App.setFleetSearch(this.value)">
+                    </div>
+                    <div class="fleet-table-wrap">
+                        <table class="fleet-table">
+                            <thead><tr>
+                                <th>No</th><th>Ship's Name</th><th>Code</th><th>Delivery</th>
+                            </tr></thead>
+                            <tbody id="fleetTableBody"></tbody>
+                        </table>
+                    </div>
+                </aside>
+                <div class="menu-main-col">
+                    <div class="cmaxs-cards" id="cmaxsCards"></div>
+                </div>
+                <section class="hist-panel">
+                    <div class="hist-head">Import &amp; Export History
+                        <span class="hist-dept-note">Dept: <strong id="histDeptLabel">Engine</strong></span>
+                    </div>
+                    <div class="hist-tabs">
+                        <button class="hist-tab active" data-htab="all" onclick="TVC_App.setHistTab('all')">All</button>
+                        <button class="hist-tab" data-htab="EXPORT" onclick="TVC_App.setHistTab('EXPORT')">Export</button>
+                        <button class="hist-tab" data-htab="IMPORT" onclick="TVC_App.setHistTab('IMPORT')">Import</button>
+                    </div>
+                    <div class="hist-table-wrap">
+                        <table class="hist-table">
+                            <thead><tr>
+                                <th>No</th><th>Date/Time</th><th>Type</th><th>Direction</th>
+                                <th>Dept</th><th>File</th><th>Records</th><th>Status</th>
+                            </tr></thead>
+                            <tbody id="histTableBody"></tbody>
+                        </table>
+                    </div>
+                </section>
+            </div>
+        </section>
+
+        <!-- TAB: Original Plan -->
+        <section id="tab-original" class="tab-pane hidden">
+            <div class="sheet-head">
+                <h2>📅 Original Plan</h2>
+                <span class="sheet-sub">Preventive maintenance master plan · Report Input from selected job</span>
+                <span id="origPlanCalcMsg" class="plan-calc-msg hidden"></span>
+                <span style="flex:1"></span>
+                <button type="button" id="origUpdatePlanBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateOriginalPlanFromRunHours()">↻ Update Plan</button>
+            </div>
+            <div class="plan-layout orig-layout">
+                <aside class="panel tree-panel">
+                    <div class="panel-head">🌳 GROUP Tree</div>
+                    <div class="tree-search-bar">
+                        <input class="search-input" id="origTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
+                    </div>
+                    <div class="tree-actions hidden" id="origTreeActions">
+                        <button type="button" id="origGroupAddBtn" class="btn btn-sm" onclick="TVC_App.openOrigGroupAdd()">➕ Add Group</button>
+                        <button type="button" id="origGroupRenameBtn" class="btn btn-sm" disabled onclick="TVC_App.openOrigGroupRename()">✏️ Rename Group</button>
+                    </div>
+                    <div class="panel-body tree-scroll" id="origTree"></div>
+                </aside>
+                <main class="panel">
+                    <div class="filter-bar orig-toolbar">
+                        <button type="button" id="origModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">✏️ Modify</button>
+                        <button type="button" id="origAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">➕ Append</button>
+                        <button type="button" id="origDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">🗑 Delete</button>
+                        <span class="orig-toolbar-sep"></span>
+                        <input class="search-input" id="origSearch" placeholder="Search JOB CODE / DETAIL…" oninput="TVC_App.setSearch(this.value)">
+                        <span class="count-label" id="origCount">—</span>
+                    </div>
+                    <div id="origHead" class="vl-head-wrap"></div>
+                    <div id="origScroll" class="virtual-scroll"></div>
+                </main>
+                <aside class="panel queues-side">
+                    <div class="panel-head">Selected Job</div>
+                    <div class="panel-body">
+                        <div id="origSidePanel"><p class="muted">Click a row to select · Double-click for Work Procedure</p></div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <!-- TAB: Actual Plan -->
+        <section id="tab-actual" class="tab-pane hidden">
+            <div class="sheet-head"><h2>📝 Actual Plan</h2><span class="sheet-sub">Overdue &amp; due this month · report input / approval</span></div>
+            <div id="spicsAlertBanner" class="spics-alert-banner hidden" style="margin:0 20px 8px"></div>
+            <div class="plan-layout actual-layout">
+                <aside class="panel tree-panel">
+                    <div class="panel-head">🌳 GROUP Tree</div>
+                    <div class="tree-search-bar">
+                        <input class="search-input" id="actTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
+                    </div>
+                    <div class="panel-body tree-scroll" id="actTree"></div>
+                </aside>
+                <main class="panel">
+                    <div class="filter-bar">
+                        <button class="filter-tab" data-afilter="total" onclick="TVC_App.setActualFilter('total')">Total Jobs</button>
+                        <button class="filter-tab overdue-tab" data-afilter="overdue" onclick="TVC_App.setActualFilter('overdue')">Overdue</button>
+                        <button class="filter-tab" data-afilter="due30" onclick="TVC_App.setActualFilter('due30')">Due 30d</button>
+                        <button class="filter-tab" data-afilter="pending" onclick="TVC_App.setActualFilter('pending')">Pending Reports</button>
+                        <div id="actPeriodFilter" class="act-period-filter" title="기간으로 작업 검색">
+                            <span class="act-period-label">Period</span>
+                            <input type="date" id="actPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onActualPeriodChange()">
+                            <span class="act-period-sep">~</span>
+                            <input type="date" id="actPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onActualPeriodChange()">
+                            <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearActualPeriod()">Clear</button>
+                        </div>
+                        <input class="search-input" id="actSearch" placeholder="Search JOB CODE…" oninput="TVC_App.setSearch(this.value)">
+                        <span class="count-label" id="actCount">—</span>
+                    </div>
+                    <div id="actHead" class="vl-head-wrap"></div>
+                    <div id="actScroll" class="virtual-scroll"></div>
+                </main>
+                <aside class="panel queues-side">
+                    <div class="panel-head">Selected Job</div>
+                    <div class="panel-body">
+                        <div id="sidePanel"><p class="muted">Click a row to select · Double-click for Work Procedure</p></div>
+                    </div>
+                </aside>
+            </div>
+        </section>
+
+        <!-- TAB: Work History -->
+        <section id="tab-history" class="tab-pane hidden">
+            <div class="sheet-head"><h2>📜 Work History</h2><span class="sheet-sub">Select a row · double-click or Detail Work Report · check (ㅁ) for Report Approval</span></div>
+            <div class="hist-toolbar filter-bar">
+                <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Work Report</button>
+                <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Report Approval</button>
+                <span class="orig-toolbar-sep"></span>
+                <button type="button" id="histBtnModify" class="btn btn-sm" disabled onclick="TVC_App.histModifyReport()">Modify</button>
+                <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
+                <span class="orig-toolbar-sep"></span>
+                <input class="search-input" id="histSearch" placeholder="Search JOB CODE / DETAIL…" oninput="TVC_App.setSearch(this.value)">
+                <span class="count-label" id="histCount">—</span>
+            </div>
+            <p class="hist-legend">DR: Docking Repair · PR: Pending for Repair · CL: All Pending Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
+            <div class="sheet-table-wrap">
+                <table class="sheet-table hist-table">
+                    <thead><tr>
+                        <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
+                        <th>Job Code</th><th>SORT-1</th><th>SORT-2</th><th>JOB DETAIL</th>
+                        <th>Work Date</th><th>Status</th><th>File No</th><th>Voy. No</th>
+                        <th class="hist-flag-h" title="Docking Repair">DR</th>
+                        <th class="hist-flag-h" title="Pending for Repair">PR</th>
+                        <th class="hist-flag-h" title="All Pending Cleared">CL</th>
+                        <th class="hist-flag-h" title="Ship's Comment">SC</th>
+                        <th class="hist-flag-h" title="Company's Comment">CC</th>
+                        <th class="hist-at-h" title="Ship's Attachment">Ship's AT</th>
+                        <th class="hist-at-h" title="Company's Attachment">Company's AT</th>
+                    </tr></thead>
+                    <tbody id="historyBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- TAB: Equipment Run Hrs -->
+        <section id="tab-runhrs" class="tab-pane hidden">
+            <div class="sheet-head"><h2>⚙️ Equipment Run Hrs</h2><span class="sheet-sub">Run-hour based predictive scheduling · M/E &amp; No.1~3 G/E</span></div>
+            <div class="sheet-table-wrap">
+                <table class="sheet-table runhrs-table">
+                    <thead><tr>
+                        <th>Equipment / Group</th>
+                        <th>Run-hour Jobs</th>
+                        <th>Actual Run Hrs<br>Prev. Month</th>
+                        <th>Total Run Hours</th>
+                        <th>Expected Run Hrs<br>Next Month</th>
+                        <th>Updated</th>
+                        <th></th>
+                    </tr></thead>
+                    <tbody id="runHrsBody"></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- TAB: SPARE (Unified — Inventory · Search · Requisition) -->
+        <section id="tab-spare" class="tab-pane hidden">
+            <div class="sheet-head"><h2>🔩 SPARE</h2><span class="sheet-sub">Select a row · Modify / Append / Delete · double-click for detail</span></div>
+            <div id="spareMenuBody"></div>
+        </section>
+
+        <!-- TAB: Preparation Notice -->
+        <section id="tab-notice" class="tab-pane hidden">
+            <div class="sheet-head"><h2>📢 Preparation Notice</h2><span class="sheet-sub">Upcoming major maintenance &amp; inspections</span></div>
+            <div id="noticeList" class="notice-list"></div>
+        </section>
+    </div>
+
+    <input type="file" id="importZip" accept=".zip" hidden onchange="TVC_App.handleImport(this.files[0]);this.value=''">
+</div>
+
+<!-- Modals -->
+<div id="jobDetailModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('jobDetailModal')">
+    <div class="modal-box"><button class="modal-x" onclick="TVC_App.closeModal('jobDetailModal')">×</button>
+        <div id="jobDetailBody"></div>
+    </div>
+</div>
+<div id="workProcedureModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('workProcedureModal')">
+    <div class="modal-box wp-modal"><button class="modal-x" onclick="TVC_App.closeModal('workProcedureModal')">×</button>
+        <div id="workProcedureBody"></div>
+    </div>
+</div>
+<div id="origJobEditorModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('origJobEditorModal')">
+    <div class="modal-box orig-job-editor" onclick="event.stopPropagation()">
+        <button class="modal-x" onclick="TVC_App.closeModal('origJobEditorModal')">×</button>
+        <div id="origJobEditorBody"></div>
+    </div>
+</div>
+<div id="groupEditorModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('groupEditorModal')">
+    <div class="modal-box orig-job-editor" onclick="event.stopPropagation()">
+        <button class="modal-x" onclick="TVC_App.closeModal('groupEditorModal')">×</button>
+        <div id="groupEditorBody"></div>
+    </div>
+</div>
+<div id="workReportModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeWorkReport()">
+    <div class="modal-box wr-modal"><button class="modal-x" onclick="TVC_App.closeWorkReport()">×</button>
+        <div id="workReportBody"></div>
+    </div>
+</div>
+<div id="procedureHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('procedureHistoryModal')">
+    <div class="modal-box wide"><button class="modal-x" onclick="TVC_App.closeModal('procedureHistoryModal')">×</button>
+        <div id="procedureHistoryBody"></div>
+    </div>
+</div>
+<div id="deptPickModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('deptPickModal')">
+    <div class="modal-box dept-pick-box">
+        <button class="modal-x" onclick="TVC_App.closeModal('deptPickModal')">×</button>
+        <h3 id="deptPickTitle">부서를 선택하세요</h3>
+        <p class="muted">데이터가 섞이지 않도록 부서를 정확히 선택하세요.</p>
+        <div class="dept-pick-row">
+            <button class="btn dept-pick-btn deck" onclick="TVC_App.resolveDeptPick('DECK')">⚓<br>Deck</button>
+            <button class="btn dept-pick-btn engine" onclick="TVC_App.resolveDeptPick('ENGINE')">⚙️<br>Engine</button>
+        </div>
+    </div>
+</div>
+<div id="spareDetailModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('spareDetailModal')">
+    <div class="modal-box wide spics-detail-modal"><button class="modal-x" onclick="TVC_App.closeModal('spareDetailModal')">×</button>
+        <div id="spareDetailBody"></div>
+    </div>
+</div>
+
+<div id="spareTxModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeTxModal()">
+    <div class="modal-box wide spics-tx-modal"><div id="spareTxModalBody"></div></div>
+</div>
+<div id="spareAssessmentModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeAssessmentModal()">
+    <div class="modal-box wide"><div id="spareAssessmentBody"></div></div>
+</div>
+<div id="spareHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeHistoryModal()">
+    <div class="modal-box wide"><div id="spareHistoryBody"></div></div>
+</div>
+<div id="spareReqListModal" class="modal hidden spare-req-list-modal-wrap">
+    <div class="modal-box spare-req-list-modal" onclick="event.stopPropagation()"><div id="spareReqListBody"></div></div>
+</div>
+<div id="spareReqWorkModal" class="modal hidden spare-req-work-modal-wrap">
+    <div class="modal-box spare-req-work-modal" onclick="event.stopPropagation()"><div id="spareReqWorkBody"></div></div>
+</div>
+<div id="spareReqSheetModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeReqSheetModal()">
+    <div class="modal-box req-sheet-modal" onclick="event.stopPropagation()"><div id="spareReqSheetBody"></div></div>
+</div>
+<div id="planCalcModal" class="modal plan-calc-modal hidden" aria-live="polite">
+    <div class="modal-box plan-calc-box">
+        <h3 class="plan-calc-title">Calculation</h3>
+        <p class="plan-calc-text">Now calculating... Please wait for a while.</p>
+        <div class="plan-calc-track"><div class="plan-calc-fill" id="planCalcFill"></div></div>
+    </div>
+</div>
+<div id="planUpdateModal" class="modal hidden">
+    <div class="modal-box plan-update-box" onclick="event.stopPropagation()">
+        <h3 class="plan-update-title">Original Plan Update</h3>
+        <p class="plan-update-msg">If 'OK' button was selected, 'Original Plan' would be updated and following figures would be recorded as final result.<br>
+            If there were remained work report, please input them after selecting 'Cancel' button.</p>
+        <p class="plan-update-status">Status On : <strong id="planUpdateStatusDate">—</strong></p>
+        <table class="plan-update-table">
+            <thead><tr><th>Item</th><th>Outstand'g</th><th>Monthly Planned</th><th>Rate (%)</th></tr></thead>
+            <tbody>
+                <tr><td>Non-Critical</td><td id="planUpNonOut">0</td><td id="planUpNonMon">0</td><td id="planUpNonRate" class="plan-up-rate">0.00</td></tr>
+                <tr><td>Critical</td><td id="planUpCritOut">0</td><td id="planUpCritMon">0</td><td id="planUpCritRate" class="plan-up-rate">0.00</td></tr>
+            </tbody>
+        </table>
+        <p id="planUpdatePendingHint" class="plan-update-pending hidden"></p>
+        <div class="plan-update-sign">
+            <label>Sign in (Ship code)<input type="text" id="planUpdateShipCode" value="TVC" maxlength="16"></label>
+        </div>
+        <div class="modal-actions plan-update-actions">
+            <button type="button" class="btn btn-green" onclick="TVC_App.confirmPlanUpdate(true)">OK</button>
+            <button type="button" class="btn" onclick="TVC_App.confirmPlanUpdate(false)">Cancel</button>
+        </div>
+    </div>
+</div>
+<!-- spareDetailModal kept for legacy; unified SPARE uses slide panel -->
+
+<div id="fileProtocolModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('fileProtocolModal')">
+    <div class="modal-box">
+        <button class="modal-x" onclick="TVC_App.closeModal('fileProtocolModal')">×</button>
+        <h3>⚠️ index.html 직접 열기 (file://)</h3>
+        <p>브라우저 보안상 <b>localhost와 다른 저장소</b>를 사용합니다.</p>
+        <ul class="file-protocol-list">
+            <li>PMS·SPARE 데이터가 <b>비어 보이거나</b> Import가 안 됩니다</li>
+            <li><code>npm start</code> 로 본 데이터와 <b>공유되지 않습니다</b></li>
+        </ul>
+        <p><b>해결:</b> 프로젝트 폴더의 <code>START-TVC-PMS.bat</code> 더블클릭<br>
+        (또는 터미널에서 <code>npm start</code> → <code>http://localhost:3000</code>)</p>
+        <div class="modal-actions">
+            <button class="btn btn-green" onclick="TVC_App.closeModal('fileProtocolModal')">확인</button>
+        </div>
+    </div>
+</div>
+
+<script src="vendor/jszip.min.js"></script>
+<script src="vendor/exceljs.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<script src="js/rbac.js?v=20260708-rbac-window"></script>
+<script src="js/core/schema.js?v=20260710-savefix"></script>
+<script src="js/core/db.js"></script>
+<script src="js/core/indexes.js"></script>
+<script src="js/pms.js"></script>
+<script src="js/ui/virtualList.js?v=20260709-scroll"></script>
+<script src="js/ui/modalDrag.js"></script>
+<script src="js/ui/runHours.js"></script>
+<script src="js/ui/spareMenu.js?v=20260710-ghpersist"></script>
+<script src="js/ui/spareRequest.js"></script>
+<script src="js/services/jobMeta.js"></script>
+<script src="js/services/inventory.js"></script>
+<script src="js/services/inventoryService.js"></script>
+<script src="js/services/excel.js"></script>
+<script src="js/core/pbkdf2-fallback.js"></script>
+<script src="js/auth.js?v=20260709-lan-login"></script>
+<script src="js/services/transaction.js"></script>
+<script src="js/services/maintenancePlan.js"></script>
+<script src="js/services/sync.js"></script>
+<script src="js/services/fleet.js"></script>
+<script src="js/services/dataPurge.js?v=20260708-req-draft-only"></script>
+<script src="js/services/seed.js"></script>
+<script src="js/app.js?v=20260710-ghgroup"></script>
+<script src="js/pwa.js?v=20260709-pwa"></script>
+</body>
+</html>

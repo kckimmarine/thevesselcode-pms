@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>THE VESSEL CODE - Mobile PMS</title>
+    <style>
+        :root { --primary: #1a365d; --accent: #2b6cb0; --danger: #e53e3e; --bg: #f7fafc; }
+        body { margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, sans-serif; background-color: var(--bg); }
+        .app-bar { background-color: var(--primary); color: white; padding: 15px; text-align: center; font-weight: bold; font-size: 18px; position: sticky; top: 0; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .sub-bar { background-color: #2d3748; color: #cbd5e0; padding: 8px; text-align: center; font-size: 11px; }
+        .card-container { padding: 15px; }
+        .card { background: white; border-radius: 12px; padding: 16px; margin-bottom: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); border: 1px solid #e2e8f0; }
+        .card-title { font-size: 15px; font-weight: bold; color: var(--primary); margin-bottom: 6px; display: flex; justify-content: space-between; }
+        .part-no { font-size: 12px; color: #718096; font-weight: normal; }
+        .qty-badge { background-color: #edf2f7; color: #2d3748; padding: 2px 8px; border-radius: 12px; font-weight: bold; font-size: 13px; }
+        .qty-alert { background-color: #fff5f5; border: 1px solid #fed7d7; }
+        .qty-alert .qty-badge { background-color: var(--danger); color: white; }
+        .btn-sync { background-color: #2f855a; color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; width: 100%; margin-bottom: 15px; cursor: pointer; }
+        .status-tag { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 11px; font-weight: bold; margin-top: 5px; }
+        .status-pending { background-color: #feebc8; color: #c05621; }
+        .status-supplied { background-color: #c6f6d5; color: #22543d; }
+    </style>
+</head>
+<body>
+
+    <div class="app-bar">⚓ THE VESSEL CODE Mobile</div>
+    <div class="sub-bar">본선 수신 데이터 모바일 동기화 제어판</div>
+
+    <div class="card-container">
+        <input type="file" id="mobileImport" accept=".json,application/json" onchange="importMobileData()" style="display: none;">
+        <button class="btn-sync" onclick="document.getElementById('mobileImport').click()">📥 메일 수신파일(.json) 동기화</button>
+
+        <h3 style="color: var(--primary); margin-left: 5px;">📦 부품 재고 현황</h3>
+        <div id="mobileInventorySpace"></div>
+
+        <h3 style="color: var(--primary); margin-top: 20px; margin-left: 5px;">📝 청구 및 공급 로그</h3>
+        <div id="mobileReqSpace"></div>
+    </div>
+
+<script>
+    let defaultInventory = [
+        { id: "1", name: "Exhaust Valve Spindle", partNo: "ME-E-01", qty: 4, minQty: 2 },
+        { id: "2", name: "F.O. Injector Nozzle", partNo: "ME-F-12", qty: 12, minQty: 6 },
+        { id: "3", name: "No.1 A/E Piston Ring Set", partNo: "AE1-P-04", qty: 1, minQty: 2 }
+    ];
+    let defaultReq = [
+        { id: "101", partName: "Exhaust Valve Spindle", qty: 4, status: "PENDING", date: "2026. 06. 15" }
+    ];
+
+    let inventory = JSON.parse(localStorage.getItem('vessel_inventory')) || defaultInventory;
+    let requisitions = JSON.parse(localStorage.getItem('vessel_requisitions')) || defaultReq;
+
+    function renderMobileView() {
+        let invHtml = "";
+        inventory.forEach(item => {
+            let isLow = item.qty <= item.minQty;
+            invHtml += `
+                <div class="card ${isLow ? 'qty-alert' : ''}">
+                    <div class="card-title">
+                        <div><strong>${item.name}</strong><br><span class="part-no">P/N: ${item.partNo}</span></div>
+                        <span class="qty-badge">${item.qty} EA</span>
+                    </div>
+                </div>`;
+        });
+        document.getElementById('mobileInventorySpace').innerHTML = invHtml;
+
+        let reqHtml = "";
+        requisitions.forEach(req => {
+            reqHtml += `
+                <div class="card">
+                    <div class="card-title">
+                        <span>${req.partName}</span>
+                        <span>${req.qty} EA</span>
+                    </div>
+                    <div style="font-size:11px; color:#718096;">신청일: ${req.date}</div>
+                    <span class="status-tag ${req.status === 'PENDING' ? 'status-pending' : 'status-supplied'}">${req.status}</span>
+                </div>`;
+        });
+        document.getElementById('mobileReqSpace').innerHTML = reqHtml;
+    }
+
+    function importMobileData() {
+        let fileInput = document.getElementById('mobileImport');
+        let file = fileInput.files[0];
+        if (!file) return;
+        let reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                let imported = JSON.parse(e.target.result);
+                if (imported.inventory && imported.requisitions) {
+                    localStorage.setItem('vessel_inventory', JSON.stringify(imported.inventory));
+                    localStorage.setItem('vessel_requisitions', JSON.stringify(imported.requisitions));
+                    inventory = imported.inventory;
+                    requisitions = imported.requisitions;
+                    renderMobileView();
+                    alert("⚓ 본선 데이터가 모바일 제어판에 완벽히 연동되었습니다!");
+                } else {
+                    alert("올바른 PMS 데이터 파일이 아닙니다.");
+                }
+            } catch (err) {
+                alert("올바른 PMS 데이터 파일이 아닙니다.");
+            }
+            fileInput.value = '';
+        };
+        reader.readAsText(file);
+    }
+
+    renderMobileView();
+</script>
+</body>
+</html>

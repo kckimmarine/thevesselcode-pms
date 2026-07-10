@@ -1,0 +1,568 @@
+/* THE VESSEL CODE — IndexedDB Schema & Constants
+ *
+ * ▸ 확장 원칙 (20년 유지보수 지향):
+ *   1. 기존 store/field는 절대 제거·개명하지 않는다 (하위호환 보장).
+ *   2. 신규 데이터는 신규 store 또는 "선택적(optional) field"로만 추가한다.
+ *   3. 인덱스 추가는 DB_VERSION을 올리면 db.js의 onupgradeneeded가
+ *      "누락된 store/index만" 생성하도록 reconcile 한다 (파괴적 재생성 없음).
+ *   4. 모든 레코드는 sync_status / updated_at / (선택) schema_version 을 갖는다.
+ */
+const TVC_SCHEMA = {
+    DB_NAME: 'tvc_pms_v2',
+    DB_VERSION: 6, // v6: maintenance_groups (Original Plan GROUP Tree — HQ 편집)
+    STORES: {
+        meta: { keyPath: 'key' },
+        users: { keyPath: 'id' },
+        ship_components: { keyPath: 'id' },
+        maintenance_jobs: { keyPath: 'id' },
+        maintenance_groups: { keyPath: 'id' },
+        spare_parts: { keyPath: 'id' },
+        daily_work_reports: { keyPath: 'id' },
+        audit_logs: { keyPath: 'id', autoIncrement: true },
+        sync_history: { keyPath: 'id', autoIncrement: true },
+        // ── v3 신규 (Inventory / Procurement) ──────────────────────────
+        universal_catalog: { keyPath: 'universal_code' }, // 공통 관리 코드 마스터
+        job_bom: { keyPath: 'id' },                        // 정비작업 ↔ 필요부품(BOM)
+        requisitions: { keyPath: 'id' },                   // 부품 청구서(Requisition)
+        inventory_history: { keyPath: 'id' },              // SPICS 입·출고 전용 이력
+    },
+    INDEXES: {
+        users: [{ name: 'username', keyPath: 'username', unique: true }],
+        ship_components: [
+            { name: 'by_parent', keyPath: 'parent_id' },
+            { name: 'by_sort', keyPath: 'sort_order' },
+        ],
+        maintenance_jobs: [
+            { name: 'by_job_code', keyPath: 'job_code' },
+            { name: 'by_department', keyPath: 'department' },
+            { name: 'by_component', keyPath: 'ship_component_id' },
+            { name: 'by_overdue', keyPath: 'is_overdue' },
+            { name: 'by_next_date', keyPath: 'next_date' },
+            { name: 'by_sync', keyPath: 'sync_status' },
+        ],
+        maintenance_groups: [
+            { name: 'by_department', keyPath: 'department' },
+        ],
+        spare_parts: [
+            { name: 'by_part_no', keyPath: 'part_no', unique: true },
+            { name: 'by_universal', keyPath: 'universal_code' },
+            { name: 'by_category', keyPath: 'category' },
+        ],
+        daily_work_reports: [
+            { name: 'by_status', keyPath: 'status' },
+            { name: 'by_job_code', keyPath: 'job_code' },
+            { name: 'by_sync', keyPath: 'sync_status' },
+        ],
+        sync_history: [
+            { name: 'by_direction', keyPath: 'direction' },
+            { name: 'by_at', keyPath: 'at' },
+        ],
+        job_bom: [
+            { name: 'by_job_code', keyPath: 'job_code' },
+            { name: 'by_spare', keyPath: 'spare_part_id' },
+        ],
+        requisitions: [
+            { name: 'by_status', keyPath: 'status' },
+            { name: 'by_vessel', keyPath: 'vessel_id' },
+            { name: 'by_department', keyPath: 'department' },
+        ],
+        inventory_history: [
+            { name: 'by_spare', keyPath: 'spare_part_id' },
+            { name: 'by_type', keyPath: 'tx_type' },
+            { name: 'by_at', keyPath: 'at' },
+            { name: 'by_part_no', keyPath: 'part_no' },
+        ],
+    },
+};
+
+/** SPICS inventory_history 거래 유형 */
+const TVC_INVENTORY_TX = {
+    CONSUMPTION: 'CONSUMPTION',
+    DELIVERY: 'DELIVERY',
+    REQUISITION: 'REQUISITION',
+    ADJUSTMENT: 'ADJUSTMENT',
+    IMPORT: 'IMPORT',
+    SETTLEMENT: 'SETTLEMENT',
+};
+
+const TVC_META_KEYS = {
+    VESSEL_ID: 'vessel_id',
+    LAST_EXPORT: 'last_export_at',
+    SEED_LOADED: 'seed_loaded',
+    DB_INIT: 'db_initialized_at',
+    INVENTORY_DEFAULTS: 'inventory_defaults_v1', // BOM/카탈로그 1회 시딩 여부
+    SPICS_SYNC: 'spics_sync_at',                 // SparePart 부팅 동기화 시각
+    INVENTORY_IMPORT: 'inventory_import_last',   // spare inventory.xls 마지막 import
+    INVENTORY_XLS_LOADED: 'inventory_xls_loaded', // data/spare-inventory.xls 자동 적재
+    ORIGINAL_PLAN_UPDATE: 'original_plan_update_last',
+    ORIGINAL_PLAN_LOCK: 'original_plan_lock_v1',
+};
+
+/** 번들 ENGINE CSV 경로 (우선순위 순) */
+const TVC_ENGINE_CSV_PATHS = [
+    'data/spare inventory.xls - ENGINE.csv',
+    'data/spare-inventory-engine.sample.csv',
+];
+
+/**
+ * SPICS — SparePart / MaintenanceTask 정규 스키마 (camelCase = API·UI 계약)
+ * IndexedDB 저장 시 snake_case 필드와 양방향 매핑 (TVC_SpareSchema).
+ * 기존 part_no / qty_on_hand 등 레거시 필드는 절대 제거하지 않는다.
+ */
+const TVC_SpareSchema = (function () {
+    const SCHEMA_VERSION = 1;
+
+    /** @typedef {Object} SparePart
+     *  @property {string} id
+     *  @property {string} universalItemCode - UniversalItemCode (필수 · 선박 간 공통 관리 코드)
+     *  @property {string} makerPartNo       - Maker Part No (저장: part_no)
+     *  @property {string} name              - Description
+     *  @property {number} previousStock     - 전기 재고 (저장: previous_stock)
+     *  @property {number} currentStock       - 현재 재고 실시간 (저장: qty_on_hand)
+     *  @property {number} [stockA]          - Stock (A) — 신품/완전수리 (저장: stock_a)
+     *  @property {number} [stockB]          - Stock (B) — 사용가능 중고 (저장: stock_b)
+     *  @property {number} [receivedQty]     - 입고 (저장: qty_received)
+     *  @property {number} [consumptionQty]  - 소비 (저장: qty_consumed)
+     *  @property {number} minStock          - 최소 재고 (저장: min_qty)
+     *  @property {number} [standardStock]   - 기준/청구 재고 (저장: standard_stock)
+     *  @property {number} [workingQty]     - 사용(장착) 중 수량 (저장: qty_working)
+     *  @property {string} [partClass]       - G/M/L (저장: part_class)
+     *  @property {string} [inventoryNumbering] - SPICS Numbering (01-001-01)
+     *  @property {string} [drawingPartNo]   - Part Number / Code Number
+     *  @property {string} [shipComponentId] - 연결 장비/섹션
+     *  @property {string} [parentEquipmentID] - 부모 장비 ID (CSV Equipment Header)
+     *  @property {string} location
+     *  @property {string} [group] - Original/Actual Plan GROUP (사용자 지정)
+     *  @property {boolean} isCritical
+     *  @property {Array<{at:string,type:string,qty:number,price?:number,vendorComment?:string,ref?:string,note?:string}>} history
+     */
+
+    /** @typedef {Object} RequiredPartLine
+     *  @property {string} sparePartId
+     *  @property {number} qty
+     */
+
+    /** @typedef {Object} MaintenanceTask
+     *  @property {string} id
+     *  @property {string} jobCode
+     *  @property {RequiredPartLine[]} requiredParts - BOM (작업 완료 시 currentStock 차감)
+     */
+
+    function blank() {
+        return {
+            id: '',
+            universalItemCode: '',
+            universalCode: '', // alias
+            makerPartNo: '',
+            name: '',
+            previousStock: 0,
+            currentStock: 0,
+            stockA: 0,
+            stockB: 0,
+            receivedQty: 0,
+            consumptionQty: 0,
+            minStock: 0,
+            standardStock: 0,
+            workingQty: 0,
+            partClass: '',
+            inventoryNumbering: '',
+            drawingPartNo: '',
+            shipComponentId: '',
+            parentEquipmentID: '',
+            location: '',
+            group: '',
+            isCritical: false,
+            history: [],
+            category: 'GENERAL',
+            unit: 'EA',
+            price: null,
+            currency: 'USD',
+            vendorComment: '',
+        };
+    }
+
+    function intStock(v) {
+        const n = Number(String(v ?? '').replace(/,/g, '').trim());
+        if (isNaN(n)) return 0;
+        return Math.max(0, Math.floor(n));
+    }
+
+    function textField(v) {
+        if (v == null || v === '') return '';
+        if (typeof v === 'string') return v.trim();
+        if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+        return '';
+    }
+
+    function universalItemCodeOf(row) {
+        return String(row.universal_item_code || row.universal_code || row.universalCode || row.universalItemCode || '').trim();
+    }
+
+    /** IndexedDB row → canonical SparePart */
+    function fromRow(row) {
+        if (!row) return null;
+        const uic = universalItemCodeOf(row);
+        const minS = Number(row.min_qty ?? row.minStock ?? row.standard_stock ?? 0) || 0;
+        const stdS = Number(row.standard_stock ?? row.standardStock ?? minS) || 0;
+        const pClass = String(row.part_class || row.partClass || '').trim().toUpperCase();
+        const isCritFlag = row.is_critical ?? row.isCritical;
+        return {
+            id: row.id || '',
+            universalItemCode: uic,
+            universalCode: uic,
+            makerPartNo: row.part_no || row.makerPartNo || row.maker_part_no || '',
+            name: row.name || '',
+            previousStock: intStock(row.previous_stock ?? row.previousStock),
+            currentStock: intStock(row.qty_on_hand ?? row.currentStock),
+            stockA: intStock(row.stock_a ?? row.stockA),
+            stockB: intStock(row.stock_b ?? row.stockB),
+            receivedQty: intStock(row.qty_received ?? row.receivedQty),
+            consumptionQty: intStock(row.qty_consumed ?? row.consumptionQty),
+            minStock: minS,
+            standardStock: stdS,
+            workingQty: intStock(row.qty_working ?? row.workingQty),
+            partClass: row.part_class || row.partClass || '',
+            inventoryNumbering: row.inventory_numbering || row.inventoryNumbering || '',
+            drawingPartNo: textField(row.drawing_part_no ?? row.drawingPartNo),
+            shipComponentId: row.ship_component_id || row.shipComponentId || '',
+            parentEquipmentID: row.parent_equipment_id || row.parentEquipmentID || '',
+            location: row.location || row.storage_location || '',
+            maker: row.maker || row.vendor_comment || '',
+            model: row.model || row.modelType || '',
+            group: String(row.group || '').trim(),
+            isCritical: isCritFlag != null ? !!isCritFlag : (pClass === 'M' || pClass === 'L'),
+            history: Array.isArray(row.history) ? row.history.slice() : [],
+            category: row.category || 'GENERAL',
+            unit: row.unit || 'EA',
+            price: row.price != null ? Number(row.price) : null,
+            currency: row.currency || 'USD',
+            vendorComment: row.vendor_comment || row.vendorComment || '',
+            sync_status: row.sync_status,
+            updated_at: row.updated_at,
+            schema_version: row.schema_version || SCHEMA_VERSION,
+        };
+    }
+
+    /** canonical SparePart → IndexedDB row (레거시 필드 동시 기록) */
+    function toRow(part) {
+        const p = { ...blank(), ...part };
+        const uic = String(p.universalItemCode || p.universalCode || '').trim();
+        const minS = Math.max(0, Math.floor(Number(p.minStock ?? p.standardStock) || 0));
+        const stdS = Math.max(0, Math.floor(Number(p.standardStock ?? p.minStock) || 0));
+        const cur = intStock(p.currentStock);
+        const prev = intStock(p.previousStock);
+        return {
+            id: p.id,
+            part_no: String(p.makerPartNo || '').trim(),
+            universal_code: uic,
+            universal_item_code: uic,
+            name: String(p.name || '').trim(),
+            previous_stock: prev,
+            qty_on_hand: cur,
+            stock_a: intStock(p.stockA),
+            stock_b: intStock(p.stockB),
+            qty_received: intStock(p.receivedQty),
+            qty_consumed: intStock(p.consumptionQty),
+            min_qty: minS,
+            standard_stock: stdS,
+            qty_working: intStock(p.workingQty),
+            part_class: String(p.partClass || '').trim().toUpperCase(),
+            inventory_numbering: String(p.inventoryNumbering || '').trim(),
+            drawing_part_no: textField(p.drawingPartNo),
+            ship_component_id: String(p.shipComponentId || '').trim(),
+            parent_equipment_id: String(p.parentEquipmentID || '').trim(),
+            location: String(p.location || '').trim(),
+            group: String(p.group || '').trim(),
+            is_critical: !!p.isCritical,
+            history: Array.isArray(p.history) ? p.history : [],
+            category: String(p.category || 'GENERAL').trim() || 'GENERAL',
+            unit: String(p.unit || 'EA').trim() || 'EA',
+            price: p.price != null && p.price !== '' ? Number(p.price) : null,
+            currency: String(p.currency || 'USD').trim() || 'USD',
+            vendor_comment: String(p.vendorComment || '').trim(),
+            maker: p.maker || '',
+            model: p.model || '',
+            schema_version: SCHEMA_VERSION,
+            sync_status: p.sync_status || 'LOCAL',
+            updated_at: p.updated_at || new Date().toISOString(),
+        };
+    }
+
+    function generateUniversalItemCode(name) {
+        const key = String(name || 'UNSPEC').toUpperCase().replace(/[^A-Z0-9]+/g, ' ').trim();
+        let h = 0;
+        for (let i = 0; i < key.length; i++) h = ((h << 5) - h + key.charCodeAt(i)) | 0;
+        return 'UNI-' + Math.abs(h).toString(36).toUpperCase().padStart(6, '0').slice(0, 6);
+    }
+
+    /** 입력 검증 — 사관 실수 방지 (엄격) */
+    function validate(part, { partial = false } = {}) {
+        const p = { ...blank(), ...part };
+        const errors = [];
+        if (!partial || p.makerPartNo !== undefined) {
+            const pn = String(p.makerPartNo || '').trim();
+            if (!pn) errors.push('Part No (Maker Part No)는 필수입니다.');
+            else if (pn.length > 64) errors.push('Part No는 64자 이하여야 합니다.');
+            else if (!/^[A-Za-z0-9._\-\/]+$/.test(pn)) errors.push('Part No는 영문·숫자·._-/ 만 사용 가능합니다.');
+        }
+        if (!partial || p.name !== undefined) {
+            const nm = String(p.name || '').trim();
+            if (!nm) errors.push('Description (Name)은 필수입니다.');
+            else if (nm.length > 200) errors.push('Description은 200자 이하여야 합니다.');
+        }
+        const uic = String(p.universalItemCode || p.universalCode || '').trim();
+        if (!partial && !uic) errors.push('UniversalItemCode는 필수입니다.');
+        else if (uic && !/^(UNI-[A-Z0-9]{4,12}|U_[A-Z]{2,6}_\d{3,6})$/i.test(uic)) {
+            errors.push('UniversalItemCode 형식: UNI-XXXXXX 또는 U_ENG_001');
+        }
+        ['currentStock', 'minStock', 'previousStock'].forEach(k => {
+            const v = Number(p[k]);
+            if (isNaN(v) || v < 0 || !Number.isInteger(v)) errors.push(`${k}는 0 이상의 정수여야 합니다.`);
+        });
+        if (p.price != null && p.price !== '' && (isNaN(Number(p.price)) || Number(p.price) < 0)) {
+            errors.push('Price는 0 이상의 숫자여야 합니다.');
+        }
+        if (errors.length) {
+            throw Object.assign(new Error(errors.join('\n')), { code: 'VALIDATION', errors });
+        }
+        return p;
+    }
+
+    /** MaintenanceTask.requiredParts ← job_bom / job.required_parts */
+    function requiredPartsFromJob(job, bomLinks) {
+        if (Array.isArray(job?.required_parts) && job.required_parts.length) {
+            return job.required_parts.map(l => ({
+                sparePartId: l.sparePartId || l.spare_part_id,
+                qty: Number(l.qty || l.qty_used || l.qty_per_job) || 0,
+            })).filter(l => l.sparePartId && l.qty > 0);
+        }
+        return (bomLinks || []).map(b => ({
+            sparePartId: b.spare_part_id || b.sparePartId,
+            qty: Number(b.qty_per_job || b.qty) || 0,
+        })).filter(l => l.sparePartId && l.qty > 0);
+    }
+
+    function generateSequentialUic(prefix, seq) {
+        const p = String(prefix || 'ENG').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 6) || 'ENG';
+        return `U_${p}_${String(seq).padStart(3, '0')}`;
+    }
+
+    function uicPrefixForDepartment(dept) {
+        const d = String(dept || 'ENGINE').toUpperCase();
+        if (d.includes('ENGINE') || d === 'ENG') return 'ENG';
+        if (d.includes('DECK') || d === 'DEK') return 'DEK';
+        return d.slice(0, 3).replace(/[^A-Z]/g, '') || 'GEN';
+    }
+
+    return {
+        SCHEMA_VERSION, blank, fromRow, toRow, validate, requiredPartsFromJob,
+        generateUniversalItemCode, generateSequentialUic, uicPrefixForDepartment,
+        universalItemCodeOf, intStock, textField,
+    };
+})();
+
+/** SPICS spare inventory.xls / CSV → Equipment(ship_components) + SparePart 매핑 */
+const TVC_EquipmentSchema = (function () {
+    function slug(s) {
+        return String(s || 'NODE').toUpperCase().replace(/[^A-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
+    }
+
+    function blank() {
+        return {
+            id: '',
+            parent_id: null,
+            label: '',
+            machinery_name: '',
+            component_name: '',
+            component_code: '',
+            node_type: 'COMPONENT',
+            department: 'ENGINE',
+            path: [],
+            sort_order: 0,
+            remarks: '',
+            sync_status: 'LOCAL',
+            updated_at: new Date().toISOString(),
+        };
+    }
+
+    /** 파서 컨텍스트 → ship_components row */
+    function fromInventory(ctx, kind) {
+        const b = blank();
+        const dept = ctx.department || 'ENGINE';
+        b.department = dept;
+        b.path = (ctx.path || []).slice();
+        b.sort_order = ctx.sortOrder || 0;
+        if (kind === 'TOP') {
+            b.id = 'EQ-' + slug(dept + '_' + ctx.equipmentName);
+            b.label = ctx.equipmentName;
+            b.machinery_name = ctx.equipmentName;
+            b.component_name = ctx.equipmentName;
+            b.node_type = 'EQUIPMENT';
+            b.parent_id = null;
+            b.remarks = ctx.remark || '';
+        } else if (kind === 'GROUP') {
+            b.id = 'EQ-' + slug(dept + '_' + ctx.groupLabel);
+            b.label = ctx.groupLabel;
+            b.machinery_name = ctx.equipmentName || ctx.groupLabel;
+            b.component_name = ctx.groupLabel;
+            b.component_code = ctx.groupLabel;
+            b.node_type = 'GROUP';
+            b.parent_id = ctx.equipmentId || null;
+        } else {
+            b.id = 'EQ-' + slug(dept + '_' + ctx.sectionCode);
+            b.label = ctx.sectionTitle || ctx.sectionCode;
+            b.machinery_name = ctx.equipmentName || '';
+            b.component_name = ctx.sectionTitle || ctx.sectionCode;
+            b.component_code = ctx.sectionCode;
+            b.node_type = 'SORT';
+            b.parent_id = ctx.groupId || ctx.equipmentId || null;
+            b.remarks = ctx.sectionTitle || '';
+        }
+        return b;
+    }
+
+    return { blank, fromInventory, slug };
+})();
+
+/**
+ * WorkReport — daily_work_reports 레코드 계약 (단일·다중 작업 보고)
+ * @typedef {object} WorkReportJobItem
+ * @property {string} job_code
+ * @property {string} maintenance_job_id
+ * @property {string} status — PENDING | APPROVED | CONFIRMED | POSTPONED
+ * @property {object} [form] — Job별 Work Report 입력
+ * @property {Array} [used_parts]
+ * @property {string} [description]
+ * @property {object} [prev_job_state] — 승인 직전 Job 스냅샷
+ *
+ * @typedef {object} WorkReport
+ * @property {string} id
+ * @property {string[]} job_codes — 포함된 모든 Job Code
+ * @property {WorkReportJobItem[]} job_items — Job별 독립 상태·입력
+ * @property {boolean} [is_batch]
+ * @property {string} job_code — 레거시·목록용 (단일 또는 요약)
+ * @property {string} maintenance_job_id — 레거시·첫 Job id
+ */
+const TVC_WorkReport = (function () {
+    const ITEM_STATUSES = ['PENDING', 'APPROVED', 'CONFIRMED', 'POSTPONED'];
+
+    function blankJobItem(job, overrides = {}) {
+        return {
+            job_code: job.job_code,
+            maintenance_job_id: job.id,
+            status: overrides.status || 'PENDING',
+            form: overrides.form || {},
+            used_parts: overrides.used_parts || [],
+            description: overrides.description || job.job_detail || job.item_sort2 || '',
+            prev_job_state: overrides.prev_job_state || null,
+        };
+    }
+
+    /** 레거시 단일-job 리포트 → job_codes / job_items 보강 (in-place) */
+    function fromLegacy(report) {
+        if (!report) return report;
+        if (Array.isArray(report.job_items) && report.job_items.length) {
+            report.job_codes = report.job_codes || report.job_items.map(i => i.job_code);
+            report.is_batch = report.is_batch ?? report.job_codes.length > 1;
+            return report;
+        }
+        const code = report.job_code || '';
+        report.job_codes = code ? [code] : [];
+        report.job_items = [{
+            job_code: code,
+            maintenance_job_id: report.maintenance_job_id,
+            status: report.status || 'PENDING',
+            form: report.report_form || {},
+            used_parts: report.used_parts || [],
+            description: report.description || '',
+            prev_job_state: report.prev_job_state || null,
+        }];
+        report.is_batch = false;
+        return report;
+    }
+
+    function getJobItems(report) {
+        return fromLegacy(report).job_items || [];
+    }
+
+    function getJobCodes(report) {
+        return fromLegacy(report).job_codes || [];
+    }
+
+    /** 부서 job_code 집합에 리포트(단일·Batch)가 속하는지 */
+    function belongsToJobCodeSet(report, codeSet) {
+        return getJobCodes(report).some(c => codeSet.has(c));
+    }
+
+    /** job_code → department 맵 기준 부서 소속 여부 (Export/Sync 필터) */
+    function belongsToDepartment(report, dept, jobCodeToDept) {
+        const map = jobCodeToDept instanceof Map ? jobCodeToDept : new Map(Object.entries(jobCodeToDept || {}));
+        return getJobCodes(report).some(c => (map.get(c) || null) === dept);
+    }
+
+    function aggregateStatus(jobItems) {
+        const items = jobItems || [];
+        if (!items.length) return 'PENDING';
+        if (items.every(i => i.status === 'CONFIRMED')) return 'CONFIRMED';
+        if (items.every(i => i.status === 'APPROVED' || i.status === 'CONFIRMED')) return 'APPROVED';
+        if (items.some(i => i.status === 'POSTPONED')) return 'POSTPONED';
+        if (items.some(i => i.status === 'PENDING')) return 'PENDING';
+        return items[0].status || 'PENDING';
+    }
+
+    function findItem(report, jobIdOrCode) {
+        return getJobItems(report).find(i =>
+            i.maintenance_job_id === jobIdOrCode || i.job_code === jobIdOrCode
+        ) || null;
+    }
+
+    function hasPendingJob(report, jobId, jobCode) {
+        return getJobItems(report).some(i =>
+            (i.status === 'PENDING' || i.status === 'POSTPONED') &&
+            (i.maintenance_job_id === jobId || (jobCode && i.job_code === jobCode))
+        );
+    }
+
+    function buildRecord(base, jobItems) {
+        const items = jobItems.map(i => ({ ...i }));
+        const codes = items.map(i => i.job_code).filter(Boolean);
+        const first = items[0] || {};
+        return {
+            ...base,
+            job_codes: codes,
+            job_items: items,
+            is_batch: codes.length > 1,
+            job_code: codes.length > 1 ? codes.join(', ') : (first.job_code || base.job_code || ''),
+            maintenance_job_id: first.maintenance_job_id || base.maintenance_job_id,
+            status: aggregateStatus(items),
+        };
+    }
+
+    return {
+        ITEM_STATUSES,
+        blankJobItem,
+        fromLegacy,
+        getJobItems,
+        getJobCodes,
+        belongsToJobCodeSet,
+        belongsToDepartment,
+        aggregateStatus,
+        findItem,
+        hasPendingJob,
+        buildRecord,
+    };
+})();
+
+/** 실행 환경 (file:// vs http://) */
+const TVC_Env = (function () {
+    function isFileProtocol() {
+        return typeof location !== 'undefined' && location.protocol === 'file:';
+    }
+    function canFetchBundledAssets() {
+        return !isFileProtocol();
+    }
+    const FILE_HINT =
+        'index.html을 더블클릭(file://)으로 열면 재고 파일 자동 로드가 차단됩니다. ' +
+        'npm run serve 후 http://localhost:3000 으로 접속하거나, SPARE 탭에서 파일을 직접 선택하세요.';
+    return { isFileProtocol, canFetchBundledAssets, FILE_HINT };
+})();

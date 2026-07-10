@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+  <rect width="512" height="512" rx="96" fill="#1a365d"/>
+  <circle cx="256" cy="256" r="200" stroke="#2b6cb0" stroke-width="8" opacity="0.45"/>
+  <path d="M256 120v272M120 256h272" stroke="#2b6cb0" stroke-width="4" opacity="0.25"/>
+  <path d="M148 310c28-56 68-84 108-84s80 28 108 84" stroke="#ffffff" stroke-width="28" stroke-linecap="round"/>
+  <path d="M256 168v48M232 192h48" stroke="#ffffff" stroke-width="20" stroke-linecap="round"/>
+  <text x="256" y="420" text-anchor="middle" fill="#cbd5e0" font-family="system-ui,sans-serif" font-size="48" font-weight="700" letter-spacing="4">TVC</text>
+</svg>
