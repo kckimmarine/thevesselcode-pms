@@ -1057,6 +1057,9 @@ label.spare-file-pick input[type=file] { display: none; }
     padding-bottom: 10px;
     border-bottom: 1px solid #e2e8f0;
 }
+.spare-gh-row-quad {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
 .spare-gh-field {
     display: flex;
     flex-direction: column;
@@ -1219,6 +1222,19 @@ label.spare-file-pick input[type=file] { display: none; }
     box-sizing: border-box;
 }
 .spare-inline-input-wide { min-width: 80px; }
+.spare-inline-select {
+    min-width: 52px;
+    padding-left: 4px;
+    padding-right: 16px;
+    cursor: pointer;
+    appearance: auto;
+    text-align: left;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+}
+/* 편집 행 Class 셀: 가운데 정렬 상속 무시하고 앞글자(L/M/G)가 보이도록 */
+.spare-row-editing .c-cls { text-align: left; }
 .spare-inline-input-num { text-align: center; max-width: 56px; margin: 0 auto; display: block; }
 .spare-inline-input:focus {
     outline: none;
@@ -1315,10 +1331,13 @@ label.spare-file-pick input[type=file] { display: none; }
 @media (max-width: 900px) {
     .spare-gh-row { grid-template-columns: 1fr 1fr; }
     .spare-gh-row .spare-gh-field:last-child { grid-column: 1 / -1; }
+    .spare-gh-row-quad { grid-template-columns: 1fr 1fr; }
+    .spare-gh-row-quad .spare-gh-field:last-child { grid-column: auto; }
 }
 @media (max-width: 640px) {
     .spare-gh-row { grid-template-columns: 1fr; }
     .spare-gh-row .spare-gh-field:last-child { grid-column: auto; }
+    .spare-gh-row-quad { grid-template-columns: 1fr; }
 }
 .spare-list-panel { flex: 1; min-height: 320px; display: flex; flex-direction: column; }
 .spare-vl-scroll {

@@ -30,7 +30,7 @@ const TVC_SpareMenu = (function () {
     const SPARE_REQ_MIN_WIDTH = SPARE_MAIN_MIN_WIDTH
         + 2 * (SPARE_REQ_WORK_STD_WIDTH - 56)
         + SPARE_REQ_EXTRA_COL_WIDTHS.reduce((a, b) => a + b, 0);
-    const SPARE_MAIN_COLGROUP = '<colgroup><col style="width:32px"><col style="width:92px"><col style="width:44px"><col><col style="width:150px"><col style="width:44px"><col style="width:56px"><col style="width:56px"><col style="width:56px"></colgroup>';
+    const SPARE_MAIN_COLGROUP = '<colgroup><col style="width:32px"><col style="width:92px"><col style="width:62px"><col><col style="width:150px"><col style="width:44px"><col style="width:56px"><col style="width:56px"><col style="width:56px"></colgroup>';
     const SPARE_REQ_BASE_COLGROUP = `<colgroup><col style="width:32px"><col style="width:92px"><col style="width:44px"><col><col style="width:150px"><col style="width:44px"><col style="width:${SPARE_REQ_WORK_STD_WIDTH}px"><col style="width:${SPARE_REQ_WORK_STD_WIDTH}px"><col style="width:56px"></colgroup>`;
     const SPARE_REQ_EXTRA_COLS = SPARE_REQ_EXTRA_COL_WIDTHS.map(w => `<col style="width:${w}px">`).join('');
     const SPARE_REQ_COLGROUP = SPARE_REQ_BASE_COLGROUP.replace('</colgroup>', SPARE_REQ_EXTRA_COLS + '</colgroup>');
@@ -218,6 +218,7 @@ const TVC_SpareMenu = (function () {
         if (!h.maker) h.maker = headerFieldText(equip?.maker || comp?.maker);
         if (!h.capacity) h.capacity = headerFieldText(equip?.capacity || equip?.remarks || comp?.capacity || comp?.remarks);
         if (!h.dwgNo) h.dwgNo = headerFieldText(comp?.dwg_no || equip?.dwg_no || comp?.drawing_no || equip?.drawing_no);
+        if (!h.serialNo) h.serialNo = headerFieldText(equip?.serial_no || comp?.serial_no || sample?.serialNo);
 
         if (sample) {
             const secCode = sectionCodeFromPartNo(sample.makerPartNo || sample.part_no);
@@ -251,6 +252,7 @@ const TVC_SpareMenu = (function () {
         h.capacity = headerFieldText(h.capacity);
         h.maker = headerFieldText(h.maker);
         h.dwgNo = headerFieldText(h.dwgNo);
+        h.serialNo = headerFieldText(h.serialNo);
         if (!itemLevel) { h.assyName = ''; h.dwgNo = ''; }
         return h;
     }
@@ -269,10 +271,20 @@ const TVC_SpareMenu = (function () {
             modelType: def?.modelType || s.model || '',
             capacity: def?.capacity || '',
             maker: def?.maker || s.maker || '',
+            serialNo: def?.serialNo || s.serialNo || '',
             assyName: assyNameFromSpare(s),
             dwgNo: spareDrawingNo(s),
         };
-        return enrichSpareHeaderFields(st, base, s);
+        const result = enrichSpareHeaderFields(st, base, s);
+        // 그룹 헤더를 편집했으면 입력값(빈 값 포함)을 그대로 반영 — enrich 폴백값으로 되돌아가지 않게
+        if (def?.edited) {
+            result.machineryName = def.machineryName;
+            result.modelType = def.modelType;
+            result.capacity = def.capacity;
+            result.maker = def.maker;
+            result.serialNo = def.serialNo;
+        }
+        return result;
     }
 
     /** maintenance_groups에 저장된 그룹 헤더 메타(그룹 Modify로 영속 저장) 조회 */
@@ -291,14 +303,17 @@ const TVC_SpareMenu = (function () {
             def = (st.groups || []).find(gr => inDept(gr) && normalizeGroupLabel(gr.label) === target);
         }
         if (!def) return null;
-        const has = def.machinery_name || def.model_type || def.maker || def.capacity || def.dwg_no;
-        if (!has) return null;
+        const has = def.machinery_name || def.model_type || def.maker || def.capacity || def.dwg_no || def.serial_no;
+        // header_edited가 없고 저장된 값도 없으면 무시(폴백 사용)
+        if (!def.header_edited && !has) return null;
         return {
+            edited: !!def.header_edited,
             machineryName: headerFieldText(def.machinery_name),
             modelType: headerFieldText(def.model_type),
             maker: headerFieldText(def.maker),
             capacity: headerFieldText(def.capacity),
             dwgNo: headerFieldText(def.dwg_no),
+            serialNo: headerFieldText(def.serial_no),
         };
     }
 
@@ -309,6 +324,7 @@ const TVC_SpareMenu = (function () {
             modelType: '',
             capacity: '',
             maker: '',
+            serialNo: '',
             assyName: '',
             dwgNo: '',
         };
@@ -324,6 +340,19 @@ const TVC_SpareMenu = (function () {
         //           2) 그룹 컴포넌트 자체 값  3) 대표 아이템(클릭 시와 동일 소스)
         //           Ass'y/Dwg.는 그룹 단위에서는 비운다.
         const def = groupDefHeader(st, pmsGroupNo);
+        // 사용자가 그룹 헤더를 편집했으면(빈 값 포함) 입력값을 그대로 사용 — 폴백하지 않음
+        if (def?.edited) {
+            return {
+                pmsGroupNo,
+                machineryName: def.machineryName,
+                modelType: def.modelType,
+                capacity: def.capacity,
+                maker: def.maker,
+                serialNo: def.serialNo,
+                assyName: '',
+                dwgNo: '',
+            };
+        }
         const sample = filteredSpares(st)[0];
         const itemHeader = sample ? resolveSpareHeaderFromSpare(st, sample) : null;
         const groupLabels = groupLabelsForPmsGroup(pmsGroupNo, st, groupKey);
@@ -334,6 +363,7 @@ const TVC_SpareMenu = (function () {
             modelType: def?.modelType || headerFieldText(comp?.model_type || comp?.model) || itemHeader?.modelType || '',
             capacity: def?.capacity || headerFieldText(comp?.capacity || comp?.remarks) || itemHeader?.capacity || '',
             maker: def?.maker || headerFieldText(comp?.maker) || itemHeader?.maker || '',
+            serialNo: def?.serialNo || headerFieldText(comp?.serial_no) || itemHeader?.serialNo || '',
             assyName: '',
             dwgNo: '',
         };
@@ -402,10 +432,10 @@ const TVC_SpareMenu = (function () {
                         ${hasContent ? field(h.pmsGroupNo, 'spare-gh-value-primary') : `<span class="spare-gh-value spare-gh-value-primary empty">${idleHint}</span>`}
                     </div>
                 </div>
-                <div class="spare-gh-row">
+                <div class="spare-gh-row spare-gh-row-quad">
                     <div class="spare-gh-field">
-                        <span class="spare-gh-label">Machinery Name</span>
-                        ${field(h.machineryName)}
+                        <span class="spare-gh-label">Maker</span>
+                        ${field(h.maker)}
                     </div>
                     <div class="spare-gh-field">
                         <span class="spare-gh-label">Model / Type</span>
@@ -415,19 +445,9 @@ const TVC_SpareMenu = (function () {
                         <span class="spare-gh-label">Capacity</span>
                         ${field(h.capacity)}
                     </div>
-                </div>
-                <div class="spare-gh-row">
                     <div class="spare-gh-field">
-                        <span class="spare-gh-label">Maker</span>
-                        ${field(h.maker)}
-                    </div>
-                    <div class="spare-gh-field">
-                        <span class="spare-gh-label">Ass'y Name</span>
-                        ${field(h.assyName)}
-                    </div>
-                    <div class="spare-gh-field">
-                        <span class="spare-gh-label">Dwg. No.</span>
-                        ${field(h.dwgNo)}
+                        <span class="spare-gh-label">Serial No.</span>
+                        ${field(h.serialNo)}
                     </div>
                 </div>
             </div>
@@ -465,17 +485,22 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        // GROUP Tree와 동일한 목록을 노출한다:
+        //  - 부서 필터 + 숨김 그룹(예: ENGINE 27/36, DECK 34/36) 제외
+        //  - 03~05 GENERATOR ENGINE 은 하나로 병합
+        //  - 라벨 기준 동일 정렬
         const seen = new Set();
-        return (st.idx?.groupNodes || [])
+        const nodes = (st.idx?.groupNodes || [])
             .filter(n => !st.department || n.department === st.department)
-            .filter(n => isStandardPmsGroupLabel(n.label))
+            .filter(n => !isHiddenSpareGroup(n.label, n.department))
             .filter(n => {
+                if (isGeneratorEngineGroupLabel(n.label)) return true; // 병합 단계에서 처리
                 const key = normalizeGroupLabel(n.label);
                 if (seen.has(key)) return false;
                 seen.add(key);
                 return true;
-            })
-            .sort((a, b) => pmsGroupSortNo(a.label) - pmsGroupSortNo(b.label));
+            });
+        return mergeSpareTreeNodes(nodes);
     }
 
     function resolveEditGroupSelection(st, selected) {
@@ -537,10 +562,10 @@ const TVC_SpareMenu = (function () {
                         ${renderSpareGroupPickListHtml(st, h.pmsGroupNo)}
                     </div>
                 </div>
-                <div class="spare-gh-row">
+                <div class="spare-gh-row spare-gh-row-quad">
                     <div class="spare-gh-field">
-                        <span class="spare-gh-label">Machinery Name</span>
-                        ${ghInput('sgh_machineryName', h.machineryName)}
+                        <span class="spare-gh-label">Maker</span>
+                        ${ghInput('sgh_maker', h.maker)}
                     </div>
                     <div class="spare-gh-field">
                         <span class="spare-gh-label">Model / Type</span>
@@ -550,19 +575,9 @@ const TVC_SpareMenu = (function () {
                         <span class="spare-gh-label">Capacity</span>
                         ${ghInput('sgh_capacity', h.capacity)}
                     </div>
-                </div>
-                <div class="spare-gh-row">
                     <div class="spare-gh-field">
-                        <span class="spare-gh-label">Maker</span>
-                        ${ghInput('sgh_maker', h.maker)}
-                    </div>
-                    <div class="spare-gh-field">
-                        <span class="spare-gh-label">Ass'y Name</span>
-                        ${ghInput('sgh_assyName', h.assyName)}
-                    </div>
-                    <div class="spare-gh-field">
-                        <span class="spare-gh-label">Dwg. No.</span>
-                        ${ghInput('sgh_dwgNo', h.dwgNo)}
+                        <span class="spare-gh-label">Serial No.</span>
+                        ${ghInput('sgh_serialNo', h.serialNo)}
                     </div>
                 </div>
             </div>
@@ -571,10 +586,6 @@ const TVC_SpareMenu = (function () {
 
     // 그룹 단위 헤더 편집 (Machinery Name / Model / Capacity / Maker → 그룹 내 전체 아이템 일괄 적용)
     function renderSpareGroupHeaderGroupEditHtml(st, h) {
-        const field = (v) => {
-            const t = String(v || '').trim();
-            return `<span class="spare-gh-value${t ? '' : ' empty'}">${t ? esc(t) : '—'}</span>`;
-        };
         return `<section class="spare-group-header is-editing is-group-editing" aria-label="PMS Group 헤더 편집">
             <div class="spare-group-header-card">
                 <div class="spare-gh-row spare-gh-row-primary">
@@ -583,10 +594,10 @@ const TVC_SpareMenu = (function () {
                         ${ghInput('sgh_g_pmsGroupNo', h.pmsGroupNo, 'spare-gh-input-primary')}
                     </div>
                 </div>
-                <div class="spare-gh-row">
+                <div class="spare-gh-row spare-gh-row-quad">
                     <div class="spare-gh-field">
-                        <span class="spare-gh-label">Machinery Name</span>
-                        ${ghInput('sgh_g_machineryName', h.machineryName)}
+                        <span class="spare-gh-label">Maker</span>
+                        ${ghInput('sgh_g_maker', h.maker)}
                     </div>
                     <div class="spare-gh-field">
                         <span class="spare-gh-label">Model / Type</span>
@@ -596,19 +607,9 @@ const TVC_SpareMenu = (function () {
                         <span class="spare-gh-label">Capacity</span>
                         ${ghInput('sgh_g_capacity', h.capacity)}
                     </div>
-                </div>
-                <div class="spare-gh-row">
                     <div class="spare-gh-field">
-                        <span class="spare-gh-label">Maker</span>
-                        ${ghInput('sgh_g_maker', h.maker)}
-                    </div>
-                    <div class="spare-gh-field">
-                        <span class="spare-gh-label">Ass'y Name</span>
-                        ${field(h.assyName)}
-                    </div>
-                    <div class="spare-gh-field">
-                        <span class="spare-gh-label">Dwg. No.</span>
-                        ${field(h.dwgNo)}
+                        <span class="spare-gh-label">Serial No.</span>
+                        ${ghInput('sgh_g_serialNo', h.serialNo)}
                     </div>
                 </div>
                 <div class="spare-gh-edit-actions">
@@ -627,7 +628,7 @@ const TVC_SpareMenu = (function () {
     function resolveAppendGroupHeader(st) {
         const blank = {
             pmsGroupNo: '', machineryName: '', modelType: '', capacity: '',
-            maker: '', assyName: '', dwgNo: '',
+            maker: '', serialNo: '', assyName: '', dwgNo: '',
         };
         let groupLabel = '';
         if (st.selectedGroupKey === MERGED_GEN_ENGINE_KEY) {
@@ -669,7 +670,7 @@ const TVC_SpareMenu = (function () {
                     <tbody><tr class="spare-row-editing">
                         <td class="c-chk"></td>
                         <td class="c-num">${rowCellInput('sie_code', r.code)}</td>
-                        <td class="c-cls">${rowCellInput('sie_class', r.class)}</td>
+                        <td class="c-cls">${rowCellClassSelect('sie_class', r.class)}</td>
                         <td class="c-item">${rowCellInput('sie_item', r.item, 'spare-inline-input-wide')}</td>
                         <td class="c-pno">${rowCellInput('sie_pno', r.partNo)}</td>
                         <td class="c-unit">${rowCellInput('sie_unit', r.unit)}</td>
@@ -1440,6 +1441,21 @@ const TVC_SpareMenu = (function () {
     function rowCellInput(id, value, extraClass = '') {
         const cls = ['spare-inline-input', extraClass].filter(Boolean).join(' ');
         return `<input class="${cls}" id="${id}" value="${esc(String(value ?? ''))}" onclick="event.stopPropagation()">`;
+    }
+
+    const SPARE_CLASS_OPTIONS = [
+        { value: 'L', label: 'L : Legal spare parts' },
+        { value: 'M', label: 'M : Major spare parts' },
+        { value: 'G', label: 'G : General spare parts' },
+    ];
+    function rowCellClassSelect(id, value, extraClass = '') {
+        const cur = String(value ?? '').trim().toUpperCase();
+        const cls = ['spare-inline-input', 'spare-inline-select', extraClass].filter(Boolean).join(' ');
+        const opts = SPARE_CLASS_OPTIONS
+            .map(o => `<option value="${o.value}"${o.value === cur ? ' selected' : ''}>${esc(o.label)}</option>`)
+            .join('');
+        const placeholder = cur ? '' : '<option value="" selected disabled hidden>—</option>';
+        return `<select class="${cls}" id="${id}" onclick="event.stopPropagation()">${placeholder}${opts}</select>`;
     }
 
     function rowHtml(s, focusedId, batchMap, ctx = 'main') {
@@ -2482,14 +2498,18 @@ const TVC_SpareMenu = (function () {
             dwgNo: '',
         }, null);
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
-        set('sgh_machineryName', header.machineryName);
         set('sgh_modelType', header.modelType);
         set('sgh_capacity', header.capacity);
         set('sgh_maker', header.maker);
-        set('sgh_assyName', header.assyName);
-        set('sgh_dwgNo', header.dwgNo);
+        set('sgh_serialNo', header.serialNo);
         const m = modState(st);
-        if (m.inlineDraft?.header) m.inlineDraft.header.pmsGroupNo = groupLabel;
+        // 헤더 UI에서 제거된 필드는 draft에 보존해 저장 시 반영되도록 한다.
+        if (m.inlineDraft?.header) {
+            m.inlineDraft.header.pmsGroupNo = groupLabel;
+            m.inlineDraft.header.machineryName = header.machineryName || '';
+            m.inlineDraft.header.assyName = header.assyName || '';
+            m.inlineDraft.header.dwgNo = header.dwgNo || '';
+        }
     }
 
     function cancelInlineEdit() {
@@ -2552,10 +2572,12 @@ const TVC_SpareMenu = (function () {
         const newLabel = labelChanged ? newLabelInput : oldLabel;
         const header = {
             pmsGroupNo: newLabel,
-            machineryName: g('sgh_g_machineryName'),
+            // Machinery Name / Ass'y Name / Dwg. No.는 헤더 UI에서 제거됨 → 기존 값 보존
+            machineryName: draft.machineryName || '',
             modelType: g('sgh_g_modelType'),
             capacity: g('sgh_g_capacity'),
             maker: g('sgh_g_maker'),
+            serialNo: g('sgh_g_serialNo'),
             assyName: draft.assyName || '',
             dwgNo: draft.dwgNo || '',
         };
@@ -2602,11 +2624,14 @@ const TVC_SpareMenu = (function () {
                 await TVC_DB.put('maintenance_groups', {
                     ...defBase,
                     label: lab,
-                    machinery_name: header.machineryName || defBase.machinery_name || '',
-                    model_type: header.modelType || defBase.model_type || '',
-                    maker: header.maker || defBase.maker || '',
-                    capacity: header.capacity || defBase.capacity || '',
-                    dwg_no: header.dwgNo || defBase.dwg_no || '',
+                    // 입력값을 그대로 저장(빈 값 포함) — 지우기가 반영되도록, header_edited로 authoritative 표시
+                    machinery_name: header.machineryName || '',
+                    model_type: header.modelType || '',
+                    maker: header.maker || '',
+                    capacity: header.capacity || '',
+                    dwg_no: header.dwgNo || '',
+                    serial_no: header.serialNo || '',
+                    header_edited: true,
                     updated_at: new Date().toISOString(),
                     sync_status: 'LOCAL',
                 });
@@ -2663,6 +2688,7 @@ const TVC_SpareMenu = (function () {
             capacity: header.capacity || c.capacity,
             dwg_no: header.dwgNo || c.dwg_no,
             drawing_no: header.dwgNo || c.drawing_no,
+            serial_no: header.serialNo || c.serial_no,
             remarks: header.capacity || c.remarks,
             updated_at: ts,
             sync_status: 'LOCAL',
@@ -2728,14 +2754,17 @@ const TVC_SpareMenu = (function () {
         if (!isNew && !raw) return;
 
         const g = (elId) => { const el = document.getElementById(elId); return el ? el.value : ''; };
+        // 헤더에서 제거된 필드(Machinery Name / Ass'y Name / Dwg. No.)는 편집 시작 시점의 값을 보존한다.
+        const dh = (m.inlineDraft && m.inlineDraft.header) || {};
         const header = {
             pmsGroupNo: g('sgh_pmsGroupNo').trim(),
-            machineryName: g('sgh_machineryName').trim(),
+            machineryName: (dh.machineryName || '').trim(),
             modelType: g('sgh_modelType').trim(),
             capacity: g('sgh_capacity').trim(),
             maker: g('sgh_maker').trim(),
-            assyName: g('sgh_assyName').trim(),
-            dwgNo: g('sgh_dwgNo').trim(),
+            serialNo: g('sgh_serialNo').trim(),
+            assyName: (dh.assyName || '').trim(),
+            dwgNo: (dh.dwgNo || '').trim(),
         };
         const code = g('sie_code').trim();
         const itemName = g('sie_item').trim();
