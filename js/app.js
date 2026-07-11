@@ -44,7 +44,8 @@ const TVC_App = (function () {
         selectedReqId: null,    // 열람 중인 청구서
         spicsAlerts: [],
         focusedSpareId: null,        // SPARE 행 클릭 — 연한 파란색 포커스만
-        batchSelectedSpares: {},     // { spareId: true } — ㅁ 체크 다중 선택
+        spareListSelected: {},       // { spareId: true } — SPARE 목록 ㅁ 체크(재고 조회용)
+        requisitionDraft: [],        // [spareId, …] — New Requisition 선택 아이템(목록과 독립)
         spareMenu: null,
         batchSelectedJobs: {},   // { jobId: true } — Actual Plan 다중 선택
         _batchDraft: null,       // Batch Report 편집 중 임시 데이터
@@ -1187,7 +1188,7 @@ const TVC_App = (function () {
     function openOrigGroupRename() {
         if (!canEditOriginalPlanGroups()) return alert('HQ MODE에서만 GROUP 이름 수정이 가능합니다.');
         const node = selectedGroupNode();
-        if (!node) return alert('GROUP Tree에서 수정할 그룹을 선택하세요.');
+        if (!node) return alert('PMS GROUP Tree에서 수정할 그룹을 선택하세요.');
         renderGroupEditor('rename');
         showModal('groupEditorModal');
     }
@@ -2333,8 +2334,13 @@ const TVC_App = (function () {
         return TVC_RBAC.canModifySpareInventory(spareSessionUser());
     }
 
+    function spareListSelectedIds() {
+        return Object.keys(state.spareListSelected || {}).filter(id => state.spareListSelected[id]);
+    }
+
+    /** @deprecated spareListSelectedIds 사용 */
     function batchSelectedSpareIds() {
-        return Object.keys(state.batchSelectedSpares || {}).filter(id => state.batchSelectedSpares[id]);
+        return spareListSelectedIds();
     }
 
     /** ㅁ 체크 우선, 없으면 포커스(행 클릭) 행으로 Modify/Delete 대상 결정 */
@@ -2412,9 +2418,9 @@ const TVC_App = (function () {
 
     /** ㅁ 체크박스 — 다중 선택 */
     function toggleSpareRow(spareId, checked) {
-        if (!state.batchSelectedSpares) state.batchSelectedSpares = {};
-        if (checked) state.batchSelectedSpares[spareId] = true;
-        else delete state.batchSelectedSpares[spareId];
+        if (!state.spareListSelected) state.spareListSelected = {};
+        if (checked) state.spareListSelected[spareId] = true;
+        else delete state.spareListSelected[spareId];
         TVC_SpareMenu.refreshList?.();
         requestAnimationFrame(() => {
             if (typeof TVC_SpareMenu?.syncSpareToolbarUi === 'function') TVC_SpareMenu.syncSpareToolbarUi();

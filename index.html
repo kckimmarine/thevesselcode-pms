@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260710-ghserial">
+    <link rel="stylesheet" href="css/app.css?v=20260711-spare-tree-btn">
 </head>
 <body>
 
@@ -200,7 +200,7 @@
             </div>
             <div class="plan-layout orig-layout">
                 <aside class="panel tree-panel">
-                    <div class="panel-head">🌳 GROUP Tree</div>
+                    <div class="panel-head">🌳 PMS GROUP Tree</div>
                     <div class="tree-search-bar">
                         <input class="search-input" id="origTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
                     </div>
@@ -237,7 +237,7 @@
             <div id="spicsAlertBanner" class="spics-alert-banner hidden" style="margin:0 20px 8px"></div>
             <div class="plan-layout actual-layout">
                 <aside class="panel tree-panel">
-                    <div class="panel-head">🌳 GROUP Tree</div>
+                    <div class="panel-head">🌳 PMS GROUP Tree</div>
                     <div class="tree-search-bar">
                         <input class="search-input" id="actTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
                     </div>
@@ -404,6 +404,9 @@
 <div id="spareReqWorkModal" class="modal hidden spare-req-work-modal-wrap">
     <div class="modal-box spare-req-work-modal" onclick="event.stopPropagation()"><div id="spareReqWorkBody"></div></div>
 </div>
+<div id="spareConsumeModal" class="modal hidden spare-req-work-modal-wrap">
+    <div class="modal-box spare-req-work-modal" onclick="event.stopPropagation()"><div id="spareConsumeBody"></div></div>
+</div>
 <div id="spareReqSheetModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeReqSheetModal()">
     <div class="modal-box req-sheet-modal" onclick="event.stopPropagation()"><div id="spareReqSheetBody"></div></div>
 </div>
@@ -467,7 +470,7 @@
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260710-ghserial"></script>
+<script src="js/ui/spareMenu.js?v=20260711-spare-tree-btn"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -481,7 +484,7 @@
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260708-req-draft-only"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/app.js?v=20260710-ghgroup"></script>
+<script src="js/app.js?v=20260711-tree-labels"></script>
 <script src="js/pwa.js?v=20260709-pwa"></script>
 </body>
 </html>
