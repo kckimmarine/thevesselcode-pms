@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 6, // v6: maintenance_groups (Original Plan GROUP Tree — HQ 편집)
+    DB_VERSION: 7, // v7: consume_logs (Consumed Parts 일지)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -25,6 +25,7 @@ const TVC_SCHEMA = {
         job_bom: { keyPath: 'id' },                        // 정비작업 ↔ 필요부품(BOM)
         requisitions: { keyPath: 'id' },                   // 부품 청구서(Requisition)
         inventory_history: { keyPath: 'id' },              // SPICS 입·출고 전용 이력
+        consume_logs: { keyPath: 'id' },                   // Consumed Parts 일지 (배치)
     },
     INDEXES: {
         users: [{ name: 'username', keyPath: 'username', unique: true }],
@@ -71,6 +72,11 @@ const TVC_SCHEMA = {
             { name: 'by_type', keyPath: 'tx_type' },
             { name: 'by_at', keyPath: 'at' },
             { name: 'by_part_no', keyPath: 'part_no' },
+        ],
+        consume_logs: [
+            { name: 'by_vessel', keyPath: 'vessel_id' },
+            { name: 'by_at', keyPath: 'created_at' },
+            { name: 'by_department', keyPath: 'department' },
         ],
     },
 };

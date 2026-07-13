@@ -304,6 +304,32 @@ const TVC_Inventory = (function () {
         return { updated, total: rows.length };
     }
 
+    async function listConsumeLogs(vesselId) {
+        await TVC_DB.open();
+        const all = await TVC_DB.getAll('consume_logs');
+        return all
+            .filter(l => !vesselId || !l.vessel_id || l.vessel_id === vesselId)
+            .sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
+    }
+
+    async function getConsumeLog(id) { return TVC_DB.get('consume_logs', id); }
+
+    async function saveConsumeLog(log) {
+        await TVC_DB.open();
+        const ts = new Date().toISOString();
+        const row = {
+            ...log,
+            updated_at: ts,
+            sync_status: log.sync_status || 'LOCAL',
+        };
+        if (!row.created_at) row.created_at = ts;
+        if (!row.id) row.id = 'CL-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+        await TVC_DB.put('consume_logs', row);
+        return row;
+    }
+
+    async function deleteConsumeLog(id) { return TVC_DB.del('consume_logs', id); }
+
     return {
         SCHEMA_VERSION, REQ_STATUS,
         standardStock, minStock, currentStock, isLowStock, recommendedOrderQty, lowStockItems,
@@ -311,5 +337,6 @@ const TVC_Inventory = (function () {
         getBom, bomToUsedParts, addBomLine,
         nextReqNo, createRequisition, getRequisition, listRequisitions, saveRequisition,
         setStatus, deleteRequisition, applyVendorQuote, applyHqAdjustment, applyExcelImport,
+        listConsumeLogs, getConsumeLog, saveConsumeLog, deleteConsumeLog,
     };
 })();

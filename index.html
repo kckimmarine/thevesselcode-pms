@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260711-spare-tree-btn">
+    <link rel="stylesheet" href="css/app.css?v=20260713-consume-wr-btn">
 </head>
 <body>
 
@@ -362,8 +362,8 @@
         <div id="groupEditorBody"></div>
     </div>
 </div>
-<div id="workReportModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeWorkReport()">
-    <div class="modal-box wr-modal"><button class="modal-x" onclick="TVC_App.closeWorkReport()">×</button>
+<div id="workReportModal" class="modal hidden spare-req-work-modal-wrap" onclick="if(event.target===this)TVC_App.closeWorkReport()">
+    <div class="modal-box wr-modal spare-req-work-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_App.closeWorkReport()">×</button>
         <div id="workReportBody"></div>
     </div>
 </div>
@@ -400,6 +400,9 @@
 </div>
 <div id="spareReqListModal" class="modal hidden spare-req-list-modal-wrap">
     <div class="modal-box spare-req-list-modal" onclick="event.stopPropagation()"><div id="spareReqListBody"></div></div>
+</div>
+<div id="spareConsumeLogModal" class="modal hidden spare-req-list-modal-wrap">
+    <div class="modal-box spare-req-list-modal" onclick="event.stopPropagation()"><div id="spareConsumeLogBody"></div></div>
 </div>
 <div id="spareReqWorkModal" class="modal hidden spare-req-work-modal-wrap">
     <div class="modal-box spare-req-work-modal" onclick="event.stopPropagation()"><div id="spareReqWorkBody"></div></div>
@@ -470,7 +473,7 @@
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260711-spare-tree-btn"></script>
+<script src="js/ui/spareMenu.js?v=20260713-consume-wr-btn"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -484,7 +487,7 @@
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260708-req-draft-only"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/app.js?v=20260711-tree-labels"></script>
+<script src="js/app.js?v=20260713-consume-wr-btn"></script>
 <script src="js/pwa.js?v=20260709-pwa"></script>
 </body>
 </html>

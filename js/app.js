@@ -2701,6 +2701,9 @@ const TVC_App = (function () {
         if (!confirm(msg)) return;
 
         try {
+            if (rep?.consume_log_id) {
+                await TVC_Inventory.deleteConsumeLog(rep.consume_log_id);
+            }
             await TVC_Transaction.deleteReport(user, state._wrReportId);
             state._wrReportId = null;
             state._wrReadonly = false;
@@ -2792,135 +2795,59 @@ const TVC_App = (function () {
     function captureWorkReportUsedParts() {
         const host = document.getElementById('workReportBody');
         if (!host) return;
-        host.querySelectorAll('[data-wr-spare][data-wr-field="qty"]').forEach(el => {
-            const id = el.dataset.wrSpare;
-            const row = (state._wrUsedParts || []).find(p => p.spare_part_id === id);
-            if (row) row.qty_used = Number(el.value) || 0;
+        host.querySelectorAll('.spare-wr-qty-input').forEach(el => {
+            const table = el.closest('[data-spare-id]');
+            const id = table?.dataset?.spareId;
+            if (!id) return;
+            const row = (state._wrUsedParts || []).find(p => String(p.spare_part_id ?? '') === String(id));
+            if (row) row.qty_used = Math.max(0, Math.floor(Number(el.value) || 0));
         });
-        const searchEl = document.getElementById('wrSpareSearch');
-        if (searchEl) state._wrSpareSearch = searchEl.value;
     }
 
-    function wrSpareSearchResults() {
-        const q = (state._wrSpareSearch || '').trim().toLowerCase();
-        if (q.length < 1) return [];
-        const used = new Set((state._wrUsedParts || []).map(p => p.spare_part_id));
-        return (state.spares || []).filter(s => {
-            if (used.has(s.id)) return false;
-            const canon = TVC_SpareSchema.fromRow(s);
-            const hay = [
-                canon.makerPartNo, s.part_no, canon.name, s.name,
-                canon.universalItemCode, s.universal_code, s.location, s.category,
-            ].join(' ').toLowerCase();
-            return hay.includes(q);
-        }).slice(0, 25);
+    function buildWrPage2Meta(job, reportedByName, today) {
+        return {
+            reportDate: wf('reportDate', today),
+            workDate: wf('workDate', today),
+            reportedBy: reportedByName,
+            pmsGroupNo: job?.group || '',
+            jobCode: job?.job_code || '',
+            sort1: job?.item_sort1 || '',
+            sort2: job?.item_sort2 || '',
+            jobDetail: job?.job_detail || '',
+            shipComments: wf('shipComments', ''),
+        };
     }
 
-    function buildWrSpareHitsHtml() {
-        const results = wrSpareSearchResults();
-        const searchVal = (state._wrSpareSearch || '').trim();
-        if (!searchVal) return '';
-        if (!results.length) return '<p class="muted wr-spare-empty">검색 결과 없음</p>';
-        const resultRows = results.map(s => {
-            const canon = TVC_SpareSchema.fromRow(s);
-            const pn = canon.makerPartNo || s.part_no || '—';
-            const stk = TVC_Inventory.currentStock(s);
-            return `<tr class="wr-spare-hit" onclick="TVC_App.addWrSparePart('${escAttr(s.id)}')">
-                <td><strong>${esc(pn)}</strong></td>
-                <td>${esc(canon.universalItemCode || s.universal_code || '—')}</td>
-                <td>${esc(canon.name || s.name)}</td>
-                <td style="text-align:center">${stk}</td>
-                <td><span class="pill ok">+ Add</span></td>
-            </tr>`;
-        }).join('');
-        return `<div class="wr-table-wrap wr-spare-hits">
-            <table class="wr-table"><thead><tr>
-                <th>Part No</th><th>Universal Code</th><th>Description</th><th>Stock</th><th></th>
-            </tr></thead><tbody>${resultRows}</tbody></table>
+    function renderWrPage2HeadHtml(opts = {}) {
+        const {
+            canApproveNow = false,
+            canConfirmNow = false,
+            isRepApproved = false,
+            isRepConfirmed = false,
+            approvedByVal = '',
+            confirmedByVal = '',
+        } = opts;
+        return `<div class="wr-form">
+            <div class="wr-row">
+                <div class="wr-fld wr-chk wr-in-date${canApproveNow ? ' wr-chk-active' : ''}"><label class="wr-chk-inline"><input type="checkbox" id="wrApprovedBy" ${isRepApproved ? 'checked' : ''} ${canApproveNow ? '' : 'disabled'}> Approved by</label><input class="wr-ro" value="${esc(approvedByVal)}" readonly></div>
+                <div class="wr-fld wr-chk wr-in-date${canConfirmNow ? ' wr-chk-active' : ''}"><label class="wr-chk-inline"><input type="checkbox" id="wrConfirmedBy" ${isRepConfirmed ? 'checked' : ''} ${canConfirmNow ? '' : 'disabled'}> Confirmed by</label><input class="wr-ro" value="${esc(confirmedByVal)}" readonly></div>
+            </div>
         </div>`;
     }
 
-    function refreshWrSpareHits() {
-        const wrap = document.getElementById('wrSpareHitsWrap');
-        if (wrap) wrap.innerHTML = buildWrSpareHitsHtml();
-    }
-
-    function onWrSpareSearchInput(v) {
-        state._wrSpareSearch = v;
-        clearTimeout(_wrSpareSearchT);
-        _wrSpareSearchT = setTimeout(refreshWrSpareHits, 120);
-    }
-
-    function setWrSpareSearch(v) {
-        state._wrSpareSearch = v;
-        refreshWrSpareHits();
-    }
-
-    function addWrSparePart(spareId) {
-        captureWorkReportUsedParts();
-        const spare = (state.spares || []).find(s => s.id === spareId);
-        if (!spare) return;
-        if ((state._wrUsedParts || []).some(p => p.spare_part_id === spareId)) return;
-        const canon = TVC_SpareSchema.fromRow(spare);
-        state._wrUsedParts = state._wrUsedParts || [];
-        state._wrUsedParts.push({
-            spare_part_id: spareId,
-            part_no: canon.makerPartNo || spare.part_no,
-            name: canon.name || spare.name,
-            universal_code: canon.universalItemCode || spare.universal_code || '',
-            qty_on_hand: TVC_Inventory.currentStock(spare),
-            qty_used: 1,
-        });
-        state._wrSpareSearch = '';
-        renderWorkReportModal();
-    }
-
-    function removeWrSparePart(spareId) {
-        captureWorkReportUsedParts();
-        state._wrUsedParts = (state._wrUsedParts || []).filter(p => p.spare_part_id !== spareId);
-        renderWorkReportModal();
-    }
-
     function renderWrPage2Body(ro) {
-        const lines = state._wrUsedParts || [];
-        const searchVal = esc(state._wrSpareSearch || '');
+        const job = state.idx?.jobById.get(state._wrJobId);
+        if (!job) return '';
+        const today = new Date().toISOString().slice(0, 10);
+        const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
+        const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getRankLabel(state.user);
+        return TVC_SpareMenu.renderWrSparePage2Html(job, ro, buildWrPage2Meta(job, reportedByName, today));
+    }
 
-        const usedRows = lines.length ? lines.map(p => {
-            const low = p.qty_on_hand != null && p.qty_used > p.qty_on_hand;
-            return `<tr>
-                <td><strong>${esc(p.part_no)}</strong></td>
-                <td>${esc(p.universal_code || '—')}</td>
-                <td>${esc(p.name)}</td>
-                <td style="text-align:center">${p.qty_on_hand != null ? p.qty_on_hand : '—'}</td>
-                <td style="text-align:center">
-                    <input type="number" min="0" step="1" class="wr-spare-qty" data-wr-spare="${escAttr(p.spare_part_id)}" data-wr-field="qty"
-                        value="${esc(p.qty_used)}" ${ro ? 'disabled' : ''}>
-                </td>
-                <td>${low ? '<span class="pill overdue">LOW</span>' : ''}</td>
-                <td>${ro ? '' : `<button type="button" class="btn btn-sm btn-red" onclick="TVC_App.removeWrSparePart('${escAttr(p.spare_part_id)}')">×</button>`}</td>
-            </tr>`;
-        }).join('') : `<tr><td colspan="7" class="muted" style="text-align:center;padding:16px">소모 부품 없음 — 아래 검색에서 SPARE 항목 추가</td></tr>`;
-
-        return `
-            <div class="wr-spare-page">
-                <p class="wr-spare-note">📦 승인(Approved) 시 기록된 수량만큼 SPARE 재고에서 자동 차감됩니다.</p>
-                ${!ro ? `<div class="wr-spare-search">
-                    <label class="wr-label">SPARE 검색 (Part No / Name / Universal Code)</label>
-                    <input type="search" id="wrSpareSearch" class="wr-spare-search-input" placeholder="예: 01-001, Stud, U_ENG_001"
-                        value="${searchVal}" oninput="TVC_App.onWrSpareSearchInput(this.value)">
-                    <div id="wrSpareHitsWrap">${buildWrSpareHitsHtml()}</div>
-                </div>` : ''}
-                <label class="wr-label">Consumed Spare Parts (Page 2)</label>
-                <div class="wr-table-wrap wr-spare-used-wrap">
-                    <table class="wr-table wr-spare-used">
-                        <thead><tr>
-                            <th>Part No</th><th>Universal Code</th><th>Description</th>
-                            <th>On Hand</th><th>Qty Used</th><th></th><th></th>
-                        </tr></thead>
-                        <tbody>${usedRows}</tbody>
-                    </table>
-                </div>
-            </div>`;
+    function syncWorkReportPage2Ui(showPages, ro) {
+        const onPage2 = showPages && state._wrPage === '2';
+        if (onPage2) TVC_SpareMenu.initWrSparePage2(ro);
+        else TVC_SpareMenu.teardownWrSparePage2();
     }
 
     /** 현재 입력값을 임시 보관 (탭 전환 시 유실 방지) */
@@ -3052,7 +2979,9 @@ const TVC_App = (function () {
 
         const pickerHtml = state._batchJobPickerOpen ? buildBatchJobPickerHtml() : '';
 
-        const headHtml = `
+        const headHtml = showPages && state._wrPage === '2'
+            ? renderWrPage2HeadHtml({ reportedByName })
+            : `
             <div class="wr-form">
                 <div class="wr-row">
                     <div class="wr-fld wr-in-reporter"><label>Reported by</label><input class="wr-ro" value="${esc(reportedByName)}" readonly></div>
@@ -3154,6 +3083,7 @@ const TVC_App = (function () {
                 ${body}
             </div>
             <div class="modal-actions wr-actions">${actionsHtml}</div>`;
+        syncWorkReportPage2Ui(showPages, ro);
     }
 
     function renderWorkReportModal() {
@@ -3182,7 +3112,18 @@ const TVC_App = (function () {
         const canEditShipAttach = !ro && (!rep || rep.status === 'PENDING' || rep.status === 'POSTPONED');
         const canEditCompanyAttach = !ro && !!canConfirmNow;
 
-        const headHtml = `
+        const showPages = state._wrTab === 'repair' || state._wrTab === 'trouble';
+        const headHtml = showPages && state._wrPage === '2'
+            ? renderWrPage2HeadHtml({
+                reportedByName,
+                canApproveNow,
+                canConfirmNow,
+                isRepApproved,
+                isRepConfirmed,
+                approvedByVal,
+                confirmedByVal,
+            })
+            : `
             <div class="wr-form">
                 <div class="wr-row">
                     <div class="wr-fld wr-in-reporter"><label>Reported by</label><input class="wr-ro" value="${esc(reportedByName)}" readonly></div>
@@ -3202,7 +3143,6 @@ const TVC_App = (function () {
             </div>`;
 
         let body = '';
-        const showPages = state._wrTab === 'repair' || state._wrTab === 'trouble';
         const pageTabs = showPages ? `
             <div class="wr-pagetabs">
                 <button type="button" class="wr-pagetab${state._wrPage === '1' ? ' active' : ''}" onclick="TVC_App.setWorkReportPage('1')">Page 1</button>
@@ -3323,6 +3263,7 @@ const TVC_App = (function () {
                     el.disabled = true;
                 });
         }
+        syncWorkReportPage2Ui(showPages, ro);
     }
 
     /** Work Report 창 닫기 — Approved/Confirmed 체크 시 승인·확정 처리 후 닫기 */
@@ -3353,6 +3294,8 @@ const TVC_App = (function () {
     }
 
     function resetAndCloseWorkReport() {
+        TVC_SpareMenu.teardownWrSparePage2();
+        TVC_SpareMenu.cleanupConsumeWorkReportOverlay();
         state._wrReportId = null;
         state._wrBatchItemId = null;
         state._wrReadonly = false;
@@ -3395,12 +3338,14 @@ const TVC_App = (function () {
         const usedParts = (state._wrUsedParts || [])
             .filter(p => Number(p.qty_used) > 0)
             .map(p => ({ spare_part_id: p.spare_part_id, qty_used: Number(p.qty_used) }));
+        const wrPartsForConsumeLog = enrichUsedParts(usedParts);
 
         if (workType === 'MAINTENANCE' || workType === 'TROUBLE') {
             payload.usedParts = usedParts;
         }
 
         try {
+            let report;
             if (state._wrReportId) {
                 const updatePayload = { ...payload };
                 if (state._wrBatchItemId) {
@@ -3420,18 +3365,43 @@ const TVC_App = (function () {
                         updatePayload.form = form;
                     }
                 }
-                await TVC_Transaction.updateReport(user, state._wrReportId, updatePayload);
+                report = await TVC_Transaction.updateReport(user, state._wrReportId, updatePayload);
                 TVC_JobMeta.addHistory(job.job_code, {
                     action: `${workType}_MODIFIED`, user: user.display_name,
                     notes: (description || '').slice(0, 100),
                 });
             } else {
-                await TVC_Transaction.submitReport(user, job.id, payload);
+                report = await TVC_Transaction.submitReport(user, job.id, payload);
                 TVC_JobMeta.addHistory(job.job_code, {
                     action: `${workType}_${status}`, user: user.display_name,
                     notes: (description || '').slice(0, 100),
                 });
             }
+
+            if ((workType === 'MAINTENANCE' || workType === 'TROUBLE') && !state._batchMode) {
+                try {
+                    const consumeForm = {
+                        reportDate: form.reportDate || payload.reportDate,
+                        workDate: form.workDate || payload.workDate,
+                        shipComments: form.shipComments || '',
+                    };
+                    const consumeLogId = await TVC_SpareMenu.syncConsumeLogFromWorkReport({
+                        report,
+                        job,
+                        usedParts: wrPartsForConsumeLog,
+                        form: consumeForm,
+                        user,
+                        department: job.department || state.department || '',
+                    });
+                    if (report.consume_log_id !== consumeLogId) {
+                        report.consume_log_id = consumeLogId || null;
+                        await TVC_DB.put('daily_work_reports', report);
+                    }
+                } catch (syncErr) {
+                    console.error('Consumed Log sync failed:', syncErr);
+                }
+            }
+
             const wasModify = !!state._wrReportId;
             state._wrForm = {};
             state._wrUsedParts = [];
@@ -3738,7 +3708,6 @@ const TVC_App = (function () {
         uploadWrAttachment, removeWrAttachment,
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,
         setBatchActiveJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
-        setWrSpareSearch, onWrSpareSearchInput, addWrSparePart, removeWrSparePart,
         openWorkReportFromHistory, modifyWorkReport, selectHistRow,
         histDetailWorkReport, histModifyReport, histReportApproval, histDeleteReport,
         toggleHistCheck, toggleHistSelectAll,
