@@ -483,8 +483,10 @@ const TVC_SpareMenu = (function () {
         if (m.inlineEditId && m.inlineDraft?.header && focusOverride === undefined) {
             return renderSpareGroupHeaderEditHtml(st, m.inlineDraft.header);
         }
-        if (m.groupHeaderEdit && m.groupHeaderDraft && m.groupHeaderEditKey === st.selectedGroupKey && focusOverride === undefined) {
-            return renderSpareGroupHeaderGroupEditHtml(st, m.groupHeaderDraft);
+        if (m.groupHeaderEdit && m.groupHeaderDraft && m.groupHeaderEditKey === st.selectedGroupKey) {
+            return renderSpareGroupHeaderGroupEditHtml(st, m.groupHeaderDraft, {
+                pmsLabel: opts.pmsLabel || 'SPARE Group No.',
+            });
         }
         const h = resolveSpareGroupHeader(st, { focusedId: focusOverride });
         const hasContent = spareHeaderHasContent(st, focusOverride);
@@ -494,8 +496,10 @@ const TVC_SpareMenu = (function () {
             const cls = ['spare-gh-value', extraClass, empty ? 'empty' : ''].filter(Boolean).join(' ');
             return `<span class="${cls}">${empty ? '—' : esc(t)}</span>`;
         };
-        const idleHint = '<span class="spare-gh-idle-hint">아이템을 클릭하거나 SPARE GROUP Tree에서 그룹을 선택하면 장비 정보가 표시됩니다.</span>';
-        return `<section class="spare-group-header${hasContent ? '' : ' is-idle'}" aria-label="SPARE Group information">
+        const idleHintText = opts.idleHint || '아이템을 클릭하거나 SPARE GROUP Tree에서 그룹을 선택하면 장비 정보가 표시됩니다.';
+        const idleHint = `<span class="spare-gh-idle-hint">${idleHintText}</span>`;
+        const ariaLabel = opts.ariaLabel || 'SPARE Group information';
+        return `<section class="spare-group-header${hasContent ? '' : ' is-idle'}" aria-label="${esc(ariaLabel)}">
             <div class="spare-group-header-card">
                 <div class="spare-gh-row spare-gh-row-primary">
                     <div class="spare-gh-field spare-gh-field-wide">
@@ -523,6 +527,25 @@ const TVC_SpareMenu = (function () {
                 </div>
             </div>
         </section>`;
+    }
+
+    function withDerivedPlanGroupKey(st) {
+        if (st.selectedGroupKey) return st;
+        if (st.selectedJobId && st.idx) {
+            const job = st.idx.jobById.get(st.selectedJobId);
+            if (job?.group) {
+                return { ...st, selectedGroupKey: `${job.department || ''}|${String(job.group).trim()}` };
+            }
+        }
+        return st;
+    }
+
+    function renderPlanGroupHeaderHtml(st) {
+        return renderSpareGroupHeaderHtml(withDerivedPlanGroupKey(st), {
+            pmsLabel: 'PMS Group No.',
+            idleHint: '작업을 클릭하거나 PMS GROUP Tree에서 그룹을 선택하면 장비 정보가 표시됩니다.',
+            ariaLabel: 'PMS Group information',
+        });
     }
 
     function ghInput(id, value, extraClass = '') {
@@ -665,12 +688,13 @@ const TVC_SpareMenu = (function () {
     }
 
     // 그룹 단위 헤더 편집 (Machinery Name / Model / Capacity / Maker → 그룹 내 전체 아이템 일괄 적용)
-    function renderSpareGroupHeaderGroupEditHtml(st, h) {
-        return `<section class="spare-group-header is-editing is-group-editing" aria-label="SPARE Group 헤더 편집">
+    function renderSpareGroupHeaderGroupEditHtml(st, h, opts = {}) {
+        const pmsLabel = opts.pmsLabel || 'SPARE Group No.';
+        return `<section class="spare-group-header is-editing is-group-editing" aria-label="Group 헤더 편집">
             <div class="spare-group-header-card">
                 <div class="spare-gh-row spare-gh-row-primary">
                     <div class="spare-gh-field spare-gh-field-wide">
-                        <span class="spare-gh-label">SPARE Group No.</span>
+                        <span class="spare-gh-label">${esc(pmsLabel)}</span>
                         ${ghInput('sgh_g_pmsGroupNo', h.pmsGroupNo, 'spare-gh-input-primary')}
                     </div>
                 </div>
@@ -1020,6 +1044,18 @@ const TVC_SpareMenu = (function () {
         return (st.spares || []).reduce((n, s) => n + (consumeRowChecked(canon(s)) ? 1 : 0), 0);
     }
 
+    function consumeSelectedBtnMeta(st) {
+        const m = modState(st);
+        const n = consumeCheckedSpareCount(st);
+        const on = !!m.consumeShowSelectedOnly;
+        return {
+            label: on ? `Show All (${n})` : `Selected Items${n >= 1 ? ` (${n})` : ''}`,
+            title: on ? '전체 부품 목록 표시' : (n >= 1 ? '선택된 부품만 목록에 표시' : '체크(ㅁ)로 부품을 선택하세요'),
+            disabled: !on && n < 1,
+            active: on,
+        };
+    }
+
     function consumeSelectedCountLabel(st, visibleCount) {
         const allCanon = (st.spares || []).length;
         if (spareListSearchQuery(st)) return `${visibleCount} / ${allCanon}`;
@@ -1028,6 +1064,18 @@ const TVC_SpareMenu = (function () {
 
     function reqWorkCheckedSpareCount(st) {
         return (st.spares || []).reduce((n, s) => n + (reqWorkRowChecked(canon(s)) ? 1 : 0), 0);
+    }
+
+    function reqWorkSelectedBtnMeta(st) {
+        const m = modState(st);
+        const n = reqWorkCheckedSpareCount(st);
+        const on = !!m.reqWorkShowSelectedOnly;
+        return {
+            label: on ? `Show All (${n})` : `Selected Items${n >= 1 ? ` (${n})` : ''}`,
+            title: on ? '전체 부품 목록 표시' : (n >= 1 ? '선택된 부품만 목록에 표시' : '체크(ㅁ)로 부품을 선택하세요'),
+            disabled: !on && n < 1,
+            active: on,
+        };
     }
 
     function reqWorkSelectedCountLabel(st, visibleCount) {
@@ -1192,6 +1240,10 @@ const TVC_SpareMenu = (function () {
         }
         syncRequisitionDraftFromLines();
         syncReqLineMap();
+        const st = getState();
+        if (modState(st).reqWorkShowSelectedOnly && !reqWorkCheckedSpareCount(st)) {
+            modState(st).reqWorkShowSelectedOnly = false;
+        }
         refreshReqWorkListUi();
     }
 
@@ -1212,6 +1264,10 @@ const TVC_SpareMenu = (function () {
             draft.lines = draft.lines.filter(l => !visibleIds.has(consumeSpareIdKey(l.spare_part_id)));
         }
         syncConsumeLineMap();
+        const st = getState();
+        if (modState(st).consumeShowSelectedOnly && !consumeCheckedSpareCount(st)) {
+            modState(st).consumeShowSelectedOnly = false;
+        }
         refreshConsumeListUi();
     }
 
@@ -1297,6 +1353,8 @@ const TVC_SpareMenu = (function () {
         } else if (m.reqWorkOpen) {
             refreshReqWorkListUi();
             syncSpareToolbarUi();
+        } else if (st.currentTab === 'original' || st.currentTab === 'actual') {
+            if (window.TVC_App?.renderPlanGroupHeader) TVC_App.renderPlanGroupHeader();
         } else {
             render();
         }
@@ -1495,26 +1553,16 @@ const TVC_SpareMenu = (function () {
 
     function filteredReqWorkSpares(st) {
         const m = modState(st);
-        if (!m.reqWorkShowSelectedOnly) return filteredSpares(st);
-        if (spareListSearchQuery(st)) return filteredSpares(st);
-        const f = modState(st);
-        const stNoGroup = { ...st, selectedGroupKey: null };
-        return (st.spares || []).map(canon).filter(s => {
-            if (!reqWorkRowChecked(s)) return false;
-            return matchSpare(s, stNoGroup, f);
-        });
+        const list = filteredSpares(st);
+        if (!m.reqWorkShowSelectedOnly) return list;
+        return list.filter(s => reqWorkRowChecked(s));
     }
 
     function filteredConsumeSpares(st) {
         const m = modState(st);
-        if (!m.consumeShowSelectedOnly) return filteredSpares(st);
-        if (spareListSearchQuery(st)) return filteredSpares(st);
-        const f = modState(st);
-        const stNoGroup = { ...st, selectedGroupKey: null };
-        return (st.spares || []).map(canon).filter(s => {
-            if (!consumeRowChecked(s)) return false;
-            return matchSpare(s, stNoGroup, f);
-        });
+        const list = filteredSpares(st);
+        if (!m.consumeShowSelectedOnly) return list;
+        return list.filter(s => consumeRowChecked(s));
     }
 
     function filteredWrSpares(st) {
@@ -1895,7 +1943,8 @@ const TVC_SpareMenu = (function () {
                 : ctx === 'wrSpare' ? 'TVC_SpareMenu.wrSpareToggleRow' : 'TVC_App.toggleSpareRow';
         const dblFn = ctx === 'reqWork' ? `TVC_SpareMenu.reqWorkAddSpare('${sid}')`
             : ctx === 'consume' ? `TVC_SpareMenu.consumeToggleRow('${sid}', true)`
-                : ctx === 'wrSpare' ? `TVC_SpareMenu.wrSpareToggleRow('${sid}', true)` : `TVC_SpareMenu.openDetail('${sid}')`;
+                : ctx === 'wrSpare' ? `TVC_SpareMenu.wrSpareToggleRow('${sid}', true)` : '';
+        const dblAttr = dblFn ? ` ondblclick="event.preventDefault();${dblFn}"` : '';
         const colgroup = ctx === 'reqWork' ? SPARE_REQ_COLGROUP
             : ctx === 'consume' ? SPARE_CONSUME_COLGROUP
                 : ctx === 'wrSpare' ? SPARE_WR_COLGROUP : SPARE_MAIN_COLGROUP;
@@ -1921,8 +1970,7 @@ const TVC_SpareMenu = (function () {
         const pnoText = String(spareDrawingNo(s) || '').trim();
         const workText = String(spareWorking(s) || '').trim();
         return `<table class="${tableCls}" role="presentation" data-spare-id="${sid}"
-            onclick="${focusFn}('${sid}')"
-            ondblclick="event.preventDefault();${dblFn}">${colgroup}<tbody><tr class="spare-row${low ? ' row-overdue' : ''}${sel}"
+            onclick="${focusFn}('${sid}')"${dblAttr}>${colgroup}<tbody><tr class="spare-row${low ? ' row-overdue' : ''}${sel}"
             tabindex="0" role="button" style="cursor:pointer">
             <td class="c-chk" onclick="event.stopPropagation()">
                 <input type="checkbox" class="spare-row-chk" ${checked}${locked || wrRo || consumeRo ? ' disabled' : ''} aria-label="부품 선택"
@@ -2482,11 +2530,11 @@ const TVC_SpareMenu = (function () {
         return logs.map(log => {
             const lid = escAttr(log.id);
             const checked = consumeLogIsRowChecked(m, log.id);
-            const sel = m.selectedConsumeLogId === log.id ? ' row-selected spare-row-focused' : '';
+            const sel = m.selectedConsumeLogId === log.id;
             const pmsText = safeTreeLabel(log.pms_group_no || '');
             const jobText = String(log.job_code || '').trim();
             const commentsText = consumeLogComments(log);
-            return `<tr class="spare-consume-log-row${sel}" data-consume-log-id="${lid}"
+            return `<tr class="spare-consume-log-row${sel ? ' sr-req-sel' : ''}" data-consume-log-id="${lid}"
                 onclick="TVC_SpareMenu.consumeLogSelectRow('${lid}')">
                 <td class="spare-consume-log-chk" onclick="event.stopPropagation()">
                     <input type="checkbox" class="spare-row-chk"${checked ? ' checked' : ''} aria-label="소비 일지 선택"
@@ -2564,6 +2612,7 @@ const TVC_SpareMenu = (function () {
 
     async function consumeLogSelectRow(id) {
         const m = modState(getState());
+        // 행 클릭은 하이라이트(선택)만 — Requisition List와 동일
         m.selectedConsumeLogId = id;
         await renderConsumeLogModal();
     }
@@ -3444,12 +3493,23 @@ const TVC_SpareMenu = (function () {
         return st.idx?.groupNodes?.find(n => n.key === key) || null;
     }
 
+    function canEditGroupHeader(st) {
+        if (canModifySpare(st)) return true;
+        const user = spareInventoryUser(st);
+        return !!(user && window.TVC_RBAC?.canModifyOriginalPlan?.(user));
+    }
+
     function startGroupHeaderEdit() {
         const st = getState();
-        if (!canModifySpare(st)) return alert('Chief Engineer / Captain 권한이 필요합니다.');
+        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain 권한이 필요합니다.');
         const key = st.selectedGroupKey;
+        const treeName = (st.currentTab === 'original' || st.currentTab === 'actual')
+            ? 'PMS GROUP Tree' : 'SPARE GROUP Tree';
         if (!key || key === CRITICAL_GROUP_KEY) {
-            return alert('SPARE GROUP Tree에서 수정할 그룹을 먼저 선택하세요.');
+            return alert(`${treeName}에서 수정할 그룹을 먼저 선택하세요.`);
+        }
+        if (window.TVC_App?.isOrigJobInlineEditing?.() && window.TVC_App?.cancelOrigJobInlineEdit) {
+            TVC_App.cancelOrigJobInlineEdit();
         }
         const m = modState(st);
         m.inlineEditId = null;
@@ -3475,7 +3535,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (!m.groupHeaderEdit) return;
-        if (!canModifySpare(st)) return alert('Chief Engineer / Captain 권한이 필요합니다.');
+        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain 권한이 필요합니다.');
         const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
         const draft = m.groupHeaderDraft || {};
         const key = st.selectedGroupKey;
@@ -4450,7 +4510,8 @@ const TVC_SpareMenu = (function () {
         const completeDisabled = completeDone || !canComplete;
         const completeTitle = (!canComplete && !completeDone) ? 'Chief Engineer만 사용 가능합니다' : '';
         const preview = false;
-        const selectedBtnCls = m.reqWorkShowSelectedOnly ? ' is-active' : '';
+        const selBtn = reqWorkSelectedBtnMeta(st);
+        const selectedBtnCls = selBtn.active ? ' plan-selected-filter-active' : '';
         const countLabel = m.reqWorkShowSelectedOnly
             ? reqWorkSelectedCountLabel(st, _reqWorkCachedList.length)
             : `${_reqWorkCachedList.length} / ${allCanon.length}`;
@@ -4482,7 +4543,8 @@ const TVC_SpareMenu = (function () {
                 <button type="button" id="reqWorkAppendBtn" class="btn btn-sm" onclick="TVC_App.openSpareAppend()"${tb.appendEnabled ? '' : ' disabled'} title="${esc(tb.appendTitle)}">➕ Append</button>
                 <button type="button" id="reqWorkDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteSpareItem()"${tb.deleteEnabled ? '' : ' disabled'} title="${esc(tb.deleteTitle)}">🗑 Delete</button>
                 <button type="button" id="reqWorkSelectedBtn" class="btn btn-sm spare-req-selected-btn${selectedBtnCls}"
-                    onclick="TVC_SpareMenu.reqWorkToggleSelectedOnly()" aria-pressed="${m.reqWorkShowSelectedOnly ? 'true' : 'false'}">Selected Items</button>
+                    onclick="TVC_SpareMenu.reqWorkToggleSelectedOnly()" aria-pressed="${selBtn.active ? 'true' : 'false'}"
+                    title="${escAttr(selBtn.title)}"${selBtn.disabled ? ' disabled' : ''}>${esc(selBtn.label)}</button>
                 <span style="flex:1"></span>
                 ${canModify ? `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.loadBundledXls()">📥 Import XLS</button>
                   <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.triggerInventoryImport()">📂 XLS 선택</button>
@@ -4530,6 +4592,7 @@ const TVC_SpareMenu = (function () {
 
         renderReqWorkGroupTree();
         mountReqWorkVirtualList();
+        updateReqWorkSelectedBtn();
         if (preview) {
             body.querySelectorAll('.spare-req-work-meta input, .spare-req-work-meta select').forEach(el => {
                 el.setAttribute('disabled', 'disabled');
@@ -4759,11 +4822,15 @@ const TVC_SpareMenu = (function () {
     }
 
     function updateReqWorkSelectedBtn() {
-        const m = modState(getState());
+        const st = getState();
+        const meta = reqWorkSelectedBtnMeta(st);
         const btn = document.getElementById('reqWorkSelectedBtn');
         if (!btn) return;
-        btn.classList.toggle('is-active', !!m.reqWorkShowSelectedOnly);
-        btn.setAttribute('aria-pressed', m.reqWorkShowSelectedOnly ? 'true' : 'false');
+        btn.textContent = meta.label;
+        btn.title = meta.title;
+        btn.disabled = meta.disabled;
+        btn.classList.toggle('plan-selected-filter-active', meta.active);
+        btn.setAttribute('aria-pressed', meta.active ? 'true' : 'false');
     }
 
     function clearReqWorkSearch(st) {
@@ -4778,13 +4845,12 @@ const TVC_SpareMenu = (function () {
     function reqWorkToggleSelectedOnly() {
         const st = getState();
         const m = modState(st);
-        if (m.reqWorkShowSelectedOnly && spareListSearchQuery(st)) {
-            clearReqWorkSearch(st);
-            refreshReqWorkListUi();
-            return;
+        if (m.reqWorkShowSelectedOnly) {
+            m.reqWorkShowSelectedOnly = false;
+        } else {
+            if (!reqWorkCheckedSpareCount(st)) return alert('선택된 부품이 없습니다.');
+            m.reqWorkShowSelectedOnly = true;
         }
-        m.reqWorkShowSelectedOnly = !m.reqWorkShowSelectedOnly;
-        if (m.reqWorkShowSelectedOnly) clearReqWorkSearch(st);
         refreshReqWorkListUi();
     }
 
@@ -4832,6 +4898,9 @@ const TVC_SpareMenu = (function () {
         }
         syncRequisitionDraftFromLines();
         syncReqLineMap();
+        if (modState(getState()).reqWorkShowSelectedOnly && !reqWorkCheckedSpareCount(getState())) {
+            modState(getState()).reqWorkShowSelectedOnly = false;
+        }
         refreshReqWorkListUi();
     }
 
@@ -5568,11 +5637,15 @@ const TVC_SpareMenu = (function () {
     }
 
     function updateConsumeSelectedBtn() {
-        const m = modState(getState());
+        const st = getState();
+        const meta = consumeSelectedBtnMeta(st);
         const btn = document.getElementById('consumeSelectedBtn');
         if (!btn) return;
-        btn.classList.toggle('is-active', !!m.consumeShowSelectedOnly);
-        btn.setAttribute('aria-pressed', m.consumeShowSelectedOnly ? 'true' : 'false');
+        btn.textContent = meta.label;
+        btn.title = meta.title;
+        btn.disabled = meta.disabled;
+        btn.classList.toggle('plan-selected-filter-active', meta.active);
+        btn.setAttribute('aria-pressed', meta.active ? 'true' : 'false');
     }
 
     function clearConsumeSearch(st) {
@@ -5587,13 +5660,12 @@ const TVC_SpareMenu = (function () {
     function consumeToggleSelectedOnly() {
         const st = getState();
         const m = modState(st);
-        if (m.consumeShowSelectedOnly && spareListSearchQuery(st)) {
-            clearConsumeSearch(st);
-            refreshConsumeListUi();
-            return;
+        if (m.consumeShowSelectedOnly) {
+            m.consumeShowSelectedOnly = false;
+        } else {
+            if (!consumeCheckedSpareCount(st)) return alert('선택된 부품이 없습니다.');
+            m.consumeShowSelectedOnly = true;
         }
-        m.consumeShowSelectedOnly = !m.consumeShowSelectedOnly;
-        if (m.consumeShowSelectedOnly) clearConsumeSearch(st);
         refreshConsumeListUi();
     }
 
@@ -5640,6 +5712,9 @@ const TVC_SpareMenu = (function () {
             draft.lines = draft.lines.filter(l => !consumeSameSpareId(l.spare_part_id, sid));
         }
         syncConsumeLineMap();
+        if (modState(getState()).consumeShowSelectedOnly && !consumeCheckedSpareCount(getState())) {
+            modState(getState()).consumeShowSelectedOnly = false;
+        }
         refreshConsumeListUi();
     }
 
@@ -5663,49 +5738,25 @@ const TVC_SpareMenu = (function () {
     }
 
     function renderWrSpareMetaHtml(meta = {}) {
-        const roAttr = ' readonly disabled';
         const pmsLabel = meta.pmsGroupNo ? safeTreeLabel(meta.pmsGroupNo) : '—';
-        return `<section class="spare-consume-meta-form wr-spare-meta-form" aria-label="Work report job context">
-            <div class="spare-consume-meta-row-top">
-                <div class="spare-consume-meta-field spare-consume-meta-field-date">
-                    <label class="spare-consume-meta-inline-label">Consumed Date</label>
-                    <input type="date" class="spare-req-meta-input spare-consume-meta-input" value="${esc(meta.reportDate || '')}"${roAttr}>
-                </div>
-                <div class="spare-consume-meta-field spare-consume-meta-field-made">
-                    <label class="spare-consume-meta-inline-label">Reported Date</label>
-                    <input type="date" class="spare-req-meta-input spare-consume-meta-input" value="${esc(meta.workDate || '')}"${roAttr}>
-                </div>
-                <div class="spare-consume-meta-field spare-consume-meta-field-by">
-                    <label class="spare-consume-meta-inline-label">Reported by</label>
-                    <input type="text" class="spare-req-meta-input spare-consume-meta-input" value="${esc(meta.reportedBy || '')}"${roAttr}>
-                </div>
+        const roInp = (type, val) => `<input type="${type}" class="wr-ro" value="${esc(val)}" readonly disabled>`;
+        const fld = (label, inner, extraCls = '') =>
+            `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}"><label>${label}</label>${inner}</div>`;
+
+        return `<section class="wr-maint-card wr-maint-body wr-spare-meta-form" aria-label="Work report job context">
+            <div class="wr-maint-grid wr-maint-grid-3">
+                ${fld('Work Date', roInp('date', meta.workDate || ''))}
+                ${fld('Reported Date', roInp('date', meta.reportDate || ''))}
+                ${fld('Reported by', roInp('text', meta.reportedBy || ''))}
+                ${fld('PMS Group No.', roInp('text', pmsLabel), 'wr-maint-span-all')}
             </div>
-            <div class="spare-consume-meta-row spare-consume-meta-row-pms">
-                <label class="spare-consume-meta-label">PMS Group No.</label>
-                <input type="text" class="spare-req-meta-input spare-consume-meta-input wr-spare-meta-pms" value="${esc(pmsLabel)}"${roAttr}>
+            <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
+                ${fld('Job Code', roInp('text', meta.jobCode || ''))}
+                ${fld('SORT-1', roInp('text', meta.sort1 || ''))}
+                ${fld('SORT-2', roInp('text', meta.sort2 || ''))}
+                ${fld('Job Detail', roInp('text', meta.jobDetail || ''))}
             </div>
-            <div class="spare-consume-meta-job-grid">
-                <div class="spare-consume-meta-job-col spare-consume-meta-job-col-job">
-                    <label class="spare-consume-meta-col-head">JOB CODE</label>
-                    <input type="text" class="spare-req-meta-input spare-consume-meta-input" value="${esc(meta.jobCode || '')}"${roAttr}>
-                </div>
-                <div class="spare-consume-meta-job-col">
-                    <label class="spare-consume-meta-col-head">SORT-1</label>
-                    <input type="text" class="spare-req-meta-input spare-consume-meta-input" value="${esc(meta.sort1 || '')}"${roAttr}>
-                </div>
-                <div class="spare-consume-meta-job-col">
-                    <label class="spare-consume-meta-col-head">SORT-2</label>
-                    <input type="text" class="spare-req-meta-input spare-consume-meta-input" value="${esc(meta.sort2 || '')}"${roAttr}>
-                </div>
-                <div class="spare-consume-meta-job-col">
-                    <label class="spare-consume-meta-col-head">JOB DETAIL</label>
-                    <input type="text" class="spare-req-meta-input spare-consume-meta-input" value="${esc(meta.jobDetail || '')}"${roAttr}>
-                </div>
-            </div>
-            <div class="spare-consume-meta-comments">
-                <label class="spare-consume-meta-col-head">Ship's Comments</label>
-                <textarea class="spare-req-meta-input spare-consume-meta-textarea" rows="2"${roAttr}>${esc(meta.shipComments || '')}</textarea>
-            </div>
+            ${fld("Ship's Comments &amp; Desired Articles", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly disabled>${esc(meta.shipComments || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
         </section>`;
     }
 
@@ -5775,7 +5826,6 @@ const TVC_SpareMenu = (function () {
 
         return `
 ${renderWrSpareMetaHtml(meta)}
-${isPreview ? '' : '<div class="wr-spare-note">📦 승인(Approved) 시 기록된 수량만큼 SPARE 재고에서 자동 차감됩니다.</div>'}
 <div class="${layoutCls}">
   ${treePanel}
   <main class="panel spare-main">
@@ -6163,10 +6213,14 @@ ${isPreview ? '' : '<div class="wr-spare-note">📦 승인(Approved) 시 기록�
               <div class="panel-body tree-scroll" id="consumeGroupTree"></div>
             </aside>`;
 
-        const listToolbar = isPreview ? '' : `
+        const listToolbar = isPreview ? '' : (() => {
+            const selBtn = consumeSelectedBtnMeta(st);
+            const selectedBtnCls = selBtn.active ? ' plan-selected-filter-active' : '';
+            return `
               <div class="filter-bar orig-toolbar spare-item-toolbar">
-                <button type="button" id="consumeSelectedBtn" class="btn btn-sm spare-req-selected-btn${m.consumeShowSelectedOnly ? ' is-active' : ''}"
-                    onclick="TVC_SpareMenu.consumeToggleSelectedOnly()" aria-pressed="${m.consumeShowSelectedOnly ? 'true' : 'false'}">Selected Items</button>
+                <button type="button" id="consumeSelectedBtn" class="btn btn-sm spare-req-selected-btn${selectedBtnCls}"
+                    onclick="TVC_SpareMenu.consumeToggleSelectedOnly()" aria-pressed="${selBtn.active ? 'true' : 'false'}"
+                    title="${escAttr(selBtn.title)}"${selBtn.disabled ? ' disabled' : ''}>${esc(selBtn.label)}</button>
                 <span style="flex:1"></span>
               </div>
               <div class="filter-bar spare-list-search-bar">
@@ -6179,6 +6233,7 @@ ${isPreview ? '' : '<div class="wr-spare-note">📦 승인(Approved) 시 기록�
             ? consumeSelectedCountLabel(st, _consumeCachedList.length)
             : `${_consumeCachedList.length} / ${allCanon.length}`}</span>
               </div>`;
+        })();
 
         const layoutCls = isPreview
             ? 'plan-layout spare-layout spare-req-work-layout spare-consume-work-layout spare-consume-preview-layout'
@@ -6214,7 +6269,10 @@ ${isPreview ? '' : '<div class="wr-spare-note">📦 승인(Approved) 시 기록�
 
         if (!isPreview) renderConsumeGroupTree();
         mountConsumeVirtualList();
-        if (!isPreview) refreshConsumeGroupPickList();
+        if (!isPreview) {
+            refreshConsumeGroupPickList();
+            updateConsumeSelectedBtn();
+        }
         requestAnimationFrame(() => {
             syncConsumeHeadLayout();
             requestAnimationFrame(syncConsumeHeadLayout);
@@ -7151,6 +7209,24 @@ ${isPreview ? '' : '<div class="wr-spare-note">📦 승인(Approved) 시 기록�
         }
         openReqSheetModal();
     }
+    function resolveWrJobHeader(st, job) {
+        if (!job) {
+            return { pmsGroupNo: '', maker: '', modelType: '', capacity: '', serialNo: '' };
+        }
+        const prevKey = st.selectedGroupKey;
+        const gk = `${job.department || ''}|${String(job.group || '').trim()}`;
+        st.selectedGroupKey = gk;
+        const h = resolveSpareHeaderFromGroup(st);
+        st.selectedGroupKey = prevKey;
+        return {
+            pmsGroupNo: safeTreeLabel(job.group || '') || h.pmsGroupNo || '',
+            maker: h.maker || '',
+            modelType: h.modelType || '',
+            capacity: h.capacity || '',
+            serialNo: h.serialNo || '',
+        };
+    }
+
     function exportDeliveryData() { alert('Delivery Export — 다음 단계'); }
 
     return {
@@ -7168,7 +7244,8 @@ ${isPreview ? '' : '<div class="wr-spare-note">📦 승인(Approved) 시 기록�
         toggleConsumeJobPick, consumeJobPickSearch, pickConsumeMetaJob,
         consumeSelectGroup, consumeSetTreeSearch, consumeSetSearch, consumeToggleLowOnly,
         consumeToggleSelectedOnly, consumeFocusRow, consumeToggleRow, consumeToggleAll, consumeSetQty,
-        renderWrSparePage2Html, initWrSparePage2, teardownWrSparePage2,
+        renderSpareGroupHeaderHtml, renderPlanGroupHeaderHtml,
+        renderWrSparePage2Html, initWrSparePage2, teardownWrSparePage2, resolveWrJobHeader,
         wrSpareSelectGroup, wrSpareSetTreeSearch, wrSpareSetSearch, wrSpareToggleLowOnly,
         wrSpareToggleSelectedOnly, wrSpareFocusRow, wrSpareToggleRow, wrSpareToggleAll, wrSpareSetQty,
         onTxSearchInput, addTxLine, removeTxLine,

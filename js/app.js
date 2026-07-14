@@ -3,6 +3,7 @@ const TVC_App = (function () {
     const ROW_H = 36;
     const TABS = ['menu', 'original', 'actual', 'history', 'runhrs', 'spare', 'notice'];
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
+    const NEW_ORIG_JOB_EDIT_ID = '__new_orig_job__';
     let _wrSpareSearchT = null;
 
     let state = {
@@ -11,7 +12,7 @@ const TVC_App = (function () {
         idx: null,
         selectedGroupKey: null,
         treeSearch: '',
-        actualFilter: 'total',        // total | overdue | due30 | pending
+        actualFilter: 'total',        // total | overdue | due30 | postponed | pending
         actualPeriodFrom: '',         // YYYY-MM-DD Due date range (Actual Plan)
         actualPeriodTo: '',
         jobSort: { field: 'job_code', asc: true },
@@ -47,7 +48,9 @@ const TVC_App = (function () {
         spareListSelected: {},       // { spareId: true } — SPARE 목록 ㅁ 체크(재고 조회용)
         requisitionDraft: [],        // [spareId, …] — New Requisition 선택 아이템(목록과 독립)
         spareMenu: null,
-        batchSelectedJobs: {},   // { jobId: true } — Actual Plan 다중 선택
+        batchSelectedJobs: {},   // { jobId: true } — Original/Actual Plan 다중 선택
+        originalSelectedOnly: false, // Original Plan — 선택 항목만 목록 표시
+        actualSelectedOnly: false, // Actual Plan — 선택 항목만 목록 표시
         _batchDraft: null,       // Batch Report 편집 중 임시 데이터
         _batchMode: false,
         _batchJobIds: [],
@@ -303,6 +306,8 @@ const TVC_App = (function () {
     /** 상단 탭 전환 — 부서 필터 상태는 그대로 유지된다. */
     function switchTab(tab) {
         if (!TABS.includes(tab)) tab = 'menu';
+        if (tab !== 'actual') state.actualSelectedOnly = false;
+        if (tab !== 'original') state.originalSelectedOnly = false;
         state.currentTab = tab;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
@@ -367,6 +372,7 @@ const TVC_App = (function () {
         document.querySelectorAll('[data-feature]').forEach(el => {
             el.classList.toggle('hidden', !f[el.dataset.feature]);
         });
+        syncPlanGroupTreeUi();
     }
 
     function daysUntil(dateStr) {
@@ -499,6 +505,112 @@ const TVC_App = (function () {
         return deptJobs().filter(isCriticalMaintenanceJob).map(j => j.id);
     }
 
+    let _actualFilterKeysCache = null;
+
+    function clearActualFilterKeysCache() { _actualFilterKeysCache = null; }
+
+    function reportsForDept() {
+        let reps = state.reports || [];
+        if (state.department) reps = reps.filter(r => reportDept(r) === state.department);
+        return reps;
+    }
+
+    function pendingApprovalJobKeys() {
+        const ids = new Set();
+        const codes = new Set();
+        reportsForDept().filter(r => r.status === 'PENDING').forEach(r => {
+            TVC_WorkReport.getJobItems(r).forEach(item => {
+                if (item.status === 'PENDING') {
+                    if (item.maintenance_job_id) ids.add(item.maintenance_job_id);
+                    if (item.job_code) codes.add(item.job_code);
+                }
+            });
+        });
+        return { ids, codes };
+    }
+
+    function postponedJobKeys() {
+        const ids = new Set();
+        const codes = new Set();
+        reportsForDept().forEach(r => {
+            if (r.status === 'POSTPONED' || r.work_type === 'POSTPONE') {
+                if (r.maintenance_job_id) ids.add(r.maintenance_job_id);
+                if (r.job_code) codes.add(r.job_code);
+            }
+            TVC_WorkReport.getJobItems(r).forEach(item => {
+                if (item.status === 'POSTPONED') {
+                    if (item.maintenance_job_id) ids.add(item.maintenance_job_id);
+                    if (item.job_code) codes.add(item.job_code);
+                }
+            });
+        });
+        return { ids, codes };
+    }
+
+    function getActualFilterKeys() {
+        if (!_actualFilterKeysCache) {
+            _actualFilterKeysCache = {
+                pending: pendingApprovalJobKeys(),
+                postponed: postponedJobKeys(),
+            };
+        }
+        return _actualFilterKeysCache;
+    }
+
+    function isActualJobCompleted(j) {
+        return j?.plan_status === 'COMPLETED';
+    }
+
+    function jobMatchesActualFilter(j, filter) {
+        if (!j || filter === 'total') return true;
+        const keys = getActualFilterKeys();
+        if (filter === 'overdue') return !!j.is_overdue && !isActualJobCompleted(j);
+        if (filter === 'due30') {
+            const d = daysUntil(j.next_date);
+            return !j.is_overdue && d >= 0 && d <= 30;
+        }
+        if (filter === 'postponed') {
+            return keys.postponed.ids.has(j.id) || keys.postponed.codes.has(j.job_code);
+        }
+        if (filter === 'pending') {
+            return keys.pending.ids.has(j.id) || keys.pending.codes.has(j.job_code);
+        }
+        return true;
+    }
+
+    function actualDashboardCounts() {
+        const jobs = deptJobs();
+        const keys = getActualFilterKeys();
+        let overdue = 0;
+        let due30 = 0;
+        let postponed = 0;
+        let pending = 0;
+        jobs.forEach(j => {
+            if (j.is_overdue && !isActualJobCompleted(j)) overdue++;
+            const d = daysUntil(j.next_date);
+            if (!j.is_overdue && d >= 0 && d <= 30) due30++;
+            if (keys.postponed.ids.has(j.id) || keys.postponed.codes.has(j.job_code)) postponed++;
+            if (keys.pending.ids.has(j.id) || keys.pending.codes.has(j.job_code)) pending++;
+        });
+        return { total: jobs.length, overdue, due30, postponed, pending };
+    }
+
+    function jobActualStatusPill(j) {
+        const keys = getActualFilterKeys();
+        if (keys.pending.ids.has(j.id) || keys.pending.codes.has(j.job_code)) {
+            return '<span class="pill pending-apr">APPROVAL PENDING</span>';
+        }
+        if (keys.postponed.ids.has(j.id) || keys.postponed.codes.has(j.job_code)) {
+            return '<span class="pill postponed">POSTPONED</span>';
+        }
+        if (j.is_overdue && !isActualJobCompleted(j)) {
+            return '<span class="pill overdue">OVERDUE</span>';
+        }
+        const d = daysUntil(j.next_date);
+        if (d >= 0 && d <= 30) return '<span class="pill warn">DUE</span>';
+        return '<span class="pill ok">OK</span>';
+    }
+
     /** 부서 필터(전역) 후 mode별 세부 필터 적용 */
     function sheetIds(mode) {
         const idx = state.idx;
@@ -512,21 +624,16 @@ const TVC_App = (function () {
         }
         if (mode === 'actual') {
             const af = state.actualFilter;
-            const pendingKeys = af === 'pending' ? pendingReportJobKeys() : null;
-            ids = ids.filter(id => {
-                const j = idx.jobById.get(id);
-                if (!j) return false;
-                if (af === 'total') return true;
-                if (af === 'overdue') return j.is_overdue;
-                if (af === 'due30') return !j.is_overdue && daysUntil(j.next_date) <= 30;
-                if (af === 'pending') {
-                    return pendingKeys.ids.has(j.id) || pendingKeys.codes.has(j.job_code);
-                }
-                return true;
-            });
+            ids = ids.filter(id => jobMatchesActualFilter(idx.jobById.get(id), af));
             if (hasActualPeriodFilter()) {
                 ids = ids.filter(id => isJobInActualPeriod(idx.jobById.get(id)));
             }
+            if (state.actualSelectedOnly) {
+                ids = ids.filter(id => state.batchSelectedJobs[id]);
+            }
+        }
+        if (mode === 'original' && state.originalSelectedOnly) {
+            ids = ids.filter(id => state.batchSelectedJobs[id]);
         }
         ids = ids.filter(id => matchSearch(idx.jobById.get(id)));
         return sortIds(ids);
@@ -585,6 +692,7 @@ const TVC_App = (function () {
         if (wrap) wrap.classList.toggle('active', hasActualPeriodFilter());
     }
     function selectGroup(key) {
+        if (state.currentTab === 'original' && isOrigJobInlineEditing()) cancelOrigJobInlineEdit();
         state.selectedGroupKey = key || null;
         // 그룹을 바꾸면 이전에 클릭한 아이템 포커스를 해제 — 헤더가 새 그룹 정보를 표시하도록
         state.focusedSpareId = null;
@@ -596,11 +704,13 @@ const TVC_App = (function () {
 
     // ── Job table (shared by Original & Actual) ──────────────────────
     function renderJobRowHtml(j, mode) {
-        const st = j.is_overdue ? '<span class="pill overdue">OVERDUE</span>'
-            : (daysUntil(j.next_date) <= 30 ? '<span class="pill warn">DUE</span>' : '<span class="pill ok">OK</span>');
+        const st = mode === 'actual'
+            ? jobActualStatusPill(j)
+            : (j.is_overdue ? '<span class="pill overdue">OVERDUE</span>'
+                : (daysUntil(j.next_date) <= 30 ? '<span class="pill warn">DUE</span>' : '<span class="pill ok">OK</span>'));
         const selected = state.selectedJobId === j.id ? ' row-selected' : '';
+        const batchOn = !!state.batchSelectedJobs[j.id];
         if (mode === 'actual') {
-            const batchOn = !!state.batchSelectedJobs[j.id];
             return `<div class="vl-cells sheet-actual${selected}${j.is_overdue ? ' row-overdue' : ''}"
                 onclick="TVC_App.selectJobRow('${j.id}')"
                 ondblclick="TVC_App.openWorkProcedure('${j.id}')">
@@ -623,7 +733,8 @@ const TVC_App = (function () {
             onclick="TVC_App.selectJobRow('${j.id}')"
             ondblclick="TVC_App.openWorkProcedure('${j.id}')">
             <span class="c-chk" onclick="event.stopPropagation()">
-                <input type="checkbox" class="orig-chk-disabled" disabled aria-label="Selection not available">
+                <input type="checkbox" class="orig-batch-chk" ${batchOn ? 'checked' : ''} aria-label="Select for batch"
+                    onchange="TVC_App.toggleBatchJob('${escAttr(j.id)}', this.checked)">
             </span>
             <span class="c-code"><strong>${esc(j.job_code)}</strong></span>
             <span class="c-s1">${esc(j.item_sort1 || '')}</span>
@@ -639,14 +750,17 @@ const TVC_App = (function () {
 
     /** 행 단일 클릭 — 선택(연한 파란색)만, 모달 없음 */
     function selectJobRow(jobId) {
+        if (isOrigJobInlineEditing()) return;
         state.selectedJobId = jobId;
         if (state.vlOriginal) state.vlOriginal.refresh();
         if (state.vlActual) state.vlActual.refresh();
         renderSidePanel();
+        renderPlanGroupHeader();
         if (state.currentTab === 'original') syncOriginalPlanItemUi();
     }
 
     function mountJobSheet(headId, countId, scrollId, ids, vlKey, sheetMode) {
+        if (headId === 'origHead' || headId === 'actHead') renderPlanGroupHeader(headId);
         const container = document.getElementById(scrollId);
         if (!container) return;
         const arrow = f => state.jobSort.field === f ? (state.jobSort.asc ? ' ▲' : ' ▼') : '';
@@ -670,8 +784,12 @@ const TVC_App = (function () {
                     <span class="c-last">LAST DONE</span><span class="c-st">STATUS</span>
                 </div>`;
             } else {
-                head.innerHTML = `<div class="vl-head">
-                    <span class="c-chk"><input type="checkbox" class="orig-chk-disabled" disabled aria-hidden="true"></span>
+                const selIds = sheetIds('original');
+                const allBatch = selIds.length > 0 && selIds.every(id => state.batchSelectedJobs[id]);
+                head.innerHTML = `<div class="vl-head sheet-original">
+                    <span class="c-chk" title="Select all visible">
+                        <input type="checkbox" ${allBatch ? 'checked' : ''} onchange="TVC_App.toggleBatchSelectAll(this.checked)">
+                    </span>
                     <span class="c-code sortable" onclick="TVC_App.sortJobs('job_code')">JOB CODE${arrow('job_code')}</span>
                     <span class="c-s1">SORT-1</span><span class="c-d1">SORT-2</span><span class="c-d2">JOB DETAIL</span>
                     <span class="c-per">PERIOD</span><span class="c-pic">P.I.C</span>
@@ -1130,6 +1248,19 @@ const TVC_App = (function () {
         return state.idx.groupNodes.find(n => n.key === state.selectedGroupKey) || null;
     }
 
+    function canEditPlanGroupHeader() {
+        if (!state.user) return false;
+        return TVC_RBAC.canModifySpareInventory(state.user) || TVC_RBAC.canModifyOriginalPlan(state.user);
+    }
+
+    function syncPlanGroupTreeUi() {
+        const canEdit = canEditPlanGroupHeader();
+        ['origPlanTreeModifyBtn', 'actPlanTreeModifyBtn'].forEach(id => {
+            const btn = document.getElementById(id);
+            if (btn) btn.classList.toggle('hidden', !canEdit);
+        });
+    }
+
     function syncOriginalPlanGroupUi() {
         const bar = document.getElementById('origTreeActions');
         if (!bar) return;
@@ -1248,8 +1379,10 @@ const TVC_App = (function () {
             del.title = !canEdit ? tip : (!hasSel ? '삭제할 행을 선택하세요' : '');
         }
         const mod = document.getElementById('origModifyBtn');
-        if (mod) mod.disabled = !canEdit || !hasSel;
-        if (mod) mod.title = !canEdit ? tip : (!hasSel ? '수정할 행을 선택하세요' : '');
+        if (mod) mod.disabled = !canEdit || (!hasSel && !isOrigJobInlineEditing());
+        if (mod) mod.title = !canEdit ? tip : ((!hasSel && !isOrigJobInlineEditing()) ? '수정할 행을 선택하세요' : '');
+        const app = document.getElementById('origAppendBtn');
+        if (app && isOrigJobInlineEditing()) app.disabled = !canEdit;
     }
 
     function origGroupOptions(dept, selected) {
@@ -1268,6 +1401,188 @@ const TVC_App = (function () {
         return [...groups].sort().map(g =>
             `<option value="${escAttr(g)}"${g === selected ? ' selected' : ''}>${esc(g)}</option>`
         ).join('');
+    }
+
+    function origJobInlineState() {
+        state._origJobInline = state._origJobInline || { editId: null, mode: null, draft: null };
+        return state._origJobInline;
+    }
+
+    function isOrigJobInlineEditing() {
+        return !!origJobInlineState().editId;
+    }
+
+    function origJobCellInput(id, value, extraClass = '') {
+        const cls = ['spare-inline-input', extraClass].filter(Boolean).join(' ');
+        return `<input class="${cls}" id="${id}" value="${esc(String(value ?? ''))}" onclick="event.stopPropagation()">`;
+    }
+
+    function origJobCellDate(id, value) {
+        return `<input type="date" class="spare-inline-input orig-inline-date" id="${id}" value="${esc(String(value ?? ''))}" onclick="event.stopPropagation()">`;
+    }
+
+    function refreshOrigJobEditBlock() {
+        const host = document.getElementById('origJobEditBlock');
+        if (!host) return;
+        host.innerHTML = renderOrigJobInlineEditHtml();
+    }
+
+    function renderOrigJobInlineEditHtml() {
+        const m = origJobInlineState();
+        if (!m.editId || !m.draft) return '';
+        const r = m.draft;
+        const isNew = m.editId === NEW_ORIG_JOB_EDIT_ID;
+        const panelHead = isNew ? '➕ Append maintenance item' : '✏️ Editing maintenance item';
+        const dept = r.department || state.user?.department || state.department || 'ENGINE';
+        const units = ['M', 'W', 'D', 'H', 'Y'];
+        const unitSelect = `<select class="spare-inline-input orig-inline-unit" id="oie_unit" onclick="event.stopPropagation()">${units.map(u => `<option ${(r.unit || 'M') === u ? 'selected' : ''}>${u}</option>`).join('')}</select>`;
+        const groupSelect = `<select class="spare-inline-input spare-inline-input-wide" id="oie_group" onclick="event.stopPropagation()">${origGroupOptions(dept, r.group)}</select>`;
+        const codeCell = isNew
+            ? origJobCellInput('oie_code', r.job_code)
+            : `<span class="orig-inline-ro">${esc(r.job_code || '')}</span>`;
+        const colgroup = '<colgroup><col style="width:32px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:72px"><col style="width:48px"><col style="width:88px"><col style="width:88px"></colgroup>';
+        return `<section class="spare-item-edit-panel orig-job-inline-panel" aria-label="Maintenance job edit">
+            <div class="spare-item-edit-head">${panelHead}</div>
+            <div class="orig-job-inline-meta">
+                <span class="orig-job-inline-meta-label">GROUP</span>
+                ${groupSelect}
+            </div>
+            <div class="spare-item-edit-table-wrap">
+                <table class="spare-data-table spare-item-edit-table orig-job-inline-table">
+                    ${colgroup}
+                    <thead><tr>
+                        <th class="c-chk" aria-hidden="true"></th>
+                        <th class="c-code">JOB CODE</th>
+                        <th class="c-s1">SORT-1</th>
+                        <th class="c-d1">SORT-2</th>
+                        <th class="c-d2">JOB DETAIL</th>
+                        <th class="c-per">PERIOD</th>
+                        <th class="c-pic">P.I.C</th>
+                        <th class="c-next">NEXT DATE</th>
+                        <th class="c-last">LAST DONE</th>
+                    </tr></thead>
+                    <tbody><tr class="spare-row-editing">
+                        <td class="c-chk"></td>
+                        <td class="c-code">${codeCell}</td>
+                        <td class="c-s1">${origJobCellInput('oie_sort1', r.item_sort1)}</td>
+                        <td class="c-d1">${origJobCellInput('oie_sort2', r.item_sort2)}</td>
+                        <td class="c-d2">${origJobCellInput('oie_detail', r.job_detail, 'spare-inline-input-wide')}</td>
+                        <td class="c-per"><span class="orig-inline-period">${origJobCellInput('oie_period', r.period, 'spare-inline-input-num')}${unitSelect}</span></td>
+                        <td class="c-pic">${origJobCellInput('oie_pic', r.pic)}</td>
+                        <td class="c-next">${origJobCellDate('oie_next', r.next_date)}</td>
+                        <td class="c-last">${origJobCellDate('oie_last', r.last_done)}</td>
+                    </tr></tbody>
+                </table>
+            </div>
+            <div class="spare-item-edit-actions">
+                <button type="button" class="btn btn-sm btn-green" onclick="TVC_App.saveOrigJobInlineEdit()">💾 Save</button>
+                <button type="button" class="btn btn-sm" onclick="TVC_App.cancelOrigJobInlineEdit()">Cancel</button>
+            </div>
+        </section>`;
+    }
+
+    function startOrigJobInlineEdit(job) {
+        const m = origJobInlineState();
+        m.editId = job.id;
+        m.mode = 'modify';
+        m.draft = {
+            department: job.department,
+            job_code: job.job_code || '',
+            group: (job.group || '').trim(),
+            sort: job.sort || '',
+            item_sort1: job.item_sort1 || '',
+            item_sort2: job.item_sort2 || '',
+            job_detail: job.job_detail || '',
+            period: String(job.period ?? 1),
+            unit: job.unit || 'M',
+            pic: job.pic || '',
+            next_date: (job.next_date || '').slice(0, 10),
+            last_done: (job.last_done || '').slice(0, 10),
+        };
+        state._origJobEditMode = 'modify';
+        state._origJobEditId = job.id;
+        refreshOrigJobEditBlock();
+        syncOriginalPlanItemUi();
+    }
+
+    function startOrigJobInlineAppend() {
+        const ctx = defaultAppendContext();
+        const m = origJobInlineState();
+        m.editId = NEW_ORIG_JOB_EDIT_ID;
+        m.mode = 'append';
+        m.draft = {
+            department: ctx.dept,
+            job_code: ctx.job_code,
+            group: ctx.group,
+            sort: '',
+            item_sort1: '',
+            item_sort2: '',
+            job_detail: '',
+            period: '1',
+            unit: 'M',
+            pic: '',
+            next_date: '',
+            last_done: '',
+        };
+        state._origJobEditMode = 'append';
+        state._origJobEditId = null;
+        refreshOrigJobEditBlock();
+        syncOriginalPlanItemUi();
+    }
+
+    function cancelOrigJobInlineEdit() {
+        const m = origJobInlineState();
+        m.editId = null;
+        m.mode = null;
+        m.draft = null;
+        refreshOrigJobEditBlock();
+        syncOriginalPlanItemUi();
+    }
+
+    function readOrigJobInlineForm() {
+        const g = (id) => { const el = document.getElementById(id); return el ? String(el.value).trim() : ''; };
+        const m = origJobInlineState();
+        const isNew = m.editId === NEW_ORIG_JOB_EDIT_ID;
+        return {
+            job_code: isNew ? g('oie_code') : (m.draft?.job_code || ''),
+            group: g('oie_group'),
+            sort: m.draft?.sort || '',
+            item_sort1: g('oie_sort1'),
+            item_sort2: g('oie_sort2'),
+            job_detail: g('oie_detail'),
+            period: g('oie_period'),
+            unit: g('oie_unit'),
+            pic: g('oie_pic'),
+            next_date: g('oie_next'),
+            last_done: g('oie_last'),
+        };
+    }
+
+    async function saveOrigJobInlineEdit() {
+        if (!isOrigJobInlineEditing()) return;
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !canEditOriginalPlanItems()) return;
+        const m = origJobInlineState();
+        const data = readOrigJobInlineForm();
+        if (!data.job_code) return alert('Job Code를 입력하세요.');
+        if (!data.group) return alert('GROUP을 선택하세요.');
+        try {
+            if (m.mode === 'append') {
+                const ctx = defaultAppendContext();
+                await TVC_MaintenancePlan.createJob(user, { ...data, department: ctx.dept });
+                alert(`${data.job_code} 항목이 추가되었습니다.`);
+            } else {
+                await TVC_MaintenancePlan.updateJob(user, m.editId, data);
+                alert(`${data.job_code} 항목이 수정되었습니다.`);
+            }
+            cancelOrigJobInlineEdit();
+            await refreshAll();
+        } catch (e) {
+            const msg = e.code === 'DUPLICATE' ? '동일한 Job Code가 이미 존재합니다.'
+                : e.code === 'FORBIDDEN' ? '타 부서 항목은 편집할 수 없습니다.'
+                : (e.message || e.code);
+            alert(msg);
+        }
     }
 
     function suggestNextJobCode(group, dept) {
@@ -1335,28 +1650,17 @@ const TVC_App = (function () {
 
     function openOrigJobModify() {
         if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+        if (isOrigJobInlineEditing()) return saveOrigJobInlineEdit();
         if (!state.selectedJobId) return alert('수정할 작업 행을 선택하세요.');
         const job = state.idx?.jobById.get(state.selectedJobId);
         if (!job) return alert('작업 항목을 찾을 수 없습니다.');
-        state._origJobEditMode = 'modify';
-        state._origJobEditId = job.id;
-        renderOrigJobEditor('modify', job);
-        showModal('origJobEditorModal');
+        startOrigJobInlineEdit(job);
     }
 
     function openOrigJobAppend() {
         if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
-        const ctx = defaultAppendContext();
-        state._origJobEditMode = 'append';
-        state._origJobEditId = null;
-        renderOrigJobEditor('append', {
-            department: ctx.dept,
-            group: ctx.group,
-            job_code: ctx.job_code,
-            unit: 'M',
-            period: 1,
-        });
-        showModal('origJobEditorModal');
+        if (isOrigJobInlineEditing()) return saveOrigJobInlineEdit();
+        startOrigJobInlineAppend();
     }
 
     function readOrigJobForm() {
@@ -1620,9 +1924,13 @@ const TVC_App = (function () {
     function renderOriginalPlan() {
         renderGroupTree('origTree');
         syncOriginalPlanGroupUi();
+        syncPlanGroupTreeUi();
+        syncBatchReportBtn();
         mountJobSheet('origHead', 'origCount', 'origScroll', sheetIds('original'), 'vlOriginal', 'original');
         syncOriginalPlanUpdateUi();
         renderSidePanel();
+        renderPlanGroupHeader();
+        refreshOrigJobEditBlock();
         const msgEl = document.getElementById('origPlanCalcMsg');
         if (msgEl) {
             if (state._planCalcMsg) {
@@ -1671,13 +1979,16 @@ const TVC_App = (function () {
 
     // ── TAB: Actual Plan ─────────────────────────────────────────────
     function renderActualPlan() {
+        clearActualFilterKeysCache();
         renderGroupTree('actTree');
+        syncPlanGroupTreeUi();
         updateActualFilterUI();
         syncActualPeriodInputs();
         syncBatchReportBtn();
         renderSpicsAlertBanner();
         mountJobSheet('actHead', 'actCount', 'actScroll', sheetIds('actual'), 'vlActual', 'actual');
         renderSidePanel();
+        renderPlanGroupHeader();
     }
 
     function reportDept(r) {
@@ -1695,48 +2006,61 @@ const TVC_App = (function () {
     }
 
     function pendingReportJobKeys() {
-        let reps = state.reports.filter(r =>
-            r.status === 'PENDING' || TVC_WorkReport.getJobItems(r).some(i => i.status === 'PENDING' || i.status === 'POSTPONED')
-        );
-        if (state.department) reps = reps.filter(r => reportDept(r) === state.department);
-        const ids = new Set();
-        const codes = new Set();
-        reps.forEach(r => {
-            TVC_WorkReport.getJobItems(r).forEach(item => {
-                if (item.status === 'PENDING' || item.status === 'POSTPONED') {
-                    if (item.maintenance_job_id) ids.add(item.maintenance_job_id);
-                    if (item.job_code) codes.add(item.job_code);
-                }
-            });
-        });
-        return { ids, codes };
+        return pendingApprovalJobKeys();
     }
 
     function batchSelectedCount() {
         return Object.keys(state.batchSelectedJobs).filter(id => state.batchSelectedJobs[id]).length;
     }
 
-    function toggleBatchJob(jobId, on) {
-        if (on) state.batchSelectedJobs[jobId] = true;
-        else delete state.batchSelectedJobs[jobId];
-        syncBatchReportBtn();
-        if (state.vlActual) state.vlActual.refresh();
-        const head = document.getElementById('actHead');
-        if (head && state.currentTab === 'actual') {
-            const selIds = sheetIds('actual');
+    function planSheetMode() {
+        return state.currentTab === 'original' ? 'original' : 'actual';
+    }
+
+    function clearPlanSelectedOnlyIfEmpty() {
+        if (state.actualSelectedOnly && !batchSelectedCount()) state.actualSelectedOnly = false;
+        if (state.originalSelectedOnly && !batchSelectedCount()) state.originalSelectedOnly = false;
+    }
+
+    function refreshPlanAfterBatchToggle(mode) {
+        const selectedOnly = mode === 'original' ? !!state.originalSelectedOnly : !!state.actualSelectedOnly;
+        if (selectedOnly) {
+            if (mode === 'original') renderOriginalPlan();
+            else renderActualPlan();
+            return;
+        }
+        const vl = mode === 'original' ? state.vlOriginal : state.vlActual;
+        if (vl) vl.refresh();
+        const headId = mode === 'original' ? 'origHead' : 'actHead';
+        const head = document.getElementById(headId);
+        if (head) {
+            const selIds = sheetIds(mode);
             const allBatch = selIds.length > 0 && selIds.every(id => state.batchSelectedJobs[id]);
             const chk = head.querySelector('.c-chk input[type=checkbox]');
             if (chk) chk.checked = allBatch;
         }
     }
 
+    function toggleBatchJob(jobId, on) {
+        if (on) state.batchSelectedJobs[jobId] = true;
+        else delete state.batchSelectedJobs[jobId];
+        clearPlanSelectedOnlyIfEmpty();
+        syncBatchReportBtn();
+        if (state.currentTab === 'original' || state.currentTab === 'actual') {
+            refreshPlanAfterBatchToggle(planSheetMode());
+        }
+    }
+
     function toggleBatchSelectAll(on) {
-        sheetIds('actual').forEach(id => {
+        const mode = planSheetMode();
+        sheetIds(mode).forEach(id => {
             if (on) state.batchSelectedJobs[id] = true;
             else delete state.batchSelectedJobs[id];
         });
+        clearPlanSelectedOnlyIfEmpty();
         syncBatchReportBtn();
-        renderActualPlan();
+        if (state.currentTab === 'original') renderOriginalPlan();
+        else renderActualPlan();
     }
 
     function isBatchMultiActive() {
@@ -1762,6 +2086,14 @@ const TVC_App = (function () {
             shipComments: '',
             handHours: '0',
             handMembers: '0',
+            rhAfterLastMaint: '',
+            shoreTechnician: false,
+            lastMaintDate: '',
+            pmsGroupNo: '',
+            maker: '',
+            modelType: '',
+            capacity: '',
+            serialNo: '',
             allPendingCleared: false,
             dockingRepair: false,
             pendingForRepair: false,
@@ -1779,7 +2111,31 @@ const TVC_App = (function () {
     }
 
     function syncBatchReportBtn() {
-        if (state.currentTab === 'actual') renderSidePanel();
+        if (state.currentTab === 'actual' || state.currentTab === 'original') renderSidePanel();
+    }
+
+    function togglePlanSelectedOnly() {
+        if (state.currentTab === 'original') {
+            if (state.originalSelectedOnly) {
+                state.originalSelectedOnly = false;
+            } else {
+                if (!batchSelectedCount()) return alert('선택된 작업이 없습니다.');
+                state.originalSelectedOnly = true;
+            }
+            renderOriginalPlan();
+        } else if (state.currentTab === 'actual') {
+            if (state.actualSelectedOnly) {
+                state.actualSelectedOnly = false;
+            } else {
+                if (!batchSelectedCount()) return alert('선택된 작업이 없습니다.');
+                state.actualSelectedOnly = true;
+            }
+            renderActualPlan();
+        }
+    }
+
+    function toggleActSelectedOnly() {
+        togglePlanSelectedOnly();
     }
 
     function initBatchDraft(jobIds) {
@@ -1788,8 +2144,17 @@ const TVC_App = (function () {
         jobIds.forEach(id => {
             const job = state.idx?.jobById.get(id);
             if (!job) return;
+            const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
             state._batchDraft.items[id] = {
-                form: defaultWrForm(today),
+                form: {
+                    ...defaultWrForm(today),
+                    lastMaintDate: job.last_done || '',
+                    pmsGroupNo: hdr.pmsGroupNo || '',
+                    maker: hdr.maker || '',
+                    modelType: hdr.modelType || '',
+                    capacity: hdr.capacity || '',
+                    serialNo: hdr.serialNo || '',
+                },
                 usedParts: [],
             };
         });
@@ -1869,6 +2234,7 @@ const TVC_App = (function () {
         loadBatchJobIntoEditor(jobIds[0]);
         state._batchJobPickerOpen = false;
         if (state.vlActual) state.vlActual.refresh();
+        if (state.vlOriginal) state.vlOriginal.refresh();
         renderWorkReportModal();
         showModal('workReportModal');
     }
@@ -1929,6 +2295,8 @@ const TVC_App = (function () {
                 items: entries,
             });
             state.batchSelectedJobs = {};
+            state.originalSelectedOnly = false;
+            state.actualSelectedOnly = false;
             state._batchMode = false;
             state._batchJobIds = [];
             state._batchDraft = null;
@@ -1940,9 +2308,37 @@ const TVC_App = (function () {
         }
     }
 
-    function updateActualFilterUI() {
+    function renderActualFilterDashboard() {
+        const host = document.getElementById('actFilterDashboard');
+        if (!host) return;
+        const c = actualDashboardCounts();
         const f = state.actualFilter;
-        document.querySelectorAll('[data-afilter]').forEach(b => b.classList.toggle('active', b.dataset.afilter === f));
+        const items = [
+            { key: 'overdue', label: 'Overdue', count: c.overdue, cls: 'act-dash-overdue' },
+            { key: 'due30', label: 'Due (30d)', count: c.due30, cls: 'act-dash-due30' },
+            { key: 'postponed', label: 'Postponed', count: c.postponed, cls: 'act-dash-postponed' },
+            { key: 'pending', label: 'Approval Pending', count: c.pending, cls: 'act-dash-pending' },
+        ];
+        const btnHtml = items.map(b => `
+            <button type="button" class="act-dash-btn ${b.cls}${f === b.key ? ' active' : ''}" data-afilter="${b.key}"
+                onclick="TVC_App.setActualFilter('${b.key}')">
+                <span class="act-dash-count">${b.count}</span>
+                <span class="act-dash-label">${esc(b.label)}</span>
+            </button>`).join('');
+        host.innerHTML = `
+            <div class="act-filter-dashboard-inner">
+                ${btnHtml}
+                <span class="act-dash-sep" aria-hidden="true"></span>
+                <button type="button" class="act-dash-btn act-dash-total${f === 'total' ? ' active' : ''}" data-afilter="total"
+                    onclick="TVC_App.setActualFilter('total')">
+                    <span class="act-dash-count">${c.total}</span>
+                    <span class="act-dash-label">Total</span>
+                </button>
+            </div>`;
+    }
+
+    function updateActualFilterUI() {
+        renderActualFilterDashboard();
     }
 
     function renderQueues() {
@@ -1972,38 +2368,69 @@ const TVC_App = (function () {
             <button class="btn-sm btn-green" onclick="TVC_App.doConfirm('${r.id}')">🔒 Confirm</button></div>`).join('') : '<p class="muted">None</p>';
     }
 
-    function sidePanelHostId() {
-        return state.currentTab === 'original' ? 'origSidePanel' : 'sidePanel';
+    function planActionBarHostId() {
+        return state.currentTab === 'original' ? 'origPlanActionBar' : 'actPlanActionBar';
+    }
+
+    function planGroupHeaderHostId() {
+        return state.currentTab === 'original' ? 'origPlanGroupHeader' : 'actPlanGroupHeader';
+    }
+
+    function planGroupHeaderHostForSheet(headId) {
+        if (headId === 'origHead') return 'origPlanGroupHeader';
+        if (headId === 'actHead') return 'actPlanGroupHeader';
+        return planGroupHeaderHostId();
+    }
+
+    function ensurePlanGroupHeaderHost(hostId) {
+        let host = document.getElementById(hostId);
+        if (host) return host;
+        const listPanel = document.querySelector(
+            hostId === 'origPlanGroupHeader' ? '#tab-original .plan-list-panel' : '#tab-actual .plan-list-panel'
+        );
+        if (!listPanel?.parentElement) return null;
+        host = document.createElement('div');
+        host.id = hostId;
+        host.className = 'plan-group-header';
+        listPanel.parentElement.insertBefore(host, listPanel);
+        return host;
+    }
+
+    function renderPlanGroupHeader(headId) {
+        const hostId = headId ? planGroupHeaderHostForSheet(headId) : planGroupHeaderHostId();
+        const host = ensurePlanGroupHeaderHost(hostId);
+        if (!host) return;
+        const render = TVC_SpareMenu?.renderPlanGroupHeaderHtml || TVC_SpareMenu?.renderSpareGroupHeaderHtml;
+        if (!render) return;
+        host.innerHTML = TVC_SpareMenu.renderPlanGroupHeaderHtml
+            ? TVC_SpareMenu.renderPlanGroupHeaderHtml(state)
+            : render(state, {
+                pmsLabel: 'PMS Group No.',
+                focusedId: null,
+                idleHint: '작업을 클릭하거나 PMS GROUP Tree에서 그룹을 선택하면 장비 정보가 표시됩니다.',
+                ariaLabel: 'PMS Group information',
+            });
     }
 
     function renderSidePanel() {
-        const panel = document.getElementById(sidePanelHostId());
-        if (!panel) return;
+        const bar = document.getElementById(planActionBarHostId());
+        if (!bar) return;
         const isOrig = state.currentTab === 'original';
         const n = batchSelectedCount();
         const multi = isBatchMultiActive();
-        const batchIds = batchSelectedJobIds();
-        const batchCodesBar = !isOrig && multi
-            ? `<div class="side-batch-codes">${batchIds.map(id => {
-                const j = state.idx?.jobById.get(id);
-                return `<span class="side-batch-code">${esc(j?.job_code || id)}</span>`;
-            }).join('')}</div>`
-            : '';
-        const batchBtn = isOrig ? '' : `<button type="button" id="actBatchReportBtn" class="btn btn-sm btn-green side-batch-btn"${n < 2 ? ' disabled' : ''} onclick="TVC_App.openBatchReport()">📋 Batch Report${n >= 2 ? ` (${n})` : ''}</button>`;
-        const reportInputDisabled = multi ? ' disabled title="2개 이상 선택 시 Batch Report를 사용하세요"' : '';
+        const batchBtn = `<button type="button" id="planBatchReportBtn" class="btn btn-sm btn-green"${n < 2 ? ' disabled' : ''} onclick="TVC_App.openBatchReport()">📋 Batch Report${n >= 2 ? ` (${n})` : ''}</button>`;
+        const selFilterOn = isOrig ? !!state.originalSelectedOnly : !!state.actualSelectedOnly;
+        const selLabel = selFilterOn ? `Show All (${n})` : `Selected Items${n >= 1 ? ` (${n})` : ''}`;
+        const selTitle = selFilterOn ? '전체 작업 목록 표시' : (n >= 1 ? '선택된 작업만 목록에 표시' : '체크(ㅁ)로 작업을 선택하세요');
+        const selectedItemsBtn = `<button type="button" id="planSelectedItemsBtn" class="btn btn-sm${selFilterOn ? ' plan-selected-filter-active' : ''}"${!selFilterOn && n < 1 ? ' disabled' : ''} title="${escAttr(selTitle)}" onclick="TVC_App.togglePlanSelectedOnly()">${selLabel}</button>`;
         const job = state.idx?.jobById.get(state.selectedJobId);
-        if (!job) {
-            panel.innerHTML = `${batchCodesBar}<p class="muted">Click a row to select · Double-click for Work Procedure</p>
-                <div class="side-report-btns">${batchBtn}</div>`;
-            return;
-        }
-        panel.innerHTML = `${batchCodesBar}<div class="side-job"><h4>${esc(job.job_code)}</h4>
-            <p><strong>SORT-1:</strong> ${esc(job.item_sort1 || '—')}<br><strong>SORT-2:</strong> ${esc(job.item_sort2 || '—')}<br><strong>JOB DETAIL:</strong> ${esc(job.job_detail || '—')}</p>
-            <button class="btn btn-sm" onclick="TVC_App.openWorkProcedure('${job.id}')">Work Procedure / History</button>
-            <div class="side-report-btns">
-                <button class="btn btn-sm btn-green"${reportInputDisabled} onclick="TVC_App.openWorkReport('${job.id}')">Report Input</button>
+        const noJob = !job;
+        bar.innerHTML = `<div class="plan-action-btns">
+                <button type="button" class="btn btn-sm"${noJob ? ' disabled' : ''}${noJob ? '' : ` onclick="TVC_App.openWorkProcedure('${job.id}')"`}>Work Procedure / History</button>
+                <button type="button" class="btn btn-sm btn-green"${noJob || multi ? ' disabled' : ''}${noJob || multi ? '' : ` onclick="TVC_App.openWorkReport('${job.id}')"`}${multi ? ' title="2개 이상 선택 시 Batch Report를 사용하세요"' : ''}>Report Input</button>
                 ${batchBtn}
-            </div></div>`;
+                ${selectedItemsBtn}
+            </div>`;
     }
 
     /** Job 단위 Work History — Work History 탭과 동일한 daily_work_reports / job_items 소스 */
@@ -2594,8 +3021,8 @@ const TVC_App = (function () {
 
     // ── CMAXS Work Report (3 tabs) ───────────────────────────────────
     const WR_TABS = {
-        repair: 'Repair & Maintenance',
-        trouble: 'Trouble',
+        repair: 'Maintenance',
+        trouble: 'Repair',
         postpone: 'Postpone',
     };
 
@@ -2613,7 +3040,17 @@ const TVC_App = (function () {
         state._batchJobIds = [];
         state._batchDraft = null;
         if (state._wrJobId !== jobId) {
-            state._wrForm = {};
+            const today = new Date().toISOString().slice(0, 10);
+            state._wrForm = defaultWrForm(today);
+            const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
+            Object.assign(state._wrForm, {
+                lastMaintDate: job.last_done || '',
+                pmsGroupNo: hdr.pmsGroupNo || '',
+                maker: hdr.maker || '',
+                modelType: hdr.modelType || '',
+                capacity: hdr.capacity || '',
+                serialNo: hdr.serialNo || '',
+            });
             state._wrTab = 'repair';
             state._wrPage = '1';
             state._wrSpareSearch = '';
@@ -2805,11 +3242,12 @@ const TVC_App = (function () {
     }
 
     function buildWrPage2Meta(job, reportedByName, today) {
+        const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
         return {
             reportDate: wf('reportDate', today),
             workDate: wf('workDate', today),
             reportedBy: reportedByName,
-            pmsGroupNo: job?.group || '',
+            pmsGroupNo: wf('pmsGroupNo', hdr.pmsGroupNo || job?.group || ''),
             jobCode: job?.job_code || '',
             sort1: job?.item_sort1 || '',
             sort2: job?.item_sort2 || '',
@@ -2818,7 +3256,108 @@ const TVC_App = (function () {
         };
     }
 
-    function renderWrPage2HeadHtml(opts = {}) {
+    function renderWrBatchJobRowsHtml(jobIds, activeJobId) {
+        if (!jobIds?.length) return '';
+        const rows = jobIds.map(id => {
+            const j = state.idx?.jobById.get(id);
+            if (!j) return '';
+            const active = id === activeJobId ? ' wr-maint-batch-job-row-active' : '';
+            return `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-batch-job-row${active}" role="button" tabindex="0"
+                onclick="TVC_App.setBatchActiveJob('${escAttr(id)}')">
+                <div class="wr-maint-batch-cell"><span class="wr-maint-batch-code">${esc(j.job_code)}</span></div>
+                <div class="wr-maint-batch-cell" title="${escAttr(j.item_sort1 || '')}">${esc(j.item_sort1 || '—')}</div>
+                <div class="wr-maint-batch-cell" title="${escAttr(j.item_sort2 || '')}">${esc(j.item_sort2 || '—')}</div>
+                <div class="wr-maint-batch-cell" title="${escAttr(j.job_detail || '')}">${esc(j.job_detail || '—')}</div>
+            </div>`;
+        }).join('');
+        return `<div class="wr-maint-batch-job-list">
+            <div class="wr-maint-grid wr-maint-grid-4 wr-maint-batch-job-header">
+                <div class="wr-maint-batch-h">Job Code</div>
+                <div class="wr-maint-batch-h">SORT-1</div>
+                <div class="wr-maint-batch-h">SORT-2</div>
+                <div class="wr-maint-batch-h">Job Detail</div>
+            </div>
+            ${rows}
+        </div>`;
+    }
+
+    function renderWrRepairMaintenanceBody(job, opts = {}) {
+        const {
+            rep = null,
+            reportedByName = '',
+            today = new Date().toISOString().slice(0, 10),
+            canApproveNow = false,
+            canConfirmNow = false,
+            isRepApproved = false,
+            isRepConfirmed = false,
+            approvedByVal = '',
+            confirmedByVal = '',
+            canEditShipAttach = true,
+            canEditCompanyAttach = false,
+            batchMode = false,
+            batchJobIds = [],
+            activeJobId = null,
+        } = opts;
+        const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
+        const fld = (label, inner, extraCls = '') => `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
+        const inp = (key, val) => `<input data-wf="${key}" value="${esc(wf(key, val))}">`;
+        const jobCodeEl = batchMode
+            ? `<button type="button" class="wr-maint-batch-code" onclick="TVC_App.openBatchJobPicker()">${esc(job.job_code)}</button>`
+            : `<input class="wr-ro" value="${esc(job.job_code)}" readonly>`;
+        const jobInfoBlock = batchMode && batchJobIds.length
+            ? renderWrBatchJobRowsHtml(batchJobIds, activeJobId || job.id)
+            : `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
+                    ${fld('Job Code', jobCodeEl)}
+                    ${fld('SORT-1', `<input class="wr-ro" value="${esc(job.item_sort1 || '')}" readonly>`)}
+                    ${fld('SORT-2', `<input class="wr-ro" value="${esc(job.item_sort2 || '')}" readonly>`)}
+                    ${fld('Job Detail', `<input class="wr-ro" value="${esc(job.job_detail || '')}" readonly>`)}
+                </div>`;
+
+        return `<div class="wr-maint-form">
+            ${renderWrApprovalHtml({
+                canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
+                approvedByVal, confirmedByVal,
+            })}
+
+            <section class="wr-maint-card wr-maint-body">
+                <div class="wr-maint-grid wr-maint-grid-3">
+                    ${fld('File No.', inp('fileNo', ''))}
+                    ${fld('Voy. No.', inp('voyNo', ''))}
+                    ${fld('Place', inp('place', ''))}
+                    ${fld('Work Date', `<input type="date" data-wf="workDate" value="${esc(wf('workDate', today))}">`)}
+                    ${fld('Reported Date', `<input type="date" data-wf="reportDate" value="${esc(wf('reportDate', today))}">`)}
+                    ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByName)}" readonly>`)}
+                    ${fld('PMS Group No.', `<input data-wf="pmsGroupNo" value="${esc(wf('pmsGroupNo', hdr.pmsGroupNo))}">`, 'wr-maint-span-all')}
+                </div>
+                ${jobInfoBlock}
+                <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
+                    ${fld('Maker', inp('maker', hdr.maker))}
+                    ${fld('Model / Type', inp('modelType', hdr.modelType))}
+                    ${fld('Capacity', inp('capacity', hdr.capacity))}
+                    ${fld('Serial No.', inp('serialNo', hdr.serialNo))}
+                </div>
+                <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap">
+                    ${fld('Total Run Hrs', `<input type="number" data-wf="runHrs" value="${esc(wf('runHrs', '0'))}">`)}
+                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', job.last_done || ''))}">`)}
+                    ${fld('Running Hrs after Last Maint.', `<input type="number" data-wf="rhAfterLastMaint" value="${esc(wf('rhAfterLastMaint', ''))}">`)}
+                </div>
+                ${fld('Outline of Maintenance', `<textarea class="wr-maint-textarea" data-wf="outline" rows="3">${esc(wf('outline'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld("Ship's Comments &amp; Desired Articles", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3">${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all')}
+                <div class="wr-maint-attach-wrap">${renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach })}</div>
+                <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap wr-maint-labor">
+                    ${fld('Working Hours', `<input type="number" data-wf="handHours" value="${esc(wf('handHours', '0'))}">`)}
+                    ${fld('Working Member', `<input type="number" data-wf="handMembers" value="${esc(wf('handMembers', '0'))}">`)}
+                    <div class="wr-maint-field wr-maint-chk-field">
+                        <label class="wr-maint-chk"><input type="checkbox" data-wf="shoreTechnician" ${wf('shoreTechnician') ? 'checked' : ''}> Shore Technician</label>
+                    </div>
+                </div>
+                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+                <div class="wr-maint-attach-wrap">${renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach })}</div>
+            </section>
+        </div>`;
+    }
+
+    function renderWrApprovalHtml(opts = {}) {
         const {
             canApproveNow = false,
             canConfirmNow = false,
@@ -2827,12 +3366,20 @@ const TVC_App = (function () {
             approvedByVal = '',
             confirmedByVal = '',
         } = opts;
-        return `<div class="wr-form">
-            <div class="wr-row">
-                <div class="wr-fld wr-chk wr-in-date${canApproveNow ? ' wr-chk-active' : ''}"><label class="wr-chk-inline"><input type="checkbox" id="wrApprovedBy" ${isRepApproved ? 'checked' : ''} ${canApproveNow ? '' : 'disabled'}> Approved by</label><input class="wr-ro" value="${esc(approvedByVal)}" readonly></div>
-                <div class="wr-fld wr-chk wr-in-date${canConfirmNow ? ' wr-chk-active' : ''}"><label class="wr-chk-inline"><input type="checkbox" id="wrConfirmedBy" ${isRepConfirmed ? 'checked' : ''} ${canConfirmNow ? '' : 'disabled'}> Confirmed by</label><input class="wr-ro" value="${esc(confirmedByVal)}" readonly></div>
+        return `<section class="wr-maint-card wr-maint-approval">
+            <div class="wr-maint-approval-item${canApproveNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="wrApprovedBy" ${isRepApproved ? 'checked' : ''} ${canApproveNow ? '' : 'disabled'}> Approved by</label>
+                <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly>
             </div>
-        </div>`;
+            <div class="wr-maint-approval-item${canConfirmNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="wrConfirmedBy" ${isRepConfirmed ? 'checked' : ''} ${canConfirmNow ? '' : 'disabled'}> Confirmed by</label>
+                <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly>
+            </div>
+        </section>`;
+    }
+
+    function renderWrPage2HeadHtml(opts = {}) {
+        return renderWrApprovalHtml(opts);
     }
 
     function renderWrPage2Body(ro) {
@@ -2899,13 +3446,16 @@ const TVC_App = (function () {
                 ${canUpload ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_App.removeWrAttachment('${kind}','${escAttr(a.id)}')">×</button>` : ''}
             </li>`).join('');
         const uploadBtn = canUpload
-            ? `<button type="button" class="btn btn-sm wr-attach-btn" onclick="document.getElementById('${inputId}').click()">📎 ${esc(label)}</button>
+            ? `<button type="button" class="wr-attach-btn" onclick="document.getElementById('${inputId}').click()">📎 ${esc(label)}</button>
                <input type="file" id="${inputId}" class="hidden" multiple onchange="TVC_App.uploadWrAttachment('${kind}')">`
+            : (list.length ? '' : `<span class="wr-attach-label">${esc(label)}</span>`);
+        const listHtml = list.length
+            ? `<ul class="wr-attach-list">${items}</ul>`
             : '';
         return `
             <div class="wr-attach-block">
                 ${uploadBtn}
-                <ul class="wr-attach-list">${items || '<li class="muted wr-attach-empty">None</li>'}</ul>
+                ${listHtml}
             </div>`;
     }
 
@@ -2979,8 +3529,11 @@ const TVC_App = (function () {
 
         const pickerHtml = state._batchJobPickerOpen ? buildBatchJobPickerHtml() : '';
 
+        const repairPage1 = tab === 'repair' && state._wrPage === '1';
         const headHtml = showPages && state._wrPage === '2'
             ? renderWrPage2HeadHtml({ reportedByName })
+            : repairPage1
+            ? ''
             : `
             <div class="wr-form">
                 <div class="wr-row">
@@ -3008,6 +3561,14 @@ const TVC_App = (function () {
         let body = '';
         if (showPages && state._wrPage === '2') {
             body = renderWrPage2Body(ro);
+        } else if (tab === 'repair') {
+            body = renderWrRepairMaintenanceBody(job, {
+                reportedByName, today,
+                canEditShipAttach,
+                batchMode: true,
+                batchJobIds: state._batchJobIds,
+                activeJobId: state._wrJobId,
+            }) + (state._batchJobPickerOpen ? pickerHtml : '');
         } else if (tab === 'trouble') {
             body = `
                 <div class="wr-form">
@@ -3030,42 +3591,6 @@ const TVC_App = (function () {
                 <div class="wr-block"><span class="wr-label">Outline of Trouble</span><textarea class="wr-area" data-wf="troubleOutline" rows="2">${esc(wf('troubleOutline'))}</textarea></div>
                 <div class="wr-block"><span class="wr-label">Presumed Cause</span><textarea class="wr-area" data-wf="presumedCause" rows="2">${esc(wf('presumedCause'))}</textarea></div>
                 <div class="wr-block"><span class="wr-label">Countermeasures &amp; Disposal</span><textarea class="wr-area" data-wf="countermeasures" rows="2">${esc(wf('countermeasures'))}</textarea></div>`;
-        } else {
-            body = `
-                <div class="wr-form">
-                    <div class="wr-row">
-                        <div class="wr-fld wr-in-sm"><label>File No.</label><input data-wf="fileNo" value="${esc(wf('fileNo'))}"></div>
-                        <div class="wr-fld wr-in-voy"><label>Voy. No.</label><input data-wf="voyNo" value="${esc(wf('voyNo'))}"></div>
-                        <div class="wr-fld wr-in-num"><label>Total Run Hrs</label><input type="number" data-wf="runHrs" value="${esc(wf('runHrs', '0'))}"></div>
-                        <div class="wr-fld wr-in-sm"><label>Place</label><input data-wf="place" value="${esc(wf('place'))}"></div>
-                    </div>
-                    <div class="wr-row">
-                        <div class="wr-fld wr-grow"><label>Machinery Name</label><input class="wr-ro" value="${esc(machinery)}" readonly></div>
-                        <div class="wr-fld wr-in-result"><label>Work Result</label>
-                            <select data-wf="workResult">
-                                ${['', 'Completed', 'In Progress', 'Pending', 'Postponed'].map(o => `<option ${wf('workResult') === o ? 'selected' : ''}>${o}</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="wr-row">
-                        <div class="wr-fld wr-grow"><label>Trouble Parts (Maker / Model)</label><input data-wf="troubleParts" value="${esc(wf('troubleParts'))}"></div>
-                        <div class="wr-fld wr-in-sm"><label>Trouble Point</label><input data-wf="troublePoint" value="${esc(wf('troublePoint'))}"></div>
-                    </div>
-                </div>
-                <div class="wr-stack"><span class="wr-label">Outline of Repair &amp; Maintenance</span><textarea class="wr-area" data-wf="outline" rows="2">${esc(wf('outline'))}</textarea></div>
-                <div class="wr-stack"><span class="wr-label">Ship's Comments &amp; Desired Articles</span><textarea class="wr-area" data-wf="shipComments" rows="2">${esc(wf('shipComments'))}</textarea></div>
-                ${renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach })}
-                <div class="wr-form">
-                    <div class="wr-row">
-                        <div class="wr-fld wr-in-num"><label>Ship's Hand Working Hours</label><input type="number" data-wf="handHours" value="${esc(wf('handHours', '0'))}"></div>
-                        <div class="wr-fld wr-in-num"><label>Ship's Hand Nos Working Member</label><input type="number" data-wf="handMembers" value="${esc(wf('handMembers', '0'))}"></div>
-                        <div class="wr-fld wr-chkline"><label><input type="checkbox" data-wf="allPendingCleared" ${wf('allPendingCleared') ? 'checked' : ''}> All Pending Cleared</label></div>
-                        <div class="wr-fld wr-chkline"><label><input type="checkbox" data-wf="dockingRepair" ${wf('dockingRepair') ? 'checked' : ''}> Docking Repair</label></div>
-                        <div class="wr-fld wr-chkline"><label><input type="checkbox" data-wf="pendingForRepair" ${wf('pendingForRepair') ? 'checked' : ''}> Pending for Repair</label></div>
-                    </div>
-                </div>
-                <div class="wr-stack"><span class="wr-label">Company's Comments</span><textarea class="wr-area wr-ro" rows="2" readonly placeholder="HQ 전용 (Confirm 시 입력)"></textarea></div>
-                ${renderWrAttachmentBlock('company', { canUpload: false })}`;
         }
 
         const actionsHtml = `
@@ -3113,6 +3638,7 @@ const TVC_App = (function () {
         const canEditCompanyAttach = !ro && !!canConfirmNow;
 
         const showPages = state._wrTab === 'repair' || state._wrTab === 'trouble';
+        const repairPage1 = state._wrTab === 'repair' && state._wrPage === '1';
         const headHtml = showPages && state._wrPage === '2'
             ? renderWrPage2HeadHtml({
                 reportedByName,
@@ -3123,6 +3649,8 @@ const TVC_App = (function () {
                 approvedByVal,
                 confirmedByVal,
             })
+            : repairPage1
+            ? ''
             : `
             <div class="wr-form">
                 <div class="wr-row">
@@ -3153,41 +3681,12 @@ const TVC_App = (function () {
         if (showPages && state._wrPage === '2') {
             body = renderWrPage2Body(ro);
         } else if (state._wrTab === 'repair') {
-            body = `
-                <div class="wr-form">
-                    <div class="wr-row">
-                        <div class="wr-fld wr-in-sm"><label>File No.</label><input data-wf="fileNo" value="${esc(wf('fileNo'))}"></div>
-                        <div class="wr-fld wr-in-voy"><label>Voy. No.</label><input data-wf="voyNo" value="${esc(wf('voyNo'))}"></div>
-                        <div class="wr-fld wr-in-num"><label>Total Run Hrs</label><input type="number" data-wf="runHrs" value="${esc(wf('runHrs', '0'))}"></div>
-                        <div class="wr-fld wr-in-sm"><label>Place</label><input data-wf="place" value="${esc(wf('place'))}"></div>
-                    </div>
-                    <div class="wr-row">
-                        <div class="wr-fld wr-grow"><label>Machinery Name</label><input class="wr-ro" value="${esc(machinery)}" readonly></div>
-                        <div class="wr-fld wr-in-result"><label>Work Result</label>
-                            <select data-wf="workResult">
-                                ${['', 'Completed', 'In Progress', 'Pending', 'Postponed'].map(o => `<option ${wf('workResult') === o ? 'selected' : ''}>${o}</option>`).join('')}
-                            </select>
-                        </div>
-                    </div>
-                    <div class="wr-row">
-                        <div class="wr-fld wr-grow"><label>Trouble Parts (Maker / Model)</label><input data-wf="troubleParts" value="${esc(wf('troubleParts'))}"></div>
-                        <div class="wr-fld wr-in-sm"><label>Trouble Point</label><input data-wf="troublePoint" value="${esc(wf('troublePoint'))}"></div>
-                    </div>
-                </div>
-                <div class="wr-stack"><span class="wr-label">Outline of Repair &amp; Maintenance</span><textarea class="wr-area" data-wf="outline" rows="2">${esc(wf('outline'))}</textarea></div>
-                <div class="wr-stack"><span class="wr-label">Ship's Comments &amp; Desired Articles</span><textarea class="wr-area" data-wf="shipComments" rows="2">${esc(wf('shipComments'))}</textarea></div>
-                ${renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach })}
-                <div class="wr-form">
-                    <div class="wr-row">
-                        <div class="wr-fld wr-in-num"><label>Ship's Hand Working Hours</label><input type="number" data-wf="handHours" value="${esc(wf('handHours', '0'))}"></div>
-                        <div class="wr-fld wr-in-num"><label>Ship's Hand Nos Working Member</label><input type="number" data-wf="handMembers" value="${esc(wf('handMembers', '0'))}"></div>
-                        <div class="wr-fld wr-chkline"><label><input type="checkbox" data-wf="allPendingCleared" ${wf('allPendingCleared') ? 'checked' : ''}> All Pending Cleared</label></div>
-                        <div class="wr-fld wr-chkline"><label><input type="checkbox" data-wf="dockingRepair" ${wf('dockingRepair') ? 'checked' : ''}> Docking Repair</label></div>
-                        <div class="wr-fld wr-chkline"><label><input type="checkbox" data-wf="pendingForRepair" ${wf('pendingForRepair') ? 'checked' : ''}> Pending for Repair</label></div>
-                    </div>
-                </div>
-                <div class="wr-stack"><span class="wr-label">Company's Comments</span><textarea class="wr-area wr-ro" rows="2" readonly placeholder="HQ 전용 (Confirm 시 입력)">${esc(rep?.company_comment || '')}</textarea></div>
-                ${renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach })}`;
+            body = renderWrRepairMaintenanceBody(job, {
+                rep, reportedByName, today,
+                canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
+                approvedByVal, confirmedByVal,
+                canEditShipAttach, canEditCompanyAttach,
+            });
         } else if (state._wrTab === 'trouble') {
             body = `
                 <div class="wr-form">
@@ -3707,6 +4206,7 @@ const TVC_App = (function () {
         openWorkReport, setWorkReportTab, setWorkReportPage, saveWorkReport,
         uploadWrAttachment, removeWrAttachment,
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,
+        togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader,
         setBatchActiveJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
         openWorkReportFromHistory, modifyWorkReport, selectHistRow,
         histDetailWorkReport, histModifyReport, histReportApproval, histDeleteReport,
@@ -3715,7 +4215,7 @@ const TVC_App = (function () {
         selectJobRow,
         selectSpareRow, focusSpareRow, toggleSpareRow, syncSpareItemToolbar, spareActionIds, canEditSpareItems, openSpareAppend, openSpareModify, deleteSpareItem,
         saveRunHrs, runHrsPreview, runHrsTotalEdit,         updateOriginalPlanFromRunHours,
-        openOrigJobModify, openOrigJobAppend, saveOrigJobEditor, deleteOrigJob,
+        openOrigJobModify, openOrigJobAppend, saveOrigJobEditor, saveOrigJobInlineEdit, cancelOrigJobInlineEdit, deleteOrigJob,
         openOrigGroupAdd, openOrigGroupRename, saveGroupEditor,
         confirmPlanUpdate, closePlanUpdateModal, printCurrentTab,
         doSubmit, doExecute, doApprove, doConfirm,

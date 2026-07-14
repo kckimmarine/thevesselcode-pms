@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260713-consume-wr-btn">
+    <link rel="stylesheet" href="css/app.css?v=20260714-act-dashboard">
 </head>
 <body>
 
@@ -198,9 +198,15 @@
                 <span style="flex:1"></span>
                 <button type="button" id="origUpdatePlanBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateOriginalPlanFromRunHours()">↻ Update Plan</button>
             </div>
+            <div id="origPlanActionBar" class="plan-action-bar"></div>
             <div class="plan-layout orig-layout">
                 <aside class="panel tree-panel">
-                    <div class="panel-head">🌳 PMS GROUP Tree</div>
+                    <div class="panel-head spare-tree-head">
+                        <span>🌳 PMS GROUP Tree</span>
+                        <button type="button" id="origPlanTreeModifyBtn" class="btn spare-tree-modify-btn hidden"
+                            onclick="TVC_SpareMenu.startGroupHeaderEdit()"
+                            title="선택한 그룹의 장비 정보(Maker/Model/Capacity/Serial No.) 수정" aria-label="Modify">✏️</button>
+                    </div>
                     <div class="tree-search-bar">
                         <input class="search-input" id="origTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
                     </div>
@@ -210,45 +216,47 @@
                     </div>
                     <div class="panel-body tree-scroll" id="origTree"></div>
                 </aside>
-                <main class="panel">
-                    <div class="filter-bar orig-toolbar">
+                <main class="panel plan-main">
+                    <div class="filter-bar orig-toolbar spare-item-toolbar">
                         <button type="button" id="origModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">✏️ Modify</button>
                         <button type="button" id="origAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">➕ Append</button>
                         <button type="button" id="origDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">🗑 Delete</button>
-                        <span class="orig-toolbar-sep"></span>
-                        <input class="search-input" id="origSearch" placeholder="Search JOB CODE / DETAIL…" oninput="TVC_App.setSearch(this.value)">
+                    </div>
+                    <div class="filter-bar spare-list-search-bar">
+                        <input class="search-input spare-list-search-input" id="origSearch" placeholder="Search JOB CODE / DETAIL…" oninput="TVC_App.setSearch(this.value)">
                         <span class="count-label" id="origCount">—</span>
                     </div>
-                    <div id="origHead" class="vl-head-wrap"></div>
-                    <div id="origScroll" class="virtual-scroll"></div>
-                </main>
-                <aside class="panel queues-side">
-                    <div class="panel-head">Selected Job</div>
-                    <div class="panel-body">
-                        <div id="origSidePanel"><p class="muted">Click a row to select · Double-click for Work Procedure</p></div>
+                    <div id="origPlanGroupHeader" class="plan-group-header"></div>
+                    <div id="origJobEditBlock" class="orig-job-edit-block"></div>
+                    <div class="panel plan-list-panel">
+                        <div id="origHead" class="vl-head-wrap"></div>
+                        <div id="origScroll" class="virtual-scroll plan-vl-scroll"></div>
                     </div>
-                </aside>
+                </main>
             </div>
         </section>
 
         <!-- TAB: Actual Plan -->
         <section id="tab-actual" class="tab-pane hidden">
             <div class="sheet-head"><h2>📝 Actual Plan</h2><span class="sheet-sub">Overdue &amp; due this month · report input / approval</span></div>
+            <div id="actPlanActionBar" class="plan-action-bar"></div>
             <div id="spicsAlertBanner" class="spics-alert-banner hidden" style="margin:0 20px 8px"></div>
             <div class="plan-layout actual-layout">
                 <aside class="panel tree-panel">
-                    <div class="panel-head">🌳 PMS GROUP Tree</div>
+                    <div class="panel-head spare-tree-head">
+                        <span>🌳 PMS GROUP Tree</span>
+                        <button type="button" id="actPlanTreeModifyBtn" class="btn spare-tree-modify-btn hidden"
+                            onclick="TVC_SpareMenu.startGroupHeaderEdit()"
+                            title="선택한 그룹의 장비 정보(Maker/Model/Capacity/Serial No.) 수정" aria-label="Modify">✏️</button>
+                    </div>
                     <div class="tree-search-bar">
                         <input class="search-input" id="actTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
                     </div>
                     <div class="panel-body tree-scroll" id="actTree"></div>
                 </aside>
-                <main class="panel">
-                    <div class="filter-bar">
-                        <button class="filter-tab" data-afilter="total" onclick="TVC_App.setActualFilter('total')">Total Jobs</button>
-                        <button class="filter-tab overdue-tab" data-afilter="overdue" onclick="TVC_App.setActualFilter('overdue')">Overdue</button>
-                        <button class="filter-tab" data-afilter="due30" onclick="TVC_App.setActualFilter('due30')">Due 30d</button>
-                        <button class="filter-tab" data-afilter="pending" onclick="TVC_App.setActualFilter('pending')">Pending Reports</button>
+                <main class="panel plan-main">
+                    <div id="actFilterDashboard" class="act-filter-dashboard"></div>
+                    <div class="filter-bar spare-list-search-bar">
                         <div id="actPeriodFilter" class="act-period-filter" title="기간으로 작업 검색">
                             <span class="act-period-label">Period</span>
                             <input type="date" id="actPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onActualPeriodChange()">
@@ -256,18 +264,15 @@
                             <input type="date" id="actPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onActualPeriodChange()">
                             <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearActualPeriod()">Clear</button>
                         </div>
-                        <input class="search-input" id="actSearch" placeholder="Search JOB CODE…" oninput="TVC_App.setSearch(this.value)">
+                        <input class="search-input spare-list-search-input" id="actSearch" placeholder="Search JOB CODE…" oninput="TVC_App.setSearch(this.value)">
                         <span class="count-label" id="actCount">—</span>
                     </div>
-                    <div id="actHead" class="vl-head-wrap"></div>
-                    <div id="actScroll" class="virtual-scroll"></div>
-                </main>
-                <aside class="panel queues-side">
-                    <div class="panel-head">Selected Job</div>
-                    <div class="panel-body">
-                        <div id="sidePanel"><p class="muted">Click a row to select · Double-click for Work Procedure</p></div>
+                    <div id="actPlanGroupHeader" class="plan-group-header"></div>
+                    <div class="panel plan-list-panel">
+                        <div id="actHead" class="vl-head-wrap"></div>
+                        <div id="actScroll" class="virtual-scroll plan-vl-scroll"></div>
                     </div>
-                </aside>
+                </main>
             </div>
         </section>
 
@@ -473,7 +478,7 @@
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260713-consume-wr-btn"></script>
+<script src="js/ui/spareMenu.js?v=20260714-pms-tree-modify"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -487,7 +492,7 @@
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260708-req-draft-only"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/app.js?v=20260713-consume-wr-btn"></script>
+<script src="js/app.js?v=20260714-act-dashboard"></script>
 <script src="js/pwa.js?v=20260709-pwa"></script>
 </body>
 </html>
