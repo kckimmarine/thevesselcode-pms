@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 7, // v7: consume_logs (Consumed Parts 일지)
+    DB_VERSION: 8, // v8: defect_cases (Defect / Trouble Report Case)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -26,6 +26,7 @@ const TVC_SCHEMA = {
         requisitions: { keyPath: 'id' },                   // 부품 청구서(Requisition)
         inventory_history: { keyPath: 'id' },              // SPICS 입·출고 전용 이력
         consume_logs: { keyPath: 'id' },                   // Consumed Parts 일지 (배치)
+        defect_cases: { keyPath: 'id' },                   // Defect (Trouble) Report Case
     },
     INDEXES: {
         users: [{ name: 'username', keyPath: 'username', unique: true }],
@@ -76,6 +77,13 @@ const TVC_SCHEMA = {
         consume_logs: [
             { name: 'by_vessel', keyPath: 'vessel_id' },
             { name: 'by_at', keyPath: 'created_at' },
+            { name: 'by_department', keyPath: 'department' },
+        ],
+        defect_cases: [
+            { name: 'by_status', keyPath: 'status' },
+            { name: 'by_sync', keyPath: 'sync_status' },
+            { name: 'by_vessel', keyPath: 'vessel_id' },
+            { name: 'by_case_no', keyPath: 'case_no' },
             { name: 'by_department', keyPath: 'department' },
         ],
     },
@@ -556,6 +564,191 @@ const TVC_WorkReport = (function () {
         findItem,
         hasPendingJob,
         buildRecord,
+    };
+})();
+
+/**
+ * DefectCase — defect_cases 레코드 계약 (Defect / Trouble Report 서식 매핑)
+ * Phase 1: 선박 보고 (긴급) · Phase 2: 회사 초기 검토/작업허가 (긴급)
+ * Phase 3·4: 완료 확인·종결 (후속)
+ */
+const TVC_DefectCase = (function () {
+    const SCHEMA_VERSION = 1;
+
+    const Status = {
+        DRAFT: 'DRAFT',
+        SUBMITTED_TO_COMPANY: 'SUBMITTED_TO_COMPANY',
+        COMPANY_REVIEWED: 'COMPANY_REVIEWED',
+        WORK_IN_PROGRESS: 'WORK_IN_PROGRESS',
+        AWAITING_COMPLETION: 'AWAITING_COMPLETION',
+        CLOSED: 'CLOSED',
+    };
+
+    const PHASE1_FIELDS = [
+        'to_company', 'case_no', 'ship_name', 'report_date',
+        'pms_group_no', 'pms_job_code', 'last_maintenance_date', 'rh_since_last_maintenance',
+        'expect_date_place', 'machinery_name', 'manufacturer', 'type_model_serial',
+        'chief_engineer', 'master',
+        'outline_maintenance_request', 'estimated_cause', 'possible_effect', 'action_taken',
+    ];
+
+    const PHASE2_FIELDS = [
+        'company_initial_reply', 'permit_to_work', 'reply_by', 'reply_date',
+        'report_to_class', 'report_to_flag', 'report_to_external_stakeholder', 'report_to_psc', 'report_na',
+    ];
+
+    const PHASE3_FIELDS = ['ship_verified_after_clear', 'ship_verified_by', 'ship_verified_date'];
+    const PHASE4_FIELDS = [
+        'preventive_measures', 'dp_closed_satisfactory', 'dp_closed_reply', 'dp_closed_by', 'dp_closed_date',
+    ];
+
+    function blank(overrides = {}) {
+        const today = new Date().toISOString().slice(0, 10);
+        return {
+            id: overrides.id || `DEF-${Date.now()}`,
+            schema_version: SCHEMA_VERSION,
+            case_no: overrides.case_no || '',
+            vessel_id: overrides.vessel_id || '',
+            department: overrides.department || '',
+            maintenance_job_id: overrides.maintenance_job_id || '',
+            job_code: overrides.job_code || '',
+            work_report_id: overrides.work_report_id || null,
+            status: overrides.status || Status.DRAFT,
+            urgency: 'IMMEDIATE',
+            sync_status: 'LOCAL',
+            updated_at: new Date().toISOString(),
+            created_at: overrides.created_at || new Date().toISOString(),
+            submitted_at: null,
+            phase1_locked: false,
+            phase2_locked: false,
+            phase3_locked: false,
+            phase4_locked: false,
+            to_company: overrides.to_company || 'Company D.P.',
+            ship_name: overrides.ship_name || '',
+            report_date: overrides.report_date || today,
+            pms_group_no: overrides.pms_group_no || '',
+            pms_job_code: overrides.pms_job_code || '',
+            last_maintenance_date: overrides.last_maintenance_date || '',
+            rh_since_last_maintenance: overrides.rh_since_last_maintenance ?? '',
+            expect_date_place: overrides.expect_date_place || '',
+            machinery_name: overrides.machinery_name || '',
+            manufacturer: overrides.manufacturer || '',
+            type_model_serial: overrides.type_model_serial || '',
+            chief_engineer: overrides.chief_engineer || '',
+            master: overrides.master || '',
+            outline_maintenance_request: overrides.outline_maintenance_request || '',
+            estimated_cause: overrides.estimated_cause || '',
+            possible_effect: overrides.possible_effect || '',
+            action_taken: overrides.action_taken || '',
+            company_initial_reply: '',
+            permit_to_work: '',
+            reply_by: '',
+            reply_date: '',
+            report_to_class: false,
+            report_to_flag: false,
+            report_to_external_stakeholder: false,
+            report_to_psc: false,
+            report_na: false,
+            ship_verified_after_clear: '',
+            ship_verified_by: '',
+            ship_verified_date: '',
+            preventive_measures: '',
+            dp_closed_satisfactory: null,
+            dp_closed_reply: '',
+            dp_closed_by: '',
+            dp_closed_date: '',
+            reported_by: overrides.reported_by || '',
+            hq_synced: false,
+            ...overrides,
+        };
+    }
+
+    function fromJob(job, vesselMeta = {}) {
+        const hdr = vesselMeta.groupHeader || {};
+        return blank({
+            maintenance_job_id: job?.id || '',
+            job_code: job?.job_code || '',
+            department: job?.department || '',
+            pms_group_no: job?.group || '',
+            pms_job_code: job?.job_code || '',
+            machinery_name: hdr.machineryName || job?.item_sort1 || '',
+            manufacturer: hdr.maker || '',
+            type_model_serial: [hdr.model, hdr.serialNo].filter(Boolean).join(' / '),
+            last_maintenance_date: job?.last_done || '',
+            outline_maintenance_request: job?.job_detail || '',
+        });
+    }
+
+    function isPhase1Editable(row) {
+        return row && !row.phase1_locked && (row.status === Status.DRAFT || row.status === Status.SUBMITTED_TO_COMPANY);
+    }
+
+    function isPhase2Editable(row) {
+        return row && row.status === Status.SUBMITTED_TO_COMPANY && !row.phase2_locked;
+    }
+
+    /** Phase 2 완료 후 선박이 결함 해소를 확인·보고 */
+    function isPhase3Editable(row) {
+        if (!row || row.phase3_locked) return false;
+        return row.status === Status.COMPANY_REVIEWED
+            || row.status === Status.WORK_IN_PROGRESS;
+    }
+
+    /** 선박 Phase 3 제출 후 HQ D.P. 종결 */
+    function isPhase4Editable(row) {
+        if (!row || row.phase4_locked) return false;
+        return row.status === Status.AWAITING_COMPLETION;
+    }
+
+    function canStartWork(row) {
+        return row && row.phase2_locked && !row.phase3_locked
+            && row.status === Status.COMPANY_REVIEWED;
+    }
+
+    function validatePhase3(row) {
+        const missing = [];
+        if (!String(row.ship_verified_after_clear || '').trim()) missing.push('Verification (after trouble cleared)');
+        if (!String(row.ship_verified_by || '').trim()) missing.push('Verified by');
+        if (!String(row.ship_verified_date || '').trim()) missing.push('Verification Date');
+        return { ok: !missing.length, missing };
+    }
+
+    function validatePhase4(row) {
+        const missing = [];
+        if (!String(row.preventive_measures || '').trim()) missing.push('Preventive measures');
+        if (row.dp_closed_satisfactory !== true && row.dp_closed_satisfactory !== false) {
+            missing.push('Satisfactory / Unsatisfactory');
+        }
+        if (!String(row.dp_closed_by || '').trim()) missing.push('Reply by');
+        if (!String(row.dp_closed_date || '').trim()) missing.push('Reply Date');
+        return { ok: !missing.length, missing };
+    }
+
+    function validatePhase1(row) {
+        const missing = [];
+        if (!String(row.outline_maintenance_request || '').trim()) missing.push('Outline of Maintenance Request');
+        if (!String(row.machinery_name || '').trim()) missing.push('Machinery name');
+        if (!String(row.report_date || '').trim()) missing.push('Date');
+        return { ok: !missing.length, missing };
+    }
+
+    function validatePhase2(row) {
+        const missing = [];
+        if (!String(row.company_initial_reply || '').trim()) missing.push('Initial Reply from Company');
+        if (!String(row.reply_by || '').trim()) missing.push('Reply by');
+        if (!String(row.reply_date || '').trim()) missing.push('Reply Date');
+        return { ok: !missing.length, missing };
+    }
+
+    function belongsToDepartment(row, dept) {
+        if (!dept) return true;
+        return !row.department || row.department === dept;
+    }
+
+    return {
+        SCHEMA_VERSION, Status, PHASE1_FIELDS, PHASE2_FIELDS, PHASE3_FIELDS, PHASE4_FIELDS,
+        blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
+        canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, belongsToDepartment,
     };
 })();
 

@@ -2,14 +2,14 @@
 const TVC_App = (function () {
     const ROW_H = 36;
     const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
-    const TABS = ['menu', 'original', 'actual', 'history', 'runhrs', 'spare', 'notice'];
+    const TABS = ['menu', 'original', 'actual', 'history', 'defect', 'runhrs', 'spare', 'notice'];
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
     const NEW_ORIG_JOB_EDIT_ID = '__new_orig_job__';
     let _wrSpareSearchT = null;
 
     let state = {
         user: null,
-        components: [], jobs: [], groups: [], spares: [], reports: [],
+        components: [], jobs: [], groups: [], spares: [], reports: [], defectCases: [],
         idx: null,
         selectedGroupKey: null,
         treeSearch: '',
@@ -84,6 +84,7 @@ const TVC_App = (function () {
         const sessionUser = await TVC_Auth.refreshSessionFromDb();
         TVC_RunHours.init({ getState: () => state, refresh: refreshAll });
         TVC_SpareMenu.init({ getState: () => state, refresh: refreshAll });
+        TVC_DefectReport.init({ getState: () => state, refresh: refreshAll });
         window.addEventListener('tvc:spics-requisition-suggest', (e) => {
             state.spicsAlerts = e.detail?.alerts || [];
             renderSpicsAlertBanner();
@@ -176,6 +177,7 @@ const TVC_App = (function () {
         const allGroups = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         await normalizeGroupDepartments(allJobs, allComponents, allGroups);
         const allReports = await TVC_DB.getAll('daily_work_reports');
+        const allDefects = await TVC_DB.getAll('defect_cases').catch(() => []);
         state.spares = await TVC_DB.SparePart.listAll().catch(() =>
             TVC_DB.getAll('spare_parts').then(rows => rows.map(TVC_SpareSchema.fromRow)));
 
@@ -204,11 +206,13 @@ const TVC_App = (function () {
             state.groups = allGroups.filter(g => g.department === dept);
             const deptCodes = new Set(state.jobs.map(j => j.job_code));
             state.reports = allReports.filter(r => TVC_WorkReport.belongsToJobCodeSet(r, deptCodes));
+            state.defectCases = allDefects.filter(d => TVC_DefectCase.belongsToDepartment(d, dept));
         } else if (isCaptainHub) {
             state.jobs = allJobs;
             state.components = allComponents;
             state.groups = allGroups;
             state.reports = allReports;
+            state.defectCases = allDefects;
         } else {
             state.jobs = allJobs;
             state.components = allComponents;
@@ -218,6 +222,12 @@ const TVC_App = (function () {
             state.reports = allReports.filter(r =>
                 r.hq_synced === true &&
                 (!state.selectedVesselId || r.vessel_id === state.selectedVesselId)
+            );
+            state.defectCases = allDefects.filter(d =>
+                (d.hq_synced === true
+                    || d.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+                    || d.status === TVC_DefectCase.Status.AWAITING_COMPLETION) &&
+                (!state.selectedVesselId || d.vessel_id === state.selectedVesselId)
             );
         }
         state.idx = TVC_Indexes.build(state);
@@ -310,6 +320,7 @@ const TVC_App = (function () {
         original: renderOriginalPlan,
         actual: renderActualPlan,
         history: renderWorkHistory,
+        defect: renderDefectTab,
         runhrs: renderRunHrs,
         spare: renderSpareMenu,
         notice: renderNotice,
@@ -887,7 +898,10 @@ const TVC_App = (function () {
         let pending = state.reports.filter(r => r.status === 'PENDING');
         if (state.department) pending = pending.filter(r => reportDept(r) === state.department);
         const approved = state.reports.filter(r => r.status === 'APPROVED').length;
-        return { total: jobs.length, overdue, due30, dueMonth, pending: pending.length, approved };
+        const defectPending = (state.defectCases || []).filter(d =>
+            d.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+        ).length;
+        return { total: jobs.length, overdue, due30, dueMonth, pending: pending.length, approved, defectPending };
     }
 
     function menuModel() {
@@ -903,6 +917,8 @@ const TVC_App = (function () {
                         { label: 'Approve Original Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
                         { label: "Input Company's Comment", tag: 'C', action: "TVC_App.menuAction('companyComment')" },
                         { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('hqConfirm')", badge: c.approved, badgeTone: 'green', feature: 'showHqConfirmPanel' },
+                        { label: 'Defect Report Inbox', tag: 'B', action: "TVC_App.menuAction('defectInbox')", badge: c.defectPending, badgeTone: 'amber', feature: 'showDefectInbox' },
+                        { label: 'Import Urgent Defect', tag: 'C', action: "TVC_App.menuAction('defectImport')", feature: 'showDefectImportUrgent' },
                         { label: 'Data Export', tag: 'C', action: "TVC_App.menuAction('export')", feature: 'showExportHq' },
                     ],
                 },
@@ -925,6 +941,7 @@ const TVC_App = (function () {
                     { label: 'Check Actual Plan', tag: 'D', action: "TVC_App.menuAction('checkPlan')", badge: c.overdue, badgeTone: 'red' },
                     { kind: 'note', label: 'Execute Repair & Maintenance / Trouble Work' },
                     { label: 'Input Work Report', tag: 'C', action: "TVC_App.menuAction('inputReport')", feature: 'showDailyReportSubmit' },
+                    { label: 'Report Defect (Trouble)', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
                     { label: 'Approve Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
                 ],
             },
@@ -933,6 +950,7 @@ const TVC_App = (function () {
                 items: [
                     { label: 'Import Station Data', tag: 'C', action: "TVC_App.menuAction('hubImport')", feature: 'showHubImport' },
                     { label: 'Export Company Report Package', tag: 'B', action: "TVC_App.menuAction('companyExport')", feature: 'showCompanyExport' },
+                    { label: 'Import HQ Defect Reply', tag: 'C', action: "TVC_App.menuAction('defectImport')", feature: 'showDefectImportUrgent' },
                 ],
             },
             {
@@ -1134,6 +1152,12 @@ const TVC_App = (function () {
             if (sidebarCards) sidebarCards.innerHTML = '';
         }
         renderSyncHistory();
+        TVC_DefectReport.renderInbox();
+    }
+
+    function renderDefectTab() {
+        applyRoleUi(state.user);
+        TVC_DefectReport.renderTab();
     }
 
     function setHistView(view) {
@@ -1275,6 +1299,17 @@ const TVC_App = (function () {
                 });
                 break;
             case 'backup': handleExport(); break;
+            case 'defectReport':
+                switchTab('defect');
+                if (state.selectedJobId) TVC_DefectReport.openNewFromJob(state.selectedJobId);
+                else TVC_DefectReport.openNewBlank();
+                break;
+            case 'defectInbox':
+                switchTab('defect');
+                break;
+            case 'defectImport':
+                document.getElementById('importDefectUrgent')?.click();
+                break;
             case 'password': alert('Password 변경은 관리자(A) 권한 콘솔에서 제공됩니다.'); break;
             case 'control': alert('Control(권한) 변경은 관리자(B) 승인 후 적용됩니다.'); break;
             default: break;
@@ -4305,6 +4340,51 @@ const TVC_App = (function () {
         } catch (e) { alert(e.message); }
     }
 
+    async function handleDefectImport(file) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !file) return;
+        try {
+            await TVC_DefectSync.importPackage(user, file);
+            await refreshAll();
+            if (state.currentTab === 'menu') {
+                renderSyncHistory();
+                TVC_DefectReport.renderInbox();
+            }
+            if (state.currentTab === 'defect') TVC_DefectReport.renderTab();
+            alert('Defect package imported successfully.');
+        } catch (e) { alert(e.message); }
+    }
+
+    async function urgentExportDefect(caseId) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !caseId) return;
+        try {
+            const { filename } = await TVC_DefectSync.exportUrgentZip(user, caseId);
+            await refreshAll();
+            if (state.currentTab === 'menu') {
+                renderSyncHistory();
+                TVC_DefectReport.renderInbox();
+            }
+            if (state.currentTab === 'defect') TVC_DefectReport.renderTab();
+            alert(`Urgent Defect package created:\n${filename}\n\nAttach ZIP or HTML to email to Company. HQ imports the ZIP for Phase 2.`);
+        } catch (e) { alert(e.message); }
+    }
+
+    async function exportDefectCompletion(caseId) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !caseId) return;
+        try {
+            const { filename } = await TVC_DefectSync.exportCompletionZip(user, caseId);
+            await refreshAll();
+            if (state.currentTab === 'menu') {
+                renderSyncHistory();
+                TVC_DefectReport.renderInbox();
+            }
+            if (state.currentTab === 'defect') TVC_DefectReport.renderTab();
+            alert(`Completion package created:\n${filename}`);
+        } catch (e) { alert(e.message); }
+    }
+
     async function handleExport() {
         const user = TVC_Auth.getCurrentUser();
         if (!user) return;
@@ -4407,7 +4487,8 @@ const TVC_App = (function () {
         openOrigGroupAdd, openOrigGroupRename, saveGroupEditor,
         confirmPlanUpdate, closePlanUpdateModal, printCurrentTab,
         doSubmit, doExecute, doApprove, doConfirm,
-        handleLogin, handleLogout, handleExport, handleImport, handleHubImport, loadSeedFile,
+        handleLogin, handleLogout, handleExport, handleImport, handleHubImport, handleDefectImport,
+        urgentExportDefect, exportDefectCompletion, loadSeedFile,
         uploadAttachment, saveDetailReport, closeModal, showModal, dismissSpicsAlerts, openSpicsRequisition,
     };
 })();

@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260715-hist-width';
+const CACHE_VERSION = 'tvc-pms-20260715-defect-v3';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -34,11 +34,14 @@ const PRECACHE_ASSETS = [
     '/js/auth.js',
     '/js/services/transaction.js',
     '/js/services/maintenancePlan.js',
+    '/js/services/defectCase.js',
+    '/js/services/defectSync.js',
     '/js/services/sync.js',
     '/js/services/stationSync.js',
     '/js/services/fleet.js',
     '/js/services/dataPurge.js',
     '/js/services/seed.js',
+    '/js/ui/defectReport.js',
     '/js/app.js',
 ];
 
@@ -57,18 +60,19 @@ function isCacheableAsset(pathname) {
     return OFFLINE_EXTENSIONS.some(ext => pathname.endsWith(ext));
 }
 
-function cacheFirst(request) {
-    return caches.open(RUNTIME_CACHE).then(async cache => {
-        const cached = await cache.match(request, { ignoreSearch: true });
-        if (cached) {
-            fetch(request).then(res => {
-                if (res && res.ok) cache.put(request, res.clone());
-            }).catch(() => {});
-            return cached;
+/** Online: network-first so ?v= cache-bust query strings always fetch latest code */
+function networkFirstAsset(request) {
+    return fetch(request).then(res => {
+        if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(RUNTIME_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
         }
-        const res = await fetch(request);
-        if (res && res.ok) cache.put(request, res.clone());
         return res;
+    }).catch(async () => {
+        const cache = await caches.open(RUNTIME_CACHE);
+        return cache.match(request)
+            || cache.match(request, { ignoreSearch: true })
+            || Response.error();
     });
 }
 
@@ -111,6 +115,6 @@ self.addEventListener('fetch', event => {
     }
 
     if (isCacheableAsset(url.pathname)) {
-        event.respondWith(cacheFirst(request));
+        event.respondWith(networkFirstAsset(request));
     }
 });

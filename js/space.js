@@ -209,6 +209,8 @@ const TVC_Space = (function () {
             base.showHubImport = false;
             base.showCompanyExport = false;
             base.showCaptainDashboard = false;
+            base.showDefectReport = true;
+            base.showDefectInbox = true;
         }
         if (isCaptainHub(user)) {
             base.showCaptainDashboard = true;
@@ -218,6 +220,10 @@ const TVC_Space = (function () {
             base.showExportShip = false;
             base.showImportShip = false;
             base.showApprovalQueue = TVC_RBAC.isApprover(user);
+            base.showDefectReport = true;
+            base.showDefectInbox = true;
+            base.showDefectImportUrgent = true;
+            base.showDefectUrgentExport = TVC_RBAC.isApprover(user);
         }
         return base;
     }

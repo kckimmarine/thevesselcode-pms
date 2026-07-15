@@ -39,6 +39,9 @@ const TVC_RBAC = (function () {
         APPROVE_ORIGINAL_PLAN: 'APPROVE_ORIGINAL_PLAN',
         ADD_COMPANY_COMMENT: 'ADD_COMPANY_COMMENT',
         CONFIRM_REPORT: 'CONFIRM_REPORT',
+        SUBMIT_DEFECT_REPORT: 'SUBMIT_DEFECT_REPORT',
+        REPLY_DEFECT_REPORT: 'REPLY_DEFECT_REPORT',
+        IMPORT_DEFECT_URGENT: 'IMPORT_DEFECT_URGENT',
         VIEW_PMS_SCHEDULE: 'VIEW_PMS_SCHEDULE',
         MODIFY_MAINTENANCE_ITEM: 'MODIFY_MAINTENANCE_ITEM',
         VIEW_AUDIT_LOG: 'VIEW_AUDIT_LOG',
@@ -69,6 +72,7 @@ const TVC_RBAC = (function () {
             Action.CREATE_DAILY_REPORT, Action.EDIT_OWN_PENDING_REPORT,
             Action.VIEW_INVENTORY, Action.VIEW_PMS_SCHEDULE,
             Action.UPDATE_RUN_HOURS, Action.CREATE_REQUISITION,
+            Action.SUBMIT_DEFECT_REPORT,
         ]),
         SHIP_CHIEF: new Set([
             Action.CREATE_DAILY_REPORT, Action.APPROVE_DAILY_REPORT,
@@ -79,6 +83,7 @@ const TVC_RBAC = (function () {
             Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
             Action.CREATE_REQUISITION, Action.VIEW_AUDIT_LOG,
             Action.MODIFY_MAINTENANCE_ITEM,
+            Action.SUBMIT_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
         ]),
         SHIP_CAPTAIN: new Set([
             Action.CREATE_DAILY_REPORT, Action.APPROVE_DAILY_REPORT,
@@ -89,6 +94,7 @@ const TVC_RBAC = (function () {
             Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
             Action.CREATE_REQUISITION, Action.VIEW_AUDIT_LOG,
             Action.MODIFY_MAINTENANCE_ITEM,
+            Action.SUBMIT_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
         ]),
         HQ_SUPERVISOR: new Set([
             Action.VIEW_INVENTORY, Action.VIEW_PMS_SCHEDULE,
@@ -96,6 +102,7 @@ const TVC_RBAC = (function () {
             Action.REVIEW_MASTER_PLAN, Action.APPROVE_ORIGINAL_PLAN,
             Action.ADD_COMPANY_COMMENT, Action.CONFIRM_REPORT,
             Action.VIEW_AUDIT_LOG, Action.MODIFY_MAINTENANCE_ITEM,
+            Action.REPLY_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
         ]),
     };
 
@@ -109,6 +116,10 @@ const TVC_RBAC = (function () {
             showImportShip: false,
             showExportHq: false,
             showImportHq: false,
+            showDefectReport: true,
+            showDefectInbox: true,
+            showDefectUrgentExport: false,
+            showDefectImportUrgent: false,
         },
         HQ: {
             showDailyReportSubmit: false,
@@ -119,6 +130,10 @@ const TVC_RBAC = (function () {
             showImportShip: false,
             showExportHq: true,
             showImportHq: true,
+            showDefectReport: false,
+            showDefectInbox: true,
+            showDefectUrgentExport: false,
+            showDefectImportUrgent: true,
         },
     };
 
@@ -152,10 +167,13 @@ const TVC_RBAC = (function () {
             base.showExportShip = true;
             base.showImportShip = true;
             base.showModifyOriginalPlan = true;
+            base.showDefectUrgentExport = true;
+            base.showDefectImportUrgent = true;
         }
         if (user.role === Role.SHIP_OFFICER) {
             base.showMaintenanceExecute = false;
             base.showApprovalQueue = false;
+            base.showDefectUrgentExport = false;
         }
         return base;
     }

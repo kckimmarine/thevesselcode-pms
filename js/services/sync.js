@@ -51,7 +51,7 @@ const TVC_Sync = (function () {
 
     /** dept 지정 시 해당 부서 데이터만 델타에 포함 (영구 분리) */
     async function collectDelta(dept) {
-        const [jobs, reports, spares, components, audits, requisitions, jobBom, catalog, groups] = await Promise.all([
+        const [jobs, reports, spares, components, audits, requisitions, jobBom, catalog, groups, defects] = await Promise.all([
             TVC_DB.getAll('maintenance_jobs'),
             TVC_DB.getAll('daily_work_reports'),
             TVC_DB.getAll('spare_parts'),
@@ -61,6 +61,7 @@ const TVC_Sync = (function () {
             TVC_DB.getAll('job_bom').catch(() => []),
             TVC_DB.getAll('universal_catalog').catch(() => []),
             TVC_DB.getAll('maintenance_groups').catch(() => []),
+            TVC_DB.getAll('defect_cases').catch(() => []),
         ]);
         const pending = (rows) => rows.filter(r => r.sync_status !== 'SYNCED');
         const deptByCode = new Map(jobs.map(j => [j.job_code, j.department]));
@@ -70,12 +71,14 @@ const TVC_Sync = (function () {
         let pComponents = pending(components);
         let pReqs = pending(requisitions);
         let pGroups = pending(groups);
+        let pDefects = pending(defects);
         if (dept) {
             pJobs = pJobs.filter(j => j.department === dept);
             pReports = pReports.filter(r => TVC_WorkReport.belongsToDepartment(r, dept, deptByCode));
             pComponents = pComponents.filter(c => !c.path || c.path[0] === dept);
             pReqs = pReqs.filter(r => !r.department || r.department === dept);
             pGroups = pGroups.filter(g => g.department === dept);
+            pDefects = pDefects.filter(d => TVC_DefectCase.belongsToDepartment(d, dept));
         }
         return {
             maintenance_jobs: pJobs,
@@ -87,6 +90,7 @@ const TVC_Sync = (function () {
             job_bom: pending(jobBom),
             universal_catalog: pending(catalog),
             maintenance_groups: pGroups,
+            defect_cases: pDefects,
         };
     }
 
@@ -177,7 +181,7 @@ const TVC_Sync = (function () {
     }
 
     async function markExported(delta) {
-        const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups'];
+        const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups', 'defect_cases'];
         for (const store of stores) {
             for (const row of delta[store] || []) {
                 row.sync_status = 'SYNCED';
@@ -277,7 +281,7 @@ const TVC_Sync = (function () {
             TVC_PMS.writeStore(store, myScope);
         }
 
-        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog']
+        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'defect_cases']
             .reduce((sum, k) => sum + (payload[k]?.length || 0), 0);
 
         await TVC_DB.put('audit_logs', {
@@ -306,12 +310,13 @@ const TVC_Sync = (function () {
             if (kind === 'component') return !row.path || row.path[0] === dept;
             if (kind === 'report') return TVC_WorkReport.belongsToDepartment(row, dept, jobDeptByCode);
             if (kind === 'group') return !row.department || row.department === dept;
+            if (kind === 'defect') return TVC_DefectCase.belongsToDepartment(row, dept);
             return true;
         };
         const stamp = (row, kind) => {
             row.sync_status = 'SYNCED';
-            if (vesselId && (kind === 'report' || kind === 'job' || kind === 'requisition')) row.vessel_id = vesselId;
-            if (isHq && kind === 'report') row.hq_synced = true;
+            if (vesselId && (kind === 'report' || kind === 'job' || kind === 'requisition' || kind === 'defect')) row.vessel_id = vesselId;
+            if (isHq && (kind === 'report' || kind === 'defect')) row.hq_synced = true;
         };
         const mergeStore = async (storeName, rows, kind, keyField = 'id') => {
             if (!rows?.length) return;
@@ -343,6 +348,7 @@ const TVC_Sync = (function () {
         await mergeStore('requisitions', payload.requisitions, 'requisition');
         await mergeStore('job_bom', payload.job_bom, 'bom');
         await mergeStore('universal_catalog', payload.universal_catalog, 'catalog', 'universal_code');
+        await mergeStore('defect_cases', payload.defect_cases, 'defect');
 
         for (const c of payload.company_comments || []) {
             const reports = await TVC_DB.indexGetAll('daily_work_reports', 'by_job_code', c.job_code);
@@ -375,7 +381,7 @@ const TVC_Sync = (function () {
         const merged = {
             maintenance_jobs: [], maintenance_groups: [], daily_work_reports: [],
             spare_parts: [], ship_components: [], audit_logs: [],
-            requisitions: [], job_bom: [], universal_catalog: [],
+            requisitions: [], job_bom: [], universal_catalog: [], defect_cases: [],
         };
         const runHours = {};
         for (const dept of depts) {
@@ -462,7 +468,7 @@ const TVC_Sync = (function () {
             TVC_PMS.writeStore(store, 'SHIP');
         }
 
-        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog']
+        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'defect_cases']
             .reduce((sum, k) => sum + (payload[k]?.length || 0), 0);
 
         await TVC_DB.put('audit_logs', {
@@ -483,5 +489,5 @@ const TVC_Sync = (function () {
         return payload;
     }
 
-    return { exportZip, exportCompanyZip, importZip, importPayload, collectDelta, mergePayload, getHistory, validateImportVesselId, resolveExpectedVesselId };
+    return { exportZip, exportCompanyZip, importZip, importPayload, collectDelta, mergePayload, getHistory, recordSyncHistory, validateImportVesselId, resolveExpectedVesselId };
 })();

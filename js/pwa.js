@@ -1,6 +1,6 @@
 /* THE VESSEL CODE — PWA bootstrap (service worker + mobile nav helpers) */
 const TVC_PWA = (function () {
-    const SW_URL = 'service-worker.js';
+    const SW_URL = 'service-worker.js?v=20260715-defect-v3';
 
     function canRegister() {
         return 'serviceWorker' in navigator
@@ -16,7 +16,8 @@ const TVC_PWA = (function () {
                 if (!worker) return;
                 worker.addEventListener('statechange', () => {
                     if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                        console.info('[TVC-PWA] New version available — refresh to update.');
+                        console.info('[TVC-PWA] New version — reloading.');
+                        window.location.reload();
                     }
                 });
             });
