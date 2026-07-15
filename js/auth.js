@@ -91,6 +91,8 @@ const TVC_Auth = (function () {
             department: user.account_type === 'HQ' ? null : user.department,
             display_name: user.display_name,
             vessel_id: user.vessel_id,
+            station: session.station || null,
+            login_mode: session.login_mode || null,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(updated));
         return updated;
@@ -103,7 +105,7 @@ const TVC_Auth = (function () {
         } catch { return null; }
     }
 
-    async function login(username, password, department) {
+    async function login(username, password, loginMode) {
         await initUsers();
         const users = await TVC_DB.getAll('users');
         const uname = username.trim();
@@ -116,32 +118,32 @@ const TVC_Auth = (function () {
         const hash = await hashPassword(password);
         if (hash !== user.password_hash) return { ok: false, error: '비밀번호가 올바르지 않습니다.' };
 
-        const selected = department || '';
-
         const sessionRole = user.role || (window.TVC_RBAC?.resolveUserRole?.(user));
 
-        // HQ: 부서 선택 불필요 — 선택 여부와 관계없이 접속 허용
         if (user.account_type === 'HQ') {
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,
                 account_type: user.account_type, role: sessionRole,
-                department: null, vessel_id: user.vessel_id,
+                department: null, vessel_id: user.vessel_id, station: null, login_mode: null,
             };
             sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
             return { ok: true, user: session };
         }
 
-        if (!selected) return { ok: false, error: 'Department(Deck/Engine)를 선택하세요.' };
-
-        // 선박 계정: 선택 부서가 계정 부서와 일치해야 접속 가능
-        if (user.department !== selected) {
-            return { ok: false, error: `이 계정은 ${user.department} 부서 전용입니다. (${selected} 선택됨)` };
+        let station = null;
+        if (typeof TVC_Space !== 'undefined') {
+            const spaceCheck = TVC_Space.validateLogin(user, loginMode);
+            if (!spaceCheck.ok) return spaceCheck;
+            station = spaceCheck.station;
+        } else if (!loginMode) {
+            return { ok: false, error: 'Department(Master / Deck / Engine)를 선택하세요.' };
         }
 
         const session = {
             id: user.id, username: user.username, display_name: user.display_name,
             account_type: user.account_type, role: sessionRole,
             department: user.department, vessel_id: user.vessel_id,
+            station: station || null, login_mode: loginMode || null,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
         return { ok: true, user: session };
@@ -157,6 +159,10 @@ const TVC_Auth = (function () {
         if (!TVC_RBAC.can(user, action)) {
             alert(`권한 없음: ${TVC_RBAC.getRoleLabel(user.role)}`);
             return null;
+        }
+        if (typeof TVC_Space !== 'undefined' && user.station) {
+            try { TVC_Space.assertAction(user, action); }
+            catch (e) { alert(e.message || 'Station 접근 제한'); return null; }
         }
         return user;
     }

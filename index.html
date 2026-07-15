@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260714-act-dashboard">
+    <link rel="stylesheet" href="css/app.css?v=20260715-hist-width">
 </head>
 <body>
 
@@ -60,8 +60,9 @@
                     <label for="loginDept">Department</label>
                     <select id="loginDept">
                         <option value="">— Select Department —</option>
-                        <option value="DECK">Deck</option>
+                        <option value="MASTER">Master</option>
                         <option value="ENGINE">Engine</option>
+                        <option value="DECK">Deck</option>
                     </select>
                 </div>
                 <button type="submit" class="login-submit">Sign In</button>
@@ -71,9 +72,10 @@
                 <span class="login-hint-label">Demo access</span>
                 Password <strong>0000</strong>
                 <ul class="login-hint-list">
-                    <li><b>Deck</b> · officer / captain</li>
+                    <li><b>Master</b> · captain / ce (Hub · 전 구역)</li>
                     <li><b>Engine</b> · engineer / ce</li>
-                    <li><b>HQ</b> · hq (no department required)</li>
+                    <li><b>Deck</b> · officer / captain</li>
+                    <li><b>HQ</b> · hq (Department 선택 불필요)</li>
                 </ul>
             </div>
         </div>
@@ -142,45 +144,48 @@
     <div id="tabContent">
         <!-- TAB: Menu (CMAXS main menu home) -->
         <section id="tab-menu" class="tab-pane">
+            <div id="captainViewDashboard" class="captain-view-dashboard hidden"></div>
             <div class="cmaxs-legend">How to use this system. [ ] shows authority. &nbsp;
                 <b>[A]</b> Administrator &nbsp; <b>[B]</b> Approve &nbsp; <b>[C]</b> Input &nbsp; <b>[D]</b> Review
             </div>
             <div class="cmaxs-body" id="cmaxsMenuBody">
-                <aside id="fleetListPanel" class="fleet-list-panel hidden">
-                    <div class="fleet-list-head">🚢 Ship List</div>
-                    <div class="fleet-list-toolbar">
-                        <button class="fleet-view-btn active" data-fview="all" onclick="TVC_App.setFleetView('all')">View: All</button>
-                        <button class="fleet-view-btn" data-fview="selected" onclick="TVC_App.setFleetView('selected')">Selected</button>
-                    </div>
-                    <div class="fleet-search-bar">
-                        <input class="search-input" id="fleetSearch" placeholder="Search ship name / code…" oninput="TVC_App.setFleetSearch(this.value)">
-                    </div>
-                    <div class="fleet-table-wrap">
-                        <table class="fleet-table">
-                            <thead><tr>
-                                <th>No</th><th>Ship's Name</th><th>Code</th><th>Delivery</th>
-                            </tr></thead>
-                            <tbody id="fleetTableBody"></tbody>
-                        </table>
-                    </div>
-                </aside>
-                <div class="menu-main-col">
+                <div class="hq-left-col hidden" id="hqLeftCol">
+                    <aside id="fleetListPanel" class="fleet-list-panel">
+                        <div class="fleet-list-head">🚢 Ship List</div>
+                        <div class="fleet-list-toolbar">
+                            <button class="fleet-view-btn active" data-fview="all" onclick="TVC_App.setFleetView('all')">View: All</button>
+                            <button class="fleet-view-btn" data-fview="selected" onclick="TVC_App.setFleetView('selected')">Selected</button>
+                        </div>
+                        <div class="fleet-search-bar">
+                            <input class="search-input" id="fleetSearch" placeholder="Search ship name / code…" oninput="TVC_App.setFleetSearch(this.value)">
+                        </div>
+                        <div class="fleet-table-wrap">
+                            <table class="fleet-table">
+                                <thead><tr>
+                                    <th>No</th><th>Ship's Name</th><th>Code</th><th>Delivery</th>
+                                </tr></thead>
+                                <tbody id="fleetTableBody"></tbody>
+                            </table>
+                        </div>
+                    </aside>
+                    <div class="hq-menu-cards cmaxs-cards" id="cmaxsCardsSidebar"></div>
+                </div>
+                <div class="menu-main-col" id="menuMainCol">
                     <div class="cmaxs-cards" id="cmaxsCards"></div>
                 </div>
                 <section class="hist-panel">
                     <div class="hist-head">Import &amp; Export History
                         <span class="hist-dept-note">Dept: <strong id="histDeptLabel">Engine</strong></span>
                     </div>
-                    <div class="hist-tabs">
-                        <button class="hist-tab active" data-htab="all" onclick="TVC_App.setHistTab('all')">All</button>
-                        <button class="hist-tab" data-htab="EXPORT" onclick="TVC_App.setHistTab('EXPORT')">Export</button>
-                        <button class="hist-tab" data-htab="IMPORT" onclick="TVC_App.setHistTab('IMPORT')">Import</button>
+                    <div class="hist-view-tabs" role="tablist" aria-label="History view">
+                        <button type="button" class="hist-view-btn active" data-hview="workReport" onclick="TVC_App.setHistView('workReport')">Work Report</button>
+                        <button type="button" class="hist-view-btn" data-hview="originalPlan" onclick="TVC_App.setHistView('originalPlan')">Original Plan</button>
+                        <button type="button" class="hist-view-btn" data-hview="outstandingRate" onclick="TVC_App.setHistView('outstandingRate')">Outstanding Rate</button>
                     </div>
-                    <div class="hist-table-wrap">
-                        <table class="hist-table">
-                            <thead><tr>
-                                <th>No</th><th>Date/Time</th><th>Type</th><th>Direction</th>
-                                <th>Dept</th><th>File</th><th>Records</th><th>Status</th>
+                    <div class="hist-table-wrap" id="histTableWrap">
+                        <table class="hist-table hist-table-simple">
+                            <thead id="histTableHead"><tr>
+                                <th>No</th><th>Import</th><th>Export</th>
                             </tr></thead>
                             <tbody id="histTableBody"></tbody>
                         </table>
@@ -342,6 +347,7 @@
     </div>
 
     <input type="file" id="importZip" accept=".zip" hidden onchange="TVC_App.handleImport(this.files[0]);this.value=''">
+    <input type="file" id="importStation" accept=".zip,.json,.csv" hidden onchange="TVC_App.handleHubImport(this.files[0]);this.value=''">
 </div>
 
 <!-- Modals -->
@@ -383,8 +389,8 @@
         <h3 id="deptPickTitle">부서를 선택하세요</h3>
         <p class="muted">데이터가 섞이지 않도록 부서를 정확히 선택하세요.</p>
         <div class="dept-pick-row">
-            <button class="btn dept-pick-btn deck" onclick="TVC_App.resolveDeptPick('DECK')">⚓<br>Deck</button>
             <button class="btn dept-pick-btn engine" onclick="TVC_App.resolveDeptPick('ENGINE')">⚙️<br>Engine</button>
+            <button class="btn dept-pick-btn deck" onclick="TVC_App.resolveDeptPick('DECK')">⚓<br>Deck</button>
         </div>
     </div>
 </div>
@@ -470,7 +476,7 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/rbac.js?v=20260708-rbac-window"></script>
+<script src="js/rbac.js?v=20260715-dept-order"></script>
 <script src="js/core/schema.js?v=20260710-savefix"></script>
 <script src="js/core/db.js"></script>
 <script src="js/core/indexes.js"></script>
@@ -478,21 +484,23 @@
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260714-pms-tree-modify"></script>
+<script src="js/ui/spareMenu.js?v=20260715-dept-order"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
 <script src="js/services/inventoryService.js"></script>
 <script src="js/services/excel.js"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
-<script src="js/auth.js?v=20260709-lan-login"></script>
+<script src="js/space.js?v=20260715-login-dept"></script>
+<script src="js/auth.js?v=20260715-login-dept"></script>
 <script src="js/services/transaction.js"></script>
 <script src="js/services/maintenancePlan.js"></script>
-<script src="js/services/sync.js"></script>
+<script src="js/services/sync.js?v=20260715-space-auth"></script>
+<script src="js/services/stationSync.js?v=20260715-space-auth"></script>
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260708-req-draft-only"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/app.js?v=20260714-act-dashboard"></script>
+<script src="js/app.js?v=20260715-hq-split"></script>
 <script src="js/pwa.js?v=20260709-pwa"></script>
 </body>
 </html>

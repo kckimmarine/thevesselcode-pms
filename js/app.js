@@ -1,6 +1,7 @@
 /* THE VESSEL CODE — Main Application (v3.0 · CMAXS Tab Navigation) */
 const TVC_App = (function () {
     const ROW_H = 36;
+    const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
     const TABS = ['menu', 'original', 'actual', 'history', 'runhrs', 'spare', 'notice'];
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
     const NEW_ORIG_JOB_EDIT_ID = '__new_orig_job__';
@@ -26,10 +27,12 @@ const TVC_App = (function () {
         _wrUsedParts: [],
         _wrSpareSearch: '',
         _wrForm: {},
-        department: 'ENGINE',              // global filter (locked for ship, switchable for HQ)
+        department: 'ENGINE',
+        station: null,                     // CCR | ECR | CAPTAIN
+        captainView: 'all',                // all | deck | engine (Captain Hub dashboard)
         space: 'SHIP',                     // 데이터 공간: 'HQ' | 'SHIP' (Export/Import로만 상호 동기화)
         currentTab: 'menu',
-        histTab: 'all',
+        histView: 'workReport',
         vlOriginal: null,
         vlActual: null,
         _rhNodes: [],
@@ -193,13 +196,19 @@ const TVC_App = (function () {
             }
         }
 
-        if (state.user && !TVC_RBAC.isHqAccount(state.user) && state.user.department) {
+        const isCaptainHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(state.user);
+        if (state.user && !TVC_RBAC.isHqAccount(state.user) && state.user.department && !isCaptainHub) {
             const dept = state.user.department;
             state.jobs = allJobs.filter(j => j.department === dept);
             state.components = allComponents.filter(c => !c.path || c.path[0] === dept);
             state.groups = allGroups.filter(g => g.department === dept);
             const deptCodes = new Set(state.jobs.map(j => j.job_code));
             state.reports = allReports.filter(r => TVC_WorkReport.belongsToJobCodeSet(r, deptCodes));
+        } else if (isCaptainHub) {
+            state.jobs = allJobs;
+            state.components = allComponents;
+            state.groups = allGroups;
+            state.reports = allReports;
         } else {
             state.jobs = allJobs;
             state.components = allComponents;
@@ -263,7 +272,9 @@ const TVC_App = (function () {
         // 데이터 공간(Space) 분리: HQ와 선박(Vessel)은 서로의 실시간 데이터를 보지 못하며, 오직 Export/Import(ZIP)로만 동기화된다.
         const isHq = TVC_RBAC.isHqAccount(state.user);
         state.space = isHq ? 'HQ' : 'SHIP';
-        state.department = isHq ? null : (state.user.department || null);
+        state.station = state.user.station || null;
+        state.department = isHq ? null : (TVC_Space.isCaptainHub(state.user) ? null : (state.user.department || null));
+        state.captainView = 'all';
         state.selectedGroupKey = null;
         state.search = '';
         updateUserBar(state.user);
@@ -278,6 +289,7 @@ const TVC_App = (function () {
         await loadData();
         applyRoleUi(state.user);
         renderDeptToggles(state.user);
+        renderCaptainViewDashboard();
         if (isHq) await populateShipHeader(state.user);
         showApp();
         switchTab('menu');
@@ -328,9 +340,11 @@ const TVC_App = (function () {
 
     // ── Header / role UI ─────────────────────────────────────────────
     function updateUserBar(user) {
-        const badge = TVC_RBAC.isHqAccount(user)
-            ? 'HQ Mode'
-            : `Vessel Mode${user.department ? ` · ${TVC_RBAC.getDeptLabel(user.department)}` : ''}`;
+        const badge = typeof TVC_Space !== 'undefined'
+            ? TVC_Space.getModeBadge(user)
+            : (TVC_RBAC.isHqAccount(user)
+                ? 'HQ Mode'
+                : `Vessel Mode${user.department ? ` · ${TVC_RBAC.getDeptLabel(user.department)}` : ''}`);
         const title = TVC_RBAC.getAccountTitle(user.username);
         document.querySelectorAll('.userBadgeEl').forEach(el => el.textContent = badge);
         document.querySelectorAll('.userNameEl').forEach(el => el.textContent = title);
@@ -368,10 +382,12 @@ const TVC_App = (function () {
     function setText(id, txt) { const el = document.getElementById(id); if (el) el.textContent = txt; }
 
     function applyRoleUi(user) {
-        const f = TVC_RBAC.getUiFeatures(user);
+        const f = typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(user) : TVC_RBAC.getUiFeatures(user);
         document.querySelectorAll('[data-feature]').forEach(el => {
             el.classList.toggle('hidden', !f[el.dataset.feature]);
         });
+        const dash = document.getElementById('captainViewDashboard');
+        if (dash) dash.classList.toggle('hidden', !f.showCaptainDashboard);
         syncPlanGroupTreeUi();
     }
 
@@ -403,13 +419,15 @@ const TVC_App = (function () {
         return state.jobs.filter(j => j.department === state.department);
     }
 
-    /** HQ만 All/Deck/Engine 토글 표시. 선박 계정은 고정 부서 라벨만 노출. */
+    /** HQ / Captain Hub: All/Deck/Engine 토글. Station PC는 고정 부서 라벨만 노출. */
     function renderDeptToggles(user) {
         if (!user) return;
-        const isHq = TVC_RBAC.isHqAccount(user);
+        const canSwitch = typeof TVC_Space !== 'undefined'
+            ? TVC_Space.canSwitchDepartmentView(user)
+            : TVC_RBAC.isHqAccount(user);
         document.querySelectorAll('.dept-toggle').forEach(group => {
-            if (isHq) {
-                const opts = [{ v: null, l: 'All' }, { v: 'DECK', l: 'Deck' }, { v: 'ENGINE', l: 'Engine' }];
+            if (canSwitch) {
+                const opts = [{ v: null, l: 'All' }, { v: 'ENGINE', l: 'Engine' }, { v: 'DECK', l: 'Deck' }];
                 const btns = opts.map(o => {
                     const active = state.department === o.v ? ' active' : '';
                     const arg = o.v ? `'${o.v}'` : 'null';
@@ -417,7 +435,10 @@ const TVC_App = (function () {
                 }).join('');
                 group.innerHTML = '<span class="dept-label">Department</span>' + btns;
             } else {
-                group.innerHTML = `<span class="dept-label">Department</span><span class="dept-fixed pill ok">${TVC_RBAC.getDeptLabel(user.department)} 🔒</span>`;
+                const modeLbl = user.login_mode && typeof TVC_Space !== 'undefined'
+                    ? TVC_Space.loginModeLabel(user.login_mode)
+                    : TVC_RBAC.getDeptLabel(user.department);
+                group.innerHTML = `<span class="dept-label">Department</span><span class="dept-fixed pill ok">${modeLbl} 🔒</span>`;
             }
         });
     }
@@ -438,16 +459,59 @@ const TVC_App = (function () {
     }
 
     function setDepartment(dept) {
-        // 선박 계정은 자기 부서에 고정, 본사는 All/Deck/Engine 자유 전환
-        if (state.user && !TVC_RBAC.isHqAccount(state.user) && dept !== state.user.department) {
+        const canSwitch = state.user && (typeof TVC_Space !== 'undefined'
+            ? TVC_Space.canSwitchDepartmentView(state.user)
+            : TVC_RBAC.isHqAccount(state.user));
+        if (state.user && !canSwitch && dept !== state.user.department) {
             alert('이 계정은 ' + TVC_RBAC.getDeptLabel(state.user.department) + ' 부서 전용입니다.');
             return;
         }
         state.department = dept;
+        state.captainView = dept === 'DECK' ? 'deck' : dept === 'ENGINE' ? 'engine' : 'all';
         state.selectedGroupKey = null;
         renderDeptToggles(state.user);
+        renderCaptainViewDashboard();
         setText('histDeptLabel', TVC_RBAC.getDeptLabel(state.department));
         rerenderCurrentTab();
+    }
+
+    function setCaptainView(view) {
+        state.captainView = view;
+        if (view === 'deck') setDepartment('DECK');
+        else if (view === 'engine') setDepartment('ENGINE');
+        else setDepartment(null);
+    }
+
+    /** Captain Hub — All / Deck / Engine 모니터링 대시보드 뼈대 */
+    function renderCaptainViewDashboard() {
+        const host = document.getElementById('captainViewDashboard');
+        if (!host || !state.user || !TVC_Space.isCaptainHub(state.user)) return;
+
+        const c = menuCounts();
+        const deckPending = state.reports.filter(r => r.status === 'PENDING' && reportDept(r) === 'DECK').length;
+        const engPending = state.reports.filter(r => r.status === 'PENDING' && reportDept(r) === 'ENGINE').length;
+        const deckJobs = state.jobs.filter(j => j.department === 'DECK');
+        const engJobs = state.jobs.filter(j => j.department === 'ENGINE');
+        const v = state.captainView || 'all';
+
+        host.innerHTML = `
+            <div class="captain-dash-head">
+                <span class="captain-dash-title">⚓ Captain Hub — Vessel Overview</span>
+                <span class="captain-dash-sub">All / Engine / Deck 구역 모니터링</span>
+            </div>
+            <div class="captain-view-tabs" role="tablist" aria-label="Vessel view">
+                <button type="button" class="captain-view-btn${v === 'all' ? ' active' : ''}" onclick="TVC_App.setCaptainView('all')">All</button>
+                <button type="button" class="captain-view-btn${v === 'engine' ? ' active' : ''}" onclick="TVC_App.setCaptainView('engine')">Engine</button>
+                <button type="button" class="captain-view-btn${v === 'deck' ? ' active' : ''}" onclick="TVC_App.setCaptainView('deck')">Deck</button>
+            </div>
+            <div class="captain-view-stats">
+                <div class="captain-stat-card"><span class="captain-stat-num">${c.total}</span><span class="captain-stat-lbl">Jobs (filtered)</span></div>
+                <div class="captain-stat-card warn"><span class="captain-stat-num">${c.pending}</span><span class="captain-stat-lbl">Pending Approval</span></div>
+                <div class="captain-stat-card engine"><span class="captain-stat-num">${engPending}</span><span class="captain-stat-lbl">Engine Pending</span></div>
+                <div class="captain-stat-card deck"><span class="captain-stat-num">${deckPending}</span><span class="captain-stat-lbl">Deck Pending</span></div>
+                <div class="captain-stat-card"><span class="captain-stat-num">${engJobs.length}</span><span class="captain-stat-lbl">Engine Jobs</span></div>
+                <div class="captain-stat-card"><span class="captain-stat-num">${deckJobs.length}</span><span class="captain-stat-lbl">Deck Jobs</span></div>
+            </div>`;
     }
 
     // ── Shared job-id computation ────────────────────────────────────
@@ -865,12 +929,20 @@ const TVC_App = (function () {
                 ],
             },
             {
+                key: 'hub', tone: 'purple', icon: '⚓', title: 'Captain Hub (Station sync)',
+                items: [
+                    { label: 'Import Station Data', tag: 'C', action: "TVC_App.menuAction('hubImport')", feature: 'showHubImport' },
+                    { label: 'Export Company Report Package', tag: 'B', action: "TVC_App.menuAction('companyExport')", feature: 'showCompanyExport' },
+                ],
+            },
+            {
                 key: 'monthly', tone: 'blue', icon: '🗓️', title: 'At first day of every month',
                 flow: 'monthly',
                 items: [
                     { label: 'Update Run Hour of Equipment', tag: 'C', action: "TVC_App.menuAction('runHour')" },
                     { label: 'Modify Maintenance Item', tag: 'B', action: "TVC_App.menuAction('modifyItem')", feature: 'showModifyOriginalPlan' },
                     { label: 'Update Original Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue' },
+                    { label: 'Export to Captain Hub', tag: 'C', action: "TVC_App.menuAction('stationExport')", feature: 'showStationExport' },
                     { label: 'Data Export', tag: 'C', action: "TVC_App.menuAction('export')", feature: 'showExportShip' },
                 ],
             },
@@ -987,11 +1059,11 @@ const TVC_App = (function () {
     }
 
     function renderFleetList() {
-        const wrap = document.getElementById('fleetListPanel');
+        const hqCol = document.getElementById('hqLeftCol');
         const body = document.getElementById('fleetTableBody');
-        if (!wrap || !body) return;
+        if (!body) return;
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
-        wrap.classList.toggle('hidden', !isHq);
+        hqCol?.classList.toggle('hidden', !isHq);
         document.getElementById('cmaxsMenuBody')?.classList.toggle('hq-mode', isHq);
         if (!isHq) return;
 
@@ -1047,44 +1119,117 @@ const TVC_App = (function () {
 
     function renderMainMenu() {
         setText('histDeptLabel', TVC_RBAC.getDeptLabel(state.department));
+        renderCaptainViewDashboard();
         renderFleetList();
-        renderMenuCards(document.getElementById('cmaxsCards'));
+        const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
+        const mainCol = document.getElementById('menuMainCol');
+        const sidebarCards = document.getElementById('cmaxsCardsSidebar');
+        const mainCards = document.getElementById('cmaxsCards');
+        if (mainCol) mainCol.classList.toggle('hidden', !!isHq);
+        if (isHq) {
+            renderMenuCards(sidebarCards);
+            if (mainCards) mainCards.innerHTML = '';
+        } else {
+            renderMenuCards(mainCards);
+            if (sidebarCards) sidebarCards.innerHTML = '';
+        }
         renderSyncHistory();
     }
 
+    function setHistView(view) {
+        state.histView = view;
+        document.querySelectorAll('.hist-view-btn').forEach(b => b.classList.toggle('active', b.dataset.hview === view));
+        renderSyncHistory();
+    }
+
+    /** @deprecated — use setHistView */
     function setHistTab(tab) {
-        state.histTab = tab;
-        document.querySelectorAll('.hist-tab').forEach(t => t.classList.toggle('active', t.dataset.htab === tab));
-        renderSyncHistory();
+        const map = { all: 'workReport', IMPORT: 'workReport', EXPORT: 'workReport' };
+        setHistView(map[tab] || 'workReport');
     }
 
-    /** 부서별 데이터 독립성: Import & Export History도 dept 기준으로 필터링 (Deck은 Deck만, Engine은 Engine만) */
+    function histEventDate(row) {
+        if (row.at) return row.at.slice(0, 10);
+        const raw = String(row.date || '');
+        const m = raw.match(/(\d{4})[./-](\d{1,2})[./-](\d{1,2})/);
+        if (m) return `${m[1]}-${String(m[2]).padStart(2, '0')}-${String(m[3]).padStart(2, '0')}`;
+        return raw.slice(0, 10) || '—';
+    }
+
+    async function loadSyncHistoryRows() {
+        let rows = [];
+        try { rows = await TVC_Sync.getHistory(120); } catch (_) {}
+        if (state.space === 'HQ') rows = rows.filter(r => r.space === 'HQ');
+        else rows = rows.filter(r => r.space !== 'HQ');
+        if (state.department) rows = rows.filter(r => !r.department || r.department === state.department || r.department === 'ALL');
+        if (state.user && TVC_RBAC.isHqAccount(state.user) && state.selectedVesselId) {
+            rows = rows.filter(r => !r.vessel_id || r.vessel_id === '—' || r.vessel_id === state.selectedVesselId);
+        }
+        return rows.sort((a, b) => (b.at || b.date || '').localeCompare(a.at || a.date || ''));
+    }
+
+    function renderHistSimpleTable(rows, emptyMsg) {
+        const head = document.getElementById('histTableHead');
+        const body = document.getElementById('histTableBody');
+        if (!head || !body) return;
+        head.innerHTML = '<tr><th>No</th><th>Import</th><th>Export</th></tr>';
+        if (!rows.length) {
+            body.innerHTML = `<tr><td colspan="3" class="muted hist-empty">${esc(emptyMsg)}</td></tr>`;
+            return;
+        }
+        body.innerHTML = rows.map((r, i) => {
+            const dt = histEventDate(r);
+            const imp = r.type === 'IMPORT' ? dt : '';
+            const exp = r.type === 'EXPORT' ? dt : '';
+            return `<tr><td>${i + 1}</td><td>${esc(imp)}</td><td>${esc(exp)}</td></tr>`;
+        }).join('');
+    }
+
+    function renderOutstandingRateView() {
+        const head = document.getElementById('histTableHead');
+        const body = document.getElementById('histTableBody');
+        if (!head || !body) return;
+        const jobs = deptJobs();
+        const total = jobs.length || 1;
+        const overdue = jobs.filter(j => j.is_overdue).length;
+        const due30 = jobs.filter(j => !j.is_overdue && daysUntil(j.next_date) <= 30).length;
+        const outstanding = overdue + due30;
+        const rate = Math.round((outstanding / total) * 1000) / 10;
+        head.innerHTML = '<tr><th>No</th><th>Period</th><th>Outstanding Rate</th><th>Overdue</th><th>Due (30d)</th></tr>';
+        const today = new Date().toISOString().slice(0, 10);
+        body.innerHTML = `
+            <tr>
+                <td>1</td>
+                <td>${esc(today)}</td>
+                <td><strong>${rate}%</strong> (${outstanding} / ${total})</td>
+                <td>${overdue}</td>
+                <td>${due30}</td>
+            </tr>
+            <tr><td colspan="5" class="muted hist-empty">최신 기준 Actual Plan 집계 — 부서 필터 적용</td></tr>`;
+    }
+
+    /** Import & Export History — Work Report / Original Plan / Outstanding Rate 뷰 */
     async function renderSyncHistory() {
         const body = document.getElementById('histTableBody');
         if (!body) return;
-        let rows = [];
-        try { rows = await TVC_Sync.getHistory(80); } catch (_) {}
-        // Space 분리: HQ는 자신(HQ)이 수행한 Import/Export 기록만, 선박은 선박 기록만 표시
-        if (state.space === 'HQ') rows = rows.filter(r => r.space === 'HQ');
-        else rows = rows.filter(r => r.space !== 'HQ');
-        if (state.department) rows = rows.filter(r => r.department === state.department);
-        if (state.user && TVC_RBAC.isHqAccount(state.user) && state.selectedVesselId) {
-            rows = rows.filter(r => !r.vessel_id || r.vessel_id === state.selectedVesselId);
+        const rows = await loadSyncHistoryRows();
+        const view = state.histView || 'workReport';
+
+        if (view === 'workReport') {
+            renderHistSimpleTable(rows, 'No sync history for this department yet');
+            return;
         }
-        if (state.histTab !== 'all') rows = rows.filter(r => r.type === state.histTab);
-        if (!rows.length) { body.innerHTML = '<tr><td colspan="8" class="muted" style="text-align:center">No sync history for this department yet</td></tr>'; return; }
-        body.innerHTML = rows.map((r, i) => {
-            const stTone = r.status === 'SUCCESS' ? 'ok' : (r.status === 'FAILED' ? 'overdue' : 'warn');
-            const dirIcon = r.type === 'EXPORT' ? '⬆' : '⬇';
-            return `<tr>
-                <td>${i + 1}</td><td>${esc(r.date || '')}</td>
-                <td>${dirIcon} ${esc(r.type || '')}</td><td>${esc(r.direction || '')}</td>
-                <td><span class="pill">${esc(r.department || '—')}</span></td>
-                <td class="hist-file">${esc(r.filename || '—')}</td>
-                <td style="text-align:right">${r.record_count ?? 0}</td>
-                <td><span class="pill ${stTone}">${esc(r.status || '')}</span></td>
-            </tr>`;
-        }).join('');
+        if (view === 'originalPlan') {
+            const planRows = rows.filter(r =>
+                r.direction === 'HQ_TO_SHIP'
+                || (r.type === 'EXPORT' && (r.direction === 'SHIP_TO_HQ' || r.direction === 'STATION_TO_HUB'))
+            );
+            renderHistSimpleTable(planRows, 'No Original Plan sync history for this department yet');
+            return;
+        }
+        if (view === 'outstandingRate') {
+            renderOutstandingRateView();
+        }
     }
 
     /** 메뉴 카드 클릭 → 해당 탭 전환 + 필터 적용 (switchTab과 완전 결합) */
@@ -1120,6 +1265,9 @@ const TVC_App = (function () {
                 switchTab('original');
                 break;
             case 'export': handleExport(); break;
+            case 'stationExport': handleStationExport(); break;
+            case 'hubImport': document.getElementById('importStation')?.click(); break;
+            case 'companyExport': handleCompanyExport(); break;
             case 'import':
                 pickDepartmentThen('Import할 부서를 선택하세요 (DECK / ENGINE)', (dept) => {
                     state._pendingImportDept = dept;
@@ -1856,7 +2004,7 @@ const TVC_App = (function () {
             _planUpdateSnapshot = null;
             state._planCalcMsg = `Original Plan Update 확정 (${shipCode}) — Status On ${stats?.statusDate || ''}. 본사 Import 전까지 재변경 불가.`;
             syncOriginalPlanUpdateUi();
-            renderMenuCards(document.getElementById('cmaxsCards'));
+            if (state.currentTab === 'menu') renderMainMenu();
         } else {
             await revertPlanUpdateSnapshot();
             const pending = stats?.pendingReports || 0;
@@ -1962,7 +2110,8 @@ const TVC_App = (function () {
         if (!byDept.size && q && !matchCritical) {
             html += `<div class="tree-empty muted">No groups match "${esc(q)}"</div>`;
         }
-        byDept.forEach((nodes, dept) => {
+        DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
+            const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             nodes.forEach(n => {
                 const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
@@ -2344,9 +2493,15 @@ const TVC_App = (function () {
     function renderQueues() {
         let pending = state.reports.filter(r => r.status === 'PENDING');
         let approved = state.reports.filter(r => r.status === 'APPROVED');
-        // 책임자는 자기 부서 리포트만 승인 큐에 노출
+        // 책임자: Station은 승인 불가. Captain Hub는 뷰 필터에 따라 큐 표시
         if (state.user && TVC_RBAC.isApprover(state.user)) {
-            pending = pending.filter(r => reportDept(r) === state.user.department);
+            if (typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(state.user)) {
+                pending = [];
+            } else if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(state.user)) {
+                if (state.department) pending = pending.filter(r => reportDept(r) === state.department);
+            } else {
+                pending = pending.filter(r => reportDept(r) === state.user.department);
+            }
         } else if (state.department) {
             pending = pending.filter(r => reportDept(r) === state.department);
         }
@@ -4094,11 +4249,11 @@ const TVC_App = (function () {
     async function handleLogin() {
         const errEl = document.getElementById('loginErr');
         try {
-            const dept = document.getElementById('loginDept')?.value || '';
+            const loginMode = document.getElementById('loginDept')?.value || '';
             const r = await TVC_Auth.login(
                 document.getElementById('loginUser').value,
                 document.getElementById('loginPass').value,
-                dept
+                loginMode
             );
             if (errEl) errEl.textContent = r.ok ? '' : (r.error || '로그인 실패');
             if (r.ok) {
@@ -4115,6 +4270,39 @@ const TVC_App = (function () {
         TVC_Auth.logout();
         state.user = null;
         showLogin();
+    }
+
+    async function handleStationExport() {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user) return;
+        try {
+            await TVC_StationSync.exportStationPackage(user);
+            await refreshAll();
+            if (state.currentTab === 'menu') renderSyncHistory();
+            alert(`${TVC_Space.stationLabel(user.station)} 데이터가 Captain Hub용 패키지로보내졌습니다.`);
+        } catch (e) { alert(e.message); }
+    }
+
+    async function handleCompanyExport() {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user) return;
+        try {
+            await TVC_StationSync.exportCompanyPackage(user);
+            await refreshAll();
+            if (state.currentTab === 'menu') renderSyncHistory();
+            alert('회사 보고용 데이터 패키지가 생성되었습니다.');
+        } catch (e) { alert(e.message); }
+    }
+
+    async function handleHubImport(file) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !file) return;
+        try {
+            await TVC_StationSync.importStationPackage(user, file);
+            await refreshAll();
+            if (state.currentTab === 'menu') { renderSyncHistory(); renderCaptainViewDashboard(); }
+            alert('Station 데이터 병합(Merge)이 완료되었습니다.');
+        } catch (e) { alert(e.message); }
     }
 
     async function handleExport() {
@@ -4199,7 +4387,7 @@ const TVC_App = (function () {
 
     return {
         boot, switchTab, navigate,
-        setDepartment, setHistTab, menuAction, resolveDeptPick,
+        setDepartment, setCaptainView, setHistView, setHistTab, menuAction, resolveDeptPick,
         setFleetView, setFleetSearch, selectVessel,
         setSearch, setTreeSearch, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, selectGroup, renderGroupTree,
         openJobDetail, openWorkProcedure, setWorkProcedureTab, openProcedureHistory, openProcedureHistoryByCode,
@@ -4219,7 +4407,7 @@ const TVC_App = (function () {
         openOrigGroupAdd, openOrigGroupRename, saveGroupEditor,
         confirmPlanUpdate, closePlanUpdateModal, printCurrentTab,
         doSubmit, doExecute, doApprove, doConfirm,
-        handleLogin, handleLogout, handleExport, handleImport, loadSeedFile,
+        handleLogin, handleLogout, handleExport, handleImport, handleHubImport, loadSeedFile,
         uploadAttachment, saveDetailReport, closeModal, showModal, dismissSpicsAlerts, openSpicsRequisition,
     };
 })();

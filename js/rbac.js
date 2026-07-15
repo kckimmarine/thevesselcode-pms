@@ -181,7 +181,7 @@ const TVC_RBAC = (function () {
     // ── Department scoping ───────────────────────────────────────────
     /** 계정이 접근 가능한 부서 목록. HQ는 전체, 선박은 자기 부서만. */
     function getAccessibleDepartments(user) {
-        if (isHqAccount(user)) return [Department.DECK, Department.ENGINE];
+        if (isHqAccount(user)) return [Department.ENGINE, Department.DECK];
         return user?.department ? [user.department] : [];
     }
 
@@ -191,8 +191,11 @@ const TVC_RBAC = (function () {
         return user?.department === dept;
     }
 
-    /** 승인 권한 범위: 책임자는 자기 부서 리포트만 승인 가능. */
+    /** 승인 권한 범위: 책임자는 자기 부서 리포트만 승인 가능. Station PC(CCR/ECR)는 승인 불가. */
     function canApproveDepartment(user, dept) {
+        if (typeof TVC_Space !== 'undefined' && user?.station) {
+            return TVC_Space.canApproveReport(user, dept);
+        }
         if (!isApprover(user)) return false;
         return user.department === dept;
     }

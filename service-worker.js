@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260714-act-dashboard';
+const CACHE_VERSION = 'tvc-pms-20260715-hist-width';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -30,10 +30,12 @@ const PRECACHE_ASSETS = [
     '/js/services/inventoryService.js',
     '/js/services/excel.js',
     '/js/core/pbkdf2-fallback.js',
+    '/js/space.js',
     '/js/auth.js',
     '/js/services/transaction.js',
     '/js/services/maintenancePlan.js',
     '/js/services/sync.js',
+    '/js/services/stationSync.js',
     '/js/services/fleet.js',
     '/js/services/dataPurge.js',
     '/js/services/seed.js',

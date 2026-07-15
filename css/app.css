@@ -278,16 +278,27 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .cmaxs-legend b { color: var(--navy); }
 
-/* 메뉴(CMAXS 스타일): 좌측 절차 카드는 좁게 고정, 우측 Import & Export History는 넓게 */
+/* 메뉴(CMAXS 스타일): 선박=좌측 카드, HQ=Ship List + 메뉴(분리) | 우측 History */
 .cmaxs-body { padding: 20px; display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 20px; align-items: start; }
-.cmaxs-body.hq-mode { grid-template-columns: 280px 330px minmax(0, 1fr); }
+.cmaxs-body.hq-mode { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
 .menu-main-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.menu-main-col.hidden { display: none !important; }
+
+/* HQ — Ship List와 메뉴 카드 분리(세로 스택) */
+.hq-left-col {
+    display: flex; flex-direction: column; gap: 16px; min-width: 0; align-self: start;
+}
+.hq-left-col.hidden { display: none !important; }
+.hq-menu-cards { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.hq-menu-cards .work-card { min-width: 0; }
+.hq-menu-cards .wc-title { word-break: keep-all; overflow-wrap: break-word; }
+.hq-menu-cards .mi-label { word-break: keep-all; overflow-wrap: break-word; line-height: 1.35; }
 
 /* HQ Fleet ship list */
 .fleet-list-panel {
     background: #fff; border-radius: 12px; border: 1px solid #e2e8f0;
     box-shadow: 0 2px 8px rgba(0,0,0,.06); overflow: hidden;
-    display: flex; flex-direction: column; max-height: calc(100vh - 200px);
+    display: flex; flex-direction: column;
 }
 .fleet-list-head { padding: 12px 14px; font-weight: 700; color: var(--navy); border-bottom: 1px solid #edf2f7; background: #f7fafc; }
 .fleet-list-toolbar { display: flex; gap: 6px; padding: 8px 10px; border-bottom: 1px solid #edf2f7; }
@@ -298,7 +309,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .fleet-view-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
 .fleet-search-bar { padding: 8px 10px; border-bottom: 1px solid #edf2f7; }
 .fleet-search-bar .search-input { width: 100%; box-sizing: border-box; }
-.fleet-table-wrap { flex: 1; min-height: 0; overflow-y: auto; max-height: 520px; -webkit-overflow-scrolling: touch; }
+.fleet-table-wrap { flex: 1; min-height: 0; overflow-y: auto; max-height: 300px; -webkit-overflow-scrolling: touch; }
 .fleet-table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .fleet-table th { position: sticky; top: 0; background: var(--navy); color: #fff; padding: 7px 8px; text-align: left; font-weight: 600; z-index: 1; }
 .fleet-table td { padding: 7px 8px; border-bottom: 1px solid #edf2f7; }
@@ -317,6 +328,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .work-card.tone-blue { border-top-color: var(--blue); }
 .work-card.tone-green { border-top-color: var(--green); }
 .work-card.tone-amber { border-top-color: var(--amber); }
+.work-card.tone-purple { border-top-color: #805ad5; }
 .wc-head { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: #f7fafc; border-bottom: 1px solid #edf2f7; }
 .wc-icon { font-size: 26px; }
 .wc-title { font-weight: 700; color: var(--navy); font-size: 15px; }
@@ -372,19 +384,48 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .mi-blue { background: var(--blue); }
 .mi-green { background: var(--green); }
 
-/* Import & Export History panel */
-.hist-panel { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 2px 8px rgba(0,0,0,.06); overflow: hidden; }
-.hist-head { padding: 12px 16px; font-weight: 700; color: var(--navy); border-bottom: 1px solid #edf2f7; display: flex; justify-content: space-between; align-items: center; }
-.hist-dept-note { font-size: 12px; font-weight: 500; color: #718096; }
+/* Import & Export History panel (Menu) */
+.hist-panel {
+    background: #fff; border-radius: 12px; border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 8px rgba(0,0,0,.06); overflow: hidden;
+    min-width: 0; max-width: 100%;
+}
+.cmaxs-body > .hist-panel,
+.cmaxs-body > .hq-left-col,
+.cmaxs-body > .menu-main-col { min-width: 0; }
+.hist-head {
+    padding: 12px 16px; font-weight: 700; font-size: 14px; color: var(--navy);
+    border-bottom: 1px solid #edf2f7; display: flex; justify-content: space-between;
+    align-items: center; flex-wrap: wrap; gap: 6px;
+}
+.hist-dept-note { font-size: 12px; font-weight: 500; color: #718096; white-space: nowrap; }
+.hist-view-tabs { display: flex; gap: 6px; padding: 10px 12px; border-bottom: 1px solid #edf2f7; flex-wrap: wrap; }
+.hist-view-btn {
+    flex: 1 1 auto; min-width: 0; border: 1px solid #cbd5e0; background: #f7fafc; color: #4a5568;
+    padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 12px; font-weight: 700; text-align: center;
+    transition: background .15s, border-color .15s, color .15s;
+}
+.hist-view-btn:hover { background: #edf2f7; }
+.hist-view-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); box-shadow: 0 2px 6px rgba(26,54,93,.25); }
+.hist-panel .hist-table-wrap { max-height: 260px; overflow-x: hidden; overflow-y: auto; border-top: 1px solid #e2e8f0; }
+.hist-panel .hist-table.hist-table-simple {
+    width: 100%; min-width: 0; max-width: 100%; table-layout: fixed;
+    border-collapse: collapse; font-size: 12px;
+}
+.hist-panel .hist-table-simple th,
+.hist-panel .hist-table-simple td { white-space: normal; word-break: break-word; }
+.hist-table-simple th:nth-child(1) { width: 48px; text-align: center; }
+.hist-table-simple td:nth-child(1) { text-align: center; font-weight: 600; color: var(--navy); }
+.hist-table-simple th:nth-child(2),
+.hist-table-simple th:nth-child(3) { width: auto; }
+.hist-empty { text-align: center !important; padding: 20px 10px !important; font-size: 12px; }
 .hist-tabs { display: flex; gap: 4px; padding: 8px 12px 0; }
 .hist-tab { border: 1px solid #e2e8f0; border-bottom: none; background: #f7fafc; color: #4a5568; padding: 6px 16px; border-radius: 8px 8px 0 0; cursor: pointer; font-size: 12px; font-weight: 600; }
 .hist-tab.active { background: #fff; color: var(--navy); border-color: #cbd5e0; }
-.hist-table-wrap { max-height: 260px; overflow: auto; border-top: 1px solid #e2e8f0; }
-.hist-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.hist-table th { position: sticky; top: 0; background: var(--navy); color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; }
-.hist-table td { padding: 7px 10px; border-bottom: 1px solid #edf2f7; }
-.hist-table tbody tr:nth-child(even) { background: #fbfdff; }
-.hist-table tbody tr:hover { background: #ebf4ff; }
+.hist-panel .hist-table-simple th { position: sticky; top: 0; background: var(--navy); color: #fff; padding: 8px 10px; text-align: left; font-weight: 600; }
+.hist-panel .hist-table-simple td { padding: 7px 10px; border-bottom: 1px solid #edf2f7; }
+.hist-panel .hist-table-simple tbody tr:nth-child(even) { background: #fbfdff; }
+.hist-panel .hist-table-simple tbody tr:hover { background: #ebf4ff; }
 .hist-file { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* legacy tiles (kept for compatibility) */
@@ -700,6 +741,34 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     .act-dash-total { grid-column: 1 / -1; }
     .act-filter-dashboard { overflow-x: visible; }
 }
+
+/* Captain Hub — All / Deck / Engine view dashboard */
+.captain-view-dashboard {
+    margin: 12px 16px 0;
+    padding: 14px 16px;
+    background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
+    border-radius: 10px;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(26, 54, 93, .25);
+}
+.captain-dash-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 16px; margin-bottom: 10px; }
+.captain-dash-title { font-weight: 800; font-size: 15px; }
+.captain-dash-sub { font-size: 12px; opacity: .85; }
+.captain-view-tabs { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+.captain-view-btn {
+    padding: 6px 16px; border: 1px solid rgba(255,255,255,.35); border-radius: 20px;
+    background: rgba(255,255,255,.08); color: #fff; font-weight: 700; font-size: 12px; cursor: pointer;
+}
+.captain-view-btn.active { background: #fff; color: var(--navy); border-color: #fff; }
+.captain-view-stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+.captain-stat-card {
+    background: rgba(255,255,255,.12); border-radius: 8px; padding: 10px 12px; text-align: center;
+}
+.captain-stat-card.warn { background: rgba(237, 137, 54, .35); }
+.captain-stat-card.deck { border-left: 3px solid #63b3ed; }
+.captain-stat-card.engine { border-left: 3px solid #f6ad55; }
+.captain-stat-num { display: block; font-size: 22px; font-weight: 800; line-height: 1.1; }
+.captain-stat-lbl { display: block; font-size: 10px; opacity: .9; margin-top: 4px; }
 
 /* Account title badge (Header) — Officer / Engineer / Captain / Chief engineer / Superintendent */
 .title-badge { background: var(--navy); color: #fff; font-size: 11px; letter-spacing: .02em; padding: 3px 9px; border-radius: 8px; display: inline-block; }
@@ -1275,8 +1344,12 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .hist-table .hist-chk input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--navy); }
 .hist-table .hist-chk input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.4; }
 .hist-toolbar .btn:disabled { opacity: .45; cursor: not-allowed; }
-.hist-table { min-width: 1200px; font-size: 11px; }
-.hist-table th, .hist-table td { white-space: nowrap; }
+#tab-history .hist-table,
+.sheet-table-wrap .hist-table { min-width: 1200px; font-size: 11px; }
+#tab-history .hist-table th,
+#tab-history .hist-table td,
+.sheet-table-wrap .hist-table th,
+.sheet-table-wrap .hist-table td { white-space: nowrap; }
 .hist-table .hist-detail { white-space: normal; min-width: 180px; max-width: 280px; }
 .hist-table .hist-code { min-width: 72px; }
 .hist-table .hist-date { min-width: 84px; }
@@ -3742,7 +3815,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 
 @media (max-width: 480px) {
     .cmaxs-legend { font-size: 11px; padding: 6px 12px; }
-    .hist-panel { overflow-x: auto; }
+    .hist-panel { overflow-x: hidden; }
     .dept-btn { padding: 6px 10px; font-size: 12px; }
 }
 

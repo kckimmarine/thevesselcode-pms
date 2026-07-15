@@ -80,27 +80,33 @@ const TVC_Sync = (function () {
         return {
             maintenance_jobs: pJobs,
             daily_work_reports: pReports,
-            spare_parts: pending(spares),   // 공용 SPICS 재고 — 부서 분리 대상 아님
+            spare_parts: pending(spares),
             ship_components: pComponents,
             audit_logs: pending(audits),
-            requisitions: pReqs,            // 부품 청구서
-            job_bom: pending(jobBom),       // 정비-부품 BOM (공통)
-            universal_catalog: pending(catalog), // 공통 관리 코드 (공통)
+            requisitions: pReqs,
+            job_bom: pending(jobBom),
+            universal_catalog: pending(catalog),
             maintenance_groups: pGroups,
         };
     }
 
-    async function exportZip(user, direction, dept) {
+    async function exportZip(user, direction, dept, opts = {}) {
         const action = direction === 'HQ_TO_SHIP' ? TVC_RBAC.Action.EXPORT_HQ_FEEDBACK : TVC_RBAC.Action.EXPORT_SHIP_SYNC;
         TVC_RBAC.assert(user, action);
+        if (direction === 'STATION_TO_HUB' && typeof TVC_Space !== 'undefined') {
+            TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.STATION_EXPORT);
+        }
         if (!dept) throw new Error('부서(DECK/ENGINE)를 선택해야 합니다.');
-        if (!TVC_RBAC.canAccessDepartment(user, dept)) throw new Error(`이 계정은 ${dept} 부서 데이터를 내보낼 권한이 없습니다.`);
+        const accessDept = typeof TVC_Space !== 'undefined' && user?.station
+            ? TVC_Space.canAccessDepartment(user, dept)
+            : TVC_RBAC.canAccessDepartment(user, dept);
+        if (!accessDept) throw new Error(`이 계정은 ${dept} 부서 데이터를보낼 권한이 없습니다.`);
 
         const delta = await collectDelta(dept);
         const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user.vessel_id || 'UNKNOWN';
         const exportDate = now().slice(0, 10).replace(/-/g, '');
+        const stationId = opts.station_id || (typeof TVC_Space !== 'undefined' ? TVC_Space.getStation(user) : null);
 
-        // 시간 기반 정비용 Run-hour 데이터도 함께 내보낸다 (현재 활성 Space 저장소 기준, 해당 부서만).
         const runHoursAll = (typeof TVC_PMS !== 'undefined') ? TVC_PMS.readStore() : {};
         const runHours = {};
         for (const [k, v] of Object.entries(runHoursAll)) {
@@ -113,8 +119,9 @@ const TVC_Sync = (function () {
                 export_date: now().slice(0, 10),
                 direction,
                 department: dept,
+                station_id: stationId,
                 exported_by: user.username,
-                schema_version: 5,
+                schema_version: 6,
             },
             ...delta,
             run_hours: runHours,
@@ -125,12 +132,12 @@ const TVC_Sync = (function () {
 
         const zip = new JSZip();
         zip.file('tvc_sync.json', JSON.stringify(payload, null, 2));
+        zip.file('tvc_station_export.json', JSON.stringify(payload, null, 2));
         zip.file('README.txt', `TVC-PMS Sync Package\nVessel: ${vesselId}\nDept: ${dept}\nDate: ${payload.export_meta.export_date}\nDirection: ${direction}`);
 
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        // 선박·부서별 파일명: <VESSEL_ID>_<DEPT>_PMS_EXPORT_YYYYMMDD.zip
-        //  예) TEST_V01_ENGINE_PMS_EXPORT_20260703.zip
-        const filename = `${vesselId}_${dept}_PMS_EXPORT_${exportDate}.zip`;
+        const prefix = direction === 'STATION_TO_HUB' ? `${vesselId}_${stationId || dept}_STATION` : `${vesselId}_${dept}_PMS_EXPORT`;
+        const filename = `${prefix}_${exportDate}.zip`;
         downloadBlob(blob, filename);
 
         await markExported(delta);
@@ -180,14 +187,19 @@ const TVC_Sync = (function () {
         }
     }
 
-    /** dept: HQ는 반드시 사전 선택, 선박은 자기 부서로 고정
-     *  opts.expectedVesselId — HQ Import 시 app.js에서 선택 선박 ID 전달 */
     async function importZip(user, file, dept, opts = {}) {
         const isHq = TVC_RBAC.isHqAccount(user);
-        TVC_RBAC.assert(user, isHq ? TVC_RBAC.Action.IMPORT_HQ_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC);
-        dept = dept || user.department;
-        if (!dept) throw new Error('Import할 부서(DECK/ENGINE)를 선택해야 합니다.');
-        if (!TVC_RBAC.canAccessDepartment(user, dept)) throw new Error(`이 계정은 ${dept} 부서 데이터를 가져올 권한이 없습니다.`);
+        const isHubMerge = !!opts.allowHubMerge;
+        const directionHint = opts.expectedDirection;
+
+        if (isHubMerge) {
+            if (typeof TVC_Space !== 'undefined') TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.HUB_IMPORT);
+        } else {
+            TVC_RBAC.assert(user, isHq ? TVC_RBAC.Action.IMPORT_HQ_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC);
+            if (typeof TVC_Space !== 'undefined' && user?.station) {
+                TVC_Space.assertAction(user, isHq ? TVC_RBAC.Action.IMPORT_HQ_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC);
+            }
+        }
 
         const zip = await JSZip.loadAsync(file);
         const jsonFile = zip.file('tvc_sync.json');
@@ -195,6 +207,23 @@ const TVC_Sync = (function () {
 
         const payload = JSON.parse(await jsonFile.async('string'));
         const fileDept = payload.export_meta?.department;
+        const fileDirection = payload.export_meta?.direction;
+        dept = dept || fileDept || user.department;
+
+        if (isHubMerge) {
+            if (fileDirection && fileDirection !== 'STATION_TO_HUB' && fileDirection !== 'SHIP_TO_HQ') {
+                throw new Error('Captain Hub는 Station Export(STATION_TO_HUB) 패키지만 병합할 수 있습니다.');
+            }
+        } else if (fileDirection === 'STATION_TO_HUB') {
+            throw new Error('Station 패키지는 Captain Room(Hub) PC에서 Import Station Data로 가져와야 합니다.');
+        }
+
+        if (!dept) throw new Error('Import할 부서(DECK/ENGINE)를 선택해야 합니다.');
+        const accessDept = typeof TVC_Space !== 'undefined' && user?.station && !isHubMerge
+            ? TVC_Space.canAccessDepartment(user, dept)
+            : TVC_RBAC.canAccessDepartment(user, dept);
+        if (!accessDept && !isHubMerge) throw new Error(`이 계정은 ${dept} 부서 데이터를 가져올 권한이 없습니다.`);
+
         const importVesselId = payload.export_meta?.vessel_id || null;
         const failImport = async (err) => {
             await recordSyncHistory({
@@ -205,8 +234,11 @@ const TVC_Sync = (function () {
             throw err;
         };
 
-        if (fileDept && fileDept !== dept) {
-            await failImport(new Error(`부서 불일치: 선택한 부서(${dept})와 파일의 부서(${fileDept})가 다릅니다. 데이터가 섞이지 않도록 Import가 중단되었습니다.`));
+        if (fileDept && fileDept !== dept && fileDept !== 'ALL') {
+            await failImport(new Error(`부서 불일치: 선택한 부서(${dept})와 파일의 부서(${fileDept})가 다릅니다.`));
+        }
+        if (directionHint && fileDirection && fileDirection !== directionHint) {
+            await failImport(new Error(`방향 불일치: 기대 ${directionHint}, 파일 ${fileDirection}`));
         }
 
         const expectedVesselId = await resolveExpectedVesselId(user, isHq, opts.expectedVesselId);
@@ -217,8 +249,9 @@ const TVC_Sync = (function () {
             await failImport(err);
         }
         let status = 'SUCCESS';
+        const mergeDept = (isHubMerge && dept === 'ALL') ? null : dept;
         try {
-            await mergePayload(payload, dept, isHq, importVesselId);
+            await mergePayload(payload, mergeDept, isHq, importVesselId);
         } catch (err) {
             status = 'FAILED';
             await recordSyncHistory({
@@ -235,12 +268,11 @@ const TVC_Sync = (function () {
             throw err;
         }
 
-        // Run-hour 데이터 반영: HQ는 선박별(HQ_<vesselId>), 선박은 SHIP 저장소에 병합
         if (payload.run_hours && typeof TVC_PMS !== 'undefined') {
             const myScope = isHq ? TVC_PMS.scopeOf('HQ', importVesselId) : 'SHIP';
             const store = TVC_PMS.readStore(myScope);
             for (const [k, v] of Object.entries(payload.run_hours)) {
-                if (!dept || k.startsWith(dept + '|')) store[k] = v;
+                if (!mergeDept || k.startsWith(mergeDept + '|')) store[k] = v;
             }
             TVC_PMS.writeStore(store, myScope);
         }
@@ -266,8 +298,6 @@ const TVC_Sync = (function () {
         return payload;
     }
 
-    /** dept가 지정되면 병합 대상 row도 재차 부서 검증 (파일-선택 불일치 방어)
-     *  isHq=true(HQ가 Import)면 리포트에 hq_synced 플래그를 부여해 HQ Work History에 노출되게 한다. */
     async function mergePayload(payload, dept, isHq, vesselId) {
         const jobDeptByCode = new Map((payload.maintenance_jobs || []).map(j => [j.job_code, j.department]));
         const deptOk = (row, kind) => {
@@ -280,7 +310,6 @@ const TVC_Sync = (function () {
         };
         const stamp = (row, kind) => {
             row.sync_status = 'SYNCED';
-            // 선박 식별자 태깅 → HQ는 선박별로 데이터를 구분해 표시
             if (vesselId && (kind === 'report' || kind === 'job' || kind === 'requisition')) row.vessel_id = vesselId;
             if (isHq && kind === 'report') row.hq_synced = true;
         };
@@ -338,5 +367,121 @@ const TVC_Sync = (function () {
         URL.revokeObjectURL(a.href);
     }
 
-    return { exportZip, importZip, collectDelta, getHistory, validateImportVesselId, resolveExpectedVesselId };
+    async function exportCompanyZip(user) {
+        if (typeof TVC_Space !== 'undefined') TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.COMPANY_EXPORT);
+        TVC_RBAC.assert(user, TVC_RBAC.Action.EXPORT_SHIP_SYNC);
+
+        const depts = ['DECK', 'ENGINE'];
+        const merged = {
+            maintenance_jobs: [], maintenance_groups: [], daily_work_reports: [],
+            spare_parts: [], ship_components: [], audit_logs: [],
+            requisitions: [], job_bom: [], universal_catalog: [],
+        };
+        const runHours = {};
+        for (const dept of depts) {
+            const delta = await collectDelta(dept);
+            for (const key of Object.keys(merged)) {
+                merged[key].push(...(delta[key] || []));
+            }
+            const runHoursAll = (typeof TVC_PMS !== 'undefined') ? TVC_PMS.readStore() : {};
+            for (const [k, v] of Object.entries(runHoursAll)) {
+                if (k.startsWith(dept + '|')) runHours[k] = v;
+            }
+        }
+
+        const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user.vessel_id || 'UNKNOWN';
+        const exportDate = now().slice(0, 10).replace(/-/g, '');
+        const payload = {
+            export_meta: {
+                vessel_id: vesselId,
+                export_date: now().slice(0, 10),
+                direction: 'SHIP_TO_HQ',
+                department: 'ALL',
+                station_id: 'CAPTAIN',
+                exported_by: user.username,
+                schema_version: 6,
+                package_type: 'COMPANY_REPORT',
+            },
+            ...merged,
+            run_hours: runHours,
+            company_comments: (merged.daily_work_reports || [])
+                .filter(r => r.company_comment)
+                .map(r => ({ job_code: r.job_code, comment: r.company_comment })),
+        };
+
+        const zip = new JSZip();
+        zip.file('tvc_sync.json', JSON.stringify(payload, null, 2));
+        zip.file('tvc_company_report.json', JSON.stringify(payload, null, 2));
+        zip.file('README.txt', `TVC-PMS Company Report Package\nVessel: ${vesselId}\nDate: ${payload.export_meta.export_date}\nDirection: SHIP_TO_HQ`);
+
+        const filename = `${vesselId}_COMPANY_REPORT_${exportDate}.zip`;
+        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        downloadBlob(blob, filename);
+
+        await markExported(merged);
+        await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
+        await TVC_DB.put('audit_logs', {
+            timestamp: new Date().toLocaleString(),
+            log: `📦 [Export/SHIP_TO_HQ/ALL] ${filename}`,
+            sync_status: 'SYNCED',
+        });
+        const recordCount = Object.values(merged).reduce((sum, rows) => sum + (rows?.length || 0), 0);
+        await recordSyncHistory({
+            type: 'EXPORT',
+            direction: 'SHIP_TO_HQ',
+            department: 'ALL',
+            vessel_id: vesselId,
+            filename,
+            record_count: recordCount,
+            status: 'SUCCESS',
+            space: spaceOf(user),
+        });
+        return payload;
+    }
+
+    async function importPayload(user, payload, file, opts = {}) {
+        if (opts.allowHubMerge && typeof TVC_Space !== 'undefined') {
+            TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.HUB_IMPORT);
+        }
+        const fileDept = payload.export_meta?.department;
+        const fileDirection = payload.export_meta?.direction;
+        let dept = opts.dept || fileDept || user.department;
+        if (!dept && fileDirection === 'SHIP_TO_HQ') dept = 'ALL';
+
+        const importVesselId = payload.export_meta?.vessel_id || null;
+        const expectedVesselId = await resolveExpectedVesselId(user, false, opts.expectedVesselId);
+        const vCheck = validateImportVesselId(expectedVesselId, importVesselId, false);
+        if (!vCheck.ok) throw new Error(vCheck.message);
+
+        const mergeDept = dept === 'ALL' ? null : dept;
+        await mergePayload(payload, mergeDept, false, importVesselId);
+
+        if (payload.run_hours && typeof TVC_PMS !== 'undefined') {
+            const store = TVC_PMS.readStore('SHIP');
+            for (const [k, v] of Object.entries(payload.run_hours)) store[k] = v;
+            TVC_PMS.writeStore(store, 'SHIP');
+        }
+
+        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog']
+            .reduce((sum, k) => sum + (payload[k]?.length || 0), 0);
+
+        await TVC_DB.put('audit_logs', {
+            timestamp: new Date().toLocaleString(),
+            log: `📥 [HubMerge/${dept || 'ALL'}] ${fileDirection || 'JSON'} from ${payload.export_meta?.export_date || '?'}`,
+            sync_status: 'LOCAL',
+        });
+        await recordSyncHistory({
+            type: 'IMPORT',
+            direction: fileDirection || 'HUB_MERGE',
+            department: dept || 'ALL',
+            vessel_id: importVesselId || '—',
+            filename: file?.name || '(merged)',
+            record_count: recordCount,
+            status: 'SUCCESS',
+            space: spaceOf(user),
+        });
+        return payload;
+    }
+
+    return { exportZip, exportCompanyZip, importZip, importPayload, collectDelta, mergePayload, getHistory, validateImportVesselId, resolveExpectedVesselId };
 })();

@@ -158,6 +158,7 @@ const TVC_SpareMenu = (function () {
 
     /** Original/Actual Plan GROUP Tree — Critical Equipment 키와 동일 */
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
+    const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
     /** SPARE GROUP Tree — 03/04/05 Generator Engine 통합 노드 */
     const MERGED_GEN_ENGINE_KEY = '__SPARE_MERGE_03_05_GENERATOR__';
     const MERGED_GEN_ENGINE_LABEL = '03~05. GENERATOR ENGINE';
@@ -1426,7 +1427,8 @@ const TVC_SpareMenu = (function () {
         if (!byDept.size && q && !matchCritical) {
             html += `<div class="tree-empty muted">No groups match "${esc(q)}"</div>`;
         }
-        byDept.forEach((nodes, dept) => {
+        DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
+            const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             mergeSpareTreeNodes(nodes).forEach(n => {
                 const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
@@ -1444,9 +1446,10 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        const deptRank = { ENGINE: 0, DECK: 1 };
         const nodes = (st.idx?.groupNodes || [])
             .filter(n => !st.department || n.department === st.department)
-            .sort((a, b) => a.department.localeCompare(b.department) || a.label.localeCompare(b.label));
+            .sort((a, b) => (deptRank[a.department] ?? 9) - (deptRank[b.department] ?? 9) || a.label.localeCompare(b.label));
         let html = '<option value="">— Unassigned —</option>';
         let curDept = '';
         nodes.forEach(n => {
@@ -4150,7 +4153,8 @@ const TVC_SpareMenu = (function () {
         if (!byDept.size && q && !matchCritical) {
             html += `<div class="tree-empty muted">No groups match "${esc(q)}"</div>`;
         }
-        byDept.forEach((nodes, dept) => {
+        DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
+            const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             mergeSpareTreeNodes(nodes).forEach(n => {
                 const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
@@ -5504,7 +5508,8 @@ const TVC_SpareMenu = (function () {
         if (!byDept.size && q && !matchCritical) {
             html += `<div class="tree-empty muted">No groups match "${esc(q)}"</div>`;
         }
-        byDept.forEach((nodes, dept) => {
+        DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
+            const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             mergeSpareTreeNodes(nodes).forEach(n => {
                 const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
@@ -5883,7 +5888,8 @@ ${renderWrSpareMetaHtml(meta)}
         if (!byDept.size && q && !matchCritical) {
             html += `<div class="tree-empty muted">No groups match "${esc(q)}"</div>`;
         }
-        byDept.forEach((nodes, dept) => {
+        DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
+            const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             mergeSpareTreeNodes(nodes).forEach(n => {
                 const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
