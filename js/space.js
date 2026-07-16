@@ -36,11 +36,11 @@ const TVC_Space = (function () {
     const STATION_ENDPOINTS = {
         [Station.CCR]: new Set([
             Endpoint.DECK_WORK, Endpoint.PENDING_REPORT, Endpoint.STATION_EXPORT,
-            Endpoint.HQ_FEEDBACK_IMPORT,
+            Endpoint.APPROVE_DECK, Endpoint.HQ_FEEDBACK_IMPORT,
         ]),
         [Station.ECR]: new Set([
             Endpoint.ENGINE_WORK, Endpoint.PENDING_REPORT, Endpoint.STATION_EXPORT,
-            Endpoint.HQ_FEEDBACK_IMPORT,
+            Endpoint.APPROVE_ENGINE, Endpoint.HQ_FEEDBACK_IMPORT,
         ]),
         [Station.CAPTAIN]: new Set([
             Endpoint.MONITOR_ALL, Endpoint.DECK_WORK, Endpoint.ENGINE_WORK,
@@ -49,7 +49,6 @@ const TVC_Space = (function () {
         ]),
     };
 
-    const CAPTAIN_HUB_ROLES = new Set(['SHIP_CAPTAIN', 'SHIP_CHIEF']);
 
     /** Login UI — Master / Deck / Engine (maps to internal station) */
     const LoginMode = {
@@ -110,8 +109,8 @@ const TVC_Space = (function () {
         const station = stationFromLoginMode(loginMode);
 
         if (loginMode === LoginMode.MASTER) {
-            if (!CAPTAIN_HUB_ROLES.has(user.role)) {
-                return { ok: false, error: 'Master는 Captain 또는 Chief Engineer만 접속할 수 있습니다.' };
+            if (user.role !== 'SHIP_CAPTAIN') {
+                return { ok: false, error: 'Master Mode는 Captain만 접속할 수 있습니다.' };
             }
             return { ok: true, station };
         }
@@ -181,16 +180,20 @@ const TVC_Space = (function () {
         return TVC_RBAC.canAccessDepartment(user, dept);
     }
 
-    /** Approval: Captain → Deck only, C/E → Engine only; station PCs cannot approve */
+    /** Approval: Master(Captain) → all depts; ECR(C/E) → Engine; CCR(Captain) → Deck */
     function canApproveReport(user, dept) {
         if (!user || !TVC_RBAC.isApprover(user)) return false;
-        if (isStationPc(user)) return false;
         if (isCaptainHub(user)) {
-            if (dept === 'DECK') return user.role === 'SHIP_CAPTAIN';
-            if (dept === 'ENGINE') return user.role === 'SHIP_CHIEF';
-            return false;
+            return user.role === 'SHIP_CAPTAIN';
         }
-        if (!getStation(user)) {
+        const station = getStation(user);
+        if (station === Station.ECR) {
+            return user.role === 'SHIP_CHIEF' && dept === 'ENGINE';
+        }
+        if (station === Station.CCR) {
+            return user.role === 'SHIP_CAPTAIN' && dept === 'DECK';
+        }
+        if (!station) {
             return TVC_RBAC.isApprover(user) && user.department === dept;
         }
         return false;
@@ -201,8 +204,19 @@ const TVC_Space = (function () {
         if (!user || user.account_type === 'HQ') return base;
 
         const station = getStation(user);
-        if (station === Station.CCR || station === Station.ECR) {
-            base.showApprovalQueue = false;
+        if (station === Station.CCR) {
+            base.showApprovalQueue = user.role === 'SHIP_CAPTAIN';
+            base.showExportShip = true;
+            base.showImportShip = true;
+            base.showStationExport = true;
+            base.showHubImport = false;
+            base.showCompanyExport = false;
+            base.showCaptainDashboard = false;
+            base.showDefectReport = true;
+            base.showDefectInbox = true;
+        }
+        if (station === Station.ECR) {
+            base.showApprovalQueue = user.role === 'SHIP_CHIEF';
             base.showExportShip = true;
             base.showImportShip = true;
             base.showStationExport = true;
@@ -233,9 +247,11 @@ const TVC_Space = (function () {
         if (TVC_RBAC.isHqAccount(user)) return 'HQ Mode';
         if (isCaptainHub(user)) return 'Vessel Mode - Master';
         const station = getStation(user);
-        if (station === Station.CCR) return 'Vessel Mode · CCR · Deck';
-        if (station === Station.ECR) return 'Vessel Mode · ECR · Engine';
-        return `Vessel Mode${user.department ? ` · ${TVC_RBAC.getDeptLabel(user.department)}` : ''}`;
+        if (station === Station.CCR) return 'Vessel Mode - Deck';
+        if (station === Station.ECR) return 'Vessel Mode - Engine';
+        return user.department === 'DECK' ? 'Vessel Mode - Deck'
+            : user.department === 'ENGINE' ? 'Vessel Mode - Engine'
+                : 'Vessel Mode';
     }
 
     function canSwitchDepartmentView(user) {

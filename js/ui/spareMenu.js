@@ -150,9 +150,20 @@ const TVC_SpareMenu = (function () {
     const fixAmp = (s) => String(s ?? '').replace(/\[object Object\]/g, '&');
     const esc = (s) => fixAmp(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
+    /** PMS GROUP 라벨 — "03.    NAME" → "03. NAME" (번호 뒤 공백 1칸) */
+    function formatPmsGroupNoLabel(label) {
+        let s = String(label ?? '').replace(/\[object Object\]/g, ' & ').trim();
+        if (!s) return '';
+        const m = s.match(/^(\d+(?:\s*~\s*\d+)?)\.\s*(.*)$/);
+        if (!m) return s.replace(/\s+/g, ' ').trim();
+        const num = m[1].replace(/\s+/g, '');
+        const rest = m[2].replace(/\s+/g, ' ').trim();
+        return rest ? `${num}. ${rest}` : `${num}.`;
+    }
+
     function safeTreeLabel(v) {
         if (v == null || v === '') return '';
-        if (typeof v === 'string') return v.replace(/\[object Object\]/g, ' & ').trim();
+        if (typeof v === 'string') return formatPmsGroupNoLabel(v);
         return String(v);
     }
 
@@ -310,7 +321,7 @@ const TVC_SpareMenu = (function () {
 
         h.assyName = headerFieldText(assyName);
         h.machineryName = headerFieldText(h.machineryName || h.pmsGroupNo);
-        h.pmsGroupNo = headerFieldText(h.pmsGroupNo);
+        h.pmsGroupNo = formatPmsGroupNoLabel(h.pmsGroupNo);
         h.modelType = headerFieldText(h.modelType);
         h.capacity = headerFieldText(h.capacity);
         h.maker = headerFieldText(h.maker);
@@ -1354,7 +1365,7 @@ const TVC_SpareMenu = (function () {
         } else if (m.reqWorkOpen) {
             refreshReqWorkListUi();
             syncSpareToolbarUi();
-        } else if (st.currentTab === 'original' || st.currentTab === 'actual') {
+        } else if (st.currentTab === 'actual') {
             if (window.TVC_App?.renderPlanGroupHeader) TVC_App.renderPlanGroupHeader();
         } else {
             render();
@@ -1605,9 +1616,9 @@ const TVC_SpareMenu = (function () {
             const bomLinks = await TVC_DB.indexGetAll('job_bom', 'by_spare', spareId);
             bomLinks.forEach(l => items.push({ at: l.created_at, jobCode: l.job_code, qty: l.qty_per_job, type: 'BOM', note: 'Linked in BOM' }));
         } catch (_) { /* noop */ }
-        (st.reports || []).filter(r => r.status === 'APPROVED').forEach(r => {
+        (st.reports || []).filter(r => TVC_RBAC.isConfirmedStatus(r.status) || TVC_RBAC.isApprovedStatus(r.status)).forEach(r => {
             (r.used_parts || []).filter(u => u.spare_part_id === spareId).forEach(u => {
-                items.push({ at: r.approved_at || r.created_at, jobCode: r.job_code, qty: -(u.qty_used || 0), type: 'WORK_REPORT', note: r.reporter_name || '' });
+                items.push({ at: r.confirmed_at || r.approved_at || r.created_at, jobCode: r.job_code, qty: -(u.qty_used || 0), type: 'WORK_REPORT', note: r.reporter_name || '' });
             });
         });
         return items.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
@@ -3506,7 +3517,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain 권한이 필요합니다.');
         const key = st.selectedGroupKey;
-        const treeName = (st.currentTab === 'original' || st.currentTab === 'actual')
+        const treeName = st.currentTab === 'actual'
             ? 'PMS GROUP Tree' : 'SPARE GROUP Tree';
         if (!key || key === CRITICAL_GROUP_KEY) {
             return alert(`${treeName}에서 수정할 그룹을 먼저 선택하세요.`);

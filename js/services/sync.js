@@ -352,10 +352,14 @@ const TVC_Sync = (function () {
 
         for (const c of payload.company_comments || []) {
             const reports = await TVC_DB.indexGetAll('daily_work_reports', 'by_job_code', c.job_code);
-            const target = reports.find(r => r.status === 'APPROVED') || reports[0];
+            const target = reports.find(r => {
+                TVC_WorkReport.fromLegacy(r);
+                return TVC_RBAC.isConfirmedStatus(r.status, r.is_locked);
+            }) || reports[0];
             if (target) {
+                TVC_WorkReport.fromLegacy(target);
                 target.company_comment = c.comment;
-                target.status = 'CONFIRMED';
+                target.status = 'APPROVED';
                 target.is_locked = true;
                 target.sync_status = 'SYNCED';
                 if (vesselId) target.vessel_id = vesselId;

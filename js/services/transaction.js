@@ -14,44 +14,132 @@ const TVC_Transaction = (function () {
 
     function buildJobItemsFromPayload(job, payload, status) {
         return [TVC_WorkReport.blankJobItem(job, {
-            status: status || payload.status || 'PENDING',
+            status: status || payload.status || 'REPORTED',
             form: payload.form || {},
             used_parts: payload.usedParts || [],
             description: payload.description || job.job_detail || job.item_sort2,
         })];
     }
 
-    /** 사관: Daily Work Report 제출 (PENDING) — 재고 미차감 */
-    async function submitReport(user, jobId, payload) {
-        TVC_RBAC.assert(user, TVC_RBAC.Action.CREATE_DAILY_REPORT);
-        const job = await TVC_DB.get('maintenance_jobs', jobId);
-        if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
-        if (user.department && user.department !== job.department) {
-            throw Object.assign(new Error(`DEPT_FORBIDDEN: ${job.job_code}`), { code: 'FORBIDDEN' });
+    function snapshotJobState(job) {
+        return {
+            last_done: job.last_done ?? null,
+            next_date: job.next_date ?? null,
+            is_overdue: job.is_overdue ?? false,
+            plan_status: job.plan_status ?? 'PENDING',
+            schedule_basis: job.schedule_basis ?? null,
+        };
+    }
+
+    function resolveMaintenanceLastDone(item, report) {
+        const form = item?.form || report?.report_form || {};
+        return String(form.lastMaintDate || form.workDate || report?.work_date || now().slice(0, 10)).slice(0, 10);
+    }
+
+    function shouldApplyJobSchedule(report) {
+        const workType = report?.work_type;
+        return workType === 'MAINTENANCE' || workType === 'TROUBLE' || workType === 'POSTPONE';
+    }
+
+    function maybeSnapshotJobState(item, job, snapshotPrev) {
+        if (snapshotPrev && !item.prev_job_state) {
+            item.prev_job_state = snapshotJobState(job);
+        }
+    }
+
+    async function applyWorkReportJobSchedule(api, job, item, report, opts = {}) {
+        if (!job || !item || !report) return job;
+        maybeSnapshotJobState(item, job, opts.snapshotPrev);
+
+        if (report.work_type === 'POSTPONE' || item.status === 'CONFIRMED' || item.status === 'POSTPONED') {
+            const postponeDate = String(report.postpone_date || item.form?.postponeDate || '').slice(0, 10);
+            if (!postponeDate) return job;
+            const form = item.form || report.report_form || {};
+            if (form.lastMaintDate) job.last_done = String(form.lastMaintDate).slice(0, 10);
+            job.next_date = postponeDate;
+            job.is_overdue = _isOverdue(job.next_date);
+            job.plan_status = 'PLANNED';
+            job.schedule_basis = 'POSTPONE';
+        } else {
+            const lastDone = resolveMaintenanceLastDone(item, report);
+            job.last_done = lastDone;
+            job.next_date = calcNextDate(job, lastDone);
+            job.is_overdue = _isOverdue(job.next_date);
+            job.plan_status = 'COMPLETED';
         }
 
-        const status = payload.status || 'PENDING';
-        const jobItems = buildJobItemsFromPayload(job, payload, status);
-        const base = {
-            id: 'DWR-' + Date.now(),
-            work_type: payload.workType || 'MAINTENANCE',
-            report_date: payload.reportDate || now().slice(0, 10),
-            work_date: payload.workDate || null,
-            description: payload.description || job.job_detail || job.item_sort2,
-            reported_by: user.id,
-            reporter_name: TVC_RBAC.getRankLabel(user),
-            reporter_role: user.role,
-            used_parts: payload.usedParts || [],
-            trouble_detail: payload.troubleDetail || null,
-            postpone_date: payload.postponeDate || null,
-            report_form: payload.form || null,
-            is_locked: false,
-            created_at: now(),
-        };
-        const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
-        await TVC_DB.put('daily_work_reports', report);
-        await logAudit(`📋 [${status}] ${job.job_code} (${report.work_type}) — ${user.display_name}`);
-        return report;
+        markPending(job);
+        await api.put('maintenance_jobs', job);
+        return job;
+    }
+
+    async function restoreJobScheduleFromSnapshot(api, item) {
+        if (!item?.prev_job_state) return;
+        const job = await api.get('maintenance_jobs', item.maintenance_job_id);
+        if (!job) return;
+        const prev = item.prev_job_state;
+        job.last_done = prev.last_done ?? null;
+        job.next_date = prev.next_date ?? job.next_date;
+        job.is_overdue = prev.is_overdue !== undefined ? prev.is_overdue : _isOverdue(job.next_date);
+        job.plan_status = prev.plan_status ?? 'PENDING';
+        job.schedule_basis = prev.schedule_basis ?? null;
+        markPending(job);
+        await api.put('maintenance_jobs', job);
+    }
+
+    async function syncReportJobSchedules(api, report, opts = {}) {
+        if (!shouldApplyJobSchedule(report)) return;
+        for (const item of report.job_items || []) {
+            const norm = TVC_RBAC.normalizeReportStatus(item.status);
+            if (norm !== 'REPORTED' && norm !== 'PENDING') continue;
+            const job = await api.get('maintenance_jobs', item.maintenance_job_id);
+            if (!job) continue;
+            await applyWorkReportJobSchedule(api, job, item, report, opts);
+        }
+        if (report.job_items?.length === 1) {
+            report.prev_job_state = report.job_items[0].prev_job_state || null;
+        }
+    }
+
+    /** 사관: Daily Work Report 제출 — Save 시 LAST DONE / NEXT DATE 갱신 (재고 미차감) */
+    async function submitReport(user, jobId, payload) {
+        TVC_RBAC.assert(user, TVC_RBAC.Action.CREATE_DAILY_REPORT);
+
+        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
+            const job = await api.get('maintenance_jobs', jobId);
+            if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
+            if (user.department && user.department !== job.department) {
+                throw Object.assign(new Error(`DEPT_FORBIDDEN: ${job.job_code}`), { code: 'FORBIDDEN' });
+            }
+
+            const status = payload.status || 'REPORTED';
+            const jobItems = buildJobItemsFromPayload(job, payload, status);
+            const base = {
+                id: 'DWR-' + Date.now(),
+                work_type: payload.workType || 'MAINTENANCE',
+                report_date: payload.reportDate || now().slice(0, 10),
+                work_date: payload.workDate || null,
+                description: payload.description || job.job_detail || job.item_sort2,
+                reported_by: user.id,
+                reporter_name: TVC_RBAC.getRankLabel(user),
+                reporter_role: user.role,
+                used_parts: payload.usedParts || [],
+                trouble_detail: payload.troubleDetail || null,
+                postpone_date: payload.postponeDate || null,
+                report_form: payload.form || null,
+                is_locked: false,
+                created_at: now(),
+            };
+            const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
+            await syncReportJobSchedules(api, report, { snapshotPrev: true });
+            await api.put('daily_work_reports', report);
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `📋 [${status}] ${job.job_code} (${report.work_type}) — LAST DONE ${job.last_done || '—'} · NEXT ${job.next_date || '—'} — ${user.display_name}`,
+                sync_status: 'LOCAL',
+            });
+            return report;
+        });
     }
 
     /** 다중 Job — Batch Work Report 제출 */
@@ -60,79 +148,94 @@ const TVC_Transaction = (function () {
         const entries = payload.items || [];
         if (!entries.length) throw Object.assign(new Error('NO_JOBS_SELECTED'), { code: 'INVALID' });
 
-        const jobItems = [];
-        for (const entry of entries) {
-            const job = await TVC_DB.get('maintenance_jobs', entry.maintenance_job_id);
-            if (!job) throw Object.assign(new Error(`JOB_NOT_FOUND: ${entry.job_code || entry.maintenance_job_id}`), { code: 'NOT_FOUND' });
-            if (user.department && user.department !== job.department) {
-                throw Object.assign(new Error(`DEPT_FORBIDDEN: ${job.job_code}`), { code: 'FORBIDDEN' });
+        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
+            const jobItems = [];
+            for (const entry of entries) {
+                const job = await api.get('maintenance_jobs', entry.maintenance_job_id);
+                if (!job) throw Object.assign(new Error(`JOB_NOT_FOUND: ${entry.job_code || entry.maintenance_job_id}`), { code: 'NOT_FOUND' });
+                if (user.department && user.department !== job.department) {
+                    throw Object.assign(new Error(`DEPT_FORBIDDEN: ${job.job_code}`), { code: 'FORBIDDEN' });
+                }
+                jobItems.push(TVC_WorkReport.blankJobItem(job, {
+                    status: payload.status || 'REPORTED',
+                    form: { ...(payload.sharedForm || {}), ...(entry.form || {}) },
+                    used_parts: entry.used_parts || entry.usedParts || [],
+                    description: entry.description || entry.form?.outline || job.job_detail || job.item_sort2,
+                }));
             }
-            jobItems.push(TVC_WorkReport.blankJobItem(job, {
-                status: payload.status || 'PENDING',
-                form: { ...(payload.sharedForm || {}), ...(entry.form || {}) },
-                used_parts: entry.used_parts || entry.usedParts || [],
-                description: entry.description || entry.form?.outline || job.job_detail || job.item_sort2,
-            }));
-        }
 
-        const codes = jobItems.map(i => i.job_code).join(', ');
-        const base = {
-            id: 'DWR-' + Date.now(),
-            work_type: payload.workType || 'MAINTENANCE',
-            report_date: payload.reportDate || now().slice(0, 10),
-            work_date: payload.workDate || null,
-            description: payload.description || `Batch report (${jobItems.length} jobs)`,
-            reported_by: user.id,
-            reporter_name: TVC_RBAC.getRankLabel(user),
-            reporter_role: user.role,
-            used_parts: [],
-            trouble_detail: null,
-            postpone_date: null,
-            report_form: payload.sharedForm || null,
-            is_locked: false,
-            created_at: now(),
-        };
-        const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
-        await TVC_DB.put('daily_work_reports', report);
-        await logAudit(`📋 [BATCH/${report.status}] ${codes} — ${user.display_name}`);
-        return report;
+            const codes = jobItems.map(i => i.job_code).join(', ');
+            const base = {
+                id: 'DWR-' + Date.now(),
+                work_type: payload.workType || 'MAINTENANCE',
+                report_date: payload.reportDate || now().slice(0, 10),
+                work_date: payload.workDate || null,
+                description: payload.description || `Batch report (${jobItems.length} jobs)`,
+                reported_by: user.id,
+                reporter_name: TVC_RBAC.getRankLabel(user),
+                reporter_role: user.role,
+                used_parts: [],
+                trouble_detail: null,
+                postpone_date: null,
+                report_form: payload.sharedForm || null,
+                is_locked: false,
+                created_at: now(),
+            };
+            const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
+            await syncReportJobSchedules(api, report, { snapshotPrev: true });
+            await api.put('daily_work_reports', report);
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `📋 [BATCH/${report.status}] ${codes} — LAST DONE/NEXT DATE 갱신 — ${user.display_name}`,
+                sync_status: 'LOCAL',
+            });
+            return report;
+        });
     }
 
-    /** Work History에서 기존 리포트 수정 (Modify) — 상태는 유지 */
+    /** Work History에서 기존 리포트 수정 (Modify) — 상태는 유지, 일정 재반영 */
     async function updateReport(user, reportId, payload) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.CREATE_DAILY_REPORT);
-        const report = await TVC_DB.get('daily_work_reports', reportId);
-        if (!report) throw Object.assign(new Error('REPORT_NOT_FOUND'), { code: 'NOT_FOUND' });
-        if (report.is_locked) throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
-        TVC_WorkReport.fromLegacy(report);
 
-        if (payload.workType) report.work_type = payload.workType;
-        if (payload.reportDate) report.report_date = payload.reportDate;
-        if (payload.workDate !== undefined) report.work_date = payload.workDate || report.work_date;
-        if (payload.description) report.description = payload.description;
-        if (payload.troubleDetail !== undefined) report.trouble_detail = payload.troubleDetail;
-        if (payload.postponeDate !== undefined) report.postpone_date = payload.postponeDate;
-        if (payload.form) report.report_form = payload.form;
+        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
+            const report = await api.get('daily_work_reports', reportId);
+            if (!report) throw Object.assign(new Error('REPORT_NOT_FOUND'), { code: 'NOT_FOUND' });
+            if (report.is_locked) throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
+            TVC_WorkReport.fromLegacy(report);
 
-        if (payload.jobItems) {
-            report.job_items = payload.jobItems;
-            report.job_codes = payload.jobItems.map(i => i.job_code);
-            report.is_batch = report.job_codes.length > 1;
-        } else if (payload.form || payload.usedParts !== undefined) {
-            const item = report.job_items[0];
-            if (item) {
-                if (payload.form) item.form = payload.form;
-                if (payload.usedParts !== undefined && item.status === 'PENDING') item.used_parts = payload.usedParts;
-                if (payload.description) item.description = payload.description;
+            if (payload.workType) report.work_type = payload.workType;
+            if (payload.reportDate) report.report_date = payload.reportDate;
+            if (payload.workDate !== undefined) report.work_date = payload.workDate || report.work_date;
+            if (payload.description) report.description = payload.description;
+            if (payload.troubleDetail !== undefined) report.trouble_detail = payload.troubleDetail;
+            if (payload.postponeDate !== undefined) report.postpone_date = payload.postponeDate;
+            if (payload.form) report.report_form = payload.form;
+
+            if (payload.jobItems) {
+                report.job_items = payload.jobItems;
+                report.job_codes = payload.jobItems.map(i => i.job_code);
+                report.is_batch = report.job_codes.length > 1;
+            } else if (payload.form || payload.usedParts !== undefined) {
+                const item = report.job_items[0];
+                if (item) {
+                    if (payload.form) item.form = payload.form;
+                    if (payload.usedParts !== undefined && TVC_RBAC.isReportedStatus(item.status)) item.used_parts = payload.usedParts;
+                    if (payload.description) item.description = payload.description;
+                }
+                if (payload.usedParts !== undefined && TVC_RBAC.isReportedStatus(report.status)) report.used_parts = payload.usedParts;
             }
-            if (payload.usedParts !== undefined && report.status === 'PENDING') report.used_parts = payload.usedParts;
-        }
 
-        report.status = TVC_WorkReport.aggregateStatus(report.job_items);
-        markPending(report);
-        await TVC_DB.put('daily_work_reports', report);
-        await logAudit(`✏️ [MODIFIED] ${report.job_code} (${report.work_type}) — ${user.display_name}`);
-        return report;
+            report.status = TVC_WorkReport.aggregateStatus(report.job_items);
+            await syncReportJobSchedules(api, report, { snapshotPrev: true });
+            markPending(report);
+            await api.put('daily_work_reports', report);
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `✏️ [MODIFIED] ${report.job_code} (${report.work_type}) — LAST DONE/NEXT DATE 반영 — ${user.display_name}`,
+                sync_status: 'LOCAL',
+            });
+            return report;
+        });
     }
 
     async function rollbackApprovedItem(api, item, user) {
@@ -146,13 +249,7 @@ const TVC_Transaction = (function () {
         }
         const job = await api.get('maintenance_jobs', item.maintenance_job_id);
         if (job && item.prev_job_state) {
-            const prev = item.prev_job_state;
-            job.last_done = prev.last_done ?? null;
-            job.next_date = prev.next_date ?? job.next_date;
-            job.is_overdue = prev.is_overdue !== undefined ? prev.is_overdue : _isOverdue(job.next_date);
-            job.plan_status = prev.plan_status ?? 'PENDING';
-            markPending(job);
-            await api.put('maintenance_jobs', job);
+            await restoreJobScheduleFromSnapshot(api, item);
         }
     }
 
@@ -162,16 +259,30 @@ const TVC_Transaction = (function () {
         if (!report) throw Object.assign(new Error('REPORT_NOT_FOUND'), { code: 'NOT_FOUND' });
         TVC_WorkReport.fromLegacy(report);
 
-        const isApproved = report.status === 'APPROVED' || report.job_items.some(i => i.status === 'APPROVED');
+        const normStatus = TVC_RBAC.normalizeReportStatus(report.status, report.is_locked);
+        const isShipFinalized = normStatus === 'CONFIRMED'
+            || report.job_items.some(i => TVC_RBAC.isConfirmedStatus(i.status));
 
-        if (!isApproved) {
-            if (report.status === 'CONFIRMED' || report.is_locked) {
+        if (!isShipFinalized) {
+            if (normStatus === 'APPROVED' || report.is_locked) {
                 throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
             }
             TVC_RBAC.assert(user, TVC_RBAC.Action.CREATE_DAILY_REPORT);
-            await TVC_DB.del('daily_work_reports', reportId);
-            await logAudit(`🗑 [DELETED] ${report.job_code} (${report.work_type}) — ${user.display_name}`);
-            return true;
+            return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
+                const rep = await api.get('daily_work_reports', reportId);
+                if (!rep) throw Object.assign(new Error('REPORT_NOT_FOUND'), { code: 'NOT_FOUND' });
+                TVC_WorkReport.fromLegacy(rep);
+                for (const item of rep.job_items || []) {
+                    await restoreJobScheduleFromSnapshot(api, item);
+                }
+                await api.del('daily_work_reports', reportId);
+                await api.put('audit_logs', {
+                    timestamp: new Date().toLocaleString(),
+                    log: `🗑 [DELETED] ${rep.job_code} (${rep.work_type}) — LAST DONE/NEXT DATE 원복 — ${user.display_name}`,
+                    sync_status: 'LOCAL',
+                });
+                return true;
+            });
         }
 
         TVC_RBAC.assert(user, TVC_RBAC.Action.APPROVE_DAILY_REPORT);
@@ -182,12 +293,16 @@ const TVC_Transaction = (function () {
             TVC_WorkReport.fromLegacy(rep);
 
             for (const item of rep.job_items) {
-                if (item.status !== 'APPROVED') continue;
+                if (!TVC_RBAC.isConfirmedStatus(item.status)) continue;
                 const job = await api.get('maintenance_jobs', item.maintenance_job_id);
                 if (job && user.department && user.department !== job.department) {
                     throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
                 }
-                await rollbackApprovedItem(api, item, user);
+                if (rep.work_type !== 'POSTPONE') {
+                    await rollbackApprovedItem(api, item, user);
+                } else {
+                    await restoreJobScheduleFromSnapshot(api, item);
+                }
             }
 
             await api.del('daily_work_reports', reportId);
@@ -200,22 +315,16 @@ const TVC_Transaction = (function () {
         });
     }
 
-    async function approveJobItemDates(api, item) {
+    async function finalizeConfirmedJobItem(api, item, report) {
         const job = await api.get('maintenance_jobs', item.maintenance_job_id);
         if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
-        const today = now().slice(0, 10);
-        job.last_done = today;
-        job.next_date = calcNextDate(job, today);
-        job.is_overdue = _isOverdue(job.next_date);
-        job.plan_status = 'COMPLETED';
-        markPending(job);
-        await api.put('maintenance_jobs', job);
-        item.status = 'APPROVED';
+        await applyWorkReportJobSchedule(api, job, item, report, { snapshotPrev: true });
+        item.status = 'CONFIRMED';
         return job;
     }
 
-    /** 선기장: APPROVED + SPICS 재고 자동 차감 (단일·Batch) */
-    async function approveReport(user, reportId) {
+    /** 선장/기관장: REPORTED → CONFIRMED + SPICS 재고 자동 차감 (단일·Batch) */
+    async function confirmReport(user, reportId) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.APPROVE_DAILY_REPORT);
 
         return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'spare_parts', 'audit_logs'], async (api) => {
@@ -223,39 +332,40 @@ const TVC_Transaction = (function () {
             if (!report) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
             TVC_WorkReport.fromLegacy(report);
             if (report.is_locked) throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
-            TVC_RBAC.assertReportTransition(user, 'PENDING', 'APPROVED');
 
-            const pendingItems = report.job_items.filter(i => i.status === 'PENDING');
-            if (!pendingItems.length) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
+            const isPostpone = report.work_type === 'POSTPONE';
+            TVC_RBAC.assertReportTransition(user, 'REPORTED', 'CONFIRMED');
+
+            const reportedItems = report.job_items.filter(i => TVC_RBAC.isReportedStatus(i.status));
+            if (!reportedItems.length) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
 
             const forceOk = payloadForceOk(user);
             const confirmTasks = [];
 
-            for (const item of pendingItems) {
+            for (const item of reportedItems) {
                 const job = await api.get('maintenance_jobs', item.maintenance_job_id);
                 if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
                 if (user.department && user.department !== job.department) {
                     throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
                 }
-                item.prev_job_state = {
-                    last_done: job.last_done ?? null,
-                    next_date: job.next_date ?? null,
-                    is_overdue: job.is_overdue ?? false,
-                    plan_status: job.plan_status ?? 'PENDING',
-                };
-                confirmTasks.push({ job, usedParts: item.used_parts || [] });
+                maybeSnapshotJobState(item, job, true);
+                if (!isPostpone) {
+                    confirmTasks.push({ job, usedParts: item.used_parts || [] });
+                }
             }
 
-            const { alerts } = await TVC_PMS.confirmBatchTasks(api, confirmTasks, { forceOk });
-            report._spicsAlerts = alerts;
+            if (confirmTasks.length) {
+                const { alerts } = await TVC_PMS.confirmBatchTasks(api, confirmTasks, { forceOk });
+                report._spicsAlerts = alerts;
+            }
 
-            for (const item of pendingItems) {
-                await approveJobItemDates(api, item);
+            for (const item of reportedItems) {
+                await finalizeConfirmedJobItem(api, item, report);
             }
 
             report.status = TVC_WorkReport.aggregateStatus(report.job_items);
-            report.approved_by = user.id;
-            report.approved_at = now();
+            report.confirmed_by = user.id;
+            report.confirmed_at = now();
             if (report.job_items.length === 1) {
                 report.prev_job_state = report.job_items[0].prev_job_state;
                 report.used_parts = report.job_items[0].used_parts || [];
@@ -263,10 +373,13 @@ const TVC_Transaction = (function () {
             markPending(report);
             await api.put('daily_work_reports', report);
 
-            const codes = pendingItems.map(i => i.job_code).join(', ');
+            const codes = reportedItems.map(i => i.job_code).join(', ');
+            const scheduleNote = isPostpone
+                ? `NEXT DATE → ${report.postpone_date || reportedItems[0]?.form?.postponeDate || '—'}`
+                : `LAST DONE ${report.job_items.find(i => i.status === 'CONFIRMED')?.form?.lastMaintDate || report.work_date || now().slice(0, 10)}`;
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
-                log: `✅ [APPROVED] ${codes} — 재고차감 · LAST DONE ${now().slice(0, 10)}`,
+                log: `✅ [CONFIRMED] ${codes} — ${isPostpone ? scheduleNote : '재고차감 · ' + scheduleNote}`,
                 sync_status: 'LOCAL',
             });
             return report;
@@ -276,24 +389,27 @@ const TVC_Transaction = (function () {
     async function executeMaintenance(user, jobId, usedParts, description) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.EXECUTE_MAINTENANCE);
         const report = await submitReport(user, jobId, { workType: 'MAINTENANCE', usedParts, description });
-        return approveReport(user, report.id);
+        return confirmReport(user, report.id);
     }
 
-    /** 본사: CONFIRM + Lock */
-    async function confirmReport(user, reportId, companyComment) {
+    /** HQ 공무감독: CONFIRMED → APPROVED + Lock */
+    async function approveReport(user, reportId, companyComment) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.CONFIRM_REPORT);
         return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
             const report = await api.get('daily_work_reports', reportId);
-            if (!report || report.status !== 'APPROVED') throw Object.assign(new Error('NOT_APPROVED'), { code: 'INVALID' });
+            if (!report) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
             TVC_WorkReport.fromLegacy(report);
-            TVC_RBAC.assertReportTransition(user, 'APPROVED', 'CONFIRMED');
+            if (!TVC_RBAC.isConfirmedStatus(report.status, report.is_locked)) {
+                throw Object.assign(new Error('NOT_CONFIRMED'), { code: 'INVALID' });
+            }
+            TVC_RBAC.assertReportTransition(user, 'CONFIRMED', 'APPROVED');
 
-            report.status = 'CONFIRMED';
-            report.confirmed_by = user.id;
-            report.confirmed_at = now();
+            report.status = 'APPROVED';
+            report.approved_by = user.id;
+            report.approved_at = now();
             report.company_comment = companyComment || '';
             report.is_locked = true;
-            report.job_items.forEach(item => { item.status = 'CONFIRMED'; });
+            report.job_items.forEach(item => { item.status = 'APPROVED'; });
             markPending(report);
             await api.put('daily_work_reports', report);
 
@@ -308,7 +424,7 @@ const TVC_Transaction = (function () {
 
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
-                log: `🏢 [CONFIRMED] ${report.job_code}${companyComment ? ': ' + companyComment : ''}`,
+                log: `🏢 [APPROVED] ${report.job_code}${companyComment ? ': ' + companyComment : ''}`,
                 sync_status: 'LOCAL',
             });
             return report;

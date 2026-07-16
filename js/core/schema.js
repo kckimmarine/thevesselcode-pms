@@ -443,7 +443,7 @@ const TVC_EquipmentSchema = (function () {
  * @typedef {object} WorkReportJobItem
  * @property {string} job_code
  * @property {string} maintenance_job_id
- * @property {string} status — PENDING | APPROVED | CONFIRMED | POSTPONED
+ * @property {string} status — REPORTED | CONFIRMED | APPROVED | POSTPONED (legacy: PENDING/APPROVED/CONFIRMED)
  * @property {object} [form] — Job별 Work Report 입력
  * @property {Array} [used_parts]
  * @property {string} [description]
@@ -458,13 +458,51 @@ const TVC_EquipmentSchema = (function () {
  * @property {string} maintenance_job_id — 레거시·첫 Job id
  */
 const TVC_WorkReport = (function () {
-    const ITEM_STATUSES = ['PENDING', 'APPROVED', 'CONFIRMED', 'POSTPONED'];
+    const ITEM_STATUSES = ['REPORTED', 'CONFIRMED', 'APPROVED', 'POSTPONED'];
+
+    function normalizeItemStatus(status, isLocked) {
+        if (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeReportStatus) {
+            return TVC_RBAC.normalizeReportStatus(status, isLocked);
+        }
+        if (status === 'PENDING') return 'REPORTED';
+        if (status === 'POSTPONED' || status === 'APPROVED') return 'CONFIRMED';
+        if (status === 'CONFIRMED') return isLocked ? 'APPROVED' : 'CONFIRMED';
+        return status || 'REPORTED';
+    }
+
+    function migrateReportMeta(report) {
+        if (!report) return report;
+        const raw = report.status;
+        if (raw === 'PENDING') {
+            report.status = 'REPORTED';
+        } else if (raw === 'POSTPONED') {
+            report.status = 'CONFIRMED';
+        } else if (raw === 'APPROVED') {
+            if (!report.confirmed_by && report.approved_by) {
+                report.confirmed_by = report.approved_by;
+                report.confirmed_at = report.approved_at;
+            }
+            report.status = 'CONFIRMED';
+        } else if (raw === 'CONFIRMED' && report.is_locked) {
+            if (!report.approved_by && report.confirmed_by) {
+                report.approved_by = report.confirmed_by;
+                report.approved_at = report.confirmed_at;
+            }
+            report.status = 'APPROVED';
+        } else {
+            report.status = raw || 'REPORTED';
+        }
+        (report.job_items || []).forEach(item => {
+            item.status = normalizeItemStatus(item.status, report.is_locked);
+        });
+        return report;
+    }
 
     function blankJobItem(job, overrides = {}) {
         return {
             job_code: job.job_code,
             maintenance_job_id: job.id,
-            status: overrides.status || 'PENDING',
+            status: overrides.status || 'REPORTED',
             form: overrides.form || {},
             used_parts: overrides.used_parts || [],
             description: overrides.description || job.job_detail || job.item_sort2 || '',
@@ -478,21 +516,21 @@ const TVC_WorkReport = (function () {
         if (Array.isArray(report.job_items) && report.job_items.length) {
             report.job_codes = report.job_codes || report.job_items.map(i => i.job_code);
             report.is_batch = report.is_batch ?? report.job_codes.length > 1;
-            return report;
+            return migrateReportMeta(report);
         }
         const code = report.job_code || '';
         report.job_codes = code ? [code] : [];
         report.job_items = [{
             job_code: code,
             maintenance_job_id: report.maintenance_job_id,
-            status: report.status || 'PENDING',
+            status: report.status || 'REPORTED',
             form: report.report_form || {},
             used_parts: report.used_parts || [],
             description: report.description || '',
             prev_job_state: report.prev_job_state || null,
         }];
         report.is_batch = false;
-        return report;
+        return migrateReportMeta(report);
     }
 
     function getJobItems(report) {
@@ -516,12 +554,11 @@ const TVC_WorkReport = (function () {
 
     function aggregateStatus(jobItems) {
         const items = jobItems || [];
-        if (!items.length) return 'PENDING';
-        if (items.every(i => i.status === 'CONFIRMED')) return 'CONFIRMED';
-        if (items.every(i => i.status === 'APPROVED' || i.status === 'CONFIRMED')) return 'APPROVED';
-        if (items.some(i => i.status === 'POSTPONED')) return 'POSTPONED';
-        if (items.some(i => i.status === 'PENDING')) return 'PENDING';
-        return items[0].status || 'PENDING';
+        if (!items.length) return 'REPORTED';
+        if (items.every(i => i.status === 'APPROVED')) return 'APPROVED';
+        if (items.every(i => i.status === 'CONFIRMED' || i.status === 'APPROVED')) return 'CONFIRMED';
+        if (items.some(i => i.status === 'REPORTED' || i.status === 'PENDING')) return 'REPORTED';
+        return items[0].status || 'REPORTED';
     }
 
     function findItem(report, jobIdOrCode) {
@@ -532,7 +569,7 @@ const TVC_WorkReport = (function () {
 
     function hasPendingJob(report, jobId, jobCode) {
         return getJobItems(report).some(i =>
-            (i.status === 'PENDING' || i.status === 'POSTPONED') &&
+            (i.status === 'REPORTED' || i.status === 'PENDING') &&
             (i.maintenance_job_id === jobId || (jobCode && i.job_code === jobCode))
         );
     }
@@ -585,11 +622,15 @@ const TVC_DefectCase = (function () {
     };
 
     const PHASE1_FIELDS = [
-        'to_company', 'case_no', 'ship_name', 'report_date',
-        'pms_group_no', 'pms_job_code', 'last_maintenance_date', 'rh_since_last_maintenance',
-        'expect_date_place', 'machinery_name', 'manufacturer', 'type_model_serial',
+        'to_company', 'case_no', 'ship_name', 'report_date', 'work_date',
+        'file_no', 'voy_no', 'place',
+        'pms_group_no', 'pms_job_code', 'item_sort1', 'item_sort2', 'job_detail',
+        'last_maintenance_date', 'rh_since_last_maintenance', 'total_run_hrs',
+        'expect_date_place', 'machinery_name', 'manufacturer', 'maker', 'model_type', 'capacity', 'serial_no',
         'chief_engineer', 'master',
         'outline_maintenance_request', 'estimated_cause', 'possible_effect', 'action_taken',
+        'ship_attachments', 'company_attachments', 'company_comment',
+        'working_hours', 'working_member', 'shore_technician',
     ];
 
     const PHASE2_FIELDS = [
@@ -626,13 +667,25 @@ const TVC_DefectCase = (function () {
             to_company: overrides.to_company || 'Company D.P.',
             ship_name: overrides.ship_name || '',
             report_date: overrides.report_date || today,
+            work_date: overrides.work_date || today,
+            file_no: overrides.file_no || '',
+            voy_no: overrides.voy_no || '',
+            place: overrides.place || '',
             pms_group_no: overrides.pms_group_no || '',
             pms_job_code: overrides.pms_job_code || '',
+            item_sort1: overrides.item_sort1 || '',
+            item_sort2: overrides.item_sort2 || '',
+            job_detail: overrides.job_detail || '',
             last_maintenance_date: overrides.last_maintenance_date || '',
             rh_since_last_maintenance: overrides.rh_since_last_maintenance ?? '',
+            total_run_hrs: overrides.total_run_hrs ?? '0',
             expect_date_place: overrides.expect_date_place || '',
             machinery_name: overrides.machinery_name || '',
             manufacturer: overrides.manufacturer || '',
+            maker: overrides.maker || '',
+            model_type: overrides.model_type || '',
+            capacity: overrides.capacity || '',
+            serial_no: overrides.serial_no || '',
             type_model_serial: overrides.type_model_serial || '',
             chief_engineer: overrides.chief_engineer || '',
             master: overrides.master || '',
@@ -640,6 +693,12 @@ const TVC_DefectCase = (function () {
             estimated_cause: overrides.estimated_cause || '',
             possible_effect: overrides.possible_effect || '',
             action_taken: overrides.action_taken || '',
+            ship_attachments: overrides.ship_attachments || [],
+            company_attachments: overrides.company_attachments || [],
+            company_comment: overrides.company_comment || '',
+            working_hours: overrides.working_hours ?? '0',
+            working_member: overrides.working_member ?? '0',
+            shore_technician: !!overrides.shore_technician,
             company_initial_reply: '',
             permit_to_work: '',
             reply_by: '',
@@ -671,9 +730,16 @@ const TVC_DefectCase = (function () {
             department: job?.department || '',
             pms_group_no: job?.group || '',
             pms_job_code: job?.job_code || '',
+            item_sort1: job?.item_sort1 || '',
+            item_sort2: job?.item_sort2 || '',
+            job_detail: job?.job_detail || '',
             machinery_name: hdr.machineryName || job?.item_sort1 || '',
             manufacturer: hdr.maker || '',
-            type_model_serial: [hdr.model, hdr.serialNo].filter(Boolean).join(' / '),
+            maker: hdr.maker || '',
+            model_type: hdr.modelType || '',
+            capacity: hdr.capacity || '',
+            serial_no: hdr.serialNo || '',
+            type_model_serial: [hdr.modelType, hdr.serialNo].filter(Boolean).join(' / '),
             last_maintenance_date: job?.last_done || '',
             outline_maintenance_request: job?.job_detail || '',
         });
@@ -726,7 +792,7 @@ const TVC_DefectCase = (function () {
 
     function validatePhase1(row) {
         const missing = [];
-        if (!String(row.outline_maintenance_request || '').trim()) missing.push('Outline of Maintenance Request');
+        if (!String(row.outline_maintenance_request || '').trim()) missing.push('Outline of Defect');
         if (!String(row.machinery_name || '').trim()) missing.push('Machinery name');
         if (!String(row.report_date || '').trim()) missing.push('Date');
         return { ok: !missing.length, missing };

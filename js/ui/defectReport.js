@@ -10,6 +10,137 @@ const TVC_DefectReport = (function () {
 
     function getState() { return _ctx?.getState?.() || {}; }
 
+    function resolveJob(row) {
+        const s = getState();
+        if (!row?.maintenance_job_id) return null;
+        return s.idx?.jobById?.get(row.maintenance_job_id)
+            || s.jobs?.find(j => j.id === row.maintenance_job_id)
+            || null;
+    }
+
+    function reportedByLabel(row) {
+        if (!row?.reported_by) return TVC_RBAC.getRankLabel?.(getState().user) || '';
+        const u = getState().user;
+        if (u?.username === row.reported_by) return TVC_RBAC.getRankLabel(u);
+        return row.reported_by;
+    }
+
+    function ensureDfDraft(row) {
+        const s = getState();
+        if (!s._dfDraft || s._dfCaseId !== row.id) {
+            s._dfCaseId = row.id;
+            s._dfDraft = {
+                ...row,
+                ship_attachments: Array.isArray(row.ship_attachments) ? row.ship_attachments.map(a => ({ ...a })) : [],
+                company_attachments: Array.isArray(row.company_attachments) ? row.company_attachments.map(a => ({ ...a })) : [],
+            };
+        }
+        return s._dfDraft;
+    }
+
+    function dfVal(row, key, fallback = '') {
+        const draft = getState()._dfDraft;
+        const v = draft?.[key];
+        if (v !== undefined && v !== null && v !== '') return v;
+        const rv = row?.[key];
+        if (rv !== undefined && rv !== null && rv !== '') return rv;
+        return fallback ?? '';
+    }
+
+    function captureDfFormFields() {
+        const host = document.getElementById('defectReportBody');
+        const draft = getState()._dfDraft || {};
+        if (!host) return draft;
+        host.querySelectorAll('[data-df]').forEach(el => {
+            const key = el.dataset.df;
+            if (el.type === 'radio') return;
+            if (el.type === 'checkbox') draft[key] = el.checked;
+            else draft[key] = el.value;
+        });
+        host.querySelectorAll('input[type=radio][data-df]:checked').forEach(el => {
+            const key = el.dataset.df;
+            if (key === 'dp_closed_satisfactory') draft[key] = el.value === 'true';
+            else draft[key] = el.value;
+        });
+        getState()._dfDraft = draft;
+        return draft;
+    }
+
+    function dfAttachmentList(kind) {
+        const draft = getState()._dfDraft;
+        if (!draft) return [];
+        const key = kind === 'company' ? 'company_attachments' : 'ship_attachments';
+        if (!Array.isArray(draft[key])) draft[key] = [];
+        return draft[key];
+    }
+
+    function readDfAttachmentFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({
+                id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                dataUrl: reader.result,
+                uploaded_at: new Date().toISOString(),
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function renderDfAttachmentBlock(kind, { canUpload }) {
+        const formKey = kind === 'company' ? 'company_attachments' : 'ship_attachments';
+        const label = kind === 'company' ? "Company's Attachment" : "Ship's Attachment";
+        const inputId = kind === 'company' ? 'dfCompanyAttachInput' : 'dfShipAttachInput';
+        const list = dfAttachmentList(kind);
+        const items = list.map(a => `
+            <li class="wr-attach-item">
+                <a class="wr-attach-link" href="${esc(a.dataUrl)}" download="${esc(a.name)}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>
+                <span class="wr-attach-size">${Math.max(1, Math.round((a.size || 0) / 1024))}KB</span>
+                ${canUpload ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_DefectReport.removeAttachment('${kind}','${esc(a.id)}')">×</button>` : ''}
+            </li>`).join('');
+        const uploadBtn = canUpload
+            ? `<button type="button" class="wr-attach-btn" onclick="document.getElementById('${inputId}').click()">📎 ${esc(label)}</button>
+               <input type="file" id="${inputId}" class="hidden" multiple onchange="TVC_DefectReport.uploadAttachment('${kind}')">`
+            : (list.length ? '' : `<span class="wr-attach-label">${esc(label)}</span>`);
+        const listHtml = list.length ? `<ul class="wr-attach-list">${items}</ul>` : '';
+        return `<div class="wr-attach-block">${uploadBtn}${listHtml}</div>`;
+    }
+
+    async function uploadAttachment(kind) {
+        const inputId = kind === 'company' ? 'dfCompanyAttachInput' : 'dfShipAttachInput';
+        const input = document.getElementById(inputId);
+        if (!input?.files?.length) return;
+        captureDfFormFields();
+        const list = dfAttachmentList(kind);
+        const maxBytes = 8 * 1024 * 1024;
+        try {
+            for (const file of input.files) {
+                if (file.size > maxBytes) {
+                    alert(`${file.name}: 8MB 이하 파일만 첨부할 수 있습니다.`);
+                    continue;
+                }
+                list.push(await readDfAttachmentFile(file));
+            }
+        } catch (e) {
+            alert(e.message || '파일을 읽을 수 없습니다.');
+        }
+        input.value = '';
+        const id = getState()._defectCaseId;
+        if (id) await openCase(id, getState()._defectMode);
+    }
+
+    async function removeAttachment(kind, attId) {
+        captureDfFormFields();
+        const list = dfAttachmentList(kind);
+        const i = list.findIndex(a => a.id === attId);
+        if (i >= 0) list.splice(i, 1);
+        const id = getState()._defectCaseId;
+        if (id) await openCase(id, getState()._defectMode);
+    }
+
     function refresh() { _ctx?.refresh?.(); }
 
     function isHq() {
@@ -140,29 +271,69 @@ const TVC_DefectReport = (function () {
     }
 
     function renderPhase1(row, readonly) {
-        return `<section class="df-phase">
-            <h3 class="df-phase-title">Phase 1 — Ship Report <span class="df-urgent">URGENT</span></h3>
-            <div class="df-grid">
-                ${fieldInput('to_company', 'To', row.to_company, { readonly })}
-                ${fieldInput('case_no', 'Ref No', row.case_no, { readonly: true })}
-                ${fieldInput('ship_name', "Ship's Name", row.ship_name, { readonly })}
-                ${fieldInput('report_date', 'Date', row.report_date, { type: 'date', readonly })}
-                ${fieldInput('pms_group_no', 'PMS GROUP NO', row.pms_group_no, { readonly })}
-                ${fieldInput('pms_job_code', 'PMS JOB CODE', row.pms_job_code, { readonly })}
-                ${fieldInput('last_maintenance_date', 'Last maintenance date', row.last_maintenance_date, { type: 'date', readonly })}
-                ${fieldInput('rh_since_last_maintenance', 'RH since last maintenance', row.rh_since_last_maintenance, { readonly })}
-                ${fieldInput('expect_date_place', 'Expect date & place', row.expect_date_place, { span: 2, readonly })}
-                ${fieldInput('machinery_name', 'Machinery name', row.machinery_name, { span: 2, readonly })}
-                ${fieldInput('manufacturer', 'Manufacturer', row.manufacturer, { readonly })}
-                ${fieldInput('type_model_serial', 'Type / Model / Serial No.', row.type_model_serial, { readonly })}
-                ${fieldInput('outline_maintenance_request', 'Outline of Maintenance Request', row.outline_maintenance_request, { span: 2, textarea: true, rows: 3, readonly })}
-                ${fieldInput('estimated_cause', 'Estimated cause of Trouble', row.estimated_cause, { span: 2, textarea: true, rows: 2, readonly })}
-                ${fieldInput('possible_effect', 'Possible effect to other system', row.possible_effect, { span: 2, textarea: true, rows: 2, readonly })}
-                ${fieldInput('action_taken', 'Action taken / Corrective Action', row.action_taken, { span: 2, textarea: true, rows: 3, readonly })}
-                ${fieldInput('chief_engineer', 'C/E', row.chief_engineer, { readonly })}
-                ${fieldInput('master', 'Master', row.master, { readonly })}
-            </div>
-        </section>`;
+        ensureDfDraft(row);
+        const s = getState();
+        const job = resolveJob(row);
+        const hdr = job && TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || {};
+        const ro = readonly;
+        const roAttr = ro ? ' readonly' : '';
+        const roCls = ro ? ' wr-ro' : '';
+        const dis = ro ? ' disabled' : '';
+        const fld = (label, inner, extraCls = '') => `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
+        const inp = (name, val, type = 'text') => {
+            const v = esc(dfVal(row, name, val));
+            if (type === 'date') return `<input type="date" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
+            if (type === 'number') return `<input type="number" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
+            return `<input data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
+        };
+        const ta = (name, val, rows = 3) => `<textarea class="wr-maint-textarea${roCls}" data-df="${name}" rows="${rows}"${roAttr}>${esc(dfVal(row, name, val))}</textarea>`;
+        const canEditShipAttach = !ro;
+        const canEditCompanyAttach = isHq() && TVC_DefectCase.isPhase2Editable(row);
+
+        return `<div class="wr-maint-form">
+            <section class="wr-maint-card wr-maint-body">
+                <div class="wr-maint-grid wr-maint-grid-3">
+                    ${fld('File No.', inp('file_no', ''))}
+                    ${fld('Voy. No.', inp('voy_no', ''))}
+                    ${fld('Place', inp('place', ''))}
+                    ${fld('Work Date', inp('work_date', row.report_date, 'date'))}
+                    ${fld('Reported Date', inp('report_date', row.report_date, 'date'))}
+                    ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByLabel(row))}" readonly>`)}
+                    ${fld('PMS Group No.', inp('pms_group_no', hdr.pmsGroupNo || row.pms_group_no || job?.group || ''), 'wr-maint-span-all')}
+                </div>
+                <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
+                    ${fld('Job Code', `<input class="wr-ro" value="${esc(dfVal(row, 'pms_job_code', job?.job_code || ''))}" readonly>`)}
+                    ${fld('SORT-1', `<input class="wr-ro" value="${esc(dfVal(row, 'item_sort1', job?.item_sort1 || ''))}" readonly>`)}
+                    ${fld('SORT-2', `<input class="wr-ro" value="${esc(dfVal(row, 'item_sort2', job?.item_sort2 || ''))}" readonly>`)}
+                    ${fld('Job Detail', `<input class="wr-ro" value="${esc(dfVal(row, 'job_detail', job?.job_detail || ''))}" readonly>`)}
+                </div>
+                <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
+                    ${fld('Maker', inp('maker', hdr.maker || row.manufacturer || ''))}
+                    ${fld('Model / Type', inp('model_type', hdr.modelType || row.model_type || ''))}
+                    ${fld('Capacity', inp('capacity', hdr.capacity || row.capacity || ''))}
+                    ${fld('Serial No.', inp('serial_no', hdr.serialNo || row.serial_no || ''))}
+                </div>
+                <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap">
+                    ${fld('Total Run Hrs', inp('total_run_hrs', '0', 'number'))}
+                    ${fld('Last Maintenance Date', inp('last_maintenance_date', job?.last_done || '', 'date'))}
+                    ${fld('Running Hrs after Last Maint.', inp('rh_since_last_maintenance', '', 'number'))}
+                </div>
+                ${fld('Outline of Defect', ta('outline_maintenance_request', job?.job_detail || ''), 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld('Estimated Cause of Defect', ta('estimated_cause', ''), 'wr-maint-span-all')}
+                ${fld('Possible Effect to Other System', ta('possible_effect', ''), 'wr-maint-span-all')}
+                ${fld('Action Plan / Corrective Action', ta('action_taken', ''), 'wr-maint-span-all')}
+                <div class="wr-maint-attach-wrap">${renderDfAttachmentBlock('ship', { canUpload: canEditShipAttach })}</div>
+                <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap wr-maint-labor">
+                    ${fld('Working Hours', inp('working_hours', '0', 'number'))}
+                    ${fld('Working Member', inp('working_member', '0', 'number'))}
+                    <div class="wr-maint-field wr-maint-chk-field">
+                        <label class="wr-maint-chk"><input type="checkbox" data-df="shore_technician"${dfVal(row, 'shore_technician') ? ' checked' : ''}${dis}> Shore Technician</label>
+                    </div>
+                </div>
+                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(dfVal(row, 'company_comment', row.company_initial_reply || ''))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+                <div class="wr-maint-attach-wrap">${renderDfAttachmentBlock('company', { canUpload: canEditCompanyAttach })}</div>
+            </section>
+        </div>`;
     }
 
     function renderPhase2(row, readonly) {
@@ -238,18 +409,18 @@ const TVC_DefectReport = (function () {
         const canStart = !hq && TVC_DefectCase.canStartWork(row);
 
         return `<div class="df-modal-inner">
-            <div class="df-titlebar">DEFECT (TROUBLE) REPORT — ${esc(row.case_no)}
+            <div class="wr-titlebar">Defect (Trouble) Report — ${esc(row.case_no)}
                 <span class="df-status-pill tone-${statusTone(row.status)}">${esc(statusLabel(row.status))}</span>
             </div>
-            <div class="df-modal-scroll">
+            <div class="wr-page tone-defect df-modal-scroll">
                 ${renderPhase1(row, !canEditP1)}
                 ${renderPhase2(row, !canEditP2)}
                 ${renderPhase3(row, !canEditP3)}
                 ${renderPhase4(row, !canEditP4)}
             </div>
-            <div class="modal-actions df-modal-actions">
-                <button type="button" class="btn" onclick="TVC_DefectReport.printCase('${esc(row.id)}')">🖨 Print / PDF</button>
-                ${canEditP1 ? `<button type="button" class="btn" onclick="TVC_DefectReport.saveDraft()">Save Draft</button>` : ''}
+            <div class="modal-actions wr-actions df-modal-actions">
+                <button type="button" class="btn" onclick="TVC_DefectReport.printCase('${esc(row.id)}')">🖨 Print</button>
+                ${canEditP1 ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveDraft()">💾 Save</button>` : ''}
                 ${canEditP1 ? `<button type="button" class="btn btn-amber" onclick="TVC_DefectReport.submitCase()">Submit to Company</button>` : ''}
                 ${!hq && row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
                     ? `<button type="button" class="btn btn-red" onclick="TVC_App.urgentExportDefect('${esc(row.id)}')">📦 Urgent Export</button>` : ''}
@@ -262,30 +433,18 @@ const TVC_DefectReport = (function () {
                     ? `<button type="button" class="btn btn-amber" onclick="TVC_App.exportDefectCompletion('${esc(row.id)}')">📦 Export Completion</button>` : ''}
                 ${canEditP4 ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveHqPhase4()">Close Case (D.P.)</button>` : ''}
                 ${canEditP4 ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveHqPhase4(true)">Close &amp; Export</button>` : ''}
-                <button type="button" class="btn btn-ghost" onclick="TVC_DefectReport.closeModal()">Close</button>
+                <button type="button" class="btn" onclick="TVC_DefectReport.closeModal()">Cancel</button>
             </div>
         </div>`;
     }
 
     function captureForm() {
-        const host = document.getElementById('defectReportBody');
-        if (!host) return {};
-        const data = {};
-        host.querySelectorAll('[data-df]').forEach(el => {
-            const key = el.dataset.df;
-            if (el.type === 'radio') return;
-            if (el.type === 'checkbox') data[key] = el.checked;
-            else data[key] = el.value;
-        });
-        host.querySelectorAll('input[type=radio][data-df]:checked').forEach(el => {
-            const key = el.dataset.df;
-            if (key === 'dp_closed_satisfactory') {
-                data[key] = el.value === 'true';
-            } else {
-                data[key] = el.value;
-            }
-        });
-        return data;
+        const draft = captureDfFormFields();
+        return {
+            ...draft,
+            ship_attachments: dfAttachmentList('ship'),
+            company_attachments: dfAttachmentList('company'),
+        };
     }
 
     async function openCase(id, mode) {
@@ -293,6 +452,8 @@ const TVC_DefectReport = (function () {
         if (!row) return alert('Case not found.');
         getState()._defectCaseId = id;
         getState()._defectMode = mode || 'view';
+        getState()._dfCaseId = null;
+        ensureDfDraft(row);
         const body = document.getElementById('defectReportBody');
         if (body) body.innerHTML = renderModalBody(row, mode);
         document.getElementById('defectReportModal')?.classList.remove('hidden');
@@ -308,7 +469,14 @@ const TVC_DefectReport = (function () {
         const hdr = TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || {};
         row.machinery_name = hdr.machineryName || job.item_sort1 || row.machinery_name;
         row.manufacturer = hdr.maker || row.manufacturer;
-        row.type_model_serial = [hdr.model, hdr.serialNo].filter(Boolean).join(' / ') || row.type_model_serial;
+        row.maker = hdr.maker || row.maker;
+        row.model_type = hdr.modelType || row.model_type;
+        row.capacity = hdr.capacity || row.capacity;
+        row.serial_no = hdr.serialNo || row.serial_no;
+        row.type_model_serial = [hdr.modelType, hdr.serialNo].filter(Boolean).join(' / ') || row.type_model_serial;
+        row.item_sort1 = job.item_sort1 || row.item_sort1;
+        row.item_sort2 = job.item_sort2 || row.item_sort2;
+        row.job_detail = job.job_detail || row.job_detail;
         await TVC_DefectCaseService.saveDraft(s.user, row, row.id);
         await refresh();
         openCase(row.id);
@@ -420,13 +588,16 @@ const TVC_DefectReport = (function () {
 
     function closeModal() {
         document.getElementById('defectReportModal')?.classList.add('hidden');
-        getState()._defectCaseId = null;
+        const s = getState();
+        s._defectCaseId = null;
+        s._dfCaseId = null;
+        s._dfDraft = null;
     }
 
     return {
         init, renderInbox, renderTab, openCase, openNewFromJob, openNewBlank,
         saveDraft, submitCase, saveHqReply, saveShipPhase3, saveHqPhase4, startWork,
-        printCase, closeModal, captureForm,
+        printCase, closeModal, captureForm, uploadAttachment, removeAttachment,
         filteredCases, statusLabel,
     };
 })();

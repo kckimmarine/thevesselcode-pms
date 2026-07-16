@@ -55,10 +55,10 @@ const TVC_DefectSync = (function () {
   <tr><th>Expect date &amp; place</th><td colspan="3">${esc(row.expect_date_place)}</td></tr>
   <tr><th>Machinery name</th><td colspan="3">${esc(row.machinery_name)}</td></tr>
   <tr><th>Manufacturer</th><td>${esc(row.manufacturer)}</td><th>Type / Model / Serial No.</th><td>${esc(row.type_model_serial)}</td></tr>
-  <tr><th>Outline of Maintenance Request</th><td colspan="3">${esc(row.outline_maintenance_request)}</td></tr>
-  <tr><th>Estimated cause of Trouble</th><td colspan="3">${esc(row.estimated_cause)}</td></tr>
-  <tr><th>Possible effect to other system</th><td colspan="3">${esc(row.possible_effect)}</td></tr>
-  <tr><th>Action taken / Corrective Action</th><td colspan="3">${esc(row.action_taken)}</td></tr>
+  <tr><th>Outline of Defect</th><td colspan="3">${esc(row.outline_maintenance_request)}</td></tr>
+  <tr><th>Estimated Cause of Defect</th><td colspan="3">${esc(row.estimated_cause)}</td></tr>
+  <tr><th>Possible Effect to Other System</th><td colspan="3">${esc(row.possible_effect)}</td></tr>
+  <tr><th>Action Plan / Corrective Action</th><td colspan="3">${esc(row.action_taken)}</td></tr>
   <tr class="sig-row"><th>C/E</th><td>${esc(row.chief_engineer)}</td><th>Master</th><td>${esc(row.master)}</td></tr>
 </table>
 </div>

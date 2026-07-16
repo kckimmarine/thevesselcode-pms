@@ -140,6 +140,7 @@ const TVC_PMS = (function () {
 
         for (const job of (state.jobs || [])) {
             if (!isRunHourJob(job) || !isTrackedGroup(job.group)) continue;
+            if (job.schedule_basis === 'POSTPONE') continue;
             const key = TVC_Indexes.groupKey(job);
             const rec = store[key];
             if (!rec) continue;

@@ -15,11 +15,31 @@ const TVC_RBAC = (function () {
     const APPROVER_ROLES = new Set(['SHIP_CAPTAIN', 'SHIP_CHIEF']);
 
     const ReportStatus = {
-        PENDING: 'PENDING',
-        APPROVED: 'APPROVED',
+        REPORTED: 'REPORTED',
         CONFIRMED: 'CONFIRMED',
+        APPROVED: 'APPROVED',
         POSTPONED: 'POSTPONED',
+        // legacy (read-time normalize only)
+        PENDING: 'PENDING',
     };
+
+    const LEGACY_REPORT_STATUS = {
+        PENDING: 'REPORTED',
+        APPROVED: 'CONFIRMED',
+        POSTPONED: 'CONFIRMED',
+    };
+
+    function normalizeReportStatus(status, isLocked) {
+        if (status === 'PENDING') return ReportStatus.REPORTED;
+        if (status === 'POSTPONED') return ReportStatus.CONFIRMED;
+        if (status === 'APPROVED') return ReportStatus.CONFIRMED;
+        if (status === 'CONFIRMED') return isLocked ? ReportStatus.APPROVED : ReportStatus.CONFIRMED;
+        return status || ReportStatus.REPORTED;
+    }
+
+    function isReportedStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === ReportStatus.REPORTED; }
+    function isConfirmedStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === ReportStatus.CONFIRMED; }
+    function isApprovedStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === ReportStatus.APPROVED; }
 
     const Action = {
         CREATE_DAILY_REPORT: 'CREATE_DAILY_REPORT',
@@ -179,13 +199,15 @@ const TVC_RBAC = (function () {
     }
 
     function canTransitionReport(user, fromStatus, toStatus) {
+        const from = normalizeReportStatus(fromStatus);
+        const to = normalizeReportStatus(toStatus);
         const transitions = {
-            SHIP_OFFICER: { PENDING: [] },
-            SHIP_CAPTAIN: { PENDING: ['APPROVED', 'POSTPONED'] },
-            SHIP_CHIEF: { PENDING: ['APPROVED', 'POSTPONED'] },
-            HQ_SUPERVISOR: { APPROVED: ['CONFIRMED', 'POSTPONED'] },
+            SHIP_OFFICER: { REPORTED: [] },
+            SHIP_CAPTAIN: { REPORTED: ['CONFIRMED'] },
+            SHIP_CHIEF: { REPORTED: ['CONFIRMED'] },
+            HQ_SUPERVISOR: { CONFIRMED: ['APPROVED'] },
         };
-        return (transitions[user.role]?.[fromStatus] || []).includes(toStatus);
+        return (transitions[user.role]?.[from] || []).includes(to);
     }
 
     function assertReportTransition(user, fromStatus, toStatus) {
@@ -209,13 +231,23 @@ const TVC_RBAC = (function () {
         return user?.department === dept;
     }
 
-    /** 승인 권한 범위: 책임자는 자기 부서 리포트만 승인 가능. Station PC(CCR/ECR)는 승인 불가. */
-    function canApproveDepartment(user, dept) {
+    /** 선장/기관장: Reported → Confirmed */
+    function canConfirmDepartment(user, dept) {
         if (typeof TVC_Space !== 'undefined' && user?.station) {
             return TVC_Space.canApproveReport(user, dept);
         }
         if (!isApprover(user)) return false;
         return user.department === dept;
+    }
+
+    /** HQ 공무감독: Confirmed → Approved */
+    function canApproveHqReport(user) {
+        return isHqAccount(user) && can(user, Action.CONFIRM_REPORT);
+    }
+
+    /** @deprecated use canConfirmDepartment — ship-side confirm */
+    function canApproveDepartment(user, dept) {
+        return canConfirmDepartment(user, dept);
     }
 
     function getRoleLabel(role) {
@@ -294,7 +326,8 @@ const TVC_RBAC = (function () {
         isShipAccount, isHqAccount, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan,
         canModifySpareInventory, resolveUserRole,
-        getAccessibleDepartments, canAccessDepartment, canApproveDepartment,
+        normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,
+        getAccessibleDepartments, canAccessDepartment, canConfirmDepartment, canApproveDepartment, canApproveHqReport,
     };
 })();
 if (typeof window !== 'undefined') window.TVC_RBAC = TVC_RBAC;

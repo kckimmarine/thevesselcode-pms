@@ -164,7 +164,7 @@ console.log('\n═══ 3단계: menuAction → switchTab 매핑 검증 ══�
 
 const MENU_TAB_MAP = {
     checkPlan: 'actual', inputReport: 'actual', approveReport: 'actual', hqConfirm: 'actual',
-    runHour: 'runhrs', originalPlan: 'original', modifyItem: 'original',
+    runHour: 'runhrs', originalPlan: 'actual', modifyItem: 'actual',
 };
 for (const [action, tab] of Object.entries(MENU_TAB_MAP)) {
     assert(`menuAction('${action}') → switchTab('${tab}')`, true);
