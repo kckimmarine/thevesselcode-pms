@@ -17,7 +17,7 @@ const TVC_App = (function () {
         selectedGroupKey: null,
         treeSearch: '',
         actualFilter: 'total',        // total | overdue | due30 | postponed
-        actualPeriodFrom: '',         // YYYY-MM-DD Due date range (Actual Plan)
+        actualPeriodFrom: '',         // YYYY-MM-DD Due date range (Work Plan)
         actualPeriodTo: '',
         jobSort: { field: 'job_code', asc: true },
         search: '',
@@ -53,8 +53,8 @@ const TVC_App = (function () {
         spareListSelected: {},       // { spareId: true } — SPARE 목록 ㅁ 체크(재고 조회용)
         requisitionDraft: [],        // [spareId, …] — New Requisition 선택 아이템(목록과 독립)
         spareMenu: null,
-        batchSelectedJobs: {},   // { jobId: true } — Original/Actual Plan 다중 선택
-        actualSelectedOnly: false, // Actual Plan — 선택 항목만 목록 표시
+        batchSelectedJobs: {},   // { jobId: true } — Original/Work Plan 다중 선택
+        actualSelectedOnly: false, // Work Plan — 선택 항목만 목록 표시
         _batchDraft: null,       // Batch Report 편집 중 임시 데이터
         _batchMode: false,
         _batchJobIds: [],
@@ -172,24 +172,40 @@ const TVC_App = (function () {
         return { jobs: changedJobs.length, comps: changedComps.length, groups: changedGroups.length };
     }
 
-    async function applyActivePostponeSchedules() {
+    async function applyActiveReportSchedules() {
         const jobById = new Map((state.jobs || []).map(j => [j.id, j]));
         const dirty = [];
         (state.reports || []).forEach(r => {
             TVC_WorkReport.fromLegacy(r);
-            if (r.work_type !== 'POSTPONE') return;
             if (!TVC_RBAC.isReportedStatus(r.status) && !TVC_RBAC.isConfirmedStatus(r.status)) return;
-            const postponeDate = String(r.postpone_date || r.job_items?.[0]?.form?.postponeDate || '').slice(0, 10);
-            if (!postponeDate) return;
             (r.job_items || []).forEach(item => {
                 const job = jobById.get(item.maintenance_job_id);
                 if (!job) return;
-                const overdue = new Date(postponeDate) < new Date(new Date().toDateString());
-                if (job.next_date === postponeDate && job.schedule_basis === 'POSTPONE' && !!job.is_overdue === overdue) return;
-                job.next_date = postponeDate;
+                const form = item.form || r.report_form || {};
+                if (r.work_type === 'POSTPONE') {
+                    const postponeDate = String(r.postpone_date || form.postponeDate || '').slice(0, 10);
+                    if (!postponeDate) return;
+                    const overdue = new Date(postponeDate) < new Date(new Date().toDateString());
+                    if (job.next_date === postponeDate && job.schedule_basis === 'POSTPONE' && !!job.is_overdue === overdue) return;
+                    job.next_date = postponeDate;
+                    job.is_overdue = overdue;
+                    job.schedule_basis = 'POSTPONE';
+                    job.plan_status = 'PLANNED';
+                    if (form.lastMaintDate) job.last_done = String(form.lastMaintDate).slice(0, 10);
+                    dirty.push(job);
+                    return;
+                }
+                if (r.work_type !== 'MAINTENANCE' && r.work_type !== 'TROUBLE') return;
+                const lastDone = String(form.workDate || form.lastMaintDate || r.work_date || '').slice(0, 10);
+                if (!lastDone) return;
+                const nextDate = TVC_Transaction.calcNextDate(job, lastDone);
+                const overdue = new Date(nextDate) < new Date(new Date().toDateString());
+                if (job.last_done === lastDone && job.next_date === nextDate && job.plan_status === 'COMPLETED') return;
+                job.last_done = lastDone;
+                job.next_date = nextDate;
                 job.is_overdue = overdue;
-                job.schedule_basis = 'POSTPONE';
-                job.plan_status = 'PLANNED';
+                job.plan_status = 'COMPLETED';
+                if (job.schedule_basis === 'POSTPONE') job.schedule_basis = null;
                 dirty.push(job);
             });
         });
@@ -263,7 +279,7 @@ const TVC_App = (function () {
             );
         }
         state.reports.forEach(r => TVC_WorkReport.fromLegacy(r));
-        await applyActivePostponeSchedules();
+        await applyActiveReportSchedules();
         state.idx = TVC_Indexes.build(state);
         assertDeptIsolation();
         await backfillOriginalNextDates(state.jobs);
@@ -441,7 +457,7 @@ const TVC_App = (function () {
         return Math.ceil((new Date(dateStr) - new Date()) / 86400000);
     }
 
-    /** Actual Plan — next_date(Due)가 설정 기간 안에 있는지 */
+    /** Work Plan — next_date(Due)가 설정 기간 안에 있는지 */
     function isJobInActualPeriod(job) {
         if (!job) return false;
         const from = state.actualPeriodFrom;
@@ -516,7 +532,6 @@ const TVC_App = (function () {
         state.selectedGroupKey = null;
         renderDeptToggles(state.user);
         renderCaptainViewDashboard();
-        setText('histDeptLabel', TVC_RBAC.getDeptLabel(state.department));
         rerenderCurrentTab();
     }
 
@@ -602,7 +617,7 @@ const TVC_App = (function () {
         return hay.includes(q);
     }
 
-    /** C. CRITICAL EQUIPMENT 분류 (Original / Actual Plan Group Tree) */
+    /** C. CRITICAL EQUIPMENT 분류 (Original / Work Plan Group Tree) */
     function isCriticalMaintenanceJob(j) {
         if (!j) return false;
         const sort = String(j.sort || '').trim().toUpperCase();
@@ -779,7 +794,7 @@ const TVC_App = (function () {
         else if (state.currentTab === 'spare') TVC_SpareMenu.render();
     }
 
-    // ── Job table (Actual Plan) ──────────────────────────────────────
+    // ── Job table (Work Plan) ──────────────────────────────────────
     function planCellHtml(text, cls) {
         const t = String(text ?? '').trim();
         const display = t || '—';
@@ -902,173 +917,113 @@ const TVC_App = (function () {
     function menuModel() {
         const c = menuCounts();
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
+        const isMaster = state.user && TVC_Space.isCaptainHub(state.user);
+
+        const dailyItems = [
+            { label: 'Check Work Plan', tag: 'D', action: "TVC_App.menuAction('checkPlan')", badge: c.overdue, badgeTone: 'red' },
+            { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
+        ];
+
+        const necessaryItems = [
+            { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
+        ];
 
         if (isHq) {
             return [
-                {
-                    key: 'monthly', tone: 'blue', icon: '🗓️', title: 'At first day of every month',
-                    items: [
-                        { label: 'Data Import', tag: 'C', action: "TVC_App.menuAction('import')", feature: 'showImportHq' },
-                        { label: 'Approve Original Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
-                        { label: "Input Company's Comment", tag: 'C', action: "TVC_App.menuAction('companyComment')" },
-                        { label: 'Approve Work Report', tag: 'B', action: "TVC_App.menuAction('hqConfirm')", badge: c.approved, badgeTone: 'green', feature: 'showHqConfirmPanel' },
-                        { label: 'Defect Report Inbox', tag: 'B', action: "TVC_App.menuAction('defectInbox')", badge: c.defectPending, badgeTone: 'amber', feature: 'showDefectInbox' },
-                        { label: 'Import Urgent Defect', tag: 'C', action: "TVC_App.menuAction('defectImport')", feature: 'showDefectImportUrgent' },
-                        { label: 'Data Export', tag: 'C', action: "TVC_App.menuAction('export')", feature: 'showExportHq' },
-                    ],
-                },
-                {
-                    key: 'necessary', tone: 'amber', icon: '🧰', title: 'When it is necessary',
-                    items: [
-                        { label: 'Password Change', tag: 'A', action: "TVC_App.menuAction('password')" },
-                        { label: 'Control Change', tag: 'B', action: "TVC_App.menuAction('control')" },
-                        { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
-                    ],
-                },
-            ];
-        }
-
-        return [
-            {
-                key: 'everyday', tone: 'red', icon: '📅', title: 'At everyday',
-                flow: 'linear',
-                items: [
-                    { label: 'Check Actual Plan', tag: 'D', action: "TVC_App.menuAction('checkPlan')", badge: c.overdue, badgeTone: 'red' },
-                    { kind: 'note', label: 'Execute Repair & Maintenance / Trouble Work' },
-                    { label: 'Input Work Report', tag: 'C', action: "TVC_App.menuAction('inputReport')", feature: 'showDailyReportSubmit' },
-                    { label: 'Report Defect (Trouble)', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
-                    { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
-                ],
-            },
-            {
-                key: 'hub', tone: 'purple', icon: '⚓', title: 'Captain Hub (Station sync)',
-                items: [
-                    { label: 'Import Station Data', tag: 'C', action: "TVC_App.menuAction('hubImport')", feature: 'showHubImport' },
-                    { label: 'Export Company Report Package', tag: 'B', action: "TVC_App.menuAction('companyExport')", feature: 'showCompanyExport' },
-                    { label: 'Import HQ Defect Reply', tag: 'C', action: "TVC_App.menuAction('defectImport')", feature: 'showDefectImportUrgent' },
-                ],
-            },
-            {
-                key: 'monthly', tone: 'blue', icon: '🗓️', title: 'At first day of every month',
-                flow: 'monthly',
-                items: [
-                    { label: 'Update Run Hour of Equipment', tag: 'C', action: "TVC_App.menuAction('runHour')" },
-                    { label: 'Modify Maintenance Item', tag: 'B', action: "TVC_App.menuAction('modifyItem')", feature: 'showModifyOriginalPlan' },
-                    { label: 'Update Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue' },
-                    { label: 'Export to Captain Hub', tag: 'C', action: "TVC_App.menuAction('stationExport')", feature: 'showStationExport' },
-                    { label: 'Data Export', tag: 'C', action: "TVC_App.menuAction('export')", feature: 'showExportShip' },
-                ],
-            },
-            {
-                key: 'hq', tone: 'green', icon: '🛰️', title: 'When received data from HQ',
-                items: [
-                    { label: 'Data Import', tag: 'C', action: "TVC_App.menuAction('import')", feature: 'showImportShip' },
-                    { label: 'Review Confirmed Reports', tag: 'B', action: "TVC_App.menuAction('hqConfirm')", badge: c.approved, badgeTone: 'green', feature: 'showHqConfirmPanel' },
-                ],
-            },
-            {
-                key: 'necessary', tone: 'amber', icon: '🧰', title: 'When it is necessary',
-                items: [
+                { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: [
+                    { label: 'Approve Work Report', tag: 'B', action: "TVC_App.menuAction('hqConfirm')", badge: c.approved, badgeTone: 'green', feature: 'showHqConfirmPanel' },
+                ] },
+                { key: 'defect', tone: 'defect', title: 'Defect Report', items: [
+                    { label: 'Import Urgent Defect', tag: 'C', action: "TVC_App.menuAction('defectImport')", feature: 'showDefectImportUrgent' },
+                ] },
+                { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
+                    { label: 'Data Import', tag: 'C', action: "TVC_App.menuAction('import')", feature: 'showImportHq' },
+                    { label: 'Approve Original Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
+                    { label: "Input Company's Comment", tag: 'C', action: "TVC_App.menuAction('companyComment')" },
+                    { label: 'Data Export', tag: 'C', action: "TVC_App.menuAction('export')", feature: 'showExportHq' },
+                ] },
+                { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: [
                     { label: 'Password Change', tag: 'A', action: "TVC_App.menuAction('password')" },
                     { label: 'Control Change', tag: 'B', action: "TVC_App.menuAction('control')" },
                     { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
-                ],
-            },
+                ] },
+            ];
+        }
+
+        if (isMaster) {
+            const hubSync = [
+                { label: 'Data Import (from Engine, Deck)', tag: 'C', action: "TVC_App.menuAction('hubImport')", feature: 'showHubImport' },
+                { label: 'Data Export (to Company)', tag: 'B', action: "TVC_App.menuAction('companyExport')", feature: 'showCompanyExport' },
+                { label: 'Data Import (from Company)', tag: 'C', action: "TVC_App.menuAction('import')", feature: 'showCompanyImport' },
+                { label: 'Data Export (to Engine, Deck)', tag: 'C', action: "TVC_App.menuAction('export')", feature: 'showHubStationExport' },
+            ];
+            const monthlyCore = [
+                { label: 'Update Run Hour', tag: 'C', action: "TVC_App.menuAction('runHour')" },
+                { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
+            ];
+            return [
+                { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: dailyItems },
+                { key: 'defect', tone: 'defect', title: 'Defect Report', items: [
+                    { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
+                    ...hubSync,
+                ] },
+                { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [...monthlyCore, ...hubSync] },
+                { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
+            ];
+        }
+
+        const stationSync = [
+            { label: 'Data Export (to Master)', tag: 'C', action: "TVC_App.menuAction('stationExport')", feature: 'showStationExport' },
+            { label: 'Data Import (from Master)', tag: 'C', action: "TVC_App.menuAction('import')", feature: 'showImportShip' },
+        ];
+        return [
+            { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: dailyItems },
+            { key: 'defect', tone: 'defect', title: 'Defect Report', items: [
+                { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
+                ...stationSync,
+            ] },
+            { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
+                { label: 'Update Run Hour', tag: 'C', action: "TVC_App.menuAction('runHour')" },
+                { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
+                ...stationSync,
+            ] },
+            { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
         ];
     }
 
-    function renderMenuStep(it, extra = {}) {
+    function renderMenuFlowItem(it, f, opts = {}) {
+        if (it.feature && !f[it.feature]) return '';
         const badge = (it.badge != null && it.badge > 0)
             ? `<span class="mi-badge mi-${it.badgeTone || 'blue'}">${it.badge}</span>` : '';
-        if (extra.locked) {
-            const tip = esc(extra.disabledTitle || 'Original Plan Update는 현재 사용할 수 없습니다.');
-            return `<button type="button" class="menu-item disabled" disabled title="${tip}">
-                <span class="mi-auth">[${it.tag}]</span>
-                <span class="mi-label">${esc(it.label)}</span>
-                <span class="mi-lock">🔒</span>
-            </button>`;
+        const label = `<span class="mi-label">${esc(it.label)}</span>`;
+        if (opts.locked) {
+            const tip = esc(opts.disabledTitle || 'Original Plan Update는 현재 사용할 수 없습니다.');
+            return `<button type="button" class="spare-flow-item" disabled title="${tip}">${label}<span class="mi-lock">🔒</span></button>`;
         }
-        return `<button class="menu-item" onclick="${it.action}">
-            <span class="mi-auth">[${it.tag}]</span>
-            <span class="mi-label">${esc(it.label)}</span>
-            ${badge}<span class="mi-go">›</span>
-        </button>`;
+        return `<button type="button" class="spare-flow-item${it.primary ? ' primary' : ''}" onclick="${it.action}">${label}${badge}</button>`;
     }
 
-    function menuFlowArrow() {
-        return '<div class="menu-flow-arrow" aria-hidden="true"><span class="menu-flow-arrow-icon">▼</span></div>';
-    }
-
-    /** CMAXS 스타일 — At everyday: 순차 화살표 + 중간 안내 문구 */
-    function renderLinearFlow(items, f) {
-        const visible = items.filter(it => it.kind === 'note' || !it.feature || f[it.feature]);
-        if (!visible.length) return '<div class="menu-item disabled">권한 없음 (No permitted action)</div>';
-        let html = '<div class="menu-flow">';
-        visible.forEach((it, i) => {
-            if (i > 0) html += menuFlowArrow();
-            if (it.kind === 'note') {
-                html += `<div class="menu-flow-note">${esc(it.label)}</div>`;
-            } else {
-                html += renderMenuStep(it);
-            }
-        });
-        return html + '</div>';
-    }
-
-    /** CMAXS 스타일 — At first day of every month: (If necessary) 분기 + 화살표 */
-    function renderMonthlyFlow(items, f) {
-        const runHour = items[0];
-        const modify = items.find(it => it.optional);
-        const original = items.find(it => it.label === 'Update Plan');
-        const exportItem = items.find(it => it.label === 'Data Export');
+    function renderMenuFlowPanel(cols, f) {
         const planLocked = isOriginalPlanUpdateLocked(getPlanLockDept());
         const lockTip = getOriginalPlanLockMessage(getPlanLockDept());
-        const steps = [runHour, original, exportItem].filter(it => it && (!it.feature || f[it.feature]));
-        const showModify = modify && (!modify.feature || f[modify.feature]);
-        if (!steps.length) return '<div class="menu-item disabled">권한 없음 (No permitted action)</div>';
-
-        let html = '<div class="menu-flow menu-flow-monthly">';
-        html += renderMenuStep(runHour);
-        html += '<div class="menu-flow-split">';
-        html += '<div class="menu-flow-col menu-flow-col-main">' + menuFlowArrow() + '</div>';
-        if (showModify) {
-            html += `<div class="menu-flow-col menu-flow-col-opt">
-                <span class="menu-flow-if">( If necessary )</span>
-                ${renderMenuStep(modify, { locked: planLocked, disabledTitle: lockTip })}
-                ${menuFlowArrow()}
-            </div>`;
-        }
-        html += '</div>';
-        if (original && (!original.feature || f[original.feature])) {
-            html += renderMenuStep(original, { locked: planLocked, disabledTitle: lockTip });
-        }
-        if (exportItem && (!exportItem.feature || f[exportItem.feature])) {
-            html += menuFlowArrow() + renderMenuStep(exportItem);
-        }
-        return html + '</div>';
-    }
-
-    function renderMenuCardItems(card, f) {
-        if (card.flow === 'linear') return renderLinearFlow(card.items, f);
-        if (card.flow === 'monthly') return renderMonthlyFlow(card.items, f);
-        const items = card.items.filter(it => !it.feature || f[it.feature]);
-        if (!items.length) return '<div class="menu-item disabled">권한 없음 (No permitted action)</div>';
-        return items.map(it => renderMenuStep(it)).join('');
+        const colHtml = cols.map(col => {
+            const items = col.items
+                .map(it => renderMenuFlowItem(it, f, it.planLock ? { locked: planLocked, disabledTitle: lockTip } : {}))
+                .filter(Boolean)
+                .join('');
+            const empty = items || '<p class="menu-flow-empty muted">No permitted action</p>';
+            return `<section class="spare-flow-col tone-${col.tone}">
+                <header class="spare-flow-head">${esc(col.title)}</header>
+                <div class="spare-flow-items">${empty}</div>
+            </section>`;
+        }).join('');
+        return `<nav class="spare-flow-panel menu-flow-panel" aria-label="Maintenance workflow">${colHtml}</nav>`;
     }
 
     function renderMenuCards(host) {
         if (!host) return;
-        const f = state.user ? TVC_RBAC.getUiFeatures(state.user) : {};
-        host.innerHTML = menuModel().map(card => {
-            const rows = renderMenuCardItems(card, f);
-            const flowCls = card.flow ? ` flow-${card.flow}` : '';
-            return `<div class="work-card tone-${card.tone}${flowCls}">
-                <div class="wc-head"><span class="wc-icon">${card.icon}</span>
-                    <div><div class="wc-title">${esc(card.title)}</div></div>
-                </div>
-                <div class="wc-items">${rows}</div>
-            </div>`;
-        }).join('');
+        const f = state.user ? TVC_Space.getUiFeatures(state.user) : {};
+        host.innerHTML = renderMenuFlowPanel(menuModel(), f);
     }
 
     function renderFleetList() {
@@ -1131,23 +1086,13 @@ const TVC_App = (function () {
     }
 
     function renderMainMenu() {
-        setText('histDeptLabel', TVC_RBAC.getDeptLabel(state.department));
         renderCaptainViewDashboard();
         renderFleetList();
-        const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
-        const mainCol = document.getElementById('menuMainCol');
         const sidebarCards = document.getElementById('cmaxsCardsSidebar');
         const mainCards = document.getElementById('cmaxsCards');
-        if (mainCol) mainCol.classList.toggle('hidden', !!isHq);
-        if (isHq) {
-            renderMenuCards(sidebarCards);
-            if (mainCards) mainCards.innerHTML = '';
-        } else {
-            renderMenuCards(mainCards);
-            if (sidebarCards) sidebarCards.innerHTML = '';
-        }
-        renderSyncHistory();
-        TVC_DefectReport.renderInbox();
+        document.getElementById('menuMainCol')?.classList.remove('hidden');
+        renderMenuCards(mainCards);
+        if (sidebarCards) sidebarCards.innerHTML = '';
     }
 
     function renderDefectTab() {
@@ -1224,7 +1169,7 @@ const TVC_App = (function () {
                 <td>${overdue}</td>
                 <td>${due30}</td>
             </tr>
-            <tr><td colspan="5" class="muted hist-empty">최신 기준 Actual Plan 집계 — 부서 필터 적용</td></tr>`;
+            <tr><td colspan="5" class="muted hist-empty">최신 기준 Work Plan 집계 — 부서 필터 적용</td></tr>`;
     }
 
     /** Import & Export History — Work Report / Original Plan / Outstanding Rate 뷰 */
@@ -1311,7 +1256,7 @@ const TVC_App = (function () {
         }
     }
 
-    // ── Plan update & item edit (Actual Plan tab) ────────────────────
+    // ── Plan update & item edit (Work Plan tab) ────────────────────
     let _planCalcTimer = null;
     let _planUpdateSnapshot = null;
     const PLAN_CALC_MS = 5000;
@@ -1994,7 +1939,7 @@ const TVC_App = (function () {
         const hint = document.getElementById('planUpdatePendingHint');
         if (hint) {
             if (stats.pendingReports > 0) {
-                hint.textContent = `미완료 Work Report ${stats.pendingReports}건 — Cancel 선택 후 Actual Plan에서 입력하세요.`;
+                hint.textContent = `미완료 Work Report ${stats.pendingReports}건 — Cancel 선택 후 Work Plan에서 입력하세요.`;
                 hint.classList.remove('hidden');
             } else {
                 hint.textContent = '';
@@ -2037,7 +1982,7 @@ const TVC_App = (function () {
             await revertPlanUpdateSnapshot();
             const pending = stats?.pendingReports || 0;
             state._planCalcMsg = pending
-                ? `Original Plan Update 취소 — Due Date 원복. 미완료 Work Report ${pending}건을 Actual Plan에서 입력하세요.`
+                ? `Original Plan Update 취소 — Due Date 원복. 미완료 Work Report ${pending}건을 Work Plan에서 입력하세요.`
                 : 'Original Plan Update 취소 — Run-hour Due Date 변경을 되돌렸습니다.';
             if (pending > 0) {
                 switchTab('actual');
@@ -2132,7 +2077,7 @@ const TVC_App = (function () {
         if (searchEl && document.activeElement !== searchEl) searchEl.value = state.treeSearch || '';
     }
 
-    // ── TAB: Actual Plan ─────────────────────────────────────────────
+    // ── TAB: Work Plan ─────────────────────────────────────────────
     function renderActualPlan() {
         clearActualFilterKeysCache();
         renderGroupTree('actTree');
@@ -2295,7 +2240,7 @@ const TVC_App = (function () {
             state._batchDraft.items[id] = {
                 form: {
                     ...defaultWrForm(today),
-                    lastMaintDate: job.last_done || '',
+                    lastMaintDate: today,
                     pmsGroupNo: hdr.pmsGroupNo || '',
                     maker: hdr.maker || '',
                     modelType: hdr.modelType || '',
@@ -2898,7 +2843,7 @@ const TVC_App = (function () {
         await deleteWorkReport();
     }
 
-    /** Actual Plan에서 작성된 Work Report를 기반으로 이력 표시 */
+    /** Work Plan에서 작성된 Work Report를 기반으로 이력 표시 */
     function renderWorkHistory() {
         const body = document.getElementById('historyBody');
         if (!body) return;
@@ -2911,7 +2856,7 @@ const TVC_App = (function () {
         const searchEl = document.getElementById('histSearch');
         if (searchEl && document.activeElement !== searchEl) searchEl.value = state.search || '';
         if (!all.length) {
-            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No work reports yet. Create one from Original Plan or Actual Plan.</td></tr>`;
+            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No work reports yet. Create one from Original Plan or Work Plan.</td></tr>`;
             updateHistToolbarState();
             return;
         }
@@ -2958,7 +2903,7 @@ const TVC_App = (function () {
         updateHistToolbarState();
     }
 
-    /** Work History: 단일 클릭 — 행 선택 하이라이트(Actual Plan과 동일 UX) */
+    /** Work History: 단일 클릭 — 행 선택 하이라이트(Work Plan과 동일 UX) */
     function selectHistRow(rowKey, ev) {
         if (ev?.target?.closest?.('.hist-chk')) return;
         state._histSelReportId = rowKey;
@@ -3150,7 +3095,7 @@ const TVC_App = (function () {
     }
 
     // ── Job detail / procedure modals ────────────────────────────────
-    /** Original / Actual Plan: 더블 클릭 — CMAXS Work Procedure / Work History 모달 */
+    /** Original / Work Plan: 더블 클릭 — CMAXS Work Procedure / Work History 모달 */
     function openWorkProcedure(jobId, tab) {
         if (state._wpJobId !== jobId) state._wpTab = 'procedure';
         state._wpJobId = jobId;
@@ -3252,7 +3197,7 @@ const TVC_App = (function () {
         postpone: 'Postpone',
     };
 
-    /** Original / Actual Plan → Report Input: CMAXS 스타일 Work Report 화면 */
+    /** Original / Work Plan → Report Input: CMAXS 스타일 Work Report 화면 */
     function openWorkReport(jobId, tab) {
         const job = state.idx.jobById.get(jobId);
         if (!job) return;
@@ -3267,7 +3212,7 @@ const TVC_App = (function () {
             state._wrForm = defaultWrForm(today);
             const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
             Object.assign(state._wrForm, {
-                lastMaintDate: job.last_done || '',
+                lastMaintDate: today,
                 pmsGroupNo: hdr.pmsGroupNo || '',
                 maker: hdr.maker || '',
                 modelType: hdr.modelType || '',
@@ -3561,7 +3506,7 @@ const TVC_App = (function () {
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap">
                     ${fld('Total Run Hrs', `<input type="number" data-wf="runHrs" value="${esc(wf('runHrs', '0'))}">`)}
-                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', job.last_done || ''))}">`)}
+                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', wf('workDate', today)))}">`)}
                     ${fld('Running Hrs after Last Maint.', inp('rhAfterLastMaint', ''))}
                 </div>
                 ${fld('Outline of Maintenance', `<textarea class="wr-maint-textarea" data-wf="outline" rows="3">${esc(wf('outline'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
@@ -3628,7 +3573,7 @@ const TVC_App = (function () {
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap">
                     ${fld('Total Run Hrs', `<input type="number" data-wf="runHrs" value="${esc(wf('runHrs', '0'))}">`)}
-                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', job.last_done || ''))}">`)}
+                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', wf('workDate', today)))}">`)}
                     ${fld('Running Hrs after Last Maint.', inp('rhAfterLastMaint', ''))}
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-2 wr-maint-grid-gap">
@@ -4009,6 +3954,11 @@ const TVC_App = (function () {
             ? 'TROUBLE'
             : (tab === 'postpone' ? 'POSTPONE' : 'MAINTENANCE');
         const status = 'REPORTED';
+        if ((workType === 'MAINTENANCE' || workType === 'TROUBLE') && form.workDate
+            && (!form.lastMaintDate || form.lastMaintDate === (job.last_done || ''))) {
+            form.lastMaintDate = form.workDate;
+        }
+
         const description = existingRep?.work_type === 'TROUBLE'
             ? (form.troubleOutline || existingRep.description || job.job_detail)
             : (form.outline || form.shipComments || job.job_detail);
@@ -4260,12 +4210,12 @@ const TVC_App = (function () {
     // ── Print ────────────────────────────────────────────────────────
     function printCurrentTab(preview) {
         if (state.currentTab !== 'actual') {
-            alert('인쇄는 Actual Plan 탭에서만 지원됩니다.');
+            alert('인쇄는 Work Plan 탭에서만 지원됩니다.');
             return;
         }
         const ids = sheetIds('actual');
         const jobs = ids.map(id => state.idx.jobById.get(id)).filter(Boolean);
-        const title = 'Actual Plan';
+        const title = 'Work Plan';
         const dept = TVC_RBAC.getDeptLabel(state.department);
         const html = `<html><head><title>TVC ${title}</title><style>
             body{font-family:sans-serif;font-size:12px} table{width:100%;border-collapse:collapse}

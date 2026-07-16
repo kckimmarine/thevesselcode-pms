@@ -278,8 +278,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .cmaxs-legend b { color: var(--navy); }
 
-/* 메뉴(CMAXS 스타일): 선박=좌측 카드, HQ=Ship List + 메뉴(분리) | 우측 History */
-.cmaxs-body { padding: 20px; display: grid; grid-template-columns: 330px minmax(0, 1fr); gap: 20px; align-items: start; }
+/* 메뉴(CMAXS 스타일): 선박=4열 workflow, HQ=Ship List + 메뉴 */
+.cmaxs-body { padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 .cmaxs-body.hq-mode { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
 .menu-main-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .menu-main-col.hidden { display: none !important; }
@@ -323,8 +323,19 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .fleet-row:hover { background: #ebf4ff; }
 .fleet-row.selected { background: #bee3f8; font-weight: 600; }
 
-/* 절차 카드는 항상 세로로 나열 (At everyday → monthly → HQ → necessary) */
-.cmaxs-cards { display: flex; flex-direction: column; gap: 16px; }
+.cmaxs-cards { min-width: 0; }
+.menu-flow-panel { padding: 0; }
+.menu-flow-panel .spare-flow-item {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+}
+.menu-flow-panel .mi-auth { font-size: 10px; font-weight: 700; color: #718096; flex-shrink: 0; }
+.menu-flow-panel .mi-label { flex: 1; min-width: 0; }
+.menu-flow-panel .mi-badge { margin-left: auto; flex-shrink: 0; }
+.menu-flow-empty { font-size: 12px; padding: 8px 4px; margin: 0; text-align: center; }
+.spare-flow-col.tone-daily { border-top: 3px solid var(--red); }
+.spare-flow-col.tone-defect { border-top: 3px solid #805ad5; }
+.spare-flow-col.tone-monthly { border-top: 3px solid var(--blue); }
+.hq-menu-cards .menu-flow-panel { padding: 0; }
 .work-card {
     background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden;
     box-shadow: 0 2px 8px rgba(0,0,0,.06); display: flex; flex-direction: column;

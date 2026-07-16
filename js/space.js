@@ -110,21 +110,21 @@ const TVC_Space = (function () {
 
         if (loginMode === LoginMode.MASTER) {
             if (user.role !== 'SHIP_CAPTAIN') {
-                return { ok: false, error: 'Master Mode는 Captain만 접속할 수 있습니다.' };
+                return { ok: false, error: 'Master Mode access is restricted to the Captain.' };
             }
             return { ok: true, station };
         }
 
         if (loginMode === LoginMode.DECK) {
             if (user.department !== 'DECK') {
-                return { ok: false, error: 'Deck는 Deck 부서 계정(officer / captain)만 접속할 수 있습니다.' };
+                return { ok: false, error: 'Deck department access is limited to Officers and the Captain.' };
             }
             return { ok: true, station };
         }
 
         if (loginMode === LoginMode.ENGINE) {
             if (user.department !== 'ENGINE') {
-                return { ok: false, error: 'Engine는 Engine 부서 계정(engineer / ce)만 접속할 수 있습니다.' };
+                return { ok: false, error: 'Engine department access is limited to Engineers and the Chief Engineer.' };
             }
             return { ok: true, station };
         }
@@ -230,6 +230,8 @@ const TVC_Space = (function () {
             base.showCaptainDashboard = true;
             base.showHubImport = true;
             base.showCompanyExport = user.role === 'SHIP_CAPTAIN';
+            base.showCompanyImport = user.role === 'SHIP_CAPTAIN';
+            base.showHubStationExport = TVC_RBAC.isApprover(user);
             base.showStationExport = false;
             base.showExportShip = false;
             base.showImportShip = false;

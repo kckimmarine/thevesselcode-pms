@@ -113,7 +113,7 @@ const TVC_RunHours = (function () {
         const delta = newTotal - prevTotal;
         const deltaStr = delta ? `  (${delta > 0 ? '+' : ''}${delta.toLocaleString()} h)` : '';
         const resetMsg = newTotal === 0
-            ? `\n↺ Total Run Hours = 0 → Original / Actual Plan Due Date 원복\n`
+            ? `\n↺ Total Run Hours = 0 → Original / Work Plan Due Date 원복\n`
             : '';
         alert(
             `${n.label}\n` +

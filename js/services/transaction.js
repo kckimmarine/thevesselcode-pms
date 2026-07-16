@@ -33,7 +33,7 @@ const TVC_Transaction = (function () {
 
     function resolveMaintenanceLastDone(item, report) {
         const form = item?.form || report?.report_form || {};
-        return String(form.lastMaintDate || form.workDate || report?.work_date || now().slice(0, 10)).slice(0, 10);
+        return String(form.workDate || form.lastMaintDate || report?.work_date || now().slice(0, 10)).slice(0, 10);
     }
 
     function shouldApplyJobSchedule(report) {
