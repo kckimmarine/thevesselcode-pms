@@ -594,9 +594,117 @@ const TVC_App = (function () {
             || (j.item_sort1 || '').toLowerCase().includes(q);
     }
 
+    function isHistDefectEntry(entry) {
+        return entry?.source === 'defect';
+    }
+
+    function histRowKey(reportId, jobId) {
+        return `${reportId}|${jobId}`;
+    }
+
+    function histDefectRowKey(defectId) {
+        return `DEF|${defectId}`;
+    }
+
+    function histEntryRowKey(entry) {
+        if (isHistDefectEntry(entry)) return histDefectRowKey(entry.defect.id);
+        return histRowKey(entry.report.id, entry.item.maintenance_job_id);
+    }
+
+    function formatHistGroupLabel(v) {
+        return TVC_SpareMenu?.safeTreeLabel?.(v) || String(v || '').trim();
+    }
+
+    function defectHistoryHasJob(dc) {
+        return !!(dc.pms_job_code || dc.maintenance_job_id || dc.job_code);
+    }
+
+    /** Defect Case → Work History column mapping (group-only: Group→Job Code, Job Name→SORT-1) */
+    function defectHistoryColumns(dc) {
+        if (defectHistoryHasJob(dc)) {
+            const job = state.idx?.jobById.get(dc.maintenance_job_id)
+                || state.jobs.find(j => j.job_code === (dc.pms_job_code || dc.job_code));
+            return {
+                jobCode: dc.pms_job_code || dc.job_code || job?.job_code || '',
+                sort1: dc.item_sort1 || job?.item_sort1 || '',
+                sort2: dc.item_sort2 || job?.item_sort2 || '',
+                jobDetail: dc.job_detail || dc.outline_maintenance_request || job?.job_detail || '',
+                groupOnly: false,
+            };
+        }
+        if (dc.pms_group_no) {
+            return {
+                jobCode: formatHistGroupLabel(dc.pms_group_no),
+                sort1: dc.job_name || dc.machinery_name || '',
+                sort2: '',
+                jobDetail: dc.outline_maintenance_request || dc.action_taken || '',
+                groupOnly: true,
+            };
+        }
+        return {
+            jobCode: dc.case_no || 'DEFECT',
+            sort1: dc.job_name || dc.machinery_name || '',
+            sort2: '',
+            jobDetail: dc.outline_maintenance_request || '',
+            groupOnly: false,
+        };
+    }
+
+    function defectHistoryStatusLabel(dc) {
+        const S = TVC_DefectCase.Status;
+        const map = {
+            [S.SUBMITTED_TO_COMPANY]: 'Defect · Submitted',
+            [S.COMPANY_REVIEWED]: 'Defect · Reviewed',
+            [S.WORK_IN_PROGRESS]: 'Defect · In Progress',
+            [S.AWAITING_COMPLETION]: 'Defect · Awaiting Close',
+            [S.CLOSED]: 'Defect · Closed',
+        };
+        return map[dc.status] || `Defect · ${dc.status || '?'}`;
+    }
+
+    function defectHistoryFormFlags(dc) {
+        return {
+            repairRequest: !!dc.repair_request,
+            shoreSupport: !!(dc.shore_support || dc.shore_technician),
+            defectCleared: !!(dc.defect_cleared || dc.status === TVC_DefectCase.Status.CLOSED),
+            shipComment: !!String(dc.ship_verified_after_clear || '').trim(),
+            companyComment: !!String(dc.company_comment || dc.company_initial_reply || '').trim(),
+        };
+    }
+
+    function histEntrySortDate(entry) {
+        if (isHistDefectEntry(entry)) {
+            const d = entry.defect;
+            return d.work_date || d.report_date || d.submitted_at || d.created_at || '';
+        }
+        const r = entry.report;
+        return r.work_date || r.report_date || r.created_at || '';
+    }
+
+    function workHistoryDefectCases() {
+        return (state.defectCases || []).filter(d => d.status !== TVC_DefectCase.Status.DRAFT);
+    }
+
     function matchHistSearch(entry) {
         const q = state.search;
         if (!q) return true;
+        if (isHistDefectEntry(entry)) {
+            const dc = entry.defect;
+            const cols = defectHistoryColumns(dc);
+            const hay = [
+                cols.jobCode,
+                cols.sort1,
+                cols.sort2,
+                cols.jobDetail,
+                dc.case_no,
+                dc.pms_group_no,
+                dc.pms_job_code,
+                dc.job_name,
+                dc.machinery_name,
+                defectHistoryStatusLabel(dc),
+            ].filter(Boolean).join(' ').toLowerCase();
+            return hay.includes(q);
+        }
         const { report: r, item } = entry;
         const job = state.idx?.jobById.get(item.maintenance_job_id)
             || state.jobs.find(j => j.job_code === item.job_code);
@@ -2191,6 +2299,8 @@ const TVC_App = (function () {
             shoreTechnician: false,
             lastMaintDate: '',
             pmsGroupNo: '',
+            pmsGroupKey: '',
+            jobName: '',
             maker: '',
             modelType: '',
             capacity: '',
@@ -2198,6 +2308,9 @@ const TVC_App = (function () {
             allPendingCleared: false,
             dockingRepair: false,
             pendingForRepair: false,
+            repairRequest: false,
+            shoreSupport: false,
+            defectCleared: false,
             shipAttachments: [],
             companyAttachments: [],
             meStop: '0',
@@ -2583,6 +2696,18 @@ const TVC_App = (function () {
         return `<td class="hist-flag">${on ? '☑' : '☐'}</td>`;
     }
 
+    /** Work History flag columns — RR / SS / DC / SC / CC (legacy DR·PR·CL fields supported) */
+    function workHistoryFormFlags(f, report) {
+        const form = f || {};
+        return {
+            repairRequest: !!(form.repairRequest ?? form.dockingRepair),
+            shoreSupport: !!(form.shoreSupport ?? form.pendingForRepair ?? form.shoreTechnician),
+            defectCleared: !!(form.defectCleared ?? form.allPendingCleared),
+            shipComment: !!String(form.shipComments || '').trim(),
+            companyComment: !!String(report?.company_comment || '').trim(),
+        };
+    }
+
     function histAttachmentCell(attachments) {
         const list = Array.isArray(attachments) ? attachments : [];
         const kb = wrAttachmentTotalKb(list);
@@ -2613,13 +2738,15 @@ const TVC_App = (function () {
         return reports;
     }
 
-    /** Work History — Job item 단위 행 (Batch Report는 Job별로 펼침) */
+    /** Work History — Work Report(job item) + Defect Case 통합 타임라인 */
     function workHistoryEntriesRaw() {
         const entries = [];
         workHistoryReports().forEach(r => {
             TVC_WorkReport.fromLegacy(r);
-            (r.job_items || []).forEach(item => entries.push({ report: r, item }));
+            (r.job_items || []).forEach(item => entries.push({ source: 'report', report: r, item }));
         });
+        workHistoryDefectCases().forEach(dc => entries.push({ source: 'defect', defect: dc }));
+        entries.sort((a, b) => histEntrySortDate(b).localeCompare(histEntrySortDate(a)));
         return entries;
     }
 
@@ -2627,18 +2754,13 @@ const TVC_App = (function () {
         return workHistoryEntriesRaw().filter(matchHistSearch);
     }
 
-    function histRowKey(reportId, jobId) {
-        return `${reportId}|${jobId}`;
-    }
-
     function getSelectedHistEntry() {
         if (!state._histSelReportId) return null;
-        return workHistoryEntries().find(e =>
-            histRowKey(e.report.id, e.item.maintenance_job_id) === state._histSelReportId
-        ) || null;
+        return workHistoryEntries().find(e => histEntryRowKey(e) === state._histSelReportId) || null;
     }
 
     function isHistRowCheckable(entry) {
+        if (isHistDefectEntry(entry)) return false;
         const { report: r, item } = entry;
         if (!state.user || r.is_locked || TVC_RBAC.isApprovedStatus(r.status, true)) return false;
         return itemSt(item) === 'REPORTED';
@@ -2652,6 +2774,7 @@ const TVC_App = (function () {
     }
 
     function histCheckDisabledTitle(entry) {
+        if (isHistDefectEntry(entry)) return 'Defect case — Confirm 불가';
         const { report: r, item } = entry;
         if (!state.user) return '로그인 필요';
         if (r.is_locked || TVC_RBAC.isApprovedStatus(r.status, true)) return '승인 완료된 리포트';
@@ -2664,9 +2787,7 @@ const TVC_App = (function () {
     }
 
     function pruneHistChecked() {
-        const valid = new Set(
-            workHistoryEntries().map(e => histRowKey(e.report.id, e.item.maintenance_job_id))
-        );
+        const valid = new Set(workHistoryEntries().map(e => histEntryRowKey(e)));
         Object.keys(state._histChecked || {}).forEach(key => {
             if (!valid.has(key) || !state._histChecked[key]) delete state._histChecked[key];
         });
@@ -2690,12 +2811,18 @@ const TVC_App = (function () {
     }
 
     function canModifyHistEntry(entry) {
+        if (isHistDefectEntry(entry)) {
+            const dc = entry.defect;
+            if (dc.status === TVC_DefectCase.Status.CLOSED) return false;
+            return !!state.user;
+        }
         const r = entry?.report;
         if (!r) return false;
         return !r.is_locked && !TVC_RBAC.isApprovedStatus(r.status, true);
     }
 
     function canDeleteHistEntry(entry) {
+        if (isHistDefectEntry(entry)) return false;
         const r = entry?.report;
         if (!r || !state.user) return false;
         if (r.is_locked || TVC_RBAC.isApprovedStatus(r.status, true)) return false;
@@ -2717,7 +2844,7 @@ const TVC_App = (function () {
         const entry = getSelectedHistEntry();
         const checkedIds = getCheckedHistReportIds();
         const checkedEntries = workHistoryEntries().filter(e =>
-            state._histChecked?.[histRowKey(e.report.id, e.item.maintenance_job_id)]
+            state._histChecked?.[histEntryRowKey(e)]
         );
         const canConfirm = checkedEntries.length > 0
             && checkedEntries.every(isHistRowApprovable)
@@ -2741,13 +2868,9 @@ const TVC_App = (function () {
         const approvable = workHistoryEntries().filter(isHistRowCheckable);
         const allEl = document.getElementById('histSelectAll');
         if (allEl && approvable.length) {
-            const allOn = approvable.every(e =>
-                state._histChecked[histRowKey(e.report.id, e.item.maintenance_job_id)]
-            );
+            const allOn = approvable.every(e => state._histChecked[histEntryRowKey(e)]);
             allEl.checked = allOn;
-            allEl.indeterminate = !allOn && approvable.some(e =>
-                state._histChecked[histRowKey(e.report.id, e.item.maintenance_job_id)]
-            );
+            allEl.indeterminate = !allOn && approvable.some(e => state._histChecked[histEntryRowKey(e)]);
         } else if (allEl) {
             allEl.checked = false;
             allEl.indeterminate = false;
@@ -2768,22 +2891,36 @@ const TVC_App = (function () {
     function toggleHistSelectAll(on) {
         state._histChecked = state._histChecked || {};
         workHistoryEntries().filter(isHistRowCheckable).forEach(e => {
-            const key = histRowKey(e.report.id, e.item.maintenance_job_id);
+            const key = histEntryRowKey(e);
             if (on) state._histChecked[key] = true;
             else delete state._histChecked[key];
         });
         renderWorkHistory();
     }
 
+    function openDefectFromHistory(defectId) {
+        if (!defectId) return;
+        TVC_DefectReport.openCase(defectId);
+    }
+
     function histDetailWorkReport() {
         const entry = getSelectedHistEntry();
         if (!entry) return alert('Work History에서 항목을 선택하세요.');
+        if (isHistDefectEntry(entry)) {
+            openDefectFromHistory(entry.defect.id);
+            return;
+        }
         openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id);
     }
 
     function histModifyReport() {
         const entry = getSelectedHistEntry();
         if (!entry) return alert('Work History에서 항목을 선택하세요.');
+        if (isHistDefectEntry(entry)) {
+            if (!canModifyHistEntry(entry)) return alert('종료(CLOSED)된 Defect Case는 수정할 수 없습니다.');
+            openDefectFromHistory(entry.defect.id);
+            return;
+        }
         if (!canModifyHistEntry(entry)) return alert('승인(APPROVED)된 리포트는 수정할 수 없습니다.');
         openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id);
         modifyWorkReport();
@@ -2791,7 +2928,7 @@ const TVC_App = (function () {
 
     async function histReportApproval() {
         const checkedEntries = workHistoryEntries().filter(e =>
-            state._histChecked?.[histRowKey(e.report.id, e.item.maintenance_job_id)]
+            state._histChecked?.[histEntryRowKey(e)]
         );
         if (!checkedEntries.length) return alert('Confirm할 REPORTED 항목의 체크박스(ㅁ)를 선택하세요.');
         const blocked = checkedEntries.filter(e => !isHistRowApprovable(e));
@@ -2851,12 +2988,12 @@ const TVC_App = (function () {
         pruneHistChecked();
         const all = workHistoryEntriesRaw();
         const entries = workHistoryEntries();
-        const colSpan = 16;
+        const colSpan = 14;
         setText('histCount', `${entries.length} / ${all.length} entries`);
         const searchEl = document.getElementById('histSearch');
         if (searchEl && document.activeElement !== searchEl) searchEl.value = state.search || '';
         if (!all.length) {
-            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No work reports yet. Create one from Original Plan or Work Plan.</td></tr>`;
+            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No work reports or defect cases yet.</td></tr>`;
             updateHistToolbarState();
             return;
         }
@@ -2865,22 +3002,51 @@ const TVC_App = (function () {
             updateHistToolbarState();
             return;
         }
-        body.innerHTML = entries.map(({ report: r, item }) => {
+        body.innerHTML = entries.map(entry => {
+            if (isHistDefectEntry(entry)) {
+                const dc = entry.defect;
+                const cols = defectHistoryColumns(dc);
+                const dt = formatCmaxsHistDate(dc.work_date || dc.report_date || dc.submitted_at || dc.created_at);
+                const st = defectHistoryStatusLabel(dc);
+                const flags = defectHistoryFormFlags(dc);
+                const rowKey = histEntryRowKey(entry);
+                const sel = state._histSelReportId === rowKey ? ' row-selected' : '';
+                const dfTag = cols.groupOnly
+                    ? `<span class="pill defect" title="Defect — PMS Group only">DF</span> `
+                    : `<span class="pill defect" title="Defect case">DF</span> `;
+                const chk = `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(entry))}">`;
+                return `<tr class="hist-row hist-row-defect${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openDefectFromHistory('${escAttr(dc.id)}')">
+                <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
+                <td class="hist-code">${dfTag}<strong>${esc(cols.jobCode)}</strong></td>
+                <td>${esc(cols.sort1)}</td>
+                <td>${esc(cols.sort2)}</td>
+                <td class="hist-detail">${esc(cols.jobDetail)}</td>
+                <td class="hist-date">${esc(dt)}</td>
+                <td>${esc(st)}</td>
+                ${histFlagCell(flags.repairRequest)}
+                ${histFlagCell(flags.shoreSupport)}
+                ${histFlagCell(flags.defectCleared)}
+                ${histFlagCell(flags.shipComment)}
+                ${histFlagCell(flags.companyComment)}
+                ${histAttachmentCell(dc.ship_attachments)}
+                ${histAttachmentCell(dc.company_attachments)}
+            </tr>`;
+            }
+            const { report: r, item } = entry;
             const job = state.idx?.jobById.get(item.maintenance_job_id) || state.jobs.find(j => j.job_code === item.job_code);
             const f = item.form || wrReportForm(r);
             const dt = formatCmaxsHistDate(r.work_date || r.report_date || r.created_at);
             const st = reportWorkflowStatusLabel(r, item);
-            const shipComments = String(f.shipComments || '').trim();
-            const companyComment = String(r.company_comment || '').trim();
-            const rowKey = histRowKey(r.id, item.maintenance_job_id);
+            const flags = workHistoryFormFlags(f, r);
+            const rowKey = histEntryRowKey(entry);
             const sel = state._histSelReportId === rowKey ? ' row-selected' : '';
             const batchTag = r.is_batch ? `<span class="pill ok" title="Batch report">B</span> ` : '';
-            const entry = { report: r, item };
-            const canCheck = isHistRowCheckable(entry);
+            const wrEntry = { source: 'report', report: r, item };
+            const canCheck = isHistRowCheckable(wrEntry);
             const checked = canCheck && !!state._histChecked?.[rowKey];
             const chk = canCheck
                 ? `<input type="checkbox" class="hist-chk-input"${checked ? ' checked' : ''}>`
-                : `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(entry))}">`;
+                : `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(wrEntry))}">`;
             return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(item.maintenance_job_id)}')">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 <td class="hist-code">${batchTag}<strong>${esc(item.job_code)}</strong></td>
@@ -2889,13 +3055,11 @@ const TVC_App = (function () {
                 <td class="hist-detail">${esc(job?.job_detail || item.description || r.description || '')}</td>
                 <td class="hist-date">${esc(dt)}</td>
                 <td>${esc(st)}</td>
-                <td>${esc(f.fileNo || '')}</td>
-                <td>${esc(f.voyNo || '')}</td>
-                ${histFlagCell(!!f.dockingRepair)}
-                ${histFlagCell(!!f.pendingForRepair)}
-                ${histFlagCell(!!f.allPendingCleared)}
-                ${histFlagCell(!!shipComments)}
-                ${histFlagCell(!!companyComment)}
+                ${histFlagCell(flags.repairRequest)}
+                ${histFlagCell(flags.shoreSupport)}
+                ${histFlagCell(flags.defectCleared)}
+                ${histFlagCell(flags.shipComment)}
+                ${histFlagCell(flags.companyComment)}
                 ${histAttachmentCell(f.shipAttachments)}
                 ${histAttachmentCell(f.companyAttachments)}
             </tr>`;
@@ -3214,6 +3378,7 @@ const TVC_App = (function () {
             Object.assign(state._wrForm, {
                 lastMaintDate: today,
                 pmsGroupNo: hdr.pmsGroupNo || '',
+                pmsGroupKey: `${job.department}|${String(job.group || '').trim()}`,
                 maker: hdr.maker || '',
                 modelType: hdr.modelType || '',
                 capacity: hdr.capacity || '',
@@ -3271,15 +3436,23 @@ const TVC_App = (function () {
     function navReport(dir) {
         const list = workHistoryEntries();
         if (!list.length) return;
-        const curKey = state._wrBatchItemId ? `${state._wrReportId}|${state._wrBatchItemId}` : state._wrReportId;
-        let i = list.findIndex(e => `${e.report.id}|${e.item.maintenance_job_id}` === curKey || e.report.id === state._wrReportId);
+        const curKey = state._histSelReportId
+            || (state._wrBatchItemId ? `${state._wrReportId}|${state._wrBatchItemId}` : state._wrReportId);
+        let i = list.findIndex(e => histEntryRowKey(e) === curKey || (!isHistDefectEntry(e) && e.report.id === state._wrReportId));
         if (i < 0) i = 0; else i += dir;
-        if (i < 0) { alert('첫 번째 리포트입니다.'); return; }
-        if (i >= list.length) { alert('마지막 리포트입니다.'); return; }
+        if (i < 0) { alert('첫 번째 항목입니다.'); return; }
+        if (i >= list.length) { alert('마지막 항목입니다.'); return; }
+        const entry = list[i];
+        state._histSelReportId = histEntryRowKey(entry);
         const keepTab = state._wrTab;
-        openWorkReportFromHistory(list[i].report.id, list[i].item.maintenance_job_id);
-        state._wrTab = keepTab || state._wrTab;
-        renderWorkReportModal();
+        if (isHistDefectEntry(entry)) {
+            closeModal('workReportModal');
+            openDefectFromHistory(entry.defect.id);
+        } else {
+            openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id);
+            state._wrTab = keepTab || state._wrTab;
+            renderWorkReportModal();
+        }
     }
 
     /** Work Report 삭제 (승인 완료 리포트는 재고/일자 자동 원상복구) */
@@ -3448,6 +3621,218 @@ const TVC_App = (function () {
         </div>`;
     }
 
+    const WR_PICK_Z = 10100;
+    let _wrGroupPickSearch = '';
+    let _wrJobPickSearch = '';
+
+    function wrGroupKeyFromForm() {
+        if (state._wrForm?.pmsGroupKey) return state._wrForm.pmsGroupKey;
+        const job = state.idx?.jobById.get(state._wrJobId);
+        if (job?.department && job?.group) return `${job.department}|${String(job.group).trim()}`;
+        return '';
+    }
+
+    function closeWrPickMenu(wrap) {
+        if (!wrap) return;
+        const menu = wrap._portalMenu || wrap.querySelector('.spare-consume-pick-menu');
+        if (menu) {
+            menu.classList.remove('spare-consume-pick-menu-portal');
+            menu.style.cssText = '';
+            if (wrap._portalMenu && menu.parentNode === document.body) wrap.appendChild(menu);
+        }
+        wrap.classList.remove('open');
+    }
+
+    function closeAllWrPicks() {
+        closeWrPickMenu(document.getElementById('wrGroupPick'));
+        closeWrPickMenu(document.getElementById('wrJobPick'));
+    }
+
+    function positionWrPickMenu(wrap, minWidth) {
+        const trigger = wrap.querySelector('.spare-consume-pick-trigger');
+        let menu = wrap.querySelector('.spare-consume-pick-menu');
+        if (!trigger || !menu) return;
+        if (!wrap._portalMenu) wrap._portalMenu = menu;
+        if (menu.parentNode !== document.body) document.body.appendChild(menu);
+        menu.classList.add('spare-consume-pick-menu-portal');
+        const r = trigger.getBoundingClientRect();
+        Object.assign(menu.style, {
+            display: 'flex', flexDirection: 'column', position: 'fixed',
+            left: `${r.left}px`, top: `${r.bottom + 2}px`,
+            minWidth: `${Math.max(minWidth, r.width)}px`, width: `${Math.max(minWidth, r.width)}px`,
+            zIndex: String(WR_PICK_Z), maxHeight: 'min(420px, 70vh)',
+        });
+    }
+
+    function buildWrGroupPickList() {
+        const key = wrGroupKeyFromForm();
+        const q = (_wrGroupPickSearch || '').toLowerCase().trim();
+        const matchNode = (n) => !q || TVC_SpareMenu.safeTreeLabel(n.label).toLowerCase().includes(q);
+        const critKey = TVC_SpareMenu.CRITICAL_GROUP_KEY;
+        let html = '';
+        if (!q || 'critical'.includes(q)) {
+            html += `<button type="button" class="spare-consume-pick-item${key === critKey ? ' selected' : ''}"
+                onclick="TVC_App.pickWrGroup('${escAttr(critKey)}','Critical Equipment')">⚠ Critical Equipment</button>`;
+        }
+        (TVC_SpareMenu.getPlanGroupPickNodes(state) || []).filter(matchNode).forEach(n => {
+            html += `<button type="button" class="spare-consume-pick-item${key === n.key ? ' selected' : ''}"
+                onclick="TVC_App.pickWrGroup('${escAttr(n.key)}','${escAttr(n.label)}')">${esc(TVC_SpareMenu.safeTreeLabel(n.label))}</button>`;
+        });
+        return html || '<div class="spare-consume-pick-empty muted">No groups</div>';
+    }
+
+    function buildWrJobPickList() {
+        const gk = wrGroupKeyFromForm();
+        if (!gk) return '<div class="spare-consume-pick-empty muted">Select PMS Group first.</div>';
+        const q = (_wrJobPickSearch || '').toLowerCase().trim();
+        const jobs = (TVC_SpareMenu.getJobsForGroupKey(state, gk) || []).filter(j => {
+            if (!q) return true;
+            return [j.job_code, j.item_sort1, j.item_sort2, j.job_detail].join(' ').toLowerCase().includes(q);
+        });
+        const cur = state.idx?.jobById.get(state._wrJobId);
+        return jobs.map(j => `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-job${cur?.id === j.id ? ' selected' : ''}"
+            onclick="TVC_App.pickWrJob('${escAttr(j.id)}')"><span class="spare-consume-pick-job-code">${esc(j.job_code)}</span></button>`).join('')
+            || '<div class="spare-consume-pick-empty muted">No jobs</div>';
+    }
+
+    function toggleWrGroupPick(ev) {
+        ev?.stopPropagation();
+        const wrap = document.getElementById('wrGroupPick');
+        if (!wrap) return;
+        closeWrPickMenu(document.getElementById('wrJobPick'));
+        if (wrap.classList.contains('open')) { closeWrPickMenu(wrap); return; }
+        wrap.classList.add('open');
+        const list = document.getElementById('wrGroupPickList');
+        if (list) list.innerHTML = buildWrGroupPickList();
+        positionWrPickMenu(wrap, 360);
+        setTimeout(() => document.addEventListener('click', function c(e) {
+            if (!wrap.contains(e.target) && !(wrap._portalMenu?.contains(e.target))) {
+                closeWrPickMenu(wrap); document.removeEventListener('click', c);
+            }
+        }), 0);
+    }
+
+    function toggleWrJobPick(ev) {
+        ev?.stopPropagation();
+        if (!wrGroupKeyFromForm()) return alert('PMS Group No.를 먼저 선택하세요.');
+        const wrap = document.getElementById('wrJobPick');
+        if (!wrap) return;
+        closeWrPickMenu(document.getElementById('wrGroupPick'));
+        if (wrap.classList.contains('open')) { closeWrPickMenu(wrap); return; }
+        wrap.classList.add('open');
+        const list = document.getElementById('wrJobPickList');
+        if (list) list.innerHTML = buildWrJobPickList();
+        positionWrPickMenu(wrap, 420);
+        setTimeout(() => document.addEventListener('click', function c(e) {
+            if (!wrap.contains(e.target) && !(wrap._portalMenu?.contains(e.target))) {
+                closeWrPickMenu(wrap); document.removeEventListener('click', c);
+            }
+        }), 0);
+    }
+
+    function pickWrGroup(groupKey, groupLabel) {
+        captureWorkReportForm();
+        const prev = state._wrForm.pmsGroupKey;
+        state._wrForm.pmsGroupKey = groupKey;
+        state._wrForm.pmsGroupNo = groupLabel;
+        const hdr = TVC_SpareMenu.resolveGroupHeaderByKey(state, groupKey, groupLabel);
+        state._wrForm.maker = hdr.maker || '';
+        state._wrForm.modelType = hdr.modelType || '';
+        state._wrForm.capacity = hdr.capacity || '';
+        state._wrForm.serialNo = hdr.serialNo || '';
+        if (prev !== groupKey) {
+            state._wrForm.jobName = state._wrForm.jobName || '';
+        }
+        closeWrPickMenu(document.getElementById('wrGroupPick'));
+        renderWorkReportModal();
+    }
+
+    function pickWrJob(jobId) {
+        captureWorkReportForm();
+        const job = state.idx?.jobById.get(jobId);
+        if (!job) return;
+        state._wrJobId = jobId;
+        state._wrForm.pmsGroupKey = `${job.department}|${String(job.group || '').trim()}`;
+        state._wrForm.pmsGroupNo = job.group || state._wrForm.pmsGroupNo;
+        const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
+        Object.assign(state._wrForm, {
+            maker: hdr.maker || '', modelType: hdr.modelType || '',
+            capacity: hdr.capacity || '', serialNo: hdr.serialNo || '',
+            runHrs: String(state._wrForm.runHrs || '0'),
+            lastMaintDate: state._wrForm.lastMaintDate || job.last_done || new Date().toISOString().slice(0, 10),
+        });
+        closeWrPickMenu(document.getElementById('wrJobPick'));
+        renderWorkReportModal();
+    }
+
+    function wrGroupPickSearch(v) { _wrGroupPickSearch = v || ''; const l = document.getElementById('wrGroupPickList'); if (l) l.innerHTML = buildWrGroupPickList(); }
+    function wrJobPickSearch(v) { _wrJobPickSearch = v || ''; const l = document.getElementById('wrJobPickList'); if (l) l.innerHTML = buildWrJobPickList(); }
+
+    function renderWrGroupPick(ro) {
+        const text = wf('pmsGroupNo') ? TVC_SpareMenu.safeTreeLabel(wf('pmsGroupNo')) : '— PMS Group 선택 —';
+        if (ro) return `<input class="wr-ro" value="${esc(text)}" readonly>`;
+        return `<div class="spare-consume-meta-pick" id="wrGroupPick"><button type="button" class="spare-consume-pick-trigger" onclick="TVC_App.toggleWrGroupPick(event)">
+            <span class="spare-consume-pick-text">${esc(text)}</span><span class="spare-consume-pick-caret">▾</span></button>
+            <div class="spare-consume-pick-menu"><div class="spare-consume-pick-search"><input type="search" class="search-input" placeholder="Search GROUP…" oninput="TVC_App.wrGroupPickSearch(this.value)" onclick="event.stopPropagation()"></div>
+            <div class="spare-consume-pick-scroll" id="wrGroupPickList"></div></div></div>`;
+    }
+
+    function renderWrJobPick(ro) {
+        const job = state.idx?.jobById.get(state._wrJobId);
+        const text = job?.job_code || '— JOB CODE 선택 —';
+        if (ro) return `<input class="wr-ro" value="${esc(job?.job_code || '')}" readonly>`;
+        const dis = !wrGroupKeyFromForm();
+        return `<div class="spare-consume-meta-pick" id="wrJobPick"><button type="button" class="spare-consume-pick-trigger"${dis ? ' disabled' : ''} onclick="TVC_App.toggleWrJobPick(event)">
+            <span class="spare-consume-pick-text">${esc(text)}</span><span class="spare-consume-pick-caret">▾</span></button>
+            <div class="spare-consume-pick-menu"><div class="spare-consume-pick-search"><input type="search" class="search-input" placeholder="Search JOB CODE…" oninput="TVC_App.wrJobPickSearch(this.value)" onclick="event.stopPropagation()"></div>
+            <div class="spare-consume-pick-scroll" id="wrJobPickList"></div></div></div>`;
+    }
+
+    function wrFormFlag(key) {
+        if (key === 'repairRequest') return !!(wf('repairRequest') || wf('dockingRepair'));
+        if (key === 'shoreSupport') return !!(wf('shoreSupport') || wf('pendingForRepair') || wf('shoreTechnician'));
+        if (key === 'defectCleared') return !!(wf('defectCleared') || wf('allPendingCleared'));
+        return !!wf(key);
+    }
+
+    function renderWrReportFooter(opts = {}) {
+        const {
+            rep = null,
+            ro = false,
+            canEditShipAttach = true,
+            canEditCompanyAttach = false,
+            showShipComment = true,
+        } = opts;
+        const dis = ro ? ' disabled' : '';
+        const roAttr = ro ? ' readonly' : '';
+        const fld = (label, inner, extraCls = '') =>
+            `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
+        const flagChk = (key, label) => `<label class="wr-footer-flag">
+            <input type="checkbox" data-wf="${key}"${wrFormFlag(key) ? ' checked' : ''}${dis}>
+            <span>${esc(label)}</span>
+        </label>`;
+
+        return `<footer class="wr-report-footer">
+            <div class="wr-footer-flags" role="group" aria-label="Report status flags">
+                ${flagChk('repairRequest', 'Repair Request')}
+                ${flagChk('shoreSupport', 'Conducted by Shore Support')}
+                ${flagChk('defectCleared', 'Defect Cleared')}
+            </div>
+            <div class="wr-footer-labor">
+                ${fld('Working Hours', `<input type="number" data-wf="handHours" value="${esc(wf('handHours', '0'))}"${dis}>`)}
+                ${fld('Working Member', `<input type="number" data-wf="handMembers" value="${esc(wf('handMembers', '0'))}"${dis}>`)}
+            </div>
+            ${showShipComment ? `<div class="wr-footer-section wr-footer-ship">
+                ${fld("Ship's Comments", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3"${roAttr}${dis}>${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all')}
+                <div class="wr-footer-attach">${renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach && !ro })}</div>
+            </div>` : ''}
+            <div class="wr-footer-section wr-footer-company">
+                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all')}
+                <div class="wr-footer-attach">${renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach && !ro })}</div>
+            </div>
+        </footer>`;
+    }
+
     function renderWrRepairMaintenanceBody(job, opts = {}) {
         const {
             rep = null,
@@ -3464,22 +3849,15 @@ const TVC_App = (function () {
             batchMode = false,
             batchJobIds = [],
             activeJobId = null,
+            ro = false,
         } = opts;
         const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
         const fld = (label, inner, extraCls = '') => `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
         const inp = (key, val) => `<input data-wf="${key}" value="${esc(wf(key, val))}">`;
         const roWf = (key, val) => `<input class="wr-ro" data-wf="${key}" value="${esc(wf(key, val))}" readonly tabindex="-1">`;
-        const jobCodeEl = batchMode
-            ? `<button type="button" class="wr-maint-batch-code" onclick="TVC_App.openBatchJobPicker()">${esc(job.job_code)}</button>`
-            : `<input class="wr-ro" value="${esc(job.job_code)}" readonly>`;
         const jobInfoBlock = batchMode && batchJobIds.length
             ? renderWrBatchJobRowsHtml(batchJobIds, activeJobId || job.id)
-            : `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
-                    ${fld('Job Code', jobCodeEl)}
-                    ${fld('SORT-1', `<input class="wr-ro" value="${esc(job.item_sort1 || '')}" readonly>`)}
-                    ${fld('SORT-2', `<input class="wr-ro" value="${esc(job.item_sort2 || '')}" readonly>`)}
-                    ${fld('Job Detail', `<input class="wr-ro" value="${esc(job.job_detail || '')}" readonly>`)}
-                </div>`;
+            : '';
 
         return `<div class="wr-maint-form">
             ${renderWrApprovalHtml({
@@ -3492,12 +3870,19 @@ const TVC_App = (function () {
                     ${fld('File No.', inp('fileNo', ''))}
                     ${fld('Voy. No.', inp('voyNo', ''))}
                     ${fld('Place', inp('place', ''))}
-                    ${fld('Work Date', `<input type="date" data-wf="workDate" value="${esc(wf('workDate', today))}">`)}
-                    ${fld('Reported Date', `<input type="date" data-wf="reportDate" value="${esc(wf('reportDate', today))}">`)}
+                    ${fld('Work Date', `<input type="date" data-wf="workDate" value="${esc(wf('workDate', today))}"${ro ? ' disabled' : ''}>`)}
+                    ${fld('Reported Date', `<input type="date" data-wf="reportDate" value="${esc(wf('reportDate', today))}"${ro ? ' disabled' : ''}>`)}
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByName)}" readonly>`)}
-                    ${fld('PMS Group No.', roWf('pmsGroupNo', hdr.pmsGroupNo), 'wr-maint-span-all')}
+                    ${fld('PMS Group No.', batchMode ? roWf('pmsGroupNo', hdr.pmsGroupNo) : renderWrGroupPick(ro), 'wr-maint-span-all')}
                 </div>
                 ${jobInfoBlock}
+                ${!batchMode ? `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
+                    ${fld('Job Code', renderWrJobPick(ro))}
+                    ${fld('SORT-1', `<input class="wr-ro" value="${esc(job.item_sort1 || '')}" readonly>`)}
+                    ${fld('SORT-2', `<input class="wr-ro" value="${esc(job.item_sort2 || '')}" readonly>`)}
+                    ${fld('Job Detail', `<input class="wr-ro" value="${esc(job.job_detail || '')}" readonly>`)}
+                </div>
+                ${fld('Job Name', inp('jobName', ''), 'wr-maint-span-all wr-maint-grid-gap')}` : ''}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
                     ${fld('Maker', roWf('maker', hdr.maker))}
                     ${fld('Model / Type', roWf('modelType', hdr.modelType))}
@@ -3509,18 +3894,13 @@ const TVC_App = (function () {
                     ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', wf('workDate', today)))}">`)}
                     ${fld('Running Hrs after Last Maint.', inp('rhAfterLastMaint', ''))}
                 </div>
-                ${fld('Outline of Maintenance', `<textarea class="wr-maint-textarea" data-wf="outline" rows="3">${esc(wf('outline'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
-                ${fld("Ship's Comments &amp; Desired Articles", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3">${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all')}
-                <div class="wr-maint-attach-wrap">${renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach })}</div>
-                <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap wr-maint-labor">
-                    ${fld('Working Hours', `<input type="number" data-wf="handHours" value="${esc(wf('handHours', '0'))}">`)}
-                    ${fld('Working Member', `<input type="number" data-wf="handMembers" value="${esc(wf('handMembers', '0'))}">`)}
-                    <div class="wr-maint-field wr-maint-chk-field">
-                        <label class="wr-maint-chk"><input type="checkbox" data-wf="shoreTechnician" ${wf('shoreTechnician') ? 'checked' : ''}> Shore Technician</label>
-                    </div>
-                </div>
-                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
-                <div class="wr-maint-attach-wrap">${renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach })}</div>
+                ${fld('Outline of Maintenance', `<textarea class="wr-maint-textarea" data-wf="outline" rows="3"${ro ? ' readonly disabled' : ''}>${esc(wf('outline'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+                ${renderWrReportFooter({
+                    rep,
+                    ro,
+                    canEditShipAttach,
+                    canEditCompanyAttach,
+                })}
             </section>
         </div>`;
     }
@@ -3538,6 +3918,7 @@ const TVC_App = (function () {
             confirmedByVal = '',
             canEditShipAttach = true,
             canEditCompanyAttach = false,
+            ro = false,
         } = opts;
         const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
         const fld = (label, inner, extraCls = '') => `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
@@ -3578,12 +3959,14 @@ const TVC_App = (function () {
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-2 wr-maint-grid-gap">
                     ${fld('Original Due Date', `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly>`)}
-                    ${fld('Postpone Date', `<input type="date" data-wf="postponeDate" value="${esc(wf('postponeDate'))}">`, 'wr-postpone-date')}
+                    ${fld('Postpone Date', `<input type="date" data-wf="postponeDate" value="${esc(wf('postponeDate'))}"${ro ? ' disabled' : ''}>`, 'wr-postpone-date')}
                 </div>
-                ${fld("Ship's Comments &amp; Desired Articles", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3">${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
-                <div class="wr-maint-attach-wrap">${renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach })}</div>
-                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
-                <div class="wr-maint-attach-wrap">${renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach })}</div>
+                ${renderWrReportFooter({
+                    rep,
+                    ro,
+                    canEditShipAttach,
+                    canEditCompanyAttach,
+                })}
             </section>
         </div>`;
     }
@@ -3842,6 +4225,7 @@ const TVC_App = (function () {
                 canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
                 approvedByVal, confirmedByVal,
                 canEditShipAttach, canEditCompanyAttach,
+                ro,
             });
         } else if (state._wrTab === 'postpone') {
             body = renderWrPostponeBody(job, {
@@ -3849,6 +4233,7 @@ const TVC_App = (function () {
                 canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
                 approvedByVal, confirmedByVal,
                 canEditShipAttach, canEditCompanyAttach,
+                ro,
             });
         }
 
@@ -3958,6 +4343,11 @@ const TVC_App = (function () {
             && (!form.lastMaintDate || form.lastMaintDate === (job.last_done || ''))) {
             form.lastMaintDate = form.workDate;
         }
+        if (form.shoreTechnician) form.shoreSupport = true;
+        if (form.shoreSupport) form.shoreTechnician = true;
+        form.dockingRepair = !!form.repairRequest;
+        form.pendingForRepair = !!form.shoreSupport;
+        form.allPendingCleared = !!form.defectCleared;
 
         const description = existingRep?.work_type === 'TROUBLE'
             ? (form.troubleOutline || existingRep.description || job.job_detail)
@@ -4424,10 +4814,11 @@ const TVC_App = (function () {
         openJobDetail, openWorkProcedure, setWorkProcedureTab, openProcedureHistory, openProcedureHistoryByCode,
         openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport,
         uploadWrAttachment, removeWrAttachment,
+        toggleWrGroupPick, toggleWrJobPick, pickWrGroup, pickWrJob, wrGroupPickSearch, wrJobPickSearch,
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,
         togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader,
         setBatchActiveJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
-        openWorkReportFromHistory, modifyWorkReport, selectHistRow,
+        openWorkReportFromHistory, openDefectFromHistory, modifyWorkReport, selectHistRow,
         histDetailWorkReport, histModifyReport, histReportApproval, histDeleteReport,
         toggleHistCheck, toggleHistSelectAll,
         navReport, deleteWorkReport, printWorkReport, closeWorkReport,

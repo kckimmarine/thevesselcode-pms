@@ -699,6 +699,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .pill.ok { background: var(--green); }
 .pill.postponed { background: #805ad5; }
 .pill.pending-apr { background: #3182ce; }
+.pill.defect { background: #c05621; }
+.hist-row-defect .hist-code strong { color: #9c4221; }
 
 /* Actual Plan — status dashboard filters */
 .act-filter-dashboard {
@@ -1028,6 +1030,75 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .wr-maint-date { width: 118px !important; flex: 0 0 auto; }
 .wr-maint-chk-field { justify-content: flex-end; padding-top: 18px; }
 .wr-maint-labor { align-items: end; }
+.wr-maint-field .spare-consume-meta-pick { width: 100%; min-width: 0; }
+.wr-maint-field .spare-consume-pick-trigger { width: 100%; box-sizing: border-box; }
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 2px solid #e2e8f0;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+.wr-footer-flags {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 24px;
+    padding: 12px 16px;
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8);
+}
+.wr-footer-flag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: #2d3748;
+    cursor: pointer;
+    user-select: none;
+}
+.wr-footer-flag input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--navy);
+    flex-shrink: 0;
+}
+.wr-footer-labor {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 200px));
+    gap: 12px 20px;
+    align-items: end;
+}
+.wr-footer-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 12px 14px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+}
+.wr-footer-section.wr-footer-company {
+    background: #fafbfd;
+}
+.wr-footer-section .wr-maint-field > label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #4a5568;
+}
+.wr-footer-attach { margin-top: 2px; }
+.wr-footer-attach .wr-attach-block { margin: 0; }
+@media (max-width: 640px) {
+    .wr-footer-labor { grid-template-columns: 1fr; }
+    .wr-footer-flags { flex-direction: column; align-items: flex-start; }
+}
 .wr-maint-attach-wrap { margin-top: 10px; }
 .wr-maint-attach-wrap .wr-attach-block { margin: 0; display: flex; flex-direction: column; gap: 6px; }
 .wr-maint-attach-wrap .wr-attach-btn {
@@ -2475,6 +2546,18 @@ label.spare-file-pick input[type=file] { display: none; }
     flex-direction: column;
     align-items: flex-start;
     gap: 2px;
+}
+.spare-consume-pick-item-none {
+    border-bottom: 1px solid #e2e8f0;
+    margin-bottom: 4px;
+    padding-bottom: 8px;
+}
+.spare-consume-pick-item-none .spare-consume-pick-job-code {
+    font-weight: 600;
+    color: #64748b;
+}
+.spare-consume-pick-item-none.selected .spare-consume-pick-job-code {
+    color: var(--navy);
 }
 .spare-consume-pick-job-code { font-weight: 700; color: #1e40af; }
 .spare-consume-pick-job-sub {

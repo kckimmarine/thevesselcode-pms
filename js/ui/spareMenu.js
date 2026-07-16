@@ -7232,16 +7232,32 @@ ${renderWrSpareMetaHtml(meta)}
         }
         const prevKey = st.selectedGroupKey;
         const gk = `${job.department || ''}|${String(job.group || '').trim()}`;
-        st.selectedGroupKey = gk;
+        return resolveGroupHeaderByKey(st, gk, job.group || '', prevKey);
+    }
+
+    function resolveGroupHeaderByKey(st, groupKey, groupLabel, restoreKey) {
+        const prevKey = restoreKey !== undefined ? restoreKey : st.selectedGroupKey;
+        st.selectedGroupKey = groupKey || null;
         const h = resolveSpareHeaderFromGroup(st);
         st.selectedGroupKey = prevKey;
+        const label = groupLabel
+            ? safeTreeLabel(groupLabel)
+            : (groupKey ? safeTreeLabel(groupFilterLabel(st)) : '');
         return {
-            pmsGroupNo: safeTreeLabel(job.group || '') || h.pmsGroupNo || '',
+            pmsGroupNo: label || h.pmsGroupNo || '',
             maker: h.maker || '',
             modelType: h.modelType || '',
             capacity: h.capacity || '',
             serialNo: h.serialNo || '',
         };
+    }
+
+    function getPlanGroupPickNodes(st) {
+        return planGroupNodes(st);
+    }
+
+    function getJobsForGroupKey(st, groupKey) {
+        return consumeJobsForGroup(st, groupKey);
     }
 
     function exportDeliveryData() { alert('Delivery Export — 다음 단계'); }
@@ -7263,6 +7279,8 @@ ${renderWrSpareMetaHtml(meta)}
         consumeToggleSelectedOnly, consumeFocusRow, consumeToggleRow, consumeToggleAll, consumeSetQty,
         renderSpareGroupHeaderHtml, renderPlanGroupHeaderHtml,
         renderWrSparePage2Html, initWrSparePage2, teardownWrSparePage2, resolveWrJobHeader,
+        resolveGroupHeaderByKey, getPlanGroupPickNodes, getJobsForGroupKey, findJobByCode, safeTreeLabel,
+        CRITICAL_GROUP_KEY,
         wrSpareSelectGroup, wrSpareSetTreeSearch, wrSpareSetSearch, wrSpareToggleLowOnly,
         wrSpareToggleSelectedOnly, wrSpareFocusRow, wrSpareToggleRow, wrSpareToggleAll, wrSpareSetQty,
         onTxSearchInput, addTxLine, removeTxLine,

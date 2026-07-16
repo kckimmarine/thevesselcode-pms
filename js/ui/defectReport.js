@@ -6,9 +6,372 @@ const TVC_DefectReport = (function () {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     }
 
+    function escAttr(s) {
+        return esc(s).replace(/'/g, '&#39;');
+    }
+
+    const DF_PICK_Z = 10100;
+    let _dfGroupPickSearch = '';
+    let _dfJobPickSearch = '';
+
+    function dfTreeLabel(v) {
+        return TVC_SpareMenu?.safeTreeLabel?.(v) || String(v || '').trim();
+    }
+
+    function dfGroupKey(row) {
+        const key = dfVal(row, 'pms_group_key');
+        if (key) return key;
+        const job = resolveJob(row);
+        if (job?.department && job?.group) return `${job.department}|${String(job.group).trim()}`;
+        const label = dfVal(row, 'pms_group_no');
+        if (!label) return '';
+        const st = getState();
+        const node = (TVC_SpareMenu?.getPlanGroupPickNodes?.(st) || [])
+            .find(n => n.label === label || String(n.label || '').trim() === String(label).trim());
+        return node?.key || '';
+    }
+
+    function dfPickMenuEl(wrap) {
+        return wrap?._portalMenu || wrap?.querySelector('.spare-consume-pick-menu') || null;
+    }
+
+    function dfPickClickInside(wrap, target) {
+        if (!wrap || !target) return false;
+        const menu = dfPickMenuEl(wrap);
+        return wrap.contains(target) || (menu && menu.contains(target));
+    }
+
+    function closeDfPickMenu(wrap) {
+        if (!wrap) return;
+        const menu = dfPickMenuEl(wrap);
+        if (menu) {
+            menu.classList.remove('spare-consume-pick-menu-portal');
+            menu.style.cssText = '';
+            if (wrap._portalMenu && menu.parentNode === document.body) wrap.appendChild(menu);
+        }
+        wrap.classList.remove('open');
+    }
+
+    function closeAllDfPicks() {
+        closeDfPickMenu(document.getElementById('dfGroupPick'));
+        closeDfPickMenu(document.getElementById('dfJobPick'));
+    }
+
+    function positionDfPickMenu(wrap, minWidth = 320) {
+        const trigger = wrap.querySelector('.spare-consume-pick-trigger');
+        let menu = wrap.querySelector('.spare-consume-pick-menu');
+        if (!trigger || !menu) return;
+        if (!wrap._portalMenu) wrap._portalMenu = menu;
+        if (menu.parentNode !== document.body) document.body.appendChild(menu);
+        menu.classList.add('spare-consume-pick-menu-portal');
+        const r = trigger.getBoundingClientRect();
+        menu.style.display = 'flex';
+        menu.style.flexDirection = 'column';
+        menu.style.position = 'fixed';
+        menu.style.left = `${r.left}px`;
+        menu.style.top = `${r.bottom + 2}px`;
+        menu.style.minWidth = `${Math.max(minWidth, r.width)}px`;
+        menu.style.width = `${Math.max(minWidth, r.width)}px`;
+        menu.style.zIndex = String(DF_PICK_Z);
+        menu.style.maxHeight = 'min(420px, 70vh)';
+    }
+
+    function bindDfPickClose(wrap, minWidth) {
+        const close = (e) => {
+            if (!dfPickClickInside(wrap, e.target)) {
+                closeDfPickMenu(wrap);
+                document.removeEventListener('click', close);
+                window.removeEventListener('scroll', onReposition, true);
+                window.removeEventListener('resize', onReposition);
+            }
+        };
+        const onReposition = () => {
+            if (wrap.classList.contains('open')) positionDfPickMenu(wrap, minWidth);
+        };
+        setTimeout(() => {
+            document.addEventListener('click', close);
+            window.addEventListener('scroll', onReposition, true);
+            window.addEventListener('resize', onReposition);
+        }, 0);
+    }
+
+    function buildDfGroupPickList(row) {
+        const st = getState();
+        const draftKey = dfGroupKey(row);
+        const q = (_dfGroupPickSearch || '').toLowerCase().trim();
+        const matchNode = (n) => !q || dfTreeLabel(n.label).toLowerCase().includes(q)
+            || String(n.department || '').toLowerCase().includes(q);
+        const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
+        let html = '';
+        const critKey = TVC_SpareMenu?.CRITICAL_GROUP_KEY || '__CRITICAL_EQUIPMENT__';
+        if (matchCritical) {
+            const sel = draftKey === critKey ? ' selected' : '';
+            html += `<button type="button" class="spare-consume-pick-item${sel}"
+                onclick="TVC_DefectReport.pickDfGroup('${escAttr(critKey)}','${escAttr('Critical Equipment')}')">⚠ Critical Equipment</button>`;
+        }
+        const nodes = (TVC_SpareMenu?.getPlanGroupPickNodes?.(st) || []).filter(matchNode);
+        if (!nodes.length && !matchCritical) {
+            return '<div class="spare-consume-pick-empty muted">PMS GROUP Tree를 불러오는 중…</div>';
+        }
+        let curDept = '';
+        nodes.forEach(n => {
+            if (n.department !== curDept) {
+                html += `<div class="spare-consume-pick-dept">${esc(n.department)}</div>`;
+                curDept = n.department;
+            }
+            const sel = draftKey === n.key ? ' selected' : '';
+            html += `<button type="button" class="spare-consume-pick-item${sel}"
+                onclick="TVC_DefectReport.pickDfGroup('${escAttr(n.key)}','${escAttr(n.label)}')">${esc(dfTreeLabel(n.label))}</button>`;
+        });
+        return html || '<div class="spare-consume-pick-empty muted">검색 결과 없음</div>';
+    }
+
+    function buildDfJobPickList(row) {
+        const st = getState();
+        const groupKey = dfGroupKey(row);
+        if (!groupKey) {
+            return '<div class="spare-consume-pick-empty muted">PMS Group No.를 먼저 선택하세요.</div>';
+        }
+        const q = (_dfJobPickSearch || '').toLowerCase().trim();
+        const jobs = (TVC_SpareMenu?.getJobsForGroupKey?.(st, groupKey) || []).filter(j => {
+            if (!q) return true;
+            const hay = [j.job_code, j.item_sort1, j.item_sort2, j.job_detail].join(' ').toLowerCase();
+            return hay.includes(q);
+        });
+        const selectedCode = dfVal(row, 'pms_job_code');
+        const hasJob = !!(selectedCode || dfVal(row, 'maintenance_job_id'));
+        const clearBtn = `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-none${hasJob ? '' : ' selected'}"
+                onclick="TVC_DefectReport.clearDfJob()">
+                <span class="spare-consume-pick-job-code">— Job Code 없음 —</span>
+                <span class="spare-consume-pick-job-sub muted">PMS Group만 지정 · Job Name 직접 입력</span>
+            </button>`;
+        if (!jobs.length) {
+            return clearBtn + '<div class="spare-consume-pick-empty muted">검색 결과 없음</div>';
+        }
+        return clearBtn + jobs.map(j => {
+            const sel = selectedCode === j.job_code ? ' selected' : '';
+            const sub = [j.item_sort1, j.item_sort2].filter(Boolean).join(' · ');
+            return `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-job${sel}"
+                onclick="TVC_DefectReport.pickDfJob('${escAttr(j.id)}')">
+                <span class="spare-consume-pick-job-code">${esc(j.job_code || '')}</span>
+                ${sub ? `<span class="spare-consume-pick-job-sub">${esc(sub)}</span>` : ''}
+            </button>`;
+        }).join('');
+    }
+
+    function refreshDfGroupPickList() {
+        const list = document.getElementById('dfGroupPickList');
+        const row = getState()._dfDraft || {};
+        if (list) list.innerHTML = buildDfGroupPickList(row);
+    }
+
+    function refreshDfJobPickList() {
+        const list = document.getElementById('dfJobPickList');
+        const row = getState()._dfDraft || {};
+        if (list) list.innerHTML = buildDfJobPickList(row);
+    }
+
+    function dfGroupPickSearch(v) {
+        _dfGroupPickSearch = v || '';
+        refreshDfGroupPickList();
+        const wrap = document.getElementById('dfGroupPick');
+        if (wrap?.classList.contains('open')) positionDfPickMenu(wrap, 360);
+    }
+
+    function dfJobPickSearch(v) {
+        _dfJobPickSearch = v || '';
+        refreshDfJobPickList();
+        const wrap = document.getElementById('dfJobPick');
+        if (wrap?.classList.contains('open')) positionDfPickMenu(wrap, 420);
+    }
+
+    function toggleDfGroupPick(ev) {
+        ev?.stopPropagation();
+        const wrap = document.getElementById('dfGroupPick');
+        if (!wrap) return;
+        const opening = !wrap.classList.contains('open');
+        closeDfPickMenu(document.getElementById('dfJobPick'));
+        if (!opening) {
+            closeDfPickMenu(wrap);
+            return;
+        }
+        wrap.classList.add('open');
+        refreshDfGroupPickList();
+        positionDfPickMenu(wrap, 360);
+        bindDfPickClose(wrap, 360);
+    }
+
+    function toggleDfJobPick(ev) {
+        ev?.stopPropagation();
+        const row = getState()._dfDraft || {};
+        if (!dfGroupKey(row)) return alert('PMS Group No.를 먼저 선택하세요.');
+        const wrap = document.getElementById('dfJobPick');
+        if (!wrap) return;
+        const opening = !wrap.classList.contains('open');
+        closeDfPickMenu(document.getElementById('dfGroupPick'));
+        if (!opening) {
+            closeDfPickMenu(wrap);
+            return;
+        }
+        wrap.classList.add('open');
+        refreshDfJobPickList();
+        positionDfPickMenu(wrap, 420);
+        bindDfPickClose(wrap, 420);
+    }
+
+    function rerenderDefectForm() {
+        captureDfFormFields();
+        const s = getState();
+        const row = { ...(s._dfDraft || {}), id: s._defectCaseId };
+        const host = document.getElementById('defectReportBody');
+        if (host) host.innerHTML = renderModalBody(row, s._defectMode);
+    }
+
+    function applyDfGroupHeader(st, draft, groupKey, groupLabel) {
+        const hdr = TVC_SpareMenu?.resolveGroupHeaderByKey?.(st, groupKey, groupLabel) || {};
+        draft.pms_group_key = groupKey;
+        draft.pms_group_no = groupLabel;
+        draft.machinery_name = hdr.machineryName || draft.machinery_name || '';
+        draft.maker = hdr.maker || '';
+        draft.manufacturer = hdr.maker || '';
+        draft.model_type = hdr.modelType || '';
+        draft.capacity = hdr.capacity || '';
+        draft.serial_no = hdr.serialNo || '';
+        draft.type_model_serial = [hdr.modelType, hdr.serialNo].filter(Boolean).join(' / ');
+    }
+
+    function pickDfGroup(groupKey, groupLabel) {
+        captureDfFormFields();
+        const s = getState();
+        const draft = s._dfDraft;
+        if (!draft) return;
+        const prevKey = draft.pms_group_key || dfGroupKey(draft);
+        if (prevKey !== groupKey) {
+            draft.maintenance_job_id = '';
+            draft.pms_job_code = '';
+            draft.item_sort1 = '';
+            draft.item_sort2 = '';
+            draft.job_detail = '';
+        }
+        applyDfGroupHeader(s, draft, groupKey, groupLabel);
+        closeDfPickMenu(document.getElementById('dfGroupPick'));
+        rerenderDefectForm();
+    }
+
+    function pickDfJob(jobId) {
+        captureDfFormFields();
+        const s = getState();
+        const draft = s._dfDraft;
+        if (!draft) return;
+        const job = s.idx?.jobById?.get(jobId) || s.jobs?.find(j => j.id === jobId);
+        if (!job) return;
+        draft.maintenance_job_id = job.id;
+        draft.pms_job_code = job.job_code || '';
+        draft.item_sort1 = job.item_sort1 || '';
+        draft.item_sort2 = job.item_sort2 || '';
+        draft.job_detail = job.job_detail || '';
+        draft.last_maintenance_date = job.last_done || draft.last_maintenance_date || '';
+        const hdr = TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || {};
+        draft.machinery_name = hdr.machineryName || job.item_sort1 || draft.machinery_name || '';
+        closeDfPickMenu(document.getElementById('dfJobPick'));
+        rerenderDefectForm();
+    }
+
+    function clearDfJob() {
+        captureDfFormFields();
+        const s = getState();
+        const draft = s._dfDraft;
+        if (!draft) return;
+        draft.maintenance_job_id = '';
+        draft.job_code = '';
+        draft.pms_job_code = '';
+        draft.item_sort1 = '';
+        draft.item_sort2 = '';
+        draft.job_detail = '';
+        const hdr = resolveDfGroupHeader(s, draft);
+        draft.machinery_name = hdr.machineryName || '';
+        closeDfPickMenu(document.getElementById('dfJobPick'));
+        rerenderDefectForm();
+    }
+
+    function renderDfGroupPick(row, ro) {
+        const label = dfVal(row, 'pms_group_no');
+        const text = label ? dfTreeLabel(label) : '— PMS Group 선택 —';
+        if (ro) {
+            return `<input class="wr-ro" value="${esc(text)}" readonly tabindex="-1">`;
+        }
+        return `<div class="spare-consume-meta-pick" id="dfGroupPick">
+            <button type="button" class="spare-consume-pick-trigger" onclick="TVC_DefectReport.toggleDfGroupPick(event)">
+                <span class="spare-consume-pick-text">${esc(text)}</span>
+                <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="spare-consume-pick-menu" role="listbox" aria-label="PMS Group No.">
+                <div class="spare-consume-pick-search">
+                    <input type="search" class="search-input" placeholder="Search GROUP…" value="${esc(_dfGroupPickSearch)}"
+                        oninput="TVC_DefectReport.dfGroupPickSearch(this.value)" onclick="event.stopPropagation()">
+                </div>
+                <div class="spare-consume-pick-head muted">PMS GROUP Tree</div>
+                <div class="spare-consume-pick-scroll" id="dfGroupPickList"></div>
+            </div>
+        </div>`;
+    }
+
+    function renderDfJobPick(row, ro) {
+        const code = dfVal(row, 'pms_job_code');
+        const text = code || '— JOB CODE 선택 —';
+        const disabled = !dfGroupKey(row);
+        if (ro) {
+            return `<input class="wr-ro" value="${esc(code || '—')}" readonly tabindex="-1">`;
+        }
+        return `<div class="spare-consume-meta-pick" id="dfJobPick">
+            <button type="button" class="spare-consume-pick-trigger"${disabled ? ' disabled' : ''} onclick="TVC_DefectReport.toggleDfJobPick(event)">
+                <span class="spare-consume-pick-text">${esc(text)}</span>
+                <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
+            </button>
+            <div class="spare-consume-pick-menu" role="listbox" aria-label="JOB CODE">
+                <div class="spare-consume-pick-search">
+                    <input type="search" class="search-input" placeholder="Search JOB CODE / SORT / DETAIL…" value="${esc(_dfJobPickSearch)}"
+                        oninput="TVC_DefectReport.dfJobPickSearch(this.value)" onclick="event.stopPropagation()">
+                </div>
+                <div class="spare-consume-pick-scroll" id="dfJobPickList"></div>
+            </div>
+        </div>`;
+    }
+
     function init(ctx) { _ctx = ctx; }
 
     function getState() { return _ctx?.getState?.() || {}; }
+
+    function dfHasLinkedJob(row) {
+        return !!(String(dfVal(row, 'pms_job_code') || '').trim() || String(dfVal(row, 'maintenance_job_id') || '').trim());
+    }
+
+    function resolveDfGroupHeader(st, row) {
+        const groupKey = dfGroupKey(row);
+        if (!groupKey) return {};
+        return TVC_SpareMenu?.resolveGroupHeaderByKey?.(st, groupKey, dfVal(row, 'pms_group_no')) || {};
+    }
+
+    /** Submit/Save 전 — machinery_name·Job 연동 필드 정규화 */
+    function normalizeDfSubmitRow(st, row) {
+        const hasJob = dfHasLinkedJob(row);
+        if (!hasJob) {
+            row.maintenance_job_id = '';
+            row.pms_job_code = '';
+            row.item_sort1 = '';
+            row.item_sort2 = '';
+            row.job_detail = '';
+        }
+        const groupHdr = resolveDfGroupHeader(st, row);
+        const job = hasJob ? resolveJob(row) : null;
+        const jobHdr = job && TVC_SpareMenu?.resolveWrJobHeader?.(st, job) || {};
+        row.machinery_name = String(row.machinery_name || '').trim()
+            || String(row.job_name || '').trim()
+            || (hasJob ? String(row.item_sort1 || job?.item_sort1 || '').trim() : '')
+            || String(groupHdr.machineryName || jobHdr.machineryName || '').trim()
+            || dfTreeLabel(row.pms_group_no || '');
+        return row;
+    }
 
     function resolveJob(row) {
         const s = getState();
@@ -57,6 +420,8 @@ const TVC_DefectReport = (function () {
             if (el.type === 'checkbox') draft[key] = el.checked;
             else draft[key] = el.value;
         });
+        if (draft.shore_support) draft.shore_technician = true;
+        else if (draft.shore_technician && draft.shore_support == null) draft.shore_support = true;
         host.querySelectorAll('input[type=radio][data-df]:checked').forEach(el => {
             const key = el.dataset.df;
             if (key === 'dp_closed_satisfactory') draft[key] = el.value === 'true';
@@ -270,11 +635,55 @@ const TVC_DefectReport = (function () {
         </div>`;
     }
 
+    function dfFlagChecked(row, name) {
+        if (name === 'shore_support') return !!(dfVal(row, 'shore_support') || dfVal(row, 'shore_technician'));
+        return !!dfVal(row, name);
+    }
+
+    function renderDfReportFooter(row, opts = {}) {
+        const ro = opts.readonly;
+        const dis = ro ? ' disabled' : '';
+        const roAttr = ro ? ' readonly' : '';
+        const canEditShipAttach = !ro;
+        const canEditCompanyAttach = isHq() && TVC_DefectCase.isPhase2Editable(row);
+        const fld = (label, inner, extraCls = '') =>
+            `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
+        const inp = (name, val, type = 'text') => {
+            const v = esc(dfVal(row, name, val));
+            if (type === 'number') return `<input type="number" data-df="${name}" class="${ro ? 'wr-ro' : ''}" value="${v}"${roAttr}${dis}>`;
+            return `<input data-df="${name}" class="${ro ? 'wr-ro' : ''}" value="${v}"${roAttr}${dis}>`;
+        };
+        const flagChk = (name, label) => `<label class="wr-footer-flag">
+            <input type="checkbox" data-df="${name}"${dfFlagChecked(row, name) ? ' checked' : ''}${dis}>
+            <span>${esc(label)}</span>
+        </label>`;
+
+        return `<footer class="wr-report-footer">
+            <div class="wr-footer-flags" role="group" aria-label="Report status flags">
+                ${flagChk('repair_request', 'Repair Request')}
+                ${flagChk('shore_support', 'Conducted by Shore Support')}
+                ${flagChk('defect_cleared', 'Defect Cleared')}
+            </div>
+            <div class="wr-footer-labor">
+                ${fld('Working Hours', inp('working_hours', '0', 'number'))}
+                ${fld('Working Member', inp('working_member', '0', 'number'))}
+            </div>
+            <div class="wr-footer-section wr-footer-ship">
+                <div class="wr-footer-attach">${renderDfAttachmentBlock('ship', { canUpload: canEditShipAttach })}</div>
+            </div>
+            <div class="wr-footer-section wr-footer-company">
+                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(dfVal(row, 'company_comment', row.company_initial_reply || ''))}</textarea>`, 'wr-maint-span-all')}
+                <div class="wr-footer-attach">${renderDfAttachmentBlock('company', { canUpload: canEditCompanyAttach })}</div>
+            </div>
+        </footer>`;
+    }
+
     function renderPhase1(row, readonly) {
         ensureDfDraft(row);
         const s = getState();
-        const job = resolveJob(row);
-        const hdr = job && TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || {};
+        const hasJob = dfHasLinkedJob(row);
+        const job = hasJob ? resolveJob(row) : null;
+        const hdr = job && TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || resolveDfGroupHeader(s, row);
         const ro = readonly;
         const roAttr = ro ? ' readonly' : '';
         const roCls = ro ? ' wr-ro' : '';
@@ -287,8 +696,6 @@ const TVC_DefectReport = (function () {
             return `<input data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
         };
         const ta = (name, val, rows = 3) => `<textarea class="wr-maint-textarea${roCls}" data-df="${name}" rows="${rows}"${roAttr}>${esc(dfVal(row, name, val))}</textarea>`;
-        const canEditShipAttach = !ro;
-        const canEditCompanyAttach = isHq() && TVC_DefectCase.isPhase2Editable(row);
 
         return `<div class="wr-maint-form">
             <section class="wr-maint-card wr-maint-body">
@@ -296,22 +703,23 @@ const TVC_DefectReport = (function () {
                     ${fld('File No.', inp('file_no', ''))}
                     ${fld('Voy. No.', inp('voy_no', ''))}
                     ${fld('Place', inp('place', ''))}
-                    ${fld('Work Date', inp('work_date', row.report_date, 'date'))}
+                    ${fld('Occurred Date', inp('work_date', row.report_date, 'date'))}
                     ${fld('Reported Date', inp('report_date', row.report_date, 'date'))}
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByLabel(row))}" readonly>`)}
-                    ${fld('PMS Group No.', inp('pms_group_no', hdr.pmsGroupNo || row.pms_group_no || job?.group || ''), 'wr-maint-span-all')}
+                    ${fld('PMS Group No.', renderDfGroupPick(row, ro), 'wr-maint-span-all')}
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
-                    ${fld('Job Code', `<input class="wr-ro" value="${esc(dfVal(row, 'pms_job_code', job?.job_code || ''))}" readonly>`)}
-                    ${fld('SORT-1', `<input class="wr-ro" value="${esc(dfVal(row, 'item_sort1', job?.item_sort1 || ''))}" readonly>`)}
-                    ${fld('SORT-2', `<input class="wr-ro" value="${esc(dfVal(row, 'item_sort2', job?.item_sort2 || ''))}" readonly>`)}
-                    ${fld('Job Detail', `<input class="wr-ro" value="${esc(dfVal(row, 'job_detail', job?.job_detail || ''))}" readonly>`)}
+                    ${fld('Job Code', renderDfJobPick(row, ro))}
+                    ${fld('SORT-1', `<input class="wr-ro" data-df="item_sort1" value="${esc(hasJob ? dfVal(row, 'item_sort1', job?.item_sort1 || '') : '')}" readonly tabindex="-1">`)}
+                    ${fld('SORT-2', `<input class="wr-ro" data-df="item_sort2" value="${esc(hasJob ? dfVal(row, 'item_sort2', job?.item_sort2 || '') : '')}" readonly tabindex="-1">`)}
+                    ${fld('Job Detail', `<input class="wr-ro" data-df="job_detail" value="${esc(hasJob ? dfVal(row, 'job_detail', job?.job_detail || '') : '')}" readonly tabindex="-1">`)}
                 </div>
+                ${fld('Job Name', inp('job_name', ''), 'wr-maint-span-all wr-maint-grid-gap')}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
-                    ${fld('Maker', inp('maker', hdr.maker || row.manufacturer || ''))}
-                    ${fld('Model / Type', inp('model_type', hdr.modelType || row.model_type || ''))}
-                    ${fld('Capacity', inp('capacity', hdr.capacity || row.capacity || ''))}
-                    ${fld('Serial No.', inp('serial_no', hdr.serialNo || row.serial_no || ''))}
+                    ${fld('Maker', `<input class="wr-ro" data-df="maker" value="${esc(dfVal(row, 'maker', hdr.maker || row.manufacturer || ''))}" readonly tabindex="-1">`)}
+                    ${fld('Model / Type', `<input class="wr-ro" data-df="model_type" value="${esc(dfVal(row, 'model_type', hdr.modelType || row.model_type || ''))}" readonly tabindex="-1">`)}
+                    ${fld('Capacity', `<input class="wr-ro" data-df="capacity" value="${esc(dfVal(row, 'capacity', hdr.capacity || row.capacity || ''))}" readonly tabindex="-1">`)}
+                    ${fld('Serial No.', `<input class="wr-ro" data-df="serial_no" value="${esc(dfVal(row, 'serial_no', hdr.serialNo || row.serial_no || ''))}" readonly tabindex="-1">`)}
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap">
                     ${fld('Total Run Hrs', inp('total_run_hrs', '0', 'number'))}
@@ -322,16 +730,7 @@ const TVC_DefectReport = (function () {
                 ${fld('Estimated Cause of Defect', ta('estimated_cause', ''), 'wr-maint-span-all')}
                 ${fld('Possible Effect to Other System', ta('possible_effect', ''), 'wr-maint-span-all')}
                 ${fld('Action Plan / Corrective Action', ta('action_taken', ''), 'wr-maint-span-all')}
-                <div class="wr-maint-attach-wrap">${renderDfAttachmentBlock('ship', { canUpload: canEditShipAttach })}</div>
-                <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap wr-maint-labor">
-                    ${fld('Working Hours', inp('working_hours', '0', 'number'))}
-                    ${fld('Working Member', inp('working_member', '0', 'number'))}
-                    <div class="wr-maint-field wr-maint-chk-field">
-                        <label class="wr-maint-chk"><input type="checkbox" data-df="shore_technician"${dfVal(row, 'shore_technician') ? ' checked' : ''}${dis}> Shore Technician</label>
-                    </div>
-                </div>
-                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(dfVal(row, 'company_comment', row.company_initial_reply || ''))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
-                <div class="wr-maint-attach-wrap">${renderDfAttachmentBlock('company', { canUpload: canEditCompanyAttach })}</div>
+                ${renderDfReportFooter(row, { readonly: ro })}
             </section>
         </div>`;
     }
@@ -440,11 +839,12 @@ const TVC_DefectReport = (function () {
 
     function captureForm() {
         const draft = captureDfFormFields();
-        return {
+        const st = getState();
+        return normalizeDfSubmitRow(st, {
             ...draft,
             ship_attachments: dfAttachmentList('ship'),
             company_attachments: dfAttachmentList('company'),
-        };
+        });
     }
 
     async function openCase(id, mode) {
@@ -477,6 +877,8 @@ const TVC_DefectReport = (function () {
         row.item_sort1 = job.item_sort1 || row.item_sort1;
         row.item_sort2 = job.item_sort2 || row.item_sort2;
         row.job_detail = job.job_detail || row.job_detail;
+        row.pms_group_key = `${job.department}|${String(job.group || '').trim()}`;
+        row.pms_group_no = job.group || row.pms_group_no;
         await TVC_DefectCaseService.saveDraft(s.user, row, row.id);
         await refresh();
         openCase(row.id);
@@ -587,6 +989,9 @@ const TVC_DefectReport = (function () {
     }
 
     function closeModal() {
+        closeAllDfPicks();
+        _dfGroupPickSearch = '';
+        _dfJobPickSearch = '';
         document.getElementById('defectReportModal')?.classList.add('hidden');
         const s = getState();
         s._defectCaseId = null;
@@ -598,6 +1003,7 @@ const TVC_DefectReport = (function () {
         init, renderInbox, renderTab, openCase, openNewFromJob, openNewBlank,
         saveDraft, submitCase, saveHqReply, saveShipPhase3, saveHqPhase4, startWork,
         printCase, closeModal, captureForm, uploadAttachment, removeAttachment,
+        toggleDfGroupPick, toggleDfJobPick, pickDfGroup, pickDfJob, clearDfJob, dfGroupPickSearch, dfJobPickSearch,
         filteredCases, statusLabel,
     };
 })();

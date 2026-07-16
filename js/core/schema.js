@@ -624,13 +624,14 @@ const TVC_DefectCase = (function () {
     const PHASE1_FIELDS = [
         'to_company', 'case_no', 'ship_name', 'report_date', 'work_date',
         'file_no', 'voy_no', 'place',
-        'pms_group_no', 'pms_job_code', 'item_sort1', 'item_sort2', 'job_detail',
+        'pms_group_no', 'pms_job_code', 'item_sort1', 'item_sort2', 'job_detail', 'job_name', 'pms_group_key',
         'last_maintenance_date', 'rh_since_last_maintenance', 'total_run_hrs',
         'expect_date_place', 'machinery_name', 'manufacturer', 'maker', 'model_type', 'capacity', 'serial_no',
         'chief_engineer', 'master',
         'outline_maintenance_request', 'estimated_cause', 'possible_effect', 'action_taken',
         'ship_attachments', 'company_attachments', 'company_comment',
         'working_hours', 'working_member', 'shore_technician',
+        'repair_request', 'shore_support', 'defect_cleared',
     ];
 
     const PHASE2_FIELDS = [
@@ -672,10 +673,12 @@ const TVC_DefectCase = (function () {
             voy_no: overrides.voy_no || '',
             place: overrides.place || '',
             pms_group_no: overrides.pms_group_no || '',
+            pms_group_key: overrides.pms_group_key || '',
             pms_job_code: overrides.pms_job_code || '',
             item_sort1: overrides.item_sort1 || '',
             item_sort2: overrides.item_sort2 || '',
             job_detail: overrides.job_detail || '',
+            job_name: overrides.job_name || '',
             last_maintenance_date: overrides.last_maintenance_date || '',
             rh_since_last_maintenance: overrides.rh_since_last_maintenance ?? '',
             total_run_hrs: overrides.total_run_hrs ?? '0',
@@ -699,6 +702,9 @@ const TVC_DefectCase = (function () {
             working_hours: overrides.working_hours ?? '0',
             working_member: overrides.working_member ?? '0',
             shore_technician: !!overrides.shore_technician,
+            repair_request: !!overrides.repair_request,
+            shore_support: !!(overrides.shore_support ?? overrides.shore_technician),
+            defect_cleared: !!overrides.defect_cleared,
             company_initial_reply: '',
             permit_to_work: '',
             reply_by: '',
@@ -729,10 +735,12 @@ const TVC_DefectCase = (function () {
             job_code: job?.job_code || '',
             department: job?.department || '',
             pms_group_no: job?.group || '',
+            pms_group_key: job?.department ? `${job.department}|${String(job.group || '').trim()}` : '',
             pms_job_code: job?.job_code || '',
             item_sort1: job?.item_sort1 || '',
             item_sort2: job?.item_sort2 || '',
             job_detail: job?.job_detail || '',
+            job_name: overrides.job_name || '',
             machinery_name: hdr.machineryName || job?.item_sort1 || '',
             manufacturer: hdr.maker || '',
             maker: hdr.maker || '',
@@ -793,7 +801,8 @@ const TVC_DefectCase = (function () {
     function validatePhase1(row) {
         const missing = [];
         if (!String(row.outline_maintenance_request || '').trim()) missing.push('Outline of Defect');
-        if (!String(row.machinery_name || '').trim()) missing.push('Machinery name');
+        const machinery = String(row.machinery_name || row.job_name || '').trim();
+        if (!machinery) missing.push('Job Name');
         if (!String(row.report_date || '').trim()) missing.push('Date');
         return { ok: !missing.length, missing };
     }

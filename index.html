@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260716-menu-flow">
+    <link rel="stylesheet" href="css/app.css?v=20260716-hist-defect">
 </head>
 <body>
 
@@ -251,19 +251,19 @@
                 <button type="button" id="histBtnModify" class="btn btn-sm" disabled onclick="TVC_App.histModifyReport()">Modify</button>
                 <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
                 <span class="orig-toolbar-sep"></span>
-                <input class="search-input" id="histSearch" placeholder="Search JOB CODE / DETAIL…" oninput="TVC_App.setSearch(this.value)">
+                <input class="search-input" id="histSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_App.setSearch(this.value)">
                 <span class="count-label" id="histCount">—</span>
             </div>
-            <p class="hist-legend">DR: Docking Repair · PR: Pending for Repair · CL: All Pending Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
+            <p class="hist-legend">RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
             <div class="sheet-table-wrap">
                 <table class="sheet-table hist-table">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
                         <th>Job Code</th><th>SORT-1</th><th>SORT-2</th><th>JOB DETAIL</th>
-                        <th>Work Date</th><th>Status</th><th>File No</th><th>Voy. No</th>
-                        <th class="hist-flag-h" title="Docking Repair">DR</th>
-                        <th class="hist-flag-h" title="Pending for Repair">PR</th>
-                        <th class="hist-flag-h" title="All Pending Cleared">CL</th>
+                        <th>Work Date</th><th>Status</th>
+                        <th class="hist-flag-h" title="Repair Request">RR</th>
+                        <th class="hist-flag-h" title="Conducted by Shore Support">SS</th>
+                        <th class="hist-flag-h" title="Defect Cleared">DC</th>
                         <th class="hist-flag-h" title="Ship's Comment">SC</th>
                         <th class="hist-flag-h" title="Company's Comment">CC</th>
                         <th class="hist-at-h" title="Ship's Attachment">Ship's AT</th>
@@ -444,14 +444,14 @@
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/rbac.js?v=20260716-report-flow"></script>
-<script src="js/core/schema.js?v=20260716-report-flow"></script>
+<script src="js/core/schema.js?v=20260716-df-submit"></script>
 <script src="js/core/db.js"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260716-postpone-nextdate"></script>
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260716-pms-group-space"></script>
+<script src="js/ui/spareMenu.js?v=20260716-df-pick"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -469,8 +469,8 @@
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260708-req-draft-only"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/ui/defectReport.js?v=20260716-defect-wr-layout"></script>
-<script src="js/app.js?v=20260716-menu-clean"></script>
+<script src="js/ui/defectReport.js?v=20260716-df-submit"></script>
+<script src="js/app.js?v=20260716-hist-defect"></script>
 <script src="js/pwa.js?v=20260715-defect-v3"></script>
 </body>
 </html>
