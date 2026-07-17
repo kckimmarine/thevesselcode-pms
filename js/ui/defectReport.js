@@ -690,21 +690,7 @@ const TVC_DefectReport = (function () {
     }
 
     function matchDfListSearch(row) {
-        const q = (_dfListSearch || '').toLowerCase().trim();
-        if (!q) return true;
-        const cols = defectListColumns(row);
-        const hay = [
-            row.case_no,
-            row.file_no,
-            row.voy_no,
-            cols.jobCode,
-            cols.jobName,
-            row.machinery_name,
-            row.pms_group_no,
-            row.outline_maintenance_request,
-            statusLabel(row),
-        ].filter(Boolean).join(' ').toLowerCase();
-        return hay.includes(q);
+        return TVC_App.matchDefectHistSearch?.(row, _dfListSearch) ?? true;
     }
 
     function defectListRows() {
@@ -773,6 +759,7 @@ const TVC_DefectReport = (function () {
         const body = document.getElementById('defectTabBody');
         if (!body || body._dfListEventsBound) return;
         body._dfListEventsBound = true;
+        TVC_App.initHistCellTips?.();
         body.addEventListener('change', (ev) => {
             const cb = ev.target.closest('.df-list-chk-input');
             if (!cb || cb.disabled) return;
@@ -988,7 +975,7 @@ const TVC_DefectReport = (function () {
         pruneDfListChecked();
         const all = defectListRowsRaw();
         const rows = defectListRows();
-        const colSpan = 7;
+        const colSpan = 15;
         const countEl = document.getElementById('dfListCount');
         if (countEl) countEl.textContent = `${rows.length} / ${all.length} entries`;
         const searchEl = document.getElementById('dfListSearch');
@@ -1006,24 +993,17 @@ const TVC_DefectReport = (function () {
         }
 
         body.innerHTML = rows.map(r => {
-            const cols = defectListColumns(r);
-            const occurred = formatDfDate(r.work_date || r.report_date);
-            const closed = defectListClosedOut(r);
-            const sel = _dfListSelId === r.id ? ' row-selected' : '';
             const canCheck = isDfListRowCheckable(r);
             const checked = canCheck && !!_dfListChecked?.[r.id];
             const chk = canCheck
                 ? `<input type="checkbox" class="df-list-chk-input"${checked ? ' checked' : ''}>`
                 : `<input type="checkbox" disabled title="${escAttr(dfListCheckDisabledTitle(r))}">`;
-            return `<tr class="df-list-row hist-row${sel}" data-df-id="${escAttr(r.id)}" onclick="TVC_DefectReport.selectDfListRow('${escAttr(r.id)}', event)" ondblclick="TVC_DefectReport.openCaseFromList('${escAttr(r.id)}')">
-                <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
-                <td class="df-list-date">${esc(occurred || '—')}</td>
-                <td class="df-list-file">${esc(r.file_no || '—')}</td>
-                <td class="df-list-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
-                <td class="df-list-name">${esc(cols.jobName || '—')}</td>
-                <td><span class="defect-status tone-${statusTone(r)}">${esc(statusLabel(r))}</span></td>
-                <td class="df-list-closed">${esc(closed || '—')}</td>
-            </tr>`;
+            return TVC_App.buildDefectHistRowHtml(r, {
+                selected: _dfListSelId === r.id,
+                checkboxHtml: chk,
+                onclick: `TVC_DefectReport.selectDfListRow('${escAttr(r.id)}', event)`,
+                ondblclick: `TVC_DefectReport.openCaseFromList('${escAttr(r.id)}')`,
+            });
         }).join('');
         updateDfListToolbarState();
     }

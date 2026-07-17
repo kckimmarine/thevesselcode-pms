@@ -2924,28 +2924,78 @@ const TVC_App = (function () {
     }
 
     function initHistCellTips() {
-        const container = document.querySelector('#tab-history .sheet-table-wrap');
-        if (!container || container._histTipsBound) return;
-        container._histTipsBound = true;
-        const syncTip = (tip) => {
-            const textEl = tip.querySelector('.vl-cell-tip-text');
-            const truncated = textEl && textEl.scrollWidth > textEl.clientWidth + 1;
-            tip.classList.toggle('vl-cell-tip-active', !!truncated);
-            tip.closest('td')?.classList.toggle('hist-cell-tip-open', !!truncated);
-        };
-        container.addEventListener('mouseover', (e) => {
-            const tip = e.target.closest('.vl-cell-tip');
-            if (!tip || !container.contains(tip)) return;
-            syncTip(tip);
+        document.querySelectorAll('#tab-history .sheet-table-wrap, #tab-defect .sheet-table-wrap').forEach(container => {
+            if (container._histTipsBound) return;
+            container._histTipsBound = true;
+            const syncTip = (tip) => {
+                const textEl = tip.querySelector('.vl-cell-tip-text');
+                const truncated = textEl && textEl.scrollWidth > textEl.clientWidth + 1;
+                tip.classList.toggle('vl-cell-tip-active', !!truncated);
+                tip.closest('td')?.classList.toggle('hist-cell-tip-open', !!truncated);
+            };
+            container.addEventListener('mouseover', (e) => {
+                const tip = e.target.closest('.vl-cell-tip');
+                if (!tip || !container.contains(tip)) return;
+                syncTip(tip);
+            });
+            container.addEventListener('mouseout', (e) => {
+                const from = e.target.closest('.vl-cell-tip');
+                const to = e.relatedTarget?.closest?.('.vl-cell-tip');
+                if (from && from !== to) {
+                    from.classList.remove('vl-cell-tip-active');
+                    from.closest('td')?.classList.remove('hist-cell-tip-open');
+                }
+            });
         });
-        container.addEventListener('mouseout', (e) => {
-            const from = e.target.closest('.vl-cell-tip');
-            const to = e.relatedTarget?.closest?.('.vl-cell-tip');
-            if (from && from !== to) {
-                from.classList.remove('vl-cell-tip-active');
-                from.closest('td')?.classList.remove('hist-cell-tip-open');
-            }
-        });
+    }
+
+    function matchDefectHistSearch(dc, q) {
+        q = (q || '').toLowerCase().trim();
+        if (!q) return true;
+        const cols = defectHistoryColumns(dc);
+        const hay = [
+            cols.jobCode,
+            cols.sort1,
+            cols.sort2,
+            cols.jobDetail,
+            dc.case_no,
+            dc.file_no,
+            dc.pms_group_no,
+            dc.pms_job_code,
+            dc.job_name,
+            dc.machinery_name,
+            defectHistoryStatusLabel(dc),
+        ].filter(Boolean).join(' ').toLowerCase();
+        return hay.includes(q);
+    }
+
+    function buildDefectHistRowHtml(dc, opts = {}) {
+        const cols = defectHistoryColumns(dc);
+        const dt = formatCmaxsHistDate(dc.work_date || dc.report_date || dc.submitted_at || dc.created_at);
+        const st = defectHistoryStatusLabel(dc);
+        const flags = defectHistoryFormFlags(dc);
+        const sel = opts.selected ? ' row-selected' : '';
+        const rowKey = opts.rowKey || histDefectRowKey(dc.id);
+        const chk = opts.checkboxHtml ?? '<input type="checkbox" disabled>';
+        const onclick = opts.onclick ? ` onclick="${opts.onclick}"` : '';
+        const ondblclick = opts.ondblclick ? ` ondblclick="${opts.ondblclick}"` : '';
+        return `<tr class="hist-row hist-row-defect${sel}" data-df-id="${escAttr(dc.id)}" data-hist-key="${escAttr(rowKey)}"${onclick}${ondblclick}>
+                <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
+                <td class="hist-type hist-type-defect" title="Defect Report"><span class="hist-type-mark">D</span></td>
+                <td class="hist-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
+                <td class="hist-sort1">${histCellHtml(cols.sort1)}</td>
+                <td class="hist-sort2">${histCellHtml(cols.sort2)}</td>
+                <td class="hist-detail">${histCellHtml(cols.jobDetail)}</td>
+                <td class="hist-date">${esc(dt || '—')}</td>
+                <td>${esc(st)}</td>
+                ${histFlagCell(flags.repairRequest)}
+                ${histFlagCell(flags.shoreSupport)}
+                ${histFlagCell(flags.defectCleared)}
+                ${histFlagCell(flags.shipComment)}
+                ${histFlagCell(flags.companyComment)}
+                ${histAttachmentCell(dc.ship_attachments)}
+                ${histAttachmentCell(dc.company_attachments)}
+            </tr>`;
     }
 
     function bindWorkHistoryTableEvents() {
@@ -3181,30 +3231,16 @@ const TVC_App = (function () {
         body.innerHTML = entries.map(entry => {
             if (isHistDefectEntry(entry)) {
                 const dc = entry.defect;
-                const cols = defectHistoryColumns(dc);
-                const dt = formatCmaxsHistDate(dc.work_date || dc.report_date || dc.submitted_at || dc.created_at);
-                const st = defectHistoryStatusLabel(dc);
-                const flags = defectHistoryFormFlags(dc);
                 const rowKey = histEntryRowKey(entry);
-                const sel = state._histSelReportId === rowKey ? ' row-selected' : '';
+                const sel = state._histSelReportId === rowKey;
                 const chk = `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(entry))}">`;
-                return `<tr class="hist-row hist-row-defect${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openDefectFromHistory('${escAttr(dc.id)}')">
-                <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
-                ${histTypeCell(entry)}
-                <td class="hist-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
-                <td class="hist-sort1">${histCellHtml(cols.sort1)}</td>
-                <td class="hist-sort2">${histCellHtml(cols.sort2)}</td>
-                <td class="hist-detail">${histCellHtml(cols.jobDetail)}</td>
-                <td class="hist-date">${esc(dt || '—')}</td>
-                <td>${esc(st)}</td>
-                ${histFlagCell(flags.repairRequest)}
-                ${histFlagCell(flags.shoreSupport)}
-                ${histFlagCell(flags.defectCleared)}
-                ${histFlagCell(flags.shipComment)}
-                ${histFlagCell(flags.companyComment)}
-                ${histAttachmentCell(dc.ship_attachments)}
-                ${histAttachmentCell(dc.company_attachments)}
-            </tr>`;
+                return buildDefectHistRowHtml(dc, {
+                    rowKey,
+                    selected: sel,
+                    checkboxHtml: chk,
+                    onclick: `TVC_App.selectHistRow('${escAttr(rowKey)}', event)`,
+                    ondblclick: `TVC_App.openDefectFromHistory('${escAttr(dc.id)}')`,
+                });
             }
             const { report: r, item } = entry;
             const job = state.idx?.jobById.get(item.maintenance_job_id) || state.jobs.find(j => j.job_code === item.job_code);
@@ -5066,6 +5102,7 @@ const TVC_App = (function () {
         togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader,
         setBatchActiveJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
         openWorkReportFromHistory, openDefectFromHistory, getWorkHistoryDefectNavList, modifyWorkReport, selectHistRow,
+        buildDefectHistRowHtml, matchDefectHistSearch, initHistCellTips,
         histDetailWorkReport, histModifyReport, histReportApproval, histDeleteReport,
         toggleHistCheck, toggleHistSelectAll,
         navReport, deleteWorkReport, printWorkReport, closeWorkReport,
