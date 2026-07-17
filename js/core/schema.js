@@ -628,10 +628,11 @@ const TVC_DefectCase = (function () {
         'last_maintenance_date', 'rh_since_last_maintenance', 'total_run_hrs',
         'expect_date_place', 'machinery_name', 'manufacturer', 'maker', 'model_type', 'capacity', 'serial_no',
         'chief_engineer', 'master',
+        'confirmed_by', 'confirmed_at', 'approved_by', 'approved_at',
         'outline_maintenance_request', 'estimated_cause', 'possible_effect', 'action_taken',
         'ship_attachments', 'company_attachments', 'company_comment',
         'working_hours', 'working_member', 'shore_technician',
-        'repair_request', 'shore_support', 'defect_cleared',
+        'repair_request', 'shore_support', 'defect_cleared', 'used_parts',
     ];
 
     const PHASE2_FIELDS = [
@@ -692,6 +693,10 @@ const TVC_DefectCase = (function () {
             type_model_serial: overrides.type_model_serial || '',
             chief_engineer: overrides.chief_engineer || '',
             master: overrides.master || '',
+            confirmed_by: overrides.confirmed_by || '',
+            confirmed_at: overrides.confirmed_at || '',
+            approved_by: overrides.approved_by || '',
+            approved_at: overrides.approved_at || '',
             outline_maintenance_request: overrides.outline_maintenance_request || '',
             estimated_cause: overrides.estimated_cause || '',
             possible_effect: overrides.possible_effect || '',
@@ -705,6 +710,7 @@ const TVC_DefectCase = (function () {
             repair_request: !!overrides.repair_request,
             shore_support: !!(overrides.shore_support ?? overrides.shore_technician),
             defect_cleared: !!overrides.defect_cleared,
+            used_parts: overrides.used_parts || [],
             company_initial_reply: '',
             permit_to_work: '',
             reply_by: '',
@@ -724,6 +730,7 @@ const TVC_DefectCase = (function () {
             dp_closed_date: '',
             reported_by: overrides.reported_by || '',
             hq_synced: false,
+            visible_in_list: overrides.visible_in_list !== false,
             ...overrides,
         };
     }
@@ -820,10 +827,32 @@ const TVC_DefectCase = (function () {
         return !row.department || row.department === dept;
     }
 
+    /** Defect Report 목록·Work History 공통 표시 Status */
+    function listWorkflowStatus(row) {
+        if (!row) return 'Draft';
+        if (row.approved_at || row.approved_by) return 'Approved';
+        if (row.sync_status === 'SYNCED') return 'Submitted';
+        if (row.confirmed_at || row.confirmed_by) return 'Confirmed';
+        if (row.visible_in_list === false) return 'Draft';
+        return 'Reported';
+    }
+
+    function listWorkflowTone(label) {
+        switch (label) {
+            case 'Approved': return 'green';
+            case 'Submitted': return 'amber';
+            case 'Confirmed': return 'green';
+            case 'Reported': return 'blue';
+            case 'Draft': return 'gray';
+            default: return 'gray';
+        }
+    }
+
     return {
         SCHEMA_VERSION, Status, PHASE1_FIELDS, PHASE2_FIELDS, PHASE3_FIELDS, PHASE4_FIELDS,
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, belongsToDepartment,
+        listWorkflowStatus, listWorkflowTone,
     };
 })();
 

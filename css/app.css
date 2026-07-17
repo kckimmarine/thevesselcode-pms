@@ -700,7 +700,6 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .pill.postponed { background: #805ad5; }
 .pill.pending-apr { background: #3182ce; }
 .pill.defect { background: #c05621; }
-.hist-row-defect .hist-code strong { color: #9c4221; }
 
 /* Actual Plan — status dashboard filters */
 .act-filter-dashboard {
@@ -892,6 +891,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 #workReportBody > .wr-pagetabs-bar,
 #workReportBody > .modal-actions,
 #defectReportBody > .df-modal-inner > .wr-titlebar,
+#defectReportBody > .df-modal-inner > .wr-pagetabs-bar,
 #defectReportBody > .df-modal-inner > .modal-actions {
     flex-shrink: 0;
 }
@@ -909,12 +909,10 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     flex-direction: column;
     overflow: hidden;
 }
-#defectReportBody > .df-modal-inner > .df-modal-scroll,
 #defectReportBody > .df-modal-inner > .wr-page {
     flex: 1;
     min-height: 0;
     overflow: auto;
-    padding: 12px 16px 16px;
 }
 #workReportBody > .wr-page {
     flex: 1;
@@ -971,7 +969,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .wr-page { padding: 8px 12px; overflow: auto; background: #eef1f5; font-size: 11px; }
 .wr-page.tone-repair,
 .wr-page.tone-trouble,
-.wr-page.tone-postpone { background: #eef1f5; padding: 12px 14px; }
+.wr-page.tone-postpone,
+.wr-page.tone-defect { background: #eef1f5; padding: 12px 14px; }
 
 /* Repair & Maintenance — Maintenance Report form */
 .wr-maint-form { display: flex; flex-direction: column; gap: 10px; }
@@ -1014,7 +1013,9 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background: #fff;
     border-color: #e2e8f0;
 }
-#workReportBody .wr-page > .wr-maint-approval { margin-bottom: 10px; }
+#workReportBody .wr-page > .wr-maint-approval,
+#defectReportBody .wr-page > .wr-maint-approval { margin-bottom: 10px; }
+#defectReportBody .wr-maint-form > .wr-maint-approval { margin-bottom: 0; }
 .wr-maint-approval .wr-maint-date,
 .wr-maint-approval .wr-ro {
     padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 5px;
@@ -1485,6 +1486,14 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .sheet-table-wrap { margin: 12px 20px 24px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: auto; max-height: 68vh; }
 .hist-toolbar { padding: 8px 14px; }
 .hist-table .hist-chk-h, .hist-table .hist-chk { width: 28px; text-align: center; padding: 4px; vertical-align: middle; }
+.hist-table .hist-type-h, .hist-table .hist-type { width: 24px; min-width: 24px; text-align: center; padding: 4px 2px; vertical-align: middle; }
+.hist-table .hist-type-mark {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 16px; height: 16px; border-radius: 3px;
+    font-size: 10px; font-weight: 800; line-height: 1; color: #fff;
+}
+.hist-table .hist-type-defect .hist-type-mark { background: #c05621; }
+.hist-table .hist-type-postpone .hist-type-mark { background: #805ad5; }
 .hist-table .hist-chk input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--navy); pointer-events: auto; }
 .hist-table .hist-chk input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.4; }
 .hist-toolbar .btn:disabled { opacity: .45; cursor: not-allowed; }
@@ -4035,6 +4044,40 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 .defect-status.tone-blue { background: #bee3f8; color: #2c5282; }
 .defect-status.tone-gray { background: #edf2f7; color: #4a5568; }
 
+#tab-defect .df-list-toolbar { margin: 0 20px 8px; }
+#tab-defect .sheet-table-wrap { margin: 0 20px 16px; }
+.df-list-table { min-width: 960px; font-size: 11px; }
+.df-list-table th,
+.df-list-table td { white-space: nowrap; }
+.df-list-table .df-list-name { white-space: normal; min-width: 160px; max-width: 280px; }
+.df-list-table .df-list-code { min-width: 64px; }
+.df-list-table .df-list-date,
+.df-list-table .df-list-closed { min-width: 84px; }
+.df-list-table .df-list-file { min-width: 72px; }
+.df-list-table tbody tr.row-selected { background: #bee3f8 !important; }
+.df-list-table tbody tr { cursor: pointer; }
+.df-list-table tbody tr:nth-child(even) { background: #fbfdff; }
+.df-list-table tbody tr:hover { background: #ebf4ff; }
+
+.df-cancel-confirm-modal { z-index: 10200; }
+.df-cancel-confirm-box {
+    width: min(92vw, 360px);
+    padding: 22px 20px 18px;
+    text-align: center;
+}
+.df-cancel-confirm-msg {
+    margin: 0 0 18px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--navy);
+    line-height: 1.5;
+}
+.df-cancel-confirm-actions {
+    justify-content: center;
+    gap: 12px;
+}
+.df-cancel-confirm-actions .btn { min-width: 72px; }
+
 .modal-box.df-modal {
     width: min(98vw, 1200px);
     max-width: 98vw;
@@ -4085,11 +4128,22 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     align-items: center;
     gap: 4px;
 }
-.df-modal-scroll {
+.df-page2-body {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.df-page2-body .df-phase { margin-bottom: 0; }
+.df-workflow-phases {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+.df-workflow-phases .df-phase { margin-bottom: 0; }
+#defectReportBody .wr-page > .wr-spare-work-layout {
     flex: 1;
-    min-height: 0;
-    overflow: auto;
-    padding: 12px 16px;
+    min-height: 420px;
 }
 .df-phase {
     margin-bottom: 16px;

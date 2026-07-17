@@ -318,6 +318,16 @@ const TVC_Sync = (function () {
             if (vesselId && (kind === 'report' || kind === 'job' || kind === 'requisition' || kind === 'defect')) row.vessel_id = vesselId;
             if (isHq && (kind === 'report' || kind === 'defect')) row.hq_synced = true;
         };
+        const stampImported = (row, kind) => {
+            stamp(row, kind);
+            const direction = payload.export_meta?.direction;
+            if (!isHq && kind === 'defect' && direction === 'HQ_TO_SHIP') {
+                if (!row.approved_at && !row.approved_by) {
+                    row.approved_at = now().slice(0, 10);
+                    row.approved_by = 'Master';
+                }
+            }
+        };
         const mergeStore = async (storeName, rows, kind, keyField = 'id') => {
             if (!rows?.length) return;
             for (const incoming of rows) {
@@ -325,7 +335,7 @@ const TVC_Sync = (function () {
                 const key = incoming[keyField];
                 const existing = key != null ? await TVC_DB.get(storeName, key) : null;
                 if (!existing) {
-                    stamp(incoming, kind);
+                    stampImported(incoming, kind);
                     await TVC_DB.put(storeName, incoming);
                     continue;
                 }
@@ -333,7 +343,7 @@ const TVC_Sync = (function () {
                 const exTs = existing.updated_at || '';
                 if (inTs >= exTs) {
                     Object.assign(existing, incoming);
-                    stamp(existing, kind);
+                    stampImported(existing, kind);
                     await TVC_DB.put(storeName, existing);
                 }
             }

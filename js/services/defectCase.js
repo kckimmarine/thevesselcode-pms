@@ -79,6 +79,7 @@ const TVC_DefectCaseService = (function () {
         row.status = TVC_DefectCase.Status.SUBMITTED_TO_COMPANY;
         row.phase1_locked = true;
         row.submitted_at = now();
+        row.visible_in_list = true;
         row.chief_engineer = row.chief_engineer || (user?.department === 'ENGINE' ? TVC_RBAC.getRankLabel(user) : row.chief_engineer);
         row.master = row.master || (user?.department === 'DECK' || user?.role === 'SHIP_CAPTAIN' ? TVC_RBAC.getRankLabel(user) : row.master);
         markPending(row);
@@ -219,9 +220,66 @@ const TVC_DefectCaseService = (function () {
         return row;
     }
 
+    async function saveApprovalMeta(user, id, { confirm, approve } = {}) {
+        const row = await get(id);
+        if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
+        const today = now().slice(0, 10);
+        let changed = false;
+        if (confirm && !row.confirmed_at) {
+            if (row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+                && row.status !== TVC_DefectCase.Status.COMPANY_REVIEWED
+                && row.status !== TVC_DefectCase.Status.WORK_IN_PROGRESS
+                && row.status !== TVC_DefectCase.Status.AWAITING_COMPLETION
+                && row.status !== TVC_DefectCase.Status.CLOSED) {
+                throw Object.assign(new Error('Confirm after Submit to Company.'), { code: 'INVALID_STATUS' });
+            }
+            if (!TVC_RBAC.canConfirmDepartment(user, row.department)) {
+                throw Object.assign(new Error('Confirm permission required.'), { code: 'FORBIDDEN' });
+            }
+            row.confirmed_by = TVC_RBAC.getRankLabel(user);
+            row.confirmed_at = today;
+            changed = true;
+        }
+        if (approve && !row.approved_at) {
+            if (!TVC_RBAC.isHqAccount(user)) {
+                throw Object.assign(new Error('HQ approval only.'), { code: 'FORBIDDEN' });
+            }
+            if (!row.confirmed_at) {
+                throw Object.assign(new Error('Confirm required before Approve.'), { code: 'INVALID_STATUS' });
+            }
+            row.approved_by = TVC_RBAC.getRankLabel(user);
+            row.approved_at = today;
+            changed = true;
+        }
+        if (!changed) return row;
+        markPending(row);
+        await TVC_DB.put('defect_cases', row);
+        await TVC_DB.put('audit_logs', {
+            timestamp: new Date().toLocaleString(),
+            log: `✅ [Defect/Approval] ${row.case_no}${confirm ? ' — Confirmed' : ''}${approve ? ' — Approved' : ''}`,
+            sync_status: 'LOCAL',
+        });
+        return row;
+    }
+
+    async function deleteCase(user, id) {
+        const row = await get(id);
+        if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
+        if (row.phase1_locked || row.status !== TVC_DefectCase.Status.DRAFT) {
+            throw Object.assign(new Error('Only draft cases can be deleted.'), { code: 'LOCKED' });
+        }
+        await TVC_DB.delete('defect_cases', id);
+        await TVC_DB.put('audit_logs', {
+            timestamp: new Date().toLocaleString(),
+            log: `🗑 [Defect/DELETE] ${row.case_no}`,
+            sync_status: 'LOCAL',
+        });
+        return row;
+    }
+
     return {
         listAll, get, saveDraft, submitToCompany, saveHqPhase2, saveShipPhase3, saveHqPhase4,
-        startWork, createFromJob,
+        startWork, createFromJob, deleteCase, saveApprovalMeta,
         resolveVesselId, nextCaseNo, markPending,
     };
 })();

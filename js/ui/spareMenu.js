@@ -5777,7 +5777,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function wrSparePreviewMode(st, ro) {
-        return !!ro && !!st._wrReportId;
+        return !!ro && (!!st._wrReportId || !!st._defectCaseId);
     }
 
     function rebuildWrSpareCachedList(st) {

@@ -615,6 +615,30 @@ const TVC_App = (function () {
         return TVC_SpareMenu?.safeTreeLabel?.(v) || String(v || '').trim();
     }
 
+    /** PMS Group → Work History Job Code (번호만, 예: "01. MAIN ENGINE" → "01") */
+    function formatHistGroupNoShort(v) {
+        const s = String(v || '').trim();
+        if (!s) return '';
+        const m = s.match(/^(\d+(?:\s*~\s*\d+)?)/);
+        return m ? m[1].replace(/\s+/g, '') : s;
+    }
+
+    function histTypeMarker(entry) {
+        if (isHistDefectEntry(entry)) {
+            return { letter: 'D', title: 'Defect Report', cls: 'hist-type-defect' };
+        }
+        if (entry.report?.work_type === 'POSTPONE') {
+            return { letter: 'P', title: 'Postponed Report', cls: 'hist-type-postpone' };
+        }
+        return { letter: '', title: '', cls: '' };
+    }
+
+    function histTypeCell(entry) {
+        const m = histTypeMarker(entry);
+        if (!m.letter) return '<td class="hist-type"></td>';
+        return `<td class="hist-type ${m.cls}" title="${escAttr(m.title)}"><span class="hist-type-mark">${esc(m.letter)}</span></td>`;
+    }
+
     function defectHistoryHasJob(dc) {
         return !!(dc.pms_job_code || dc.maintenance_job_id || dc.job_code);
     }
@@ -634,7 +658,7 @@ const TVC_App = (function () {
         }
         if (dc.pms_group_no) {
             return {
-                jobCode: formatHistGroupLabel(dc.pms_group_no),
+                jobCode: formatHistGroupNoShort(dc.pms_group_no),
                 sort1: dc.job_name || dc.machinery_name || '',
                 sort2: '',
                 jobDetail: dc.outline_maintenance_request || dc.action_taken || '',
@@ -651,15 +675,7 @@ const TVC_App = (function () {
     }
 
     function defectHistoryStatusLabel(dc) {
-        const S = TVC_DefectCase.Status;
-        const map = {
-            [S.SUBMITTED_TO_COMPANY]: 'Defect · Submitted',
-            [S.COMPANY_REVIEWED]: 'Defect · Reviewed',
-            [S.WORK_IN_PROGRESS]: 'Defect · In Progress',
-            [S.AWAITING_COMPLETION]: 'Defect · Awaiting Close',
-            [S.CLOSED]: 'Defect · Closed',
-        };
-        return map[dc.status] || `Defect · ${dc.status || '?'}`;
+        return TVC_DefectCase.listWorkflowStatus(dc);
     }
 
     function defectHistoryFormFlags(dc) {
@@ -682,7 +698,9 @@ const TVC_App = (function () {
     }
 
     function workHistoryDefectCases() {
-        return (state.defectCases || []).filter(d => d.status !== TVC_DefectCase.Status.DRAFT);
+        return (state.defectCases || []).filter(d =>
+            d.status !== TVC_DefectCase.Status.DRAFT && d.visible_in_list !== false
+        );
     }
 
     function matchHistSearch(entry) {
@@ -2900,7 +2918,14 @@ const TVC_App = (function () {
 
     function openDefectFromHistory(defectId) {
         if (!defectId) return;
-        TVC_DefectReport.openCase(defectId);
+        state._dfNavSource = 'history';
+        TVC_DefectReport.openCase(defectId, 'view');
+    }
+
+    function getWorkHistoryDefectNavList() {
+        return workHistoryEntries()
+            .filter(isHistDefectEntry)
+            .map(e => e.defect);
     }
 
     function histDetailWorkReport() {
@@ -2918,7 +2943,13 @@ const TVC_App = (function () {
         if (!entry) return alert('Work History에서 항목을 선택하세요.');
         if (isHistDefectEntry(entry)) {
             if (!canModifyHistEntry(entry)) return alert('종료(CLOSED)된 Defect Case는 수정할 수 없습니다.');
-            openDefectFromHistory(entry.defect.id);
+            state._dfNavSource = 'history';
+            const dc = entry.defect;
+            const mode = TVC_RBAC.isHqAccount(state.user) && dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY ? 'phase2'
+                : TVC_RBAC.isHqAccount(state.user) && dc.status === TVC_DefectCase.Status.AWAITING_COMPLETION ? 'phase4'
+                : !TVC_RBAC.isHqAccount(state.user) && (dc.status === TVC_DefectCase.Status.COMPANY_REVIEWED || dc.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) ? 'phase3'
+                : 'edit';
+            TVC_DefectReport.openCase(dc.id, mode);
             return;
         }
         if (!canModifyHistEntry(entry)) return alert('승인(APPROVED)된 리포트는 수정할 수 없습니다.');
@@ -2988,7 +3019,7 @@ const TVC_App = (function () {
         pruneHistChecked();
         const all = workHistoryEntriesRaw();
         const entries = workHistoryEntries();
-        const colSpan = 14;
+        const colSpan = 15;
         setText('histCount', `${entries.length} / ${all.length} entries`);
         const searchEl = document.getElementById('histSearch');
         if (searchEl && document.activeElement !== searchEl) searchEl.value = state.search || '';
@@ -3011,13 +3042,11 @@ const TVC_App = (function () {
                 const flags = defectHistoryFormFlags(dc);
                 const rowKey = histEntryRowKey(entry);
                 const sel = state._histSelReportId === rowKey ? ' row-selected' : '';
-                const dfTag = cols.groupOnly
-                    ? `<span class="pill defect" title="Defect — PMS Group only">DF</span> `
-                    : `<span class="pill defect" title="Defect case">DF</span> `;
                 const chk = `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(entry))}">`;
                 return `<tr class="hist-row hist-row-defect${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openDefectFromHistory('${escAttr(dc.id)}')">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
-                <td class="hist-code">${dfTag}<strong>${esc(cols.jobCode)}</strong></td>
+                ${histTypeCell(entry)}
+                <td class="hist-code"><strong>${esc(cols.jobCode)}</strong></td>
                 <td>${esc(cols.sort1)}</td>
                 <td>${esc(cols.sort2)}</td>
                 <td class="hist-detail">${esc(cols.jobDetail)}</td>
@@ -3049,6 +3078,7 @@ const TVC_App = (function () {
                 : `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(wrEntry))}">`;
             return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(item.maintenance_job_id)}')">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
+                ${histTypeCell(wrEntry)}
                 <td class="hist-code">${batchTag}<strong>${esc(item.job_code)}</strong></td>
                 <td>${esc(job?.item_sort1 || '')}</td>
                 <td>${esc(job?.item_sort2 || '')}</td>
@@ -4818,7 +4848,7 @@ const TVC_App = (function () {
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,
         togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader,
         setBatchActiveJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
-        openWorkReportFromHistory, openDefectFromHistory, modifyWorkReport, selectHistRow,
+        openWorkReportFromHistory, openDefectFromHistory, getWorkHistoryDefectNavList, modifyWorkReport, selectHistRow,
         histDetailWorkReport, histModifyReport, histReportApproval, histDeleteReport,
         toggleHistCheck, toggleHistSelectAll,
         navReport, deleteWorkReport, printWorkReport, closeWorkReport,

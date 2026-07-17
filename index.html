@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260716-hist-defect">
+    <link rel="stylesheet" href="css/app.css?v=20260717-df-spare-p2">
 </head>
 <body>
 
@@ -176,13 +176,36 @@
         <!-- TAB: Defect Report -->
         <section id="tab-defect" class="tab-pane hidden">
             <div class="sheet-head">
-                <h2>🚨 Defect (Trouble) Report</h2>
-                <span class="sheet-sub">Phase 1·2 URGENT — Ship report → Company review (Permit / Class·Flag·PSC)</span>
+                <h2>🚨 Defect Report</h2>
+                <span class="sheet-sub">Select a row · double-click or Detail Report · check (ㅁ) for Report Confirm</span>
                 <span style="flex:1"></span>
                 <button type="button" class="btn btn-sm btn-amber" data-feature="showDefectReport" onclick="TVC_DefectReport.openNewBlank()">＋ New Defect Report</button>
                 <button type="button" class="btn btn-sm" data-feature="showDefectImportUrgent" onclick="document.getElementById('importDefectUrgent').click()">Import Package</button>
             </div>
-            <div id="defectTabBody" class="defect-tab-body"></div>
+            <div class="hist-toolbar filter-bar df-list-toolbar">
+                <button type="button" id="dfBtnDetail" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfDetailReport()">Detail Report</button>
+                <button type="button" id="dfBtnConfirm" class="btn btn-sm btn-green" disabled onclick="TVC_DefectReport.dfReportConfirm()">Report Confirm</button>
+                <span class="orig-toolbar-sep"></span>
+                <button type="button" id="dfBtnModify" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfModifyReport()">Modify</button>
+                <button type="button" id="dfBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_DefectReport.dfDeleteReport()">Delete</button>
+                <span class="orig-toolbar-sep"></span>
+                <input class="search-input" id="dfListSearch" placeholder="Search FILE NO / JOB CODE / JOB NAME…" oninput="TVC_DefectReport.dfListSearch(this.value)">
+                <span class="count-label" id="dfListCount">—</span>
+            </div>
+            <div class="sheet-table-wrap">
+                <table class="sheet-table df-list-table">
+                    <thead><tr>
+                        <th class="hist-chk-h"><input type="checkbox" id="dfSelectAll" title="Select all draft" onclick="TVC_DefectReport.toggleDfListSelectAll(this.checked)"></th>
+                        <th>Occurred Date</th>
+                        <th>File No.</th>
+                        <th>Job Code</th>
+                        <th>Job Name</th>
+                        <th>Status</th>
+                        <th>Closed-out</th>
+                    </tr></thead>
+                    <tbody id="defectTabBody"></tbody>
+                </table>
+            </div>
         </section>
 
         <!-- TAB: Work Plan -->
@@ -254,11 +277,12 @@
                 <input class="search-input" id="histSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_App.setSearch(this.value)">
                 <span class="count-label" id="histCount">—</span>
             </div>
-            <p class="hist-legend">RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
+            <p class="hist-legend">D: Defect Report · P: Postponed · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
             <div class="sheet-table-wrap">
                 <table class="sheet-table hist-table">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
+                        <th class="hist-type-h" title="Defect / Postponed">D/P</th>
                         <th>Job Code</th><th>SORT-1</th><th>SORT-2</th><th>JOB DETAIL</th>
                         <th>Work Date</th><th>Status</th>
                         <th class="hist-flag-h" title="Repair Request">RR</th>
@@ -417,9 +441,18 @@
 </div>
 <!-- spareDetailModal kept for legacy; unified SPARE uses slide panel -->
 
-<div id="defectReportModal" class="modal hidden spare-req-work-modal-wrap" onclick="if(event.target===this)TVC_DefectReport.closeModal()">
-    <div class="modal-box wr-modal spare-req-work-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_DefectReport.closeModal()">×</button>
+<div id="defectReportModal" class="modal hidden spare-req-work-modal-wrap" onclick="if(event.target===this)TVC_DefectReport.requestCloseModal()">
+    <div class="modal-box wr-modal spare-req-work-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_DefectReport.requestCloseModal()">×</button>
         <div id="defectReportBody"></div>
+    </div>
+</div>
+<div id="dfCancelConfirmModal" class="modal hidden df-cancel-confirm-modal" onclick="if(event.target===this)TVC_DefectReport.dismissCancelConfirm()">
+    <div class="modal-box df-cancel-confirm-box" onclick="event.stopPropagation()">
+        <p class="df-cancel-confirm-msg">레포트 작성을 취소하시겠습니까?</p>
+        <div class="modal-actions df-cancel-confirm-actions">
+            <button type="button" class="btn btn-green" onclick="TVC_DefectReport.confirmCancelNew(true)">YES</button>
+            <button type="button" class="btn" onclick="TVC_DefectReport.confirmCancelNew(false)">NO</button>
+        </div>
     </div>
 </div>
 
@@ -444,14 +477,14 @@
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/rbac.js?v=20260716-report-flow"></script>
-<script src="js/core/schema.js?v=20260716-df-submit"></script>
+<script src="js/core/schema.js?v=20260717-df-wf-status"></script>
 <script src="js/core/db.js"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260716-postpone-nextdate"></script>
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260716-df-pick"></script>
+<script src="js/ui/spareMenu.js?v=20260717-df-spare-p2"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -462,15 +495,15 @@
 <script src="js/auth.js?v=20260715-login-dept"></script>
 <script src="js/services/transaction.js?v=20260716-maint-schedule"></script>
 <script src="js/services/maintenancePlan.js"></script>
-<script src="js/services/defectCase.js?v=20260715-defect-v3"></script>
+<script src="js/services/defectCase.js?v=20260717-df-approval"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
-<script src="js/services/sync.js?v=20260716-report-flow"></script>
+<script src="js/services/sync.js?v=20260717-df-wf-status"></script>
 <script src="js/services/stationSync.js?v=20260715-space-auth"></script>
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260708-req-draft-only"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/ui/defectReport.js?v=20260716-df-submit"></script>
-<script src="js/app.js?v=20260716-hist-defect"></script>
+<script src="js/ui/defectReport.js?v=20260717-df-wf-status"></script>
+<script src="js/app.js?v=20260717-df-wf-status"></script>
 <script src="js/pwa.js?v=20260715-defect-v3"></script>
 </body>
 </html>
