@@ -201,6 +201,9 @@ const TVC_Transaction = (function () {
             const report = await api.get('daily_work_reports', reportId);
             if (!report) throw Object.assign(new Error('REPORT_NOT_FOUND'), { code: 'NOT_FOUND' });
             if (report.is_locked) throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
+            if (report.sync_status === 'SYNCED' && TVC_RBAC.isConfirmedStatus(report.status, report.is_locked)) {
+                throw Object.assign(new Error('Submitted reports cannot be modified.'), { code: 'LOCKED' });
+            }
             TVC_WorkReport.fromLegacy(report);
 
             if (payload.workType) report.work_type = payload.workType;
@@ -453,8 +456,58 @@ const TVC_Transaction = (function () {
         return new Date(nextDate) < new Date(new Date().toDateString());
     }
 
+    async function purgeAllWorkReports() {
+        const reports = await TVC_DB.getAll('daily_work_reports');
+        if (!reports.length) return 0;
+
+        const sysUser = { display_name: 'System Purge' };
+        let count = 0;
+
+        await TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'spare_parts', 'audit_logs'], async (api) => {
+            for (const raw of reports) {
+                const rep = { ...raw };
+                TVC_WorkReport.fromLegacy(rep);
+                const normStatus = TVC_RBAC.normalizeReportStatus(rep.status, rep.is_locked);
+                const isShipFinalized = normStatus === 'CONFIRMED' || normStatus === 'APPROVED'
+                    || (rep.job_items || []).some(i => {
+                        const n = TVC_RBAC.normalizeReportStatus(i.status, rep.is_locked);
+                        return n === 'CONFIRMED' || n === 'APPROVED';
+                    });
+
+                for (const item of rep.job_items || []) {
+                    const itemNorm = TVC_RBAC.normalizeReportStatus(item.status, rep.is_locked);
+                    const finalized = itemNorm === 'CONFIRMED' || itemNorm === 'APPROVED';
+                    if (isShipFinalized && finalized) {
+                        if (rep.work_type !== 'POSTPONE') {
+                            await rollbackApprovedItem(api, item, sysUser);
+                        } else {
+                            await restoreJobScheduleFromSnapshot(api, item);
+                        }
+                    } else {
+                        await restoreJobScheduleFromSnapshot(api, item);
+                    }
+                    const job = await api.get('maintenance_jobs', item.maintenance_job_id);
+                    if (job?.is_locked) {
+                        job.is_locked = false;
+                        markPending(job);
+                        await api.put('maintenance_jobs', job);
+                    }
+                }
+                await api.del('daily_work_reports', rep.id);
+                count++;
+            }
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `🗑 [Purge] ${count} work report(s) cleared for testing`,
+                sync_status: 'LOCAL',
+            });
+        });
+        return count;
+    }
+
     return {
         submitReport, submitBatchReport, updateReport, deleteReport,
         approveReport, executeMaintenance, confirmReport, calcNextDate, markPending,
+        purgeAllWorkReports,
     };
 })();

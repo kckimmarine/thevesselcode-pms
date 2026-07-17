@@ -41,7 +41,21 @@ const TVC_DefectCaseService = (function () {
         const vesselId = await resolveVesselId(user);
         let row = existingId ? await get(existingId) : null;
         if (row && row.phase1_locked) {
-            throw Object.assign(new Error('Phase 1 is locked after submission.'), { code: 'LOCKED' });
+            if (!TVC_DefectCase.canModifyListWorkflow(row)) {
+                throw Object.assign(new Error('Phase 1 is locked after submission.'), { code: 'LOCKED' });
+            }
+            Object.assign(row, payload, {
+                vessel_id: vesselId || row.vessel_id,
+                reported_by: user?.username || row.reported_by,
+            });
+            markPending(row);
+            await TVC_DB.put('defect_cases', row);
+            await TVC_DB.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `✏️ [Defect/MODIFIED] ${row.case_no}`,
+                sync_status: 'LOCAL',
+            });
+            return row;
         }
         if (!row) {
             row = TVC_DefectCase.blank({
@@ -226,12 +240,11 @@ const TVC_DefectCaseService = (function () {
         const today = now().slice(0, 10);
         let changed = false;
         if (confirm && !row.confirmed_at) {
-            if (row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
-                && row.status !== TVC_DefectCase.Status.COMPANY_REVIEWED
-                && row.status !== TVC_DefectCase.Status.WORK_IN_PROGRESS
-                && row.status !== TVC_DefectCase.Status.AWAITING_COMPLETION
-                && row.status !== TVC_DefectCase.Status.CLOSED) {
-                throw Object.assign(new Error('Confirm after Submit to Company.'), { code: 'INVALID_STATUS' });
+            if (row.visible_in_list === false) {
+                throw Object.assign(new Error('목록에 저장된 Report만 Confirm할 수 있습니다.'), { code: 'INVALID_STATUS' });
+            }
+            if (row.status === TVC_DefectCase.Status.CLOSED) {
+                throw Object.assign(new Error('Closed case cannot be confirmed.'), { code: 'INVALID_STATUS' });
             }
             if (!TVC_RBAC.canConfirmDepartment(user, row.department)) {
                 throw Object.assign(new Error('Confirm permission required.'), { code: 'FORBIDDEN' });

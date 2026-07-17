@@ -32,14 +32,17 @@ const TVC_RBAC = (function () {
     function normalizeReportStatus(status, isLocked) {
         if (status === 'PENDING') return ReportStatus.REPORTED;
         if (status === 'POSTPONED') return ReportStatus.CONFIRMED;
-        if (status === 'APPROVED') return ReportStatus.CONFIRMED;
+        if (status === 'APPROVED') return isLocked ? ReportStatus.APPROVED : ReportStatus.CONFIRMED;
         if (status === 'CONFIRMED') return isLocked ? ReportStatus.APPROVED : ReportStatus.CONFIRMED;
         return status || ReportStatus.REPORTED;
     }
 
     function isReportedStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === ReportStatus.REPORTED; }
     function isConfirmedStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === ReportStatus.CONFIRMED; }
-    function isApprovedStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === ReportStatus.APPROVED; }
+    function isApprovedStatus(status, isLocked) {
+        if (status === 'APPROVED' && isLocked) return true;
+        return normalizeReportStatus(status, isLocked) === ReportStatus.APPROVED;
+    }
 
     const Action = {
         CREATE_DAILY_REPORT: 'CREATE_DAILY_REPORT',

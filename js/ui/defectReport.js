@@ -673,7 +673,7 @@ const TVC_DefectReport = (function () {
             };
         }
         return {
-            jobCode: row.case_no || '—',
+            jobCode: '',
             jobName: row.job_name || row.machinery_name || '',
         };
     }
@@ -720,27 +720,30 @@ const TVC_DefectReport = (function () {
         return Object.keys(_dfListChecked || {}).filter(id => _dfListChecked[id]);
     }
 
+    function isDefectReportConfirmable(row) {
+        if (!row || !getState().user) return false;
+        if (row.visible_in_list === false) return false;
+        if (row.confirmed_at || row.confirmed_by) return false;
+        if (row.approved_at || row.approved_by) return false;
+        if (row.status === TVC_DefectCase.Status.CLOSED) return false;
+        return TVC_RBAC.canConfirmDepartment(getState().user, row.department);
+    }
+
     function isDfListRowCheckable(row) {
         if (!getState().user) return false;
         if (isHq()) return row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY;
-        return row.status === TVC_DefectCase.Status.DRAFT && !row.phase1_locked;
+        return isDefectReportConfirmable(row) || canDeleteDfListRow(row);
     }
 
     function isDfListRowConfirmable(row) {
         if (!getState().user) return false;
         if (isHq()) return row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY;
-        return row.status === TVC_DefectCase.Status.DRAFT && !row.phase1_locked;
+        return isDefectReportConfirmable(row);
     }
 
     function canModifyDfListRow(row) {
         if (!row || !getState().user) return false;
-        if (row.status === TVC_DefectCase.Status.CLOSED) return false;
-        if (isHq()) {
-            return TVC_DefectCase.isPhase2Editable(row) || TVC_DefectCase.isPhase4Editable(row);
-        }
-        return TVC_DefectCase.isPhase1Editable(row)
-            || TVC_DefectCase.isPhase3Editable(row)
-            || TVC_DefectCase.canStartWork(row);
+        return TVC_DefectCase.canModifyListWorkflow(row);
     }
 
     function canDeleteDfListRow(row) {
@@ -788,10 +791,7 @@ const TVC_DefectReport = (function () {
         const checked = getCheckedDfListIds();
         const checkedRows = defectListRows().filter(r => _dfListChecked?.[r.id]);
         const canConfirm = checkedRows.length > 0
-            && checkedRows.every(isDfListRowConfirmable)
-            && (isHq()
-                ? checkedRows.every(r => r.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY)
-                : checkedRows.every(r => r.status === TVC_DefectCase.Status.DRAFT && !r.phase1_locked));
+            && checkedRows.every(isDfListRowConfirmable);
         const setDis = (id, dis) => {
             const el = document.getElementById(id);
             if (el) { if (dis) el.setAttribute('disabled', ''); else el.removeAttribute('disabled'); }
@@ -889,23 +889,31 @@ const TVC_DefectReport = (function () {
         }
     }
 
+    function resolveDfOpenMode(row) {
+        if (isHq() && row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'phase2';
+        if (isHq() && row.status === TVC_DefectCase.Status.AWAITING_COMPLETION) return 'phase4';
+        if (!isHq() && (row.status === TVC_DefectCase.Status.COMPANY_REVIEWED
+            || row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS)) return 'phase3';
+        return 'edit';
+    }
+
+    function openCaseFromNav(id, navSource) {
+        const row = (getState().defectCases || []).find(c => c.id === id);
+        getState()._dfNavSource = navSource;
+        openCase(id, row ? resolveDfOpenMode(row) : 'edit');
+    }
+
     function dfDetailReport() {
         const row = getSelectedDfRow();
         if (!row) return alert('Defect Report 목록에서 항목을 선택하세요.');
-        getState()._dfNavSource = 'list';
-        openCase(row.id, 'view');
+        openCaseFromNav(row.id, 'list');
     }
 
     function dfModifyReport() {
         const row = getSelectedDfRow();
         if (!row) return alert('Defect Report 목록에서 항목을 선택하세요.');
-        if (!canModifyDfListRow(row)) return alert('수정할 수 없는 상태입니다.');
-        getState()._dfNavSource = 'list';
-        const mode = isHq() && row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY ? 'phase2'
-            : isHq() && row.status === TVC_DefectCase.Status.AWAITING_COMPLETION ? 'phase4'
-            : !isHq() && (row.status === TVC_DefectCase.Status.COMPANY_REVIEWED || row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) ? 'phase3'
-            : 'edit';
-        openCase(row.id, mode);
+        if (!canModifyDfListRow(row)) return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
+        openCaseFromNav(row.id, 'list');
     }
 
     async function dfReportConfirm() {
@@ -914,7 +922,7 @@ const TVC_DefectReport = (function () {
         let rows = defectListRows().filter(r => _dfListChecked?.[r.id]);
         const sel = getSelectedDfRow();
         if (!rows.length && sel && isDfListRowConfirmable(sel)) rows = [sel];
-        if (!rows.length) return alert('Report Confirm할 Draft 항목의 체크박스(ㅁ)를 선택하세요.');
+        if (!rows.length) return alert('Report Confirm할 Reported 항목의 체크박스(ㅁ)를 선택하세요.');
 
         if (isHq()) {
             const pending = rows.filter(r => r.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY);
@@ -923,24 +931,24 @@ const TVC_DefectReport = (function () {
             return;
         }
 
-        const drafts = rows.filter(r => r.status === TVC_DefectCase.Status.DRAFT && !r.phase1_locked);
-        if (!drafts.length) return alert('Draft 상태 항목만 Submit to Company 할 수 있습니다.');
-        if (!confirm(`${drafts.length}건의 Defect Report를 Company에 제출(URGENT)하시겠습니까?`)) return;
+        const toConfirm = rows.filter(isDefectReportConfirmable);
+        if (!toConfirm.length) return alert('Confirm할 수 있는 Reported Defect Report를 선택하세요.');
+        if (!confirm(`${toConfirm.length}건의 Defect Report를 Confirm하시겠습니까?`)) return;
 
         let ok = 0;
-        for (const row of drafts) {
+        for (const row of toConfirm) {
             try {
-                await TVC_DefectCaseService.submitToCompany(user, row.id);
+                await TVC_DefectCaseService.saveApprovalMeta(user, row.id, { confirm: true });
                 ok++;
             } catch (e) {
-                alert(`${row.case_no}: ${e.message || e.code || 'Submit failed'}`);
+                alert(`${row.case_no}: ${e.message || e.code || 'Confirm failed'}`);
                 break;
             }
         }
         _dfListChecked = {};
         await refresh();
         renderTab();
-        if (ok) alert(`${ok}건 Submit to Company 완료`);
+        if (ok) alert(`${ok}건 Report Confirm 완료`);
     }
 
     async function dfDeleteReport() {
@@ -1011,7 +1019,7 @@ const TVC_DefectReport = (function () {
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 <td class="df-list-date">${esc(occurred || '—')}</td>
                 <td class="df-list-file">${esc(r.file_no || '—')}</td>
-                <td class="df-list-code"><strong>${esc(cols.jobCode || '—')}</strong></td>
+                <td class="df-list-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
                 <td class="df-list-name">${esc(cols.jobName || '—')}</td>
                 <td><span class="defect-status tone-${statusTone(r)}">${esc(statusLabel(r))}</span></td>
                 <td class="df-list-closed">${esc(closed || '—')}</td>
@@ -1107,9 +1115,7 @@ const TVC_DefectReport = (function () {
         const user = getState().user;
         const isConfirmed = !!(row.confirmed_at || row.confirmed_by);
         const isApproved = !!(row.approved_at || row.approved_by);
-        const submitted = row.status !== TVC_DefectCase.Status.DRAFT;
-        const canConfirmNow = submitted && !isConfirmed
-            && !!user && TVC_RBAC.canConfirmDepartment(user, row.department);
+        const canConfirmNow = isDefectReportConfirmable(row);
         const canApproveNow = isConfirmed && !isApproved
             && !!user && TVC_RBAC.isHqAccount(user);
         return {
@@ -1117,8 +1123,8 @@ const TVC_DefectReport = (function () {
             isApproved,
             canConfirmNow,
             canApproveNow,
-            confirmedByVal: isConfirmed ? formatDfDate(row.confirmed_at) : '',
-            approvedByVal: isApproved ? formatDfDate(row.approved_at) : '',
+            confirmedByVal: isConfirmed ? 'Captain, Chief Engineer' : '',
+            approvedByVal: isApproved ? 'Company' : '',
         };
     }
 
@@ -1189,7 +1195,7 @@ const TVC_DefectReport = (function () {
                     ${fld('Last Maintenance Date', inp('last_maintenance_date', job?.last_done || '', 'date'))}
                     ${fld('Running Hrs after Last Maint.', inp('rh_since_last_maintenance', '', 'number'))}
                 </div>
-                ${fld('Outline of Defect', ta('outline_maintenance_request', job?.job_detail || ''), 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld('Outline of Defect', ta('outline_maintenance_request', ''), 'wr-maint-span-all wr-maint-grid-gap')}
                 ${fld('Estimated Cause of Defect', ta('estimated_cause', ''), 'wr-maint-span-all')}
                 ${fld('Possible Effect to Other System', ta('possible_effect', ''), 'wr-maint-span-all')}
                 ${fld('Action Plan / Corrective Action', ta('action_taken', ''), 'wr-maint-span-all')}
@@ -1286,9 +1292,8 @@ const TVC_DefectReport = (function () {
         body.innerHTML = renderModalBody(row, mode);
         if ((s._dfPage || '1') === '2') {
             const forceView = mode === 'view';
-            const hq = isHq();
-            const phase1ro = forceView || row.phase1_locked || hq;
-            syncDfSparePage2Ui(true, phase1ro);
+            const page2ro = forceView || !TVC_DefectCase.canModifyListWorkflow(row);
+            syncDfSparePage2Ui(true, page2ro);
         }
     }
 
@@ -1308,26 +1313,25 @@ const TVC_DefectReport = (function () {
         const forceView = mode === 'view';
         const fromListNav = !!getState()._dfNavSource;
         const dfPage = getState()._dfPage || '1';
-        const phase1ro = forceView || row.phase1_locked || hq;
-        const canEditP1 = !forceView && !phase1ro && TVC_DefectCase.isPhase1Editable(row);
-        const canEditP2 = !forceView && hq && TVC_DefectCase.isPhase2Editable(row);
-        const canEditP3 = !forceView && !hq && TVC_DefectCase.isPhase3Editable(row);
-        const canEditP4 = !forceView && hq && TVC_DefectCase.isPhase4Editable(row);
-        const canSave = !forceView && (canEditP1 || canEditP2 || canEditP3 || canEditP4);
-        const canDelete = canDeleteDfListRow(row);
-        const titleText = forceView ? 'Defect Report (View)' : (fromListNav ? 'Defect Report (Modify)' : 'Defect Report');
+        const wfModifiable = TVC_DefectCase.canModifyListWorkflow(row);
+        const phase1ro = forceView || hq || !wfModifiable;
+        const canEditP1 = !forceView && !hq && wfModifiable && row.status !== TVC_DefectCase.Status.CLOSED;
+        const canEditP2 = !forceView && hq && wfModifiable && TVC_DefectCase.isPhase2Editable(row);
+        const canEditP3 = !forceView && !hq && wfModifiable && TVC_DefectCase.isPhase3Editable(row);
+        const canEditP4 = !forceView && hq && wfModifiable && TVC_DefectCase.isPhase4Editable(row);
+        const canSave = !forceView && wfModifiable && (canEditP1 || canEditP2 || canEditP3 || canEditP4);
 
         const pageTabs = `
             <div class="wr-pagetabs">
                 <button type="button" class="wr-pagetab${dfPage === '1' ? ' active' : ''}" onclick="TVC_DefectReport.setDefectReportPage('1')">Page 1</button>
                 <button type="button" class="wr-pagetab${dfPage === '2' ? ' active' : ''}" onclick="TVC_DefectReport.setDefectReportPage('2')">Page 2</button>
             </div>`;
-        const pageTabsBar = `<div class="wr-pagetabs-bar">${pageTabs}</div>`;
+        const pageTabsBar = `<div class="wr-pagetabs-bar modal-drag-handle">${pageTabs}</div>`;
 
         const headHtml = dfPage === '2' ? renderDfApprovalHtml(row) : '';
         let body = '';
         if (dfPage === '2') {
-            const page2ro = forceView || phase1ro;
+            const page2ro = forceView || !wfModifiable;
             body = renderDfPage2Body(row, page2ro);
         } else {
             body = `${renderPhase1(row, !canEditP1, { includeApproval: true })}
@@ -1339,30 +1343,17 @@ const TVC_DefectReport = (function () {
         }
 
         let actionsHtml;
-        if (fromListNav && forceView) {
-            actionsHtml = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
-                <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>
-                <button type="button" class="btn btn-green" onclick="TVC_DefectReport.modifyDefectModal()">✏️ Modify</button>
-                ${canDelete ? `<button type="button" class="btn btn-red" onclick="TVC_DefectReport.deleteDefectModal()">🗑 Delete</button>` : ''}
-                <button type="button" class="btn" onclick="TVC_DefectReport.printCase('${esc(row.id)}')">🖨 Print</button>
-                <button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button>`;
-        } else if (fromListNav && !forceView) {
+        if (fromListNav) {
             actionsHtml = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>
                 ${canSave ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">💾 Save</button>` : ''}
-                ${canDelete ? `<button type="button" class="btn btn-red" onclick="TVC_DefectReport.deleteDefectModal()">🗑 Delete</button>` : ''}
-                <button type="button" class="btn" onclick="TVC_DefectReport.printCase('${esc(row.id)}')">🖨 Print</button>
-                <button type="button" class="btn" onclick="TVC_DefectReport.requestCloseModal()">Cancel</button>`;
+                <button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button>`;
         } else {
             actionsHtml = `${canSave ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">💾 Save</button>` : ''}
-                <button type="button" class="btn" onclick="TVC_DefectReport.printCase('${esc(row.id)}')">🖨 Print</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.requestCloseModal()">Cancel</button>`;
         }
 
         return `<div class="df-modal-inner">
-            <div class="wr-titlebar">${titleText} — ${esc(row.case_no)}
-                <span class="df-status-pill tone-${statusTone(row)}">${esc(statusLabel(row))}</span>
-            </div>
             ${pageTabsBar}
             <div class="wr-page tone-defect">
                 ${headHtml}
@@ -1403,14 +1394,13 @@ const TVC_DefectReport = (function () {
         document.getElementById('defectReportModal')?.classList.remove('hidden');
         if ((s._dfPage || '1') === '2') {
             const forceView = s._defectMode === 'view';
-            const phase1ro = forceView || row.phase1_locked || isHq();
-            syncDfSparePage2Ui(true, phase1ro);
+            const page2ro = forceView || !TVC_DefectCase.canModifyListWorkflow(row);
+            syncDfSparePage2Ui(true, page2ro);
         }
     }
 
     function openCaseFromList(id) {
-        getState()._dfNavSource = 'list';
-        openCase(id, 'view');
+        openCaseFromNav(id, 'list');
     }
 
     async function openNewFromJob(jobId) {
@@ -1649,7 +1639,7 @@ const TVC_DefectReport = (function () {
     }
 
     return {
-        init, renderInbox, renderTab, openCase, openCaseFromList, openNewFromJob, openNewBlank,
+        init, renderInbox, renderTab, openCase, openCaseFromList, openCaseFromNav, openNewFromJob, openNewBlank,
         saveDraft, saveModal, submitCase, saveHqReply, saveShipPhase3, saveHqPhase4, startWork,
         printCase, closeModal, closeDefectModal, requestCloseModal, confirmCancelNew, dismissCancelConfirm, captureForm, uploadAttachment, removeAttachment,
         toggleDfGroupPick, toggleDfJobPick, pickDfGroup, pickDfJob, clearDfJob, dfGroupPickSearch, dfJobPickSearch,

@@ -1,6 +1,6 @@
 /* THE VESSEL CODE — PWA bootstrap (service worker + mobile nav helpers) */
 const TVC_PWA = (function () {
-    const SW_URL = 'service-worker.js?v=20260715-defect-v3';
+    const SW_URL = 'service-worker.js?v=20260717-wp-fix3';
 
     function canRegister() {
         return 'serviceWorker' in navigator
@@ -68,14 +68,35 @@ const TVC_PWA = (function () {
         toggleMobileNav(false);
     }
 
+    function initDateInputFormat(scope) {
+        const root = scope && typeof scope.querySelectorAll === 'function' ? scope : document;
+        root.querySelectorAll('input[type="date"]').forEach(el => {
+            if (!el.getAttribute('lang')) el.setAttribute('lang', 'en-US');
+            const sync = () => el.classList.toggle('tvc-date-empty', !el.value);
+            sync();
+            if (el.dataset.tvcDateFmt) return;
+            el.dataset.tvcDateFmt = '1';
+            el.addEventListener('input', sync);
+            el.addEventListener('change', sync);
+        });
+    }
+
+    function bindDateInputFormatObserver() {
+        if (window._tvcDateFmtObs) return;
+        initDateInputFormat();
+        window._tvcDateFmtObs = new MutationObserver(() => initDateInputFormat());
+        window._tvcDateFmtObs.observe(document.body, { childList: true, subtree: true });
+    }
+
     function boot() {
         bindConnectivity();
         initMobileNav();
+        bindDateInputFormatObserver();
         if (isStandalone()) document.body.classList.add('pwa-standalone');
         registerServiceWorker();
     }
 
-    return { boot, toggleMobileNav, closeMobileNav, registerServiceWorker };
+    return { boot, toggleMobileNav, closeMobileNav, registerServiceWorker, initDateInputFormat };
 })();
 
 document.addEventListener('DOMContentLoaded', () => TVC_PWA.boot());

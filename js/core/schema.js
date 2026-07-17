@@ -747,7 +747,7 @@ const TVC_DefectCase = (function () {
             item_sort1: job?.item_sort1 || '',
             item_sort2: job?.item_sort2 || '',
             job_detail: job?.job_detail || '',
-            job_name: overrides.job_name || '',
+            job_name: '',
             machinery_name: hdr.machineryName || job?.item_sort1 || '',
             manufacturer: hdr.maker || '',
             maker: hdr.maker || '',
@@ -756,7 +756,7 @@ const TVC_DefectCase = (function () {
             serial_no: hdr.serialNo || '',
             type_model_serial: [hdr.modelType, hdr.serialNo].filter(Boolean).join(' / '),
             last_maintenance_date: job?.last_done || '',
-            outline_maintenance_request: job?.job_detail || '',
+            outline_maintenance_request: '',
         });
     }
 
@@ -831,8 +831,10 @@ const TVC_DefectCase = (function () {
     function listWorkflowStatus(row) {
         if (!row) return 'Draft';
         if (row.approved_at || row.approved_by) return 'Approved';
-        if (row.sync_status === 'SYNCED') return 'Submitted';
-        if (row.confirmed_at || row.confirmed_by) return 'Confirmed';
+        if (row.confirmed_at || row.confirmed_by) {
+            if (row.sync_status === 'SYNCED') return 'Submitted';
+            return 'Confirmed';
+        }
         if (row.visible_in_list === false) return 'Draft';
         return 'Reported';
     }
@@ -848,11 +850,19 @@ const TVC_DefectCase = (function () {
         }
     }
 
+    /** Approved · Submitted 제외 — 목록/History Modify 허용 */
+    function canModifyListWorkflow(row) {
+        if (!row) return false;
+        if (row.status === Status.CLOSED) return false;
+        const st = listWorkflowStatus(row);
+        return st !== 'Approved' && st !== 'Submitted';
+    }
+
     return {
         SCHEMA_VERSION, Status, PHASE1_FIELDS, PHASE2_FIELDS, PHASE3_FIELDS, PHASE4_FIELDS,
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, belongsToDepartment,
-        listWorkflowStatus, listWorkflowTone,
+        listWorkflowStatus, listWorkflowTone, canModifyListWorkflow,
     };
 })();
 

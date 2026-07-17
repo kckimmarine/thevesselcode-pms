@@ -6,6 +6,8 @@ const TVC_App = (function () {
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
     const NEW_ORIG_JOB_EDIT_ID = '__new_orig_job__';
     let _wrSpareSearchT = null;
+    let _planRowRefreshTimer = null;
+    let _planRowLastTap = { id: null, t: 0 };
 
     function repSt(r) { return TVC_RBAC.normalizeReportStatus(r?.status, !!r?.is_locked); }
     function itemSt(item) { return TVC_RBAC.normalizeReportStatus(item?.status); }
@@ -81,6 +83,14 @@ const TVC_App = (function () {
                 state.spareModule.showReqPanel = false;
             }
         } catch (e) { console.warn('[TVC_DataPurge] requisitions', e); }
+        try {
+            const repPurge = await TVC_DataPurge.purgeAllReportsForTestingOnce();
+            if (repPurge?.workReports || repPurge?.defectCases) {
+                state._histSelReportId = null;
+                state._histChecked = {};
+                state._wrReportId = null;
+            }
+        } catch (e) { console.warn('[TVC_DataPurge] reports', e); }
         try { await TVC_Fleet.ensureFleet(); } catch (e) { console.warn('[TVC_Fleet]', e); }
         const sessionUser = await TVC_Auth.refreshSessionFromDb();
         TVC_RunHours.init({ getState: () => state, refresh: refreshAll });
@@ -666,7 +676,7 @@ const TVC_App = (function () {
             };
         }
         return {
-            jobCode: dc.case_no || 'DEFECT',
+            jobCode: '',
             sort1: dc.job_name || dc.machinery_name || '',
             sort2: '',
             jobDetail: dc.outline_maintenance_request || '',
@@ -698,9 +708,7 @@ const TVC_App = (function () {
     }
 
     function workHistoryDefectCases() {
-        return (state.defectCases || []).filter(d =>
-            d.status !== TVC_DefectCase.Status.DRAFT && d.visible_in_list !== false
-        );
+        return (state.defectCases || []).filter(d => d.visible_in_list !== false);
     }
 
     function matchHistSearch(entry) {
@@ -928,6 +936,66 @@ const TVC_App = (function () {
         return `<span class="${cls} vl-cell-tip" data-tip="${escAttr(t)}"><span class="vl-cell-tip-text">${esc(display)}</span></span>`;
     }
 
+    function histCellHtml(text) {
+        return planCellHtml(text, 'hist-cell-tip');
+    }
+
+    function resolveJobById(jobId) {
+        const id = String(jobId ?? '').trim();
+        if (!id) return null;
+        return state.idx?.jobById.get(id)
+            || state.idx?.jobById.get(jobId)
+            || (state.jobs || []).find(j => String(j.id) === id)
+            || null;
+    }
+
+    function clearPlanRowRefreshTimer() {
+        if (_planRowRefreshTimer) {
+            clearTimeout(_planRowRefreshTimer);
+            _planRowRefreshTimer = null;
+        }
+    }
+
+    function schedulePlanRowVisualRefresh() {
+        clearPlanRowRefreshTimer();
+        _planRowRefreshTimer = setTimeout(() => {
+            _planRowRefreshTimer = null;
+            if (state.vlActual) state.vlActual.refresh();
+        }, 320);
+    }
+
+    /** Work Plan 행 클릭 — 선택 / 빠른 두 번 클릭 시 Procedure 모달 */
+    function onPlanRowClick(ev, jobId) {
+        if (ev?.target?.closest?.('.c-chk, .act-batch-chk, input[type=checkbox]')) return;
+        const id = String(jobId ?? '').trim();
+        if (!id) return;
+
+        const now = Date.now();
+        if (_planRowLastTap.id === id && now - _planRowLastTap.t < 550) {
+            clearPlanRowRefreshTimer();
+            _planRowLastTap = { id: null, t: 0 };
+            if (ev) {
+                ev.preventDefault();
+                ev.stopPropagation();
+            }
+            openWorkProcedure(id);
+            return;
+        }
+        _planRowLastTap = { id, t: now };
+        if (isOrigJobInlineEditing()) return;
+        state.selectedJobId = id;
+        renderSidePanel();
+        renderPlanGroupHeader();
+        if (state.currentTab === 'actual') syncPlanItemUi();
+        schedulePlanRowVisualRefresh();
+    }
+
+    function openPlanWorkProcedure() {
+        const job = getPlanFocusJob();
+        if (!job) return alert('Work Plan에서 작업을 선택하세요.');
+        openWorkProcedure(job.id);
+    }
+
     function initPlanCellTips(scrollId) {
         const container = document.getElementById(scrollId);
         if (!container || container._planTipsBound) return;
@@ -953,13 +1021,25 @@ const TVC_App = (function () {
         });
     }
 
+    /** 행 단일 클릭 — 선택(연한 파란색)만, 모달 없음 */
+    function selectJobRow(jobId) {
+        if (isOrigJobInlineEditing()) return;
+        clearPlanRowRefreshTimer();
+        _planRowLastTap = { id: null, t: 0 };
+        state.selectedJobId = jobId;
+        if (state.vlActual) state.vlActual.refresh();
+        renderSidePanel();
+        renderPlanGroupHeader();
+        if (state.currentTab === 'actual') syncPlanItemUi();
+    }
+
     function renderJobRowHtml(j) {
         const st = jobActualStatusPill(j);
         const selected = state.selectedJobId === j.id ? ' row-selected' : '';
         const batchOn = !!state.batchSelectedJobs[j.id];
-        return `<div class="vl-cells sheet-actual${selected}${j.is_overdue ? ' row-overdue' : ''}"
-            onclick="TVC_App.selectJobRow('${j.id}')"
-            ondblclick="TVC_App.openWorkProcedure('${j.id}')">
+        return `<div class="vl-cells sheet-actual${selected}${j.is_overdue ? ' row-overdue' : ''}" data-job-id="${escAttr(j.id)}"
+            onclick="TVC_App.onPlanRowClick(event, this.getAttribute('data-job-id'))"
+            ondblclick="TVC_App.openWorkProcedure(this.getAttribute('data-job-id'))">
             <span class="c-chk" onclick="event.stopPropagation()">
                 <input type="checkbox" class="act-batch-chk" ${batchOn ? 'checked' : ''} aria-label="Select for batch"
                     onchange="TVC_App.toggleBatchJob('${escAttr(j.id)}', this.checked)">
@@ -976,14 +1056,14 @@ const TVC_App = (function () {
         </div>`;
     }
 
-    /** 행 단일 클릭 — 선택(연한 파란색)만, 모달 없음 */
-    function selectJobRow(jobId) {
-        if (isOrigJobInlineEditing()) return;
-        state.selectedJobId = jobId;
-        if (state.vlActual) state.vlActual.refresh();
-        renderSidePanel();
-        renderPlanGroupHeader();
-        if (state.currentTab === 'actual') syncPlanItemUi();
+    function getPlanFocusJob() {
+        if (state.selectedJobId) {
+            const j = resolveJobById(state.selectedJobId);
+            if (j) return j;
+        }
+        const batch = batchSelectedJobIds();
+        if (batch.length === 1) return resolveJobById(batch[0]);
+        return null;
     }
 
     function mountJobSheet(headId, countId, scrollId, ids, vlKey) {
@@ -1632,6 +1712,27 @@ const TVC_App = (function () {
         if (app && isOrigJobInlineEditing()) app.disabled = !canEdit;
     }
 
+    const ORIG_PIC_BY_DEPT = {
+        ENGINE: ['C/E', '1/E', '2/E', '3/E'],
+        DECK: ['Captain', 'C/O', '2/O(A)', '2/O(B)', '3/O'],
+    };
+
+    function origPicOptions(dept, selected) {
+        const d = String(dept || 'ENGINE').toUpperCase();
+        const list = ORIG_PIC_BY_DEPT[d] || ORIG_PIC_BY_DEPT.ENGINE;
+        const sel = String(selected || '').trim();
+        let html = '<option value="">—</option>';
+        if (sel && !list.includes(sel)) {
+            html += `<option value="${escAttr(sel)}" selected>${esc(sel)}</option>`;
+        }
+        html += list.map(p => `<option value="${escAttr(p)}"${p === sel ? ' selected' : ''}>${esc(p)}</option>`).join('');
+        return html;
+    }
+
+    function origJobPicSelect(id, dept, value) {
+        return `<select class="spare-inline-input orig-inline-pic" id="${id}" onclick="event.stopPropagation()">${origPicOptions(dept, value)}</select>`;
+    }
+
     function origGroupOptions(dept, selected) {
         const groups = new Set();
         (state.idx?.groupNodes || [])
@@ -1687,7 +1788,7 @@ const TVC_App = (function () {
         const codeCell = isNew
             ? origJobCellInput('oie_code', r.job_code)
             : `<span class="orig-inline-ro">${esc(r.job_code || '')}</span>`;
-        const colgroup = '<colgroup><col style="width:32px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:72px"><col style="width:48px"><col style="width:88px"><col style="width:88px"></colgroup>';
+        const colgroup = '<colgroup><col style="width:32px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
         return `<section class="spare-item-edit-panel orig-job-inline-panel" aria-label="Maintenance job edit">
             <div class="spare-item-edit-head">${panelHead}</div>
             <div class="orig-job-inline-meta">
@@ -1715,7 +1816,7 @@ const TVC_App = (function () {
                         <td class="c-d1">${origJobCellInput('oie_sort2', r.item_sort2)}</td>
                         <td class="c-d2">${origJobCellInput('oie_detail', r.job_detail, 'spare-inline-input-wide')}</td>
                         <td class="c-per"><span class="orig-inline-period">${origJobCellInput('oie_period', r.period, 'spare-inline-input-num')}${unitSelect}</span></td>
-                        <td class="c-pic">${origJobCellInput('oie_pic', r.pic)}</td>
+                        <td class="c-pic">${origJobPicSelect('oie_pic', dept, r.pic)}</td>
                         <td class="c-next">${origJobCellDate('oie_next', r.next_date)}</td>
                         <td class="c-last">${origJobCellDate('oie_last', r.last_done)}</td>
                     </tr></tbody>
@@ -1885,7 +1986,9 @@ const TVC_App = (function () {
                 <label>Unit
                     <select name="unit">${units.map(u => `<option ${(job?.unit || 'M') === u ? 'selected' : ''}>${u}</option>`).join('')}</select>
                 </label>
-                <label>P.I.C<input name="pic" value="${esc(job?.pic || '')}"></label>
+                <label>P.I.C
+                    <select name="pic">${origPicOptions(dept, job?.pic || '')}</select>
+                </label>
                 <label>Next Date<input type="date" name="next_date" value="${esc((job?.next_date || '').slice(0, 10))}"></label>
                 <label>Last Done<input type="date" name="last_done" value="${esc((job?.last_done || '').slice(0, 10))}"></label>
                 <div class="orig-job-actions span2">
@@ -2404,10 +2507,11 @@ const TVC_App = (function () {
 
     function setBatchActiveJob(jobId) {
         if (!state._batchMode || !state._batchJobIds.includes(jobId)) return;
+        if (state._wrJobId === jobId) return;
         captureBatchJobDraft();
         loadBatchJobIntoEditor(jobId);
         state._batchJobPickerOpen = false;
-        renderWorkReportModal();
+        refreshBatchActiveJobSwitch();
     }
 
     function openBatchJobPicker() {
@@ -2654,25 +2758,30 @@ const TVC_App = (function () {
         const selLabel = selFilterOn ? `Show All (${n})` : `Selected Items${n >= 1 ? ` (${n})` : ''}`;
         const selTitle = selFilterOn ? '전체 작업 목록 표시' : (n >= 1 ? '선택된 작업만 목록에 표시' : '체크(ㅁ)로 작업을 선택하세요');
         const selectedItemsBtn = `<button type="button" id="planSelectedItemsBtn" class="btn btn-sm${selFilterOn ? ' plan-selected-filter-active' : ''}"${!selFilterOn && n < 1 ? ' disabled' : ''} title="${escAttr(selTitle)}" onclick="TVC_App.togglePlanSelectedOnly()">${selLabel}</button>`;
-        const job = state.idx?.jobById.get(state.selectedJobId);
+        const job = getPlanFocusJob();
         const noJob = !job;
         const canReport = !noJob || n >= 1;
         const reportLabel = n >= 2 ? `Report Input (${n})` : (n === 1 ? 'Report Input (1)' : 'Report Input');
         const reportTitle = n >= 2 ? `${n}개 작업 일괄 Work Report` : '';
         bar.innerHTML = `<div class="plan-action-btns">
-                <button type="button" class="btn btn-sm"${noJob ? ' disabled' : ''}${noJob ? '' : ` onclick="TVC_App.openWorkProcedure('${job.id}')"`}>Work Procedure / History</button>
-                <button type="button" class="btn btn-sm btn-green"${canReport ? '' : ' disabled'}${canReport ? ` onclick="TVC_App.openWorkReportInput()"` : ''}${reportTitle ? ` title="${escAttr(reportTitle)}"` : ''}>${reportLabel}</button>
+                <button type="button" id="planWpBtn" class="btn btn-sm" onclick="TVC_App.openPlanWorkProcedure()"${noJob ? ' disabled' : ''}>Work Procedure / History</button>
+                <button type="button" id="planReportBtn" class="btn btn-sm btn-green" onclick="TVC_App.openWorkReportInput()"${canReport ? '' : ' disabled'}${reportTitle ? ` title="${escAttr(reportTitle)}"` : ''}>${reportLabel}</button>
                 ${selectedItemsBtn}
             </div>`;
     }
 
     /** Job 단위 Work History — Work History 탭과 동일한 daily_work_reports / job_items 소스 */
     function jobWorkHistoryEntries(jobId) {
-        const job = state.idx?.jobById.get(jobId);
+        const job = resolveJobById(jobId);
         if (!job) return [];
-        return workHistoryEntriesRaw().filter(e =>
-            e.item.maintenance_job_id === jobId || e.item.job_code === job.job_code
-        );
+        return workHistoryEntriesRaw().filter(e => {
+            if (e.source === 'defect') {
+                const dc = e.defect;
+                return dc && (dc.maintenance_job_id === job.id || dc.job_code === job.job_code);
+            }
+            const item = e.item;
+            return item && (item.maintenance_job_id === job.id || item.job_code === job.job_code);
+        });
     }
 
     function jobConsumedSpareParts(jobId) {
@@ -2733,9 +2842,12 @@ const TVC_App = (function () {
     }
 
     function reportWorkflowStatusLabel(report, item) {
+        if (report && !item) return workReportListWorkflowStatus(report);
         const status = item
             ? TVC_RBAC.normalizeReportStatus(item.status, report?.is_locked)
             : repSt(report);
+        const wf = report ? workReportListWorkflowStatus(report) : null;
+        if (wf && (!item || report.job_items?.length === 1)) return wf;
         const labels = {
             REPORTED: 'Reported',
             CONFIRMED: 'Confirmed',
@@ -2780,7 +2892,7 @@ const TVC_App = (function () {
     function isHistRowCheckable(entry) {
         if (isHistDefectEntry(entry)) return false;
         const { report: r, item } = entry;
-        if (!state.user || r.is_locked || TVC_RBAC.isApprovedStatus(r.status, true)) return false;
+        if (!state.user || r.is_locked || reportIsApproved(r)) return false;
         return itemSt(item) === 'REPORTED';
     }
 
@@ -2795,7 +2907,7 @@ const TVC_App = (function () {
         if (isHistDefectEntry(entry)) return 'Defect case — Confirm 불가';
         const { report: r, item } = entry;
         if (!state.user) return '로그인 필요';
-        if (r.is_locked || TVC_RBAC.isApprovedStatus(r.status, true)) return '승인 완료된 리포트';
+        if (r.is_locked || reportIsApproved(r)) return '승인 완료된 리포트';
         if (itemSt(item) !== 'REPORTED') return 'REPORTED 항목만 선택 가능';
         if (!TVC_RBAC.canConfirmDepartment(state.user, reportDept(r))) {
             return 'Confirm 권한 없음 (Engine Mode · C/E 또는 Master Mode · Captain)';
@@ -2811,10 +2923,36 @@ const TVC_App = (function () {
         });
     }
 
+    function initHistCellTips() {
+        const container = document.querySelector('#tab-history .sheet-table-wrap');
+        if (!container || container._histTipsBound) return;
+        container._histTipsBound = true;
+        const syncTip = (tip) => {
+            const textEl = tip.querySelector('.vl-cell-tip-text');
+            const truncated = textEl && textEl.scrollWidth > textEl.clientWidth + 1;
+            tip.classList.toggle('vl-cell-tip-active', !!truncated);
+            tip.closest('td')?.classList.toggle('hist-cell-tip-open', !!truncated);
+        };
+        container.addEventListener('mouseover', (e) => {
+            const tip = e.target.closest('.vl-cell-tip');
+            if (!tip || !container.contains(tip)) return;
+            syncTip(tip);
+        });
+        container.addEventListener('mouseout', (e) => {
+            const from = e.target.closest('.vl-cell-tip');
+            const to = e.relatedTarget?.closest?.('.vl-cell-tip');
+            if (from && from !== to) {
+                from.classList.remove('vl-cell-tip-active');
+                from.closest('td')?.classList.remove('hist-cell-tip-open');
+            }
+        });
+    }
+
     function bindWorkHistoryTableEvents() {
         const body = document.getElementById('historyBody');
         if (!body || body._histEventsBound) return;
         body._histEventsBound = true;
+        initHistCellTips();
         body.addEventListener('change', (ev) => {
             const cb = ev.target.closest('.hist-chk-input');
             if (!cb || cb.disabled) return;
@@ -2828,23 +2966,36 @@ const TVC_App = (function () {
         });
     }
 
-    function canModifyHistEntry(entry) {
-        if (isHistDefectEntry(entry)) {
-            const dc = entry.defect;
-            if (dc.status === TVC_DefectCase.Status.CLOSED) return false;
-            return !!state.user;
+    function reportIsApproved(r) {
+        return !!r && TVC_RBAC.isApprovedStatus(r.status, r.is_locked);
+    }
+
+    function workReportListWorkflowStatus(report) {
+        if (!report) return 'Reported';
+        TVC_WorkReport.fromLegacy(report);
+        if (TVC_RBAC.isApprovedStatus(report.status, report.is_locked)) return 'Approved';
+        if (TVC_RBAC.isConfirmedStatus(report.status, report.is_locked)) {
+            if (report.sync_status === 'SYNCED') return 'Submitted';
+            return 'Confirmed';
         }
-        const r = entry?.report;
-        if (!r) return false;
-        return !r.is_locked && !TVC_RBAC.isApprovedStatus(r.status, true);
+        return 'Reported';
+    }
+
+    function canModifyHistEntry(entry) {
+        if (!entry || !state.user) return false;
+        if (isHistDefectEntry(entry)) {
+            return TVC_DefectCase.canModifyListWorkflow(entry.defect);
+        }
+        const st = workReportListWorkflowStatus(entry?.report);
+        return st !== 'Approved' && st !== 'Submitted';
     }
 
     function canDeleteHistEntry(entry) {
         if (isHistDefectEntry(entry)) return false;
         const r = entry?.report;
         if (!r || !state.user) return false;
-        if (r.is_locked || TVC_RBAC.isApprovedStatus(r.status, true)) return false;
-        if (TVC_RBAC.isConfirmedStatus(r.status) && !TVC_RBAC.isApprover(state.user)) return false;
+        if (r.is_locked || reportIsApproved(r)) return false;
+        if (TVC_RBAC.isConfirmedStatus(r.status, r.is_locked) && !TVC_RBAC.isApprover(state.user)) return false;
         return TVC_RBAC.can(state.user, TVC_RBAC.Action.CREATE_DAILY_REPORT);
     }
 
@@ -2870,8 +3021,8 @@ const TVC_App = (function () {
                 const rep = state.reports.find(r => r.id === id);
                 if (!rep) return false;
                 const hasReported = TVC_WorkReport.getJobItems(rep).some(i => itemSt(i) === 'REPORTED');
-                if (!hasReported || rep.is_locked || TVC_RBAC.isApprovedStatus(rep.status, true)) return false;
-                if (TVC_RBAC.isConfirmedStatus(rep.status)) return false;
+                if (!hasReported || rep.is_locked || reportIsApproved(rep)) return false;
+                if (TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked)) return false;
                 return state.user && TVC_RBAC.canConfirmDepartment(state.user, reportDept(rep));
             });
         const setDis = (id, dis) => {
@@ -2918,8 +3069,7 @@ const TVC_App = (function () {
 
     function openDefectFromHistory(defectId) {
         if (!defectId) return;
-        state._dfNavSource = 'history';
-        TVC_DefectReport.openCase(defectId, 'view');
+        TVC_DefectReport.openCaseFromNav(defectId, 'history');
     }
 
     function getWorkHistoryDefectNavList() {
@@ -2942,19 +3092,14 @@ const TVC_App = (function () {
         const entry = getSelectedHistEntry();
         if (!entry) return alert('Work History에서 항목을 선택하세요.');
         if (isHistDefectEntry(entry)) {
-            if (!canModifyHistEntry(entry)) return alert('종료(CLOSED)된 Defect Case는 수정할 수 없습니다.');
-            state._dfNavSource = 'history';
-            const dc = entry.defect;
-            const mode = TVC_RBAC.isHqAccount(state.user) && dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY ? 'phase2'
-                : TVC_RBAC.isHqAccount(state.user) && dc.status === TVC_DefectCase.Status.AWAITING_COMPLETION ? 'phase4'
-                : !TVC_RBAC.isHqAccount(state.user) && (dc.status === TVC_DefectCase.Status.COMPANY_REVIEWED || dc.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) ? 'phase3'
-                : 'edit';
-            TVC_DefectReport.openCase(dc.id, mode);
+            if (!canModifyHistEntry(entry)) {
+                return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
+            }
+            TVC_DefectReport.openCaseFromNav(entry.defect.id, 'history');
             return;
         }
-        if (!canModifyHistEntry(entry)) return alert('승인(APPROVED)된 리포트는 수정할 수 없습니다.');
+        if (!canModifyHistEntry(entry)) return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
         openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id);
-        modifyWorkReport();
     }
 
     async function histReportApproval() {
@@ -3001,7 +3146,7 @@ const TVC_App = (function () {
         const entry = getSelectedHistEntry();
         if (!entry) return alert('Work History에서 항목을 선택하세요.');
         if (!canDeleteHistEntry(entry)) {
-            if (TVC_RBAC.isApprovedStatus(entry.report.status, true) || entry.report.is_locked) {
+            if (reportIsApproved(entry.report) || entry.report.is_locked) {
                 return alert('본사 승인(APPROVED)된 리포트는 삭제할 수 없습니다.');
             }
             return alert('Confirm 완료된 리포트는 Captain / Chief Engineer만 삭제할 수 있습니다.');
@@ -3046,11 +3191,11 @@ const TVC_App = (function () {
                 return `<tr class="hist-row hist-row-defect${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openDefectFromHistory('${escAttr(dc.id)}')">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 ${histTypeCell(entry)}
-                <td class="hist-code"><strong>${esc(cols.jobCode)}</strong></td>
-                <td>${esc(cols.sort1)}</td>
-                <td>${esc(cols.sort2)}</td>
-                <td class="hist-detail">${esc(cols.jobDetail)}</td>
-                <td class="hist-date">${esc(dt)}</td>
+                <td class="hist-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
+                <td class="hist-sort1">${histCellHtml(cols.sort1)}</td>
+                <td class="hist-sort2">${histCellHtml(cols.sort2)}</td>
+                <td class="hist-detail">${histCellHtml(cols.jobDetail)}</td>
+                <td class="hist-date">${esc(dt || '—')}</td>
                 <td>${esc(st)}</td>
                 ${histFlagCell(flags.repairRequest)}
                 ${histFlagCell(flags.shoreSupport)}
@@ -3079,11 +3224,11 @@ const TVC_App = (function () {
             return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(item.maintenance_job_id)}')">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 ${histTypeCell(wrEntry)}
-                <td class="hist-code">${batchTag}<strong>${esc(item.job_code)}</strong></td>
-                <td>${esc(job?.item_sort1 || '')}</td>
-                <td>${esc(job?.item_sort2 || '')}</td>
-                <td class="hist-detail">${esc(job?.job_detail || item.description || r.description || '')}</td>
-                <td class="hist-date">${esc(dt)}</td>
+                <td class="hist-code">${batchTag}${item.job_code ? `<strong>${esc(item.job_code)}</strong>` : '—'}</td>
+                <td class="hist-sort1">${histCellHtml(job?.item_sort1)}</td>
+                <td class="hist-sort2">${histCellHtml(job?.item_sort2)}</td>
+                <td class="hist-detail">${histCellHtml(job?.job_detail || item.description || r.description)}</td>
+                <td class="hist-date">${esc(dt || '—')}</td>
                 <td>${esc(st)}</td>
                 ${histFlagCell(flags.repairRequest)}
                 ${histFlagCell(flags.shoreSupport)}
@@ -3291,14 +3436,26 @@ const TVC_App = (function () {
     // ── Job detail / procedure modals ────────────────────────────────
     /** Original / Work Plan: 더블 클릭 — CMAXS Work Procedure / Work History 모달 */
     function openWorkProcedure(jobId, tab) {
-        if (state._wpJobId !== jobId) state._wpTab = 'procedure';
-        state._wpJobId = jobId;
-        state.selectedJobId = jobId;
+        const job = resolveJobById(jobId);
+        if (!job) return alert('작업을 찾을 수 없습니다.');
+        clearPlanRowRefreshTimer();
+        _planRowLastTap = { id: null, t: 0 };
+        if (state._wpJobId !== job.id) state._wpTab = 'procedure';
+        state._wpJobId = job.id;
+        state.selectedJobId = job.id;
         if (tab) state._wpTab = tab;
-        if (state.vlActual) state.vlActual.refresh();
-        renderWorkProcedureModal();
-        renderSidePanel();
+        try {
+            renderWorkProcedureModal();
+        } catch (err) {
+            console.error('[WorkProcedure]', err);
+            const host = document.getElementById('workProcedureBody');
+            if (host) {
+                host.innerHTML = `<p class="muted">Work Procedure 화면을 불러오지 못했습니다.</p>`;
+            }
+        }
         showModal('workProcedureModal');
+        if (state.vlActual) state.vlActual.refresh();
+        renderSidePanel();
     }
 
     function setWorkProcedureTab(tab) {
@@ -3307,11 +3464,11 @@ const TVC_App = (function () {
     }
 
     function renderWorkProcedureModal() {
-        const job = state.idx?.jobById.get(state._wpJobId);
+        const job = resolveJobById(state._wpJobId);
         const host = document.getElementById('workProcedureBody');
         if (!job || !host) return;
         const meta = TVC_JobMeta.getHistoryForJob(job.job_code);
-        const histEntries = jobWorkHistoryEntries(job.id);
+        const histEntries = jobWorkHistoryEntries(job.id).filter(e => e.source === 'report');
         const procActive = state._wpTab === 'procedure' ? ' active' : '';
         const histActive = state._wpTab === 'history' ? ' active' : '';
 
@@ -3432,7 +3589,7 @@ const TVC_App = (function () {
     }
 
     /** Work History: 더블 클릭 — 저장된 Work Report를 그대로 재현(읽기 전용, Modify 가능) */
-    function openWorkReportFromHistory(reportId, jobId) {
+    function openWorkReportFromHistory(reportId, jobId, opts = {}) {
         const rep = state.reports.find(r => r.id === reportId);
         if (!rep) return;
         TVC_WorkReport.fromLegacy(rep);
@@ -3446,13 +3603,14 @@ const TVC_App = (function () {
         state.selectedJobId = job.id;
         state._wrReportId = reportId;
         state._wrBatchItemId = item?.maintenance_job_id || null;
-        state._wrReadonly = true;
+        const histEntry = { source: 'report', report: rep, item };
+        state._wrReadonly = !canModifyHistEntry(histEntry);
         state._wrForm = { ...(item?.form || rep.report_form || {}) };
         state._wrUsedParts = enrichUsedParts(item?.used_parts || rep.used_parts || []);
         state._wrPage = '1';
         state._wrSpareSearch = '';
-        state._wrTab = rep.work_type === 'POSTPONE' ? 'postpone' : 'repair';
-        renderWorkReportModal();
+        state._wrTab = opts.keepTab || (rep.work_type === 'POSTPONE' ? 'postpone' : 'repair');
+        if (!opts.skipRender) renderWorkReportModal();
         showModal('workReportModal');
     }
 
@@ -3479,9 +3637,9 @@ const TVC_App = (function () {
             closeModal('workReportModal');
             openDefectFromHistory(entry.defect.id);
         } else {
-            openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id);
-            state._wrTab = keepTab || state._wrTab;
-            renderWorkReportModal();
+            openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id, {
+                keepTab: keepTab || state._wrTab,
+            });
         }
     }
 
@@ -3491,8 +3649,8 @@ const TVC_App = (function () {
         const user = TVC_Auth.getCurrentUser();
         if (!user) return;
         const rep = state.reports.find(r => r.id === state._wrReportId);
-        const isShipConfirmed = rep && TVC_RBAC.isConfirmedStatus(rep.status);
-        const isHqApproved = rep && (TVC_RBAC.isApprovedStatus(rep.status, true) || rep.is_locked);
+        const isShipConfirmed = rep && TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked);
+        const isHqApproved = rep && reportIsApproved(rep);
 
         if (isHqApproved) {
             return alert('본사 승인(APPROVED)된 리포트는 삭제할 수 없습니다.');
@@ -3632,7 +3790,7 @@ const TVC_App = (function () {
             const j = state.idx?.jobById.get(id);
             if (!j) return '';
             const active = id === activeJobId ? ' wr-maint-batch-job-row-active' : '';
-            return `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-batch-job-row${active}" role="button" tabindex="0"
+            return `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-batch-job-row${active}" data-batch-job-id="${escAttr(id)}" role="button" tabindex="0"
                 onclick="TVC_App.setBatchActiveJob('${escAttr(id)}')">
                 <div class="wr-maint-batch-cell"><span class="wr-maint-batch-code">${esc(j.job_code)}</span></div>
                 <div class="wr-maint-batch-cell" title="${escAttr(j.item_sort1 || '')}">${esc(j.item_sort1 || '—')}</div>
@@ -3781,6 +3939,10 @@ const TVC_App = (function () {
         captureWorkReportForm();
         const job = state.idx?.jobById.get(jobId);
         if (!job) return;
+        if (state._wrJobId === jobId) {
+            closeWrPickMenu(document.getElementById('wrJobPick'));
+            return;
+        }
         state._wrJobId = jobId;
         state._wrForm.pmsGroupKey = `${job.department}|${String(job.group || '').trim()}`;
         state._wrForm.pmsGroupNo = job.group || state._wrForm.pmsGroupNo;
@@ -3792,7 +3954,69 @@ const TVC_App = (function () {
             lastMaintDate: state._wrForm.lastMaintDate || job.last_done || new Date().toISOString().slice(0, 10),
         });
         closeWrPickMenu(document.getElementById('wrJobPick'));
-        renderWorkReportModal();
+        applyWrFormToDom();
+        syncWrJobHeaderFieldsToDom(job);
+    }
+
+    function applyWrFormToDom(form = state._wrForm) {
+        const host = document.getElementById('workReportBody');
+        if (!host || !form) return;
+        host.querySelectorAll('[data-wf]').forEach(el => {
+            const key = el.dataset.wf;
+            if (!Object.prototype.hasOwnProperty.call(form, key)) return;
+            const v = form[key];
+            if (el.type === 'checkbox') el.checked = !!v;
+            else el.value = v ?? '';
+        });
+    }
+
+    function syncWrJobHeaderFieldsToDom(job) {
+        if (!job) return;
+        const host = document.getElementById('workReportBody');
+        if (!host) return;
+        const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
+        const roMap = {
+            pmsGroupNo: hdr.pmsGroupNo || job.group || '',
+            maker: hdr.maker || '',
+            modelType: hdr.modelType || '',
+            capacity: hdr.capacity || '',
+            serialNo: hdr.serialNo || '',
+        };
+        host.querySelectorAll('input.wr-ro[data-wf]').forEach(el => {
+            const key = el.dataset.wf;
+            if (Object.prototype.hasOwnProperty.call(roMap, key)) el.value = roMap[key];
+        });
+        host.querySelectorAll('.wr-maint-field').forEach(fld => {
+            const label = fld.querySelector('label')?.textContent?.trim();
+            const input = fld.querySelector('input.wr-ro:not([data-wf])');
+            if (!input) return;
+            if (label === 'SORT-1') input.value = job.item_sort1 || '';
+            else if (label === 'SORT-2') input.value = job.item_sort2 || '';
+            else if (label === 'Job Detail') input.value = job.job_detail || '';
+        });
+        const jobPickText = host.querySelector('#wrJobPick .spare-consume-pick-text');
+        if (jobPickText) jobPickText.textContent = job.job_code || '—';
+    }
+
+    function updateBatchJobRowHighlight(activeJobId) {
+        document.querySelectorAll('.wr-maint-batch-job-row[data-batch-job-id]').forEach(row => {
+            row.classList.toggle('wr-maint-batch-job-row-active', row.dataset.batchJobId === activeJobId);
+        });
+    }
+
+    function refreshBatchActiveJobSwitch() {
+        const job = state.idx?.jobById.get(state._wrJobId);
+        if (!job) return;
+        if (state._wrPage === '2') {
+            TVC_SpareMenu.refreshWrSpareJobContext?.();
+            applyWrFormToDom();
+            syncWrJobHeaderFieldsToDom(job);
+            updateBatchJobRowHighlight(state._wrJobId);
+            return;
+        }
+        applyWrFormToDom();
+        syncWrJobHeaderFieldsToDom(job);
+        updateBatchJobRowHighlight(state._wrJobId);
     }
 
     function wrGroupPickSearch(v) { _wrGroupPickSearch = v || ''; const l = document.getElementById('wrGroupPickList'); if (l) l.innerHTML = buildWrGroupPickList(); }
@@ -3842,25 +4066,19 @@ const TVC_App = (function () {
             <span>${esc(label)}</span>
         </label>`;
 
-        return `<footer class="wr-report-footer">
-            <div class="wr-footer-flags" role="group" aria-label="Report status flags">
-                ${flagChk('repairRequest', 'Repair Request')}
-                ${flagChk('shoreSupport', 'Conducted by Shore Support')}
-                ${flagChk('defectCleared', 'Defect Cleared')}
-            </div>
-            <div class="wr-footer-labor">
+        return `
+            <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap">
                 ${fld('Working Hours', `<input type="number" data-wf="handHours" value="${esc(wf('handHours', '0'))}"${dis}>`)}
                 ${fld('Working Member', `<input type="number" data-wf="handMembers" value="${esc(wf('handMembers', '0'))}"${dis}>`)}
+                <div class="wr-maint-field wr-maint-chk-field">${flagChk('shoreSupport', 'Conducted by Shore Support')}</div>
             </div>
-            ${showShipComment ? `<div class="wr-footer-section wr-footer-ship">
-                ${fld("Ship's Comments", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3"${roAttr}${dis}>${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all')}
-                <div class="wr-footer-attach">${renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach && !ro })}</div>
-            </div>` : ''}
-            <div class="wr-footer-section wr-footer-company">
-                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all')}
-                <div class="wr-footer-attach">${renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach && !ro })}</div>
-            </div>
-        </footer>`;
+            ${showShipComment ? `
+                ${fld("Ship's Comments", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3"${roAttr}${dis}>${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld("Ship's Attachment", renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach && !ro }), 'wr-maint-span-all wr-maint-grid-gap')}
+            ` : ''}
+            ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+            ${fld("Company's Attachment", renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach && !ro }), 'wr-maint-span-all wr-maint-grid-gap')}
+        `;
     }
 
     function renderWrRepairMaintenanceBody(job, opts = {}) {
@@ -4092,7 +4310,9 @@ const TVC_App = (function () {
         const uploadBtn = canUpload
             ? `<button type="button" class="wr-attach-btn" onclick="document.getElementById('${inputId}').click()">📎 ${esc(label)}</button>
                <input type="file" id="${inputId}" class="hidden" multiple onchange="TVC_App.uploadWrAttachment('${kind}')">`
-            : (list.length ? '' : `<span class="wr-attach-label">${esc(label)}</span>`);
+            : (list.length
+                ? ''
+                : `<button type="button" class="wr-attach-btn" disabled tabindex="-1">📎 ${esc(label)}</button>`);
         const listHtml = list.length
             ? `<ul class="wr-attach-list">${items}</ul>`
             : '';
@@ -4185,7 +4405,6 @@ const TVC_App = (function () {
 
         const actionsHtml = `
             <button class="btn btn-green" onclick="TVC_App.saveBatchReport()">💾 Save Batch Report</button>
-            <button class="btn" onclick="TVC_App.printWorkReport()">🖨 Print</button>
             <button class="btn" onclick="TVC_App.closeBatchReport()">Cancel</button>`;
 
         host.innerHTML = `
@@ -4216,13 +4435,13 @@ const TVC_App = (function () {
 
         // 승인/확정 워크플로 — Work History에서 리포트를 열었을 때만 활성
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
-        const isRepConfirmed = !!rep && TVC_RBAC.isConfirmedStatus(rep.status);
-        const isRepApproved = !!rep && TVC_RBAC.isApprovedStatus(rep.status, true);
-        const canConfirmNow = !!rep && TVC_RBAC.isReportedStatus(rep.status) && TVC_RBAC.canConfirmDepartment(state.user, job.department);
-        const canApproveNow = !!rep && TVC_RBAC.isConfirmedStatus(rep.status) && TVC_RBAC.canApproveHqReport(state.user);
+        const isRepConfirmed = !!rep && TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked);
+        const isRepApproved = !!rep && reportIsApproved(rep);
+        const canConfirmNow = !!rep && TVC_RBAC.isReportedStatus(rep.status, rep.is_locked) && TVC_RBAC.canConfirmDepartment(state.user, job.department);
+        const canApproveNow = !!rep && isRepConfirmed && !isRepApproved && TVC_RBAC.canApproveHqReport(state.user);
         const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getRankLabel(state.user);
-        const confirmedByVal = isRepConfirmed ? (rep.confirmed_at || '').slice(0, 10) : '';
-        const approvedByVal = isRepApproved ? (rep.approved_at || '').slice(0, 10) : '';
+        const confirmedByVal = isRepConfirmed ? 'Captain, Chief Engineer' : '';
+        const approvedByVal = isRepApproved ? 'Company' : '';
         const canEditShipAttach = !ro && (!rep || TVC_RBAC.isReportedStatus(rep.status));
         const canEditCompanyAttach = !ro && !!canApproveNow;
 
@@ -4272,18 +4491,14 @@ const TVC_App = (function () {
             ? `<button class="btn" onclick="TVC_App.navReport(-1)">&laquo; Previous</button>
                <button class="btn" onclick="TVC_App.navReport(1)">Next &raquo;</button>`
             : '';
-        const primaryBtn = ro
-            ? `<button class="btn btn-green" onclick="TVC_App.modifyWorkReport()">✏️ Modify</button>`
-            : `<button class="btn btn-green" onclick="TVC_App.saveWorkReport()">💾 Save</button>`;
-        const deleteBtn = isHist
-            ? `<button class="btn btn-red" onclick="TVC_App.deleteWorkReport()">🗑 Delete</button>`
+        const primaryBtn = !ro
+            ? `<button class="btn btn-green" onclick="TVC_App.saveWorkReport()">💾 Save</button>`
             : '';
-        const printBtn = `<button class="btn" onclick="TVC_App.printWorkReport()">🖨 Print</button>`;
         const closeBtn = isHist
-            ? `<button class="btn" onclick="TVC_App.closeWorkReport()">${ro ? 'Close' : 'Cancel'}</button>`
+            ? `<button class="btn" onclick="TVC_App.closeWorkReport()">Close</button>`
             : `<button class="btn" onclick="TVC_App.closeWorkReport()">Cancel</button>`;
-        const actionsHtml = `${navBtns}${primaryBtn}${deleteBtn}${printBtn}${closeBtn}`;
-        const titleText = ro ? 'Work Report (View)' : (isHist ? 'Work Report (Modify)' : 'Work Report');
+        const actionsHtml = `${navBtns}${primaryBtn}${closeBtn}`;
+        const titleText = isHist ? 'Work Report' : (ro ? 'Work Report (View)' : 'Work Report');
 
         host.innerHTML = `
             <div class="wr-titlebar">${titleText}</div>
@@ -4375,9 +4590,11 @@ const TVC_App = (function () {
         }
         if (form.shoreTechnician) form.shoreSupport = true;
         if (form.shoreSupport) form.shoreTechnician = true;
-        form.dockingRepair = !!form.repairRequest;
+        form.repairRequest = false;
+        form.defectCleared = false;
+        form.dockingRepair = false;
+        form.allPendingCleared = false;
         form.pendingForRepair = !!form.shoreSupport;
-        form.allPendingCleared = !!form.defectCleared;
 
         const description = existingRep?.work_type === 'TROUBLE'
             ? (form.troubleOutline || existingRep.description || job.job_detail)
@@ -4841,7 +5058,7 @@ const TVC_App = (function () {
         setDepartment, setCaptainView, setHistView, setHistTab, menuAction, resolveDeptPick,
         setFleetView, setFleetSearch, selectVessel,
         setSearch, setTreeSearch, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, selectGroup, renderGroupTree,
-        openJobDetail, openWorkProcedure, setWorkProcedureTab, openProcedureHistory, openProcedureHistoryByCode,
+        openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab, openProcedureHistory, openProcedureHistoryByCode,
         openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport,
         uploadWrAttachment, removeWrAttachment,
         toggleWrGroupPick, toggleWrJobPick, pickWrGroup, pickWrJob, wrGroupPickSearch, wrJobPickSearch,

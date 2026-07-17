@@ -86,7 +86,7 @@ const TVC_SpareMenu = (function () {
     </tr></thead>`;
     }
     const SPARE_MAIN_TABLE_HEAD = `<thead><tr>
-                    <th class="c-chk"><input type="checkbox" id="spareHeadChkAll" class="spare-head-chk" aria-label="전체 선택"
+                    <th class="c-chk"><input type="checkbox" id="spareHeadChkAll" class="spare-head-chk" aria-label="Select all"
                         onclick="event.stopPropagation()" onchange="TVC_SpareMenu.toggleSpareAll(this.checked)"></th>
                     <th class="c-num">Code</th>
                     <th class="c-cls">Class</th>
@@ -98,7 +98,7 @@ const TVC_SpareMenu = (function () {
                     <th class="c-stk">Stock</th>
                 </tr></thead>`;
     const SPARE_REQ_TABLE_HEAD = `<thead><tr>
-                    <th class="c-chk"><input type="checkbox" id="reqWorkHeadChkAll" class="spare-head-chk" aria-label="전체 선택"
+                    <th class="c-chk"><input type="checkbox" id="reqWorkHeadChkAll" class="spare-head-chk" aria-label="Select all"
                         onclick="event.stopPropagation()" onchange="TVC_SpareMenu.reqWorkToggleAll(this.checked)"></th>
                     <th class="c-num">Code</th>
                     <th class="c-cls">Class</th>
@@ -117,7 +117,7 @@ const TVC_SpareMenu = (function () {
     const SPARE_CONSUME_MIN_WIDTH = SPARE_MAIN_MIN_WIDTH + SPARE_CONSUME_EXTRA_COL_WIDTH;
     const SPARE_CONSUME_COLGROUP = SPARE_MAIN_COLGROUP.replace('</colgroup>', `<col style="width:${SPARE_CONSUME_EXTRA_COL_WIDTH}px"></colgroup>`);
     const SPARE_CONSUME_TABLE_HEAD = `<thead><tr>
-                    <th class="c-chk"><input type="checkbox" id="consumeHeadChkAll" class="spare-head-chk" aria-label="전체 선택"
+                    <th class="c-chk"><input type="checkbox" id="consumeHeadChkAll" class="spare-head-chk" aria-label="Select all"
                         onclick="event.stopPropagation()" onchange="TVC_SpareMenu.consumeToggleAll(this.checked)"></th>
                     <th class="c-num">Code</th>
                     <th class="c-cls">Class</th>
@@ -133,7 +133,7 @@ const TVC_SpareMenu = (function () {
     const SPARE_WR_MIN_WIDTH = SPARE_CONSUME_MIN_WIDTH;
     const SPARE_WR_COLGROUP = SPARE_CONSUME_COLGROUP;
     const SPARE_WR_TABLE_HEAD = `<thead><tr>
-                    <th class="c-chk"><input type="checkbox" id="wrSpareHeadChkAll" class="spare-head-chk" aria-label="전체 선택"
+                    <th class="c-chk"><input type="checkbox" id="wrSpareHeadChkAll" class="spare-head-chk" aria-label="Select all"
                         onclick="event.stopPropagation()" onchange="TVC_SpareMenu.wrSpareToggleAll(this.checked)"></th>
                     <th class="c-num">Code</th>
                     <th class="c-cls">Class</th>
@@ -508,7 +508,7 @@ const TVC_SpareMenu = (function () {
             const cls = ['spare-gh-value', extraClass, empty ? 'empty' : ''].filter(Boolean).join(' ');
             return `<span class="${cls}">${empty ? '—' : esc(t)}</span>`;
         };
-        const idleHintText = opts.idleHint || '아이템을 클릭하거나 SPARE GROUP Tree에서 그룹을 선택하면 장비 정보가 표시됩니다.';
+        const idleHintText = opts.idleHint || 'Click an item or select a group in the SPARE GROUP Tree to display equipment information.';
         const idleHint = `<span class="spare-gh-idle-hint">${idleHintText}</span>`;
         const ariaLabel = opts.ariaLabel || 'SPARE Group information';
         return `<section class="spare-group-header${hasContent ? '' : ' is-idle'}" aria-label="${esc(ariaLabel)}">
@@ -555,7 +555,7 @@ const TVC_SpareMenu = (function () {
     function renderPlanGroupHeaderHtml(st) {
         return renderSpareGroupHeaderHtml(withDerivedPlanGroupKey(st), {
             pmsLabel: 'PMS Group No.',
-            idleHint: '작업을 클릭하거나 PMS GROUP Tree에서 그룹을 선택하면 장비 정보가 표시됩니다.',
+            idleHint: 'Click a job or select a group in the PMS GROUP Tree to display equipment information.',
             ariaLabel: 'PMS Group information',
         });
     }
@@ -646,10 +646,10 @@ const TVC_SpareMenu = (function () {
     function renderSpareGroupPickListHtml(st, selected) {
         const nodes = spareEditPmsGroupNodes(st);
         const sel = resolveEditGroupSelection(st, selected);
-        const triggerText = sel ? safeTreeLabel(sel) : '— GROUP 선택 —';
+        const triggerText = sel ? safeTreeLabel(sel) : '— Select GROUP —';
         let inner = '';
         if (!nodes.length) {
-            inner = '<span class="spare-gh-group-empty muted">Original Plan을 열면 PMS GROUP Tree가 로드됩니다.</span>';
+            inner = '<span class="spare-gh-group-empty muted">Open Original Plan to load the PMS GROUP Tree.</span>';
         }
         nodes.forEach(n => {
             const label = n.label;
@@ -702,7 +702,7 @@ const TVC_SpareMenu = (function () {
     // 그룹 단위 헤더 편집 (Machinery Name / Model / Capacity / Maker → 그룹 내 전체 아이템 일괄 적용)
     function renderSpareGroupHeaderGroupEditHtml(st, h, opts = {}) {
         const pmsLabel = opts.pmsLabel || 'SPARE Group No.';
-        return `<section class="spare-group-header is-editing is-group-editing" aria-label="Group 헤더 편집">
+        return `<section class="spare-group-header is-editing is-group-editing" aria-label="Edit group header">
             <div class="spare-group-header-card">
                 <div class="spare-gh-row spare-gh-row-primary">
                     <div class="spare-gh-field spare-gh-field-wide">
@@ -729,7 +729,7 @@ const TVC_SpareMenu = (function () {
                     </div>
                 </div>
                 <div class="spare-gh-edit-actions">
-                    <span class="spare-gh-edit-hint">이 그룹의 모든 아이템에 일괄 적용됩니다.</span>
+                    <span class="spare-gh-edit-hint">Applied to all items in this group.</span>
                     <button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.saveGroupHeaderEdit()">💾 Save</button>
                     <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.cancelGroupHeaderEdit()">Cancel</button>
                 </div>
@@ -1062,7 +1062,7 @@ const TVC_SpareMenu = (function () {
         const on = !!m.consumeShowSelectedOnly;
         return {
             label: on ? `Show All (${n})` : `Selected Items${n >= 1 ? ` (${n})` : ''}`,
-            title: on ? '전체 부품 목록 표시' : (n >= 1 ? '선택된 부품만 목록에 표시' : '체크(ㅁ)로 부품을 선택하세요'),
+            title: on ? 'Show full parts list' : (n >= 1 ? 'Show selected parts only' : 'Select parts using the checkbox'),
             disabled: !on && n < 1,
             active: on,
         };
@@ -1084,7 +1084,7 @@ const TVC_SpareMenu = (function () {
         const on = !!m.reqWorkShowSelectedOnly;
         return {
             label: on ? `Show All (${n})` : `Selected Items${n >= 1 ? ` (${n})` : ''}`,
-            title: on ? '전체 부품 목록 표시' : (n >= 1 ? '선택된 부품만 목록에 표시' : '체크(ㅁ)로 부품을 선택하세요'),
+            title: on ? 'Show full parts list' : (n >= 1 ? 'Show selected parts only' : 'Select parts using the checkbox'),
             disabled: !on && n < 1,
             active: on,
         };
@@ -1411,7 +1411,7 @@ const TVC_SpareMenu = (function () {
             st.idx = TVC_Indexes.build(st);
         }
         if (!st.idx) {
-            root.innerHTML = '<div class="tree-empty muted">Maintenance Plan을 불러오는 중…<br>Original Plan 탭을 한 번 열어 주세요.</div>';
+            root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…<br>Please open the Original Plan tab once.</div>';
             return;
         }
         const q = (st.treeSearch || '').toLowerCase();
@@ -1442,7 +1442,7 @@ const TVC_SpareMenu = (function () {
             const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             mergeSpareTreeNodes(nodes).forEach(n => {
-                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
+                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="No job items">0</span>` : '';
                 const sel = st.selectedGroupKey === n.key ? ' selected' : '';
                 html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_App.selectGroup('${escAttr(n.key)}')"><span>${esc(safeTreeLabel(n.label))}</span>${emptyTag}</div>`;
             });
@@ -1649,17 +1649,17 @@ const TVC_SpareMenu = (function () {
         root.innerHTML = `
         <div class="spare-unified">
           ${fileMode && needsImport ? `<div class="spare-import-banner file-mode">
-            <strong>⚠ file:// 모드</strong> — 자동 Import 불가. 아래 <b>spare-inventory.xls 선택</b> 버튼을 직접 클릭하세요.
-            (권장: <code>npm run serve</code> → <code>http://localhost:3000</code>)
+            <strong>⚠ file:// mode</strong> — Auto Import unavailable. Click the <b>Select spare-inventory.xls</b> button below.
+            (Recommended: <code>npm run serve</code> → <code>http://localhost:3000</code>)
           </div>` : ''}
           ${needsImport ? `<div class="spare-import-banner">
-            <strong>⚠ ENGINE 재고 미적재</strong> — 현재 ${allCanon.length}건 (데모 데이터).
+            <strong>⚠ ENGINE inventory not loaded</strong> — Currently ${allCanon.length} item(s) (demo data).
             ${canModify
                 ? (fileMode
-                    ? `<label class="btn btn-sm btn-green spare-file-pick" for="srInventoryImportFile">📂 spare-inventory.xls 선택</label>`
-                    : `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.loadBundledXls()">📥 Import XLS (ENGINE) — 권장</button>
-                       <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.triggerInventoryImport()">📂 파일 선택</button>`)
-                : '기관장/선장 계정으로 Import 하세요.'}
+                    ? `<label class="btn btn-sm btn-green spare-file-pick" for="srInventoryImportFile">📂 Select spare-inventory.xls</label>`
+                    : `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.loadBundledXls()">📥 Import XLS (ENGINE) — Recommended</button>
+                       <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.triggerInventoryImport()">📂 Select file</button>`)
+                : 'Import using Chief Engineer / Captain account.'}
             ${st._spareImportMsg ? `<span class="muted">${esc(st._spareImportMsg)}</span>` : ''}
           </div>` : (st._spareImportMsg ? `<div class="spare-import-banner ok">${esc(st._spareImportMsg)}</div>` : '')}
           ${renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport, canModify })}
@@ -1667,7 +1667,7 @@ const TVC_SpareMenu = (function () {
             <aside class="panel tree-panel">
               <div class="panel-head spare-tree-head">
                 <span>🌳 SPARE GROUP Tree</span>
-                ${canModify ? `<button type="button" class="btn spare-tree-modify-btn" onclick="TVC_SpareMenu.startGroupHeaderEdit()" title="선택한 그룹의 장비 정보(Machinery/Model/Capacity/Maker) 수정" aria-label="Modify">✏️</button>` : ''}
+                ${canModify ? `<button type="button" class="btn spare-tree-modify-btn" onclick="TVC_SpareMenu.startGroupHeaderEdit()" title="Edit equipment info (Machinery/Model/Capacity/Maker) for the selected group" aria-label="Modify">✏️</button>` : ''}
               </div>
               <div class="tree-search-bar">
                 <input class="search-input" id="spareTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
@@ -1681,12 +1681,12 @@ const TVC_SpareMenu = (function () {
                 <button type="button" id="spareDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteSpareItem()"${tb.deleteEnabled ? '' : ' disabled'} title="${esc(tb.deleteTitle)}">🗑 Delete</button>
                 <span style="flex:1"></span>
                 ${canModify ? (fileMode
-                    ? `<label class="btn btn-sm btn-green spare-file-pick" for="srInventoryImportFile">📂 XLS 선택</label>
-                       <label class="btn btn-sm spare-file-pick" for="srCsvUploadFile">📄 CSV 선택</label>`
+                    ? `<label class="btn btn-sm btn-green spare-file-pick" for="srInventoryImportFile">📂 Select XLS</label>
+                       <label class="btn btn-sm spare-file-pick" for="srCsvUploadFile">📄 Select CSV</label>`
                     : `<button class="btn btn-sm btn-green" onclick="TVC_SpareMenu.loadBundledXls()">📥 Import XLS</button>
-                  <button class="btn btn-sm" onclick="TVC_SpareMenu.triggerInventoryImport()">📂 XLS 선택</button>
+                  <button class="btn btn-sm" onclick="TVC_SpareMenu.triggerInventoryImport()">📂 Select XLS</button>
                   <button class="btn btn-sm" onclick="TVC_SpareMenu.triggerCsvUpload()">📄 CSV</button>`) : ''}
-                ${!canModify && canView && needsImport ? `<span class="muted">Import: Chief/Captain 권한 필요</span>` : ''}
+                ${!canModify && canView && needsImport ? `<span class="muted">Import: Chief/Captain permission required</span>` : ''}
                 ${canRequisition ? `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.addToRequisition()">Add to Requisition</button>
                 <button class="btn btn-sm" onclick="TVC_SpareMenu.toggleReqPanel()">🧾 Requisitions</button>` : ''}
               </div>
@@ -1758,9 +1758,9 @@ const TVC_SpareMenu = (function () {
         const modifyIds = spareActionIds('modify');
         const deleteIds = spareActionIds('delete');
         const checkedCount = getCheckedSpareIds(st).length;
-        const permTip = 'Chief Engineer / Captain 권한 필요';
-        const pickTip = '행을 클릭하거나 ㅁ에서 선택하세요';
-        const editingTip = '수정 중에는 사용할 수 없습니다';
+        const permTip = 'Chief Engineer / Captain permission required';
+        const pickTip = 'Click a row or select using the checkbox';
+        const editingTip = 'Not available while editing';
         return {
             editing,
             canModify,
@@ -1769,9 +1769,9 @@ const TVC_SpareMenu = (function () {
             modifyEnabled: canModify && !editing && modifyIds.length === 1,
             deleteEnabled: canModify && !editing && deleteIds.length >= 1,
             appendEnabled: canModify && !editing,
-            modifyTitle: !canModify ? permTip : (editing ? editingTip : (checkedCount > 1 ? '수정은 한 건만 선택할 수 있습니다' : (modifyIds.length ? '' : pickTip))),
+            modifyTitle: !canModify ? permTip : (editing ? editingTip : (checkedCount > 1 ? 'Modify allows only one selected item' : (modifyIds.length ? '' : pickTip))),
             deleteTitle: !canModify ? permTip : (editing ? editingTip : (deleteIds.length ? '' : pickTip)),
-            appendTitle: !canModify ? permTip : (editing ? '수정 중에는 Append할 수 없습니다' : '신규 부품 등록'),
+            appendTitle: !canModify ? permTip : (editing ? 'Cannot Append while editing' : 'Register new part'),
         };
     }
 
@@ -1987,7 +1987,7 @@ const TVC_SpareMenu = (function () {
             onclick="${focusFn}('${sid}')"${dblAttr}>${colgroup}<tbody><tr class="spare-row${low ? ' row-overdue' : ''}${sel}"
             tabindex="0" role="button" style="cursor:pointer">
             <td class="c-chk" onclick="event.stopPropagation()">
-                <input type="checkbox" class="spare-row-chk" ${checked}${locked || wrRo || consumeRo ? ' disabled' : ''} aria-label="부품 선택"
+                <input type="checkbox" class="spare-row-chk" ${checked}${locked || wrRo || consumeRo ? ' disabled' : ''} aria-label="Select part"
                     onclick="event.stopPropagation()"
                     onchange="${toggleFn}('${sid}', this.checked)">
             </td>
@@ -2133,8 +2133,8 @@ const TVC_SpareMenu = (function () {
             const lowTag = modState(st).showLowOnly ? 'Low stock' : '';
             const filterLabel = [gLabel, lowTag].filter(Boolean).join(' · ');
             scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">
-                표시할 부품이 없습니다.${filterLabel ? ' (필터: ' + esc(filterLabel) + ' — <a href="#" onclick="TVC_App.selectGroup(null);TVC_SpareMenu.clearListFilters();return false">전체 보기</a>)' : ''}
-                ${gLabel ? '<br><small>이 GROUP에 배정된 부품이 없습니다. ✏️ Modify 또는 상세 패널에서 <b>GROUP (PMS)</b>를 지정하세요.</small>' : ''}
+                No parts to display.${filterLabel ? ' (Filter: ' + esc(filterLabel) + ' — <a href="#" onclick="TVC_App.selectGroup(null);TVC_SpareMenu.clearListFilters();return false">View all</a>)' : ''}
+                ${gLabel ? '<br><small>No parts assigned to this GROUP. Use ✏️ Modify or the detail panel to set <b>GROUP (PMS)</b>.</small>' : ''}
             </div>`;
             return;
         }
@@ -2551,7 +2551,7 @@ const TVC_SpareMenu = (function () {
             return `<tr class="spare-consume-log-row${sel ? ' sr-req-sel' : ''}" data-consume-log-id="${lid}"
                 onclick="TVC_SpareMenu.consumeLogSelectRow('${lid}')">
                 <td class="spare-consume-log-chk" onclick="event.stopPropagation()">
-                    <input type="checkbox" class="spare-row-chk"${checked ? ' checked' : ''} aria-label="소비 일지 선택"
+                    <input type="checkbox" class="spare-row-chk"${checked ? ' checked' : ''} aria-label="Select consumption log"
                         onclick="event.stopPropagation()"
                         onchange="TVC_SpareMenu.consumeLogToggleRow('${lid}', this.checked)">
                 </td>
@@ -2662,7 +2662,7 @@ const TVC_SpareMenu = (function () {
     async function consumeLogNew() {
         const { st } = await vesselScope();
         if (!canCreateConsume(st)) {
-            alert('소비(Consumption) 입력 권한이 없습니다.');
+            alert('No permission to enter consumption records.');
             return;
         }
         closeConsumeLogModal();
@@ -2682,7 +2682,7 @@ const TVC_SpareMenu = (function () {
             const linked = all.find(r => r.consume_log_id === draft.log_id);
             reportId = linked?.id || '';
         }
-        if (!reportId) return alert('연결된 Work Report가 없습니다.');
+        if (!reportId) return alert('No linked Work Report.');
 
         let report = (st.reports || []).find(r => r.id === reportId);
         if (!report) {
@@ -2693,14 +2693,14 @@ const TVC_SpareMenu = (function () {
                 if (!st.reports.some(r => r.id === reportId)) st.reports.push(report);
             }
         }
-        if (!report) return alert('Work Report를 찾을 수 없습니다.');
+        if (!report) return alert('Work Report not found.');
 
         TVC_WorkReport.fromLegacy(report);
         const item = TVC_WorkReport.findItem(report, draft.job_code) || TVC_WorkReport.getJobItems(report)[0];
-        if (!item?.maintenance_job_id) return alert('Work Report 작업 항목을 찾을 수 없습니다.');
+        if (!item?.maintenance_job_id) return alert('Work Report job item not found.');
 
         _consumeWorkReportOverlay = true;
-        if (!window.TVC_App?.openWorkReportFromHistory) return alert('Work Report 화면을 열 수 없습니다.');
+        if (!window.TVC_App?.openWorkReportFromHistory) return alert('Cannot open Work Report screen.');
         TVC_App.openWorkReportFromHistory(reportId, item.maintenance_job_id);
         document.getElementById('workReportModal')?.classList.add('modal-over-consume');
     }
@@ -2715,14 +2715,14 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateConsume(st)) {
-            alert('소비(Consumption) 입력 권한이 없습니다.');
+            alert('No permission to enter consumption records.');
             return;
         }
         const logId = m.consumeLastSavedLogId || m.selectedConsumeLogId;
-        if (!logId) return alert('수정할 소비 일지를 선택하세요.');
+        if (!logId) return alert('Select a consumption log to edit.');
         const log = await TVC_Inventory.getConsumeLog(logId);
-        if (!log) return alert('소비 일지를 찾을 수 없습니다.');
-        if (!(log.lines || []).length) return alert('수정할 부품이 없습니다.');
+        if (!log) return alert('Consumption log not found.');
+        if (!(log.lines || []).length) return alert('No parts to edit.');
         _consumeListReturnAfterSave = true;
         await startConsumeEditSession(logId);
     }
@@ -2731,13 +2731,13 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateConsume(st)) {
-            alert('소비(Consumption) 입력 권한이 없습니다.');
+            alert('No permission to enter consumption records.');
             return;
         }
-        if (!m.selectedConsumeLogId) return alert('수정할 소비 일지를 선택하세요.');
+        if (!m.selectedConsumeLogId) return alert('Select a consumption log to edit.');
         const log = await TVC_Inventory.getConsumeLog(m.selectedConsumeLogId);
-        if (!log) return alert('소비 일지를 찾을 수 없습니다.');
-        if (!(log.lines || []).length) return alert('수정할 부품이 없습니다.');
+        if (!log) return alert('Consumption log not found.');
+        if (!(log.lines || []).length) return alert('No parts to edit.');
         const logId = m.selectedConsumeLogId;
         closeConsumeLogModal();
         _consumeListReturnAfterSave = true;
@@ -2751,14 +2751,14 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (!canCreateConsume(st)) {
-            alert('소비 일지 삭제 권한이 없습니다.');
+            alert('No permission to delete consumption logs.');
             return;
         }
-        if (!m.selectedConsumeLogId) return alert('삭제할 소비 일지를 선택하세요.');
+        if (!m.selectedConsumeLogId) return alert('Select a consumption log to delete.');
         const log = await TVC_Inventory.getConsumeLog(m.selectedConsumeLogId);
-        if (!log) return alert('소비 일지를 찾을 수 없습니다.');
+        if (!log) return alert('Consumption log not found.');
         const label = [log.consumed_date, log.job_code, consumeLogComments(log)].filter(Boolean).join(' · ') || log.id;
-        if (!confirm(`소비 일지를 삭제하시겠습니까?\n\n${label}`)) return;
+        if (!confirm(`Delete this consumption log?\n\n${label}`)) return;
         await TVC_Inventory.deleteConsumeLog(m.selectedConsumeLogId);
         m.selectedConsumeLogId = null;
         m.consumeLogCheckedIds = {};
@@ -2767,7 +2767,7 @@ const TVC_SpareMenu = (function () {
 
     async function consumeLogPreview() {
         const id = modState(getState()).selectedConsumeLogId;
-        if (!id) return alert('소비 일지를 선택하세요.');
+        if (!id) return alert('Select a consumption log.');
         closeConsumeLogModal();
         _consumeListReturnAfterSave = true;
         if (window.TVC_App?.switchTab && getState().currentTab !== 'spare') {
@@ -2778,11 +2778,11 @@ const TVC_SpareMenu = (function () {
 
     async function consumeLogPrint() {
         const id = modState(getState()).selectedConsumeLogId;
-        if (!id) return alert('소비 일지를 선택하세요.');
+        if (!id) return alert('Select a consumption log.');
         const html = await buildConsumeLogPrintDocument(id);
-        if (!html) return alert('소비 일지를 찾을 수 없습니다.');
+        if (!html) return alert('Consumption log not found.');
         const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { alert('팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.'); return; }
+        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return; }
         w.document.write(`<!DOCTYPE html><html><head><title>Consumed Parts Log</title>
             <style>${reqPreviewPrintStyles()}</style></head><body>${html}</body></html>`);
         w.document.close();
@@ -2849,11 +2849,11 @@ const TVC_SpareMenu = (function () {
     async function consumeLogPrintPreview() {
         const m = modState(getState());
         const id = m.consumeLastSavedLogId;
-        if (!id) return alert('소비 일지를 찾을 수 없습니다.');
+        if (!id) return alert('Consumption log not found.');
         const html = await buildConsumeLogPrintDocument(id);
-        if (!html) return alert('소비 일지를 찾을 수 없습니다.');
+        if (!html) return alert('Consumption log not found.');
         const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { alert('팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.'); return; }
+        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return; }
         w.document.write(`<!DOCTYPE html><html><head><title>Consumed Parts Log</title>
             <style>${reqPreviewPrintStyles()}</style></head><body>${html}</body></html>`);
         w.document.close();
@@ -2913,7 +2913,7 @@ const TVC_SpareMenu = (function () {
             <label>Location<input id="se_location" value="${esc(f('location'))}"></label>
             <label>Price<input id="se_price" type="number" step="0.01" value="${sp.price != null ? esc(sp.price) : ''}"></label>
           </div>
-          <p class="muted sr-editor-hint">GROUP는 PMS GROUP Tree와 동일합니다. SPARE GROUP Tree에서 선택한 GROUP에만 부품이 표시됩니다.</p>
+          <p class="muted sr-editor-hint">GROUP matches the PMS GROUP Tree. Parts appear only for the GROUP selected in the SPARE GROUP Tree.</p>
           <div class="sr-editor-actions">
             <button class="btn btn-sm btn-green" onclick="TVC_SpareMenu.saveEdit()">💾 Save</button>
             <button class="btn btn-sm" onclick="TVC_SpareMenu.cancelEdit()">Cancel</button>
@@ -3004,7 +3004,7 @@ const TVC_SpareMenu = (function () {
     async function reqListNew() {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            alert('청구서 작성 권한이 없습니다.');
+            alert('No permission to create requisitions.');
             return;
         }
         closeReqListModal();
@@ -3019,13 +3019,13 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateRequisition(st)) {
-            alert('청구서 작성 권한이 없습니다.');
+            alert('No permission to create requisitions.');
             return;
         }
-        if (!m.selectedReqId) return alert('수정할 청구서를 선택하세요.');
+        if (!m.selectedReqId) return alert('Select a requisition to edit.');
         const req = await TVC_Inventory.getRequisition(m.selectedReqId);
-        if (!req) return alert('청구서를 찾을 수 없습니다.');
-        if (!(req.lines || []).length) return alert('수정할 부품이 없습니다.');
+        if (!req) return alert('Requisition not found.');
+        if (!(req.lines || []).length) return alert('No parts to edit.');
         const reqId = m.selectedReqId;
         closeReqListModal();
         _reqListReturnAfterSave = true;
@@ -3039,13 +3039,13 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (window.TVC_RBAC && !TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION)) {
-            alert('청구서 삭제 권한이 없습니다.');
+            alert('No permission to delete requisitions.');
             return;
         }
-        if (!m.selectedReqId) return alert('삭제할 청구서를 선택하세요.');
+        if (!m.selectedReqId) return alert('Select a requisition to delete.');
         const req = await TVC_Inventory.getRequisition(m.selectedReqId);
-        if (!req) return alert('청구서를 찾을 수 없습니다.');
-        if (!confirm(`청구서 ${req.req_no} 을(를) 삭제하시겠습니까?`)) return;
+        if (!req) return alert('Requisition not found.');
+        if (!confirm(`Delete requisition ${req.req_no}?`)) return;
         await TVC_Inventory.deleteRequisition(m.selectedReqId);
         if (_reqSheet.reqId === m.selectedReqId) _reqSheet.reqId = null;
         m.selectedReqId = null;
@@ -3223,7 +3223,7 @@ const TVC_SpareMenu = (function () {
 
     function openReqPrintWindow(html, { print = false } = {}) {
         const w = window.open('', '_blank', 'width=900,height=700');
-        if (!w) { alert('팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.'); return null; }
+        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return null; }
         w.document.write(`<!DOCTYPE html><html><head><title>Parts Requisition</title>
             <style>body{font-family:Segoe UI,Arial,sans-serif;font-size:12px;padding:16px}
             table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #999;padding:4px 6px}
@@ -3236,16 +3236,16 @@ const TVC_SpareMenu = (function () {
 
     async function reqListPreview() {
         const id = modState(getState()).selectedReqId;
-        if (!id) return alert('청구서를 선택하세요.');
+        if (!id) return alert('Select a requisition.');
         closeReqListModal();
         await startReqWorkPreviewSession(id);
     }
 
     async function reqListPrint() {
         const id = modState(getState()).selectedReqId;
-        if (!id) return alert('청구서를 선택하세요.');
+        if (!id) return alert('Select a requisition.');
         const html = await buildReqPrintDocument(id);
-        if (!html) return alert('청구서를 찾을 수 없습니다.');
+        if (!html) return alert('Requisition not found.');
         openReqPrintWindow(html, { print: true });
     }
 
@@ -3287,15 +3287,15 @@ const TVC_SpareMenu = (function () {
         if (isInlineEditing(getState())) return saveInlineEdit();
         if (window.TVC_App?.openSpareModify) return TVC_App.openSpareModify();
         const ids = spareActionIds('modify');
-        if (!ids.length) return alert('수정할 부품을 선택하세요 (행 클릭 또는 ㅁ 체크).');
-        if (getCheckedSpareIds(getState()).length > 1) return alert('수정은 한 건만 선택할 수 있습니다.');
+        if (!ids.length) return alert('Select a part to edit (click row or use checkbox).');
+        if (getCheckedSpareIds(getState()).length > 1) return alert('Modify allows only one selected item.');
         edit(ids[0]);
     }
 
     function openSpareAppend() {
         if (window.TVC_App?.openSpareAppend) return TVC_App.openSpareAppend();
         if (!canModifySpare(getState())) {
-            return alert('Chief Engineer / Captain 권한이 필요합니다.');
+            return alert('Chief Engineer / Captain permission required.');
         }
         append();
     }
@@ -3303,13 +3303,13 @@ const TVC_SpareMenu = (function () {
     async function deleteSpareItems(ids) {
         const st = getState();
         const list = (ids || []).filter(Boolean);
-        if (!list.length) return alert('삭제할 부품을 선택하세요 (행 클릭 또는 ㅁ 체크).');
+        if (!list.length) return alert('Select part(s) to delete (click row or use checkbox).');
         const labels = list.map(id => {
             const s = (st.spares || []).find(x => x.id === id);
             return s ? (s.part_no || s.name || id) : id;
         });
-        const preview = labels.slice(0, 5).join(', ') + (labels.length > 5 ? ` 외 ${labels.length - 5}건` : '');
-        if (!confirm(`선택한 부품 ${list.length}건을 삭제하시겠습니까?\n\n${preview}\n\n되돌릴 수 없습니다.`)) return;
+        const preview = labels.slice(0, 5).join(', ') + (labels.length > 5 ? ` and ${labels.length - 5} more` : '');
+        if (!confirm(`Delete ${list.length} selected part(s)?\n\n${preview}\n\nThis cannot be undone.`)) return;
         try {
             const user = spareInventoryUser(st);
             for (const id of list) await TVC_Inventory.deleteSpare(user, id);
@@ -3321,8 +3321,8 @@ const TVC_SpareMenu = (function () {
             await refresh();
             afterSpareListChange(st);
             if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
-            alert(`${list.length}건의 부품이 삭제되었습니다.`);
-        } catch (e) { alert(e.message || e.code || '삭제 실패'); }
+            alert(`${list.length} part(s) deleted.`);
+        } catch (e) { alert(e.message || e.code || 'Delete failed'); }
     }
 
     async function deleteSpareItem() {
@@ -3340,7 +3340,7 @@ const TVC_SpareMenu = (function () {
             const req = await TVC_Inventory.createRequisition(st.user, {
                 vesselId, spares: [s], qtyMap: { [s.id]: qty },
             });
-            alert(`청구서 생성: ${req.req_no}`);
+            alert(`Requisition created: ${req.req_no}`);
             await refresh();
             await openReqListModal({ selectId: req.id });
         } catch (e) { alert(e.message || e.code); }
@@ -3355,7 +3355,7 @@ const TVC_SpareMenu = (function () {
         const qty = parseInt(prompt('Qty per job:', '1') || '1', 10) || 1;
         try {
             await TVC_Inventory.addBomLine(jobCode.trim().toUpperCase(), spareId, qty);
-            alert(`BOM 연결 완료: ${jobCode.trim().toUpperCase()} · qty ${qty}`);
+            alert(`BOM linked: ${jobCode.trim().toUpperCase()} · qty ${qty}`);
             openDetail(spareId);
         } catch (e) { alert(e.message || e.code); }
     }
@@ -3365,8 +3365,8 @@ const TVC_SpareMenu = (function () {
         const lines = alerts.map(a =>
             `• ${a.partNo || '—'} — ${a.name || ''} (재고 ${a.stock} / Min ${a.minStock ?? a.standard})`
         ).join('\n');
-        const job = alerts[0]?.jobCode ? `\n\n작업: ${alerts[0].jobCode}` : '';
-        if (!confirm(`재고가 Min Stock 미만입니다.\n\n${lines}${job}\n\nSPARE 탭에서 청구서를 작성하시겠습니까?`)) return;
+        const job = alerts[0]?.jobCode ? `\n\nJob: ${alerts[0].jobCode}` : '';
+        if (!confirm(`Stock is below Min Stock.\n\n${lines}${job}\n\nCreate a requisition in the SPARE tab?`)) return;
         const st = getState();
         const m = modState(st);
         if (alerts[0]?.sparePartId) { setFocusedSpareId(getState(), alerts[0].sparePartId); modState(getState()).panelOpen = true; }
@@ -3463,7 +3463,7 @@ const TVC_SpareMenu = (function () {
         const hidden = document.getElementById('sgh_pmsGroupNo');
         if (hidden) hidden.value = groupLabel;
         const text = document.querySelector('.spare-gh-group-trigger-text');
-        if (text) text.textContent = groupLabel ? safeTreeLabel(groupLabel) : '— GROUP 선택 —';
+        if (text) text.textContent = groupLabel ? safeTreeLabel(groupLabel) : '— Select GROUP —';
         document.querySelectorAll('.spare-gh-group-item').forEach(el => {
             el.classList.toggle('selected', el.dataset.groupLabel === groupLabel);
         });
@@ -3515,12 +3515,12 @@ const TVC_SpareMenu = (function () {
 
     function startGroupHeaderEdit() {
         const st = getState();
-        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain 권한이 필요합니다.');
+        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain permission required.');
         const key = st.selectedGroupKey;
         const treeName = st.currentTab === 'actual'
             ? 'PMS GROUP Tree' : 'SPARE GROUP Tree';
         if (!key || key === CRITICAL_GROUP_KEY) {
-            return alert(`${treeName}에서 수정할 그룹을 먼저 선택하세요.`);
+            return alert(`${treeName} — select a group to edit first.`);
         }
         if (window.TVC_App?.isOrigJobInlineEditing?.() && window.TVC_App?.cancelOrigJobInlineEdit) {
             TVC_App.cancelOrigJobInlineEdit();
@@ -3549,7 +3549,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (!m.groupHeaderEdit) return;
-        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain 권한이 필요합니다.');
+        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain permission required.');
         const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
         const draft = m.groupHeaderDraft || {};
         const key = st.selectedGroupKey;
@@ -3662,8 +3662,8 @@ const TVC_SpareMenu = (function () {
             if (labelChanged) st.selectedGroupKey = `${dept}|${newLabel}`;
             afterSpareListChange(st);
             if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
-            alert(`그룹 헤더가 저장되었습니다. (${rows.length}개 아이템에 적용)`);
-        } catch (e) { alert(e.message || e.code || '저장 실패'); }
+            alert(`Group header saved (${rows.length} item(s) updated)`);
+        } catch (e) { alert(e.message || e.code || 'Save failed'); }
     }
 
     async function saveGroupHeaderMeta(st, header, spare, opts = {}) {
@@ -3759,9 +3759,9 @@ const TVC_SpareMenu = (function () {
         };
         const code = g('sie_code').trim();
         const itemName = g('sie_item').trim();
-        if (!header.pmsGroupNo) return alert('SPARE Group No.를 선택하세요.');
-        if (!code) return alert('Code를 입력하세요.');
-        if (!itemName) return alert('Item을 입력하세요.');
+        if (!header.pmsGroupNo) return alert('Select SPARE Group No.');
+        if (!code) return alert('Enter Code.');
+        if (!itemName) return alert('Enter Item.');
         const partClass = g('sie_class').trim().toUpperCase();
         // 기존 캐논 객체 위에 편집값을 얹어 깨끗한 canonical → toRow(snake_case)로 저장한다.
         // (camelCase/snake_case 혼용 시 재로드에서 옛 값/0 으로 되돌아가는 문제 방지)
@@ -3858,7 +3858,7 @@ const TVC_SpareMenu = (function () {
             el.className = 'spare-import-overlay';
             document.body.appendChild(el);
         }
-        el.innerHTML = `<div class="spare-import-loading"><div class="spare-spinner"></div><div>${esc(msg)}</div><small>1,300+ items — 잠시만 기다려 주세요</small></div>`;
+        el.innerHTML = `<div class="spare-import-loading"><div class="spare-spinner"></div><div>${esc(msg)}</div><small>1,300+ items — Please wait</small></div>`;
         el.style.display = 'flex';
     }
 
@@ -3939,7 +3939,7 @@ const TVC_SpareMenu = (function () {
         if (TVC_Env.isFileProtocol()) {
             alert(
                 'file:// 모드에서는 자동 Import가 불가합니다.\n\n' +
-                '▶ "spare-inventory.xls 선택" 버튼을 직접 클릭하세요\n' +
+                '▶ "Select spare-inventory.xls" 버튼을 직접 클릭하세요\n' +
                 '▶ 권장: npm run serve → http://localhost:3000'
             );
             return;
@@ -3980,12 +3980,12 @@ const TVC_SpareMenu = (function () {
                     '재고 파일을 불러올 수 없습니다.\n\n' +
                     '▶ npm run serve 로 http://localhost:3000 접속 후 재시도\n' +
                     '▶ 또는 [확인] → spare inventory.xls 직접 선택\n\n' +
-                    '파일 선택 창을 열까요?'
+                    'Select file 창을 열까요?'
                 )) {
                     triggerInventoryImport();
                 }
             } else {
-                alert('Import 실패: ' + msg);
+                alert('Import failed: ' + msg);
             }
         } finally {
             hideImportLoading();
@@ -4011,7 +4011,7 @@ const TVC_SpareMenu = (function () {
         try {
             await loadSpareInventory(file, { merge: true });
         } catch (e) {
-            alert('CSV 업로드 실패: ' + (e.message || e.code));
+            alert('CSV upload failed: ' + (e.message || e.code));
         } finally {
             const fi = document.getElementById('srCsvUploadFile');
             if (fi) fi.value = '';
@@ -4047,7 +4047,7 @@ const TVC_SpareMenu = (function () {
                 `· Equipment ${res.equipment} · 신규 ${res.spareCreated} · 갱신 ${res.spareUpdated}`
             );
         } catch (e) {
-            alert('Import 실패: ' + (e.message || e.code));
+            alert('Import failed: ' + (e.message || e.code));
         } finally {
             hideImportLoading();
             document.getElementById('srInventoryImportFile').value = '';
@@ -4069,11 +4069,11 @@ const TVC_SpareMenu = (function () {
                 : await TVC_Inventory.applyVendorQuote(_importReqId, rows);
             const req = await TVC_Inventory.getRequisition(_importReqId);
             const dbRes = await TVC_Inventory.applyExcelImport(rows, req?.req_no);
-            alert(`반영: ${res.updated}/${res.total} · DB ${dbRes.updated}/${dbRes.total}`);
+            alert(`Applied: ${res.updated}/${res.total} · DB ${dbRes.updated}/${dbRes.total}`);
             await refresh();
             await refreshReqListModalIfOpen();
             render();
-        } catch (e) { alert('Import 실패: ' + (e.message || e.code)); }
+        } catch (e) { alert('Import failed: ' + (e.message || e.code)); }
         finally { document.getElementById('srImportFile').value = ''; _importReqId = null; }
     }
 
@@ -4095,7 +4095,7 @@ const TVC_SpareMenu = (function () {
         const item = (label, onclick, enabled = true, primary = false) =>
             enabled
                 ? `<button type="button" class="spare-flow-item${primary ? ' primary' : ''}" onclick="${onclick}">${esc(label)}</button>`
-                : `<button type="button" class="spare-flow-item" disabled title="권한 없음">${esc(label)}</button>`;
+                : `<button type="button" class="spare-flow-item" disabled title="No permission">${esc(label)}</button>`;
         const col = (tone, title, buttons) => `
           <section class="spare-flow-col tone-${tone}">
             <header class="spare-flow-head">${esc(title)}</header>
@@ -4137,7 +4137,7 @@ const TVC_SpareMenu = (function () {
             st.idx = TVC_Indexes.build(st);
         }
         if (!st.idx) {
-            root.innerHTML = '<div class="tree-empty muted">Maintenance Plan을 불러오는 중…</div>';
+            root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…</div>';
             return;
         }
         const q = (st.treeSearch || '').toLowerCase();
@@ -4168,7 +4168,7 @@ const TVC_SpareMenu = (function () {
             const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             mergeSpareTreeNodes(nodes).forEach(n => {
-                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
+                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="No job items">0</span>` : '';
                 const sel = st.selectedGroupKey === n.key ? ' selected' : '';
                 html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_SpareMenu.reqWorkSelectGroup('${escAttr(n.key)}')"><span>${esc(safeTreeLabel(n.label))}</span>${emptyTag}</div>`;
             });
@@ -4212,7 +4212,7 @@ const TVC_SpareMenu = (function () {
             const lowTag = modState(st).showLowOnly ? 'Low stock' : '';
             const filterLabel = [gLabel, lowTag].filter(Boolean).join(' · ');
             scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">
-                표시할 부품이 없습니다.${filterLabel ? ' (필터: ' + esc(filterLabel) + ')' : ''}
+                No parts to display.${filterLabel ? ' (Filter: ' + esc(filterLabel) + ')' : ''}
             </div>`;
             vlReqWork = null;
             return;
@@ -4523,7 +4523,7 @@ const TVC_SpareMenu = (function () {
         const completeDone = !!m.reqWorkCompleted;
         const canComplete = canCompleteRequisition(st);
         const completeDisabled = completeDone || !canComplete;
-        const completeTitle = (!canComplete && !completeDone) ? 'Chief Engineer만 사용 가능합니다' : '';
+        const completeTitle = (!canComplete && !completeDone) ? 'Chief Engineer only' : '';
         const preview = false;
         const selBtn = reqWorkSelectedBtnMeta(st);
         const selectedBtnCls = selBtn.active ? ' plan-selected-filter-active' : '';
@@ -4531,7 +4531,7 @@ const TVC_SpareMenu = (function () {
             ? reqWorkSelectedCountLabel(st, _reqWorkCachedList.length)
             : `${_reqWorkCachedList.length} / ${allCanon.length}`;
         const modifyHint = m.reqWorkEditMode && !m.reqWorkCompleted
-            ? '<p class="spare-req-work-modify-hint muted">체크로 부품 추가/제거 · Request 수량 입력 후 Save 또는 Complete</p>'
+            ? '<p class="spare-req-work-modify-hint muted">Use checkboxes to add/remove parts · Enter Request qty, then Save or Complete</p>'
             : '';
         const headTitle = preview ? 'Preview' : titlePrefix;
         const previewVesselName = preview ? await vesselLabel(vesselId) : '';
@@ -4562,7 +4562,7 @@ const TVC_SpareMenu = (function () {
                     title="${escAttr(selBtn.title)}"${selBtn.disabled ? ' disabled' : ''}>${esc(selBtn.label)}</button>
                 <span style="flex:1"></span>
                 ${canModify ? `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.loadBundledXls()">📥 Import XLS</button>
-                  <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.triggerInventoryImport()">📂 XLS 선택</button>
+                  <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.triggerInventoryImport()">📂 Select XLS</button>
                   <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.triggerCsvUpload()">📄 CSV</button>` : ''}
               </div>`;
         const searchBar = preview ? '' : `<div class="filter-bar spare-list-search-bar">
@@ -4637,7 +4637,7 @@ const TVC_SpareMenu = (function () {
     async function startReqWorkSession(createNew = true) {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            alert('청구서 작성 권한이 없습니다.');
+            alert('No permission to create requisitions.');
             return;
         }
         closeReqSheetModal();
@@ -4665,11 +4665,11 @@ const TVC_SpareMenu = (function () {
     async function startReqWorkEditSession(reqId) {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            alert('청구서 작성 권한이 없습니다.');
+            alert('No permission to create requisitions.');
             return;
         }
         const req = await TVC_Inventory.getRequisition(reqId);
-        if (!req) return alert('청구서를 찾을 수 없습니다.');
+        if (!req) return alert('Requisition not found.');
         closeReqSheetModal();
         _reqWorkDraft = {
             ...req,
@@ -4701,7 +4701,7 @@ const TVC_SpareMenu = (function () {
     async function startReqWorkPreviewSession(reqId) {
         const { st } = await vesselScope();
         const req = await TVC_Inventory.getRequisition(reqId);
-        if (!req) return alert('청구서를 찾을 수 없습니다.');
+        if (!req) return alert('Requisition not found.');
         closeReqSheetModal();
         _reqWorkDraft = {
             ...req,
@@ -4755,27 +4755,27 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (m.reqWorkCompleted) return;
         if (!canCompleteRequisition(st)) {
-            return alert('Complete는 Chief Engineer만 사용할 수 있습니다.');
+            return alert('Complete is available to Chief Engineer only.');
         }
         finalizeReqWorkDraftForSave();
         const req = getReqWorkSession();
-        if (!req || !_reqWorkDraft) return alert('청구서를 찾을 수 없습니다.');
-        if (!_reqWorkDraft.req_no?.trim()) return alert('Requisition No.를 입력하세요.');
+        if (!req || !_reqWorkDraft) return alert('Requisition not found.');
+        if (!_reqWorkDraft.req_no?.trim()) return alert('Enter Requisition No.');
 
         _reqWorkDraft.lines = (_reqWorkDraft.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
         if (!_reqWorkDraft.lines.length) {
-            return alert('부품을 선택하세요.');
+            return alert('Select part(s).');
         }
 
         const missingQty = reqWorkLinesMissingRequestQty(_reqWorkDraft.lines);
         if (missingQty.length) {
             const names = missingQty.slice(0, 5).map(l => l.part_no || l.name || '—').join(', ');
-            const more = missingQty.length > 5 ? ` 외 ${missingQty.length - 5}건` : '';
-            return alert(`Request 수량을 입력하지 않은 부품이 있습니다.\n\n${names}${more}\n\n선택한 부품마다 Request 수량을 입력한 후 저장하세요.`);
+            const more = missingQty.length > 5 ? ` and ${missingQty.length - 5} more` : '';
+            return alert(`Some selected parts have no Request quantity.\n\n${names}${more}\n\nEnter Request quantity for each selected part, then save.`);
         }
 
         // 작성/수정 완료 확인 — 취소 시 현재 화면 유지
-        if (!window.confirm('청구서 작성을 완료 하시겠습니까?')) return;
+        if (!window.confirm('Complete this requisition?')) return;
 
         // 확인 시 Made on = 오늘, by = 부서별 직책(Captain / Chief Engineer)
         applyReqWorkCompleteMeta(st, _reqWorkDraft);
@@ -4803,13 +4803,13 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (m.reqWorkCompleted) return;
         finalizeReqWorkDraftForSave();
-        if (!_reqWorkDraft) return alert('청구서를 찾을 수 없습니다.');
-        if (!_reqWorkDraft.req_no?.trim()) return alert('Requisition No.를 입력하세요.');
+        if (!_reqWorkDraft) return alert('Requisition not found.');
+        if (!_reqWorkDraft.req_no?.trim()) return alert('Enter Requisition No.');
         _reqWorkDraft.lines = (_reqWorkDraft.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
         await TVC_Inventory.saveRequisition(_reqWorkDraft);
         m.reqWorkLastSavedId = _reqWorkDraft.id;
         _reqSheet.reqId = _reqWorkDraft.id;
-        alert(`청구서 ${_reqWorkDraft.req_no} 저장 (${_reqWorkDraft.lines.length} line(s)).`);
+        alert(`Requisition ${_reqWorkDraft.req_no} saved (${_reqWorkDraft.lines.length} line(s)).`);
     }
 
     async function reqWorkOpenList() {
@@ -4822,13 +4822,13 @@ const TVC_SpareMenu = (function () {
     async function reqWorkPrintPreview() {
         const { st, vesselId } = await vesselScope();
         const id = modState(st).reqWorkLastSavedId;
-        if (!id) return alert('청구서를 찾을 수 없습니다.');
+        if (!id) return alert('Requisition not found.');
         const req = await TVC_Inventory.getRequisition(id);
-        if (!req) return alert('청구서를 찾을 수 없습니다.');
+        if (!req) return alert('Requisition not found.');
         const vesselName = await vesselLabel(vesselId);
         const pages = buildReqPreviewPagesHtml(st, req, vesselName);
         const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { alert('팝업이 차단되었습니다. 브라우저에서 팝업을 허용해 주세요.'); return; }
+        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return; }
         w.document.write(`<!DOCTYPE html><html><head><title>Parts Requisition — ${esc(req.req_no || '')}</title>
             <style>${reqPreviewPrintStyles()}</style></head><body>${pages}</body></html>`);
         w.document.close();
@@ -4863,7 +4863,7 @@ const TVC_SpareMenu = (function () {
         if (m.reqWorkShowSelectedOnly) {
             m.reqWorkShowSelectedOnly = false;
         } else {
-            if (!reqWorkCheckedSpareCount(st)) return alert('선택된 부품이 없습니다.');
+            if (!reqWorkCheckedSpareCount(st)) return alert('No parts selected.');
             m.reqWorkShowSelectedOnly = true;
         }
         refreshReqWorkListUi();
@@ -4945,7 +4945,7 @@ const TVC_SpareMenu = (function () {
         if (!req) return false;
         const sid = reqWorkSpareIdKey(spareId);
         if ((req.lines || []).some(l => reqWorkSameSpareId(l.spare_part_id, sid))) {
-            if (!silent) alert('이미 추가된 부품입니다.');
+            if (!silent) alert('Part already added.');
             return false;
         }
         const spare = (getState().spares || []).find(s => reqWorkSameSpareId(s.id, sid));
@@ -4966,10 +4966,10 @@ const TVC_SpareMenu = (function () {
     async function addToRequisition() {
         const st = getState();
         if (!canCreateRequisition(st)) {
-            return alert('청구서 작성 권한이 없습니다.');
+            return alert('No permission to create requisitions.');
         }
         const ids = spareListSelectedIds(st);
-        if (!ids.length) return alert('ㅁ에서 부품을 선택하세요.');
+        if (!ids.length) return alert('Select parts using the checkbox.');
 
         const m = modState(st);
         const writableOpen = m.reqWorkOpen && !m.reqWorkEditMode && !m.reqWorkPreview && !m.reqWorkCompleted;
@@ -4986,8 +4986,8 @@ const TVC_SpareMenu = (function () {
         captureReqWorkMeta();
         refreshList();
         refreshReqWorkListUi();
-        if (added) alert(`${added}건 청구서에 추가되었습니다.`);
-        else alert('선택한 부품이 이미 청구서에 있거나 추가할 수 없습니다.');
+        if (added) alert(`${added} part(s) added to requisition.`);
+        else alert('Selected parts are already on the requisition or cannot be added.');
     }
 
     async function reqWorkAddChecked() {
@@ -5000,7 +5000,7 @@ const TVC_SpareMenu = (function () {
 
     function exportPartsList() {
         const spares = (getState().spares || []).map(canon);
-        if (!spares.length) return alert('내보낼 부품 목록이 없습니다.');
+        if (!spares.length) return alert('No parts to export.');
         const headers = ['Code', 'Class', 'Item', 'Part No', 'Unit', 'Working', 'Standard', 'Stock', 'Group'];
         const rows = spares.map(s => [
             spareNumbering(s),
@@ -5200,7 +5200,7 @@ const TVC_SpareMenu = (function () {
                 : '— PMS Group 선택 —';
         }
         const jobText = document.getElementById('consumeJobPickText');
-        if (jobText) jobText.textContent = draft.job_code || '— JOB CODE 선택 —';
+        if (jobText) jobText.textContent = draft.job_code || '— Select JOB CODE —';
         const jobTrigger = document.querySelector('#consumeJobPick .spare-consume-pick-trigger');
         if (jobTrigger) jobTrigger.disabled = !draft.spare_group_key;
     }
@@ -5251,7 +5251,7 @@ const TVC_SpareMenu = (function () {
         }
         const nodes = planGroupNodes(st).filter(matchNode);
         if (!nodes.length && !matchCritical) {
-            return '<div class="spare-consume-pick-empty muted">PMS GROUP Tree를 불러오는 중…</div>';
+            return '<div class="spare-consume-pick-empty muted">Loading PMS GROUP Tree…</div>';
         }
         let curDept = '';
         nodes.forEach(n => {
@@ -5263,7 +5263,7 @@ const TVC_SpareMenu = (function () {
             html += `<button type="button" class="spare-consume-pick-item${sel}"
                 onclick="TVC_SpareMenu.pickConsumeMetaGroup('${escAttr(n.key)}','${escAttr(n.label)}')">${esc(safeTreeLabel(n.label))}</button>`;
         });
-        return html || '<div class="spare-consume-pick-empty muted">검색 결과 없음</div>';
+        return html || '<div class="spare-consume-pick-empty muted">No search results</div>';
     }
 
     function refreshConsumeGroupPickList() {
@@ -5318,7 +5318,7 @@ const TVC_SpareMenu = (function () {
     function buildConsumeJobPickListInner(st) {
         const draft = getConsumeSession();
         if (!draft?.spare_group_key) {
-            return '<div class="spare-consume-pick-empty muted">PMS Group No.를 먼저 선택하세요.</div>';
+            return '<div class="spare-consume-pick-empty muted">Select PMS Group No. first.</div>';
         }
         const q = (_consumeJobPickSearch || '').toLowerCase().trim();
         const jobs = consumeJobsForGroup(st, draft.spare_group_key).filter(j => {
@@ -5327,7 +5327,7 @@ const TVC_SpareMenu = (function () {
             return hay.includes(q);
         });
         if (!jobs.length) {
-            return '<div class="spare-consume-pick-empty muted">검색 결과 없음</div>';
+            return '<div class="spare-consume-pick-empty muted">No search results</div>';
         }
         return jobs.map(j => {
             const code = escAttr(j.job_code || '');
@@ -5357,7 +5357,7 @@ const TVC_SpareMenu = (function () {
     function toggleConsumeJobPick(ev) {
         ev?.stopPropagation();
         const draft = getConsumeSession();
-        if (!draft?.spare_group_key) return alert('PMS Group No.를 먼저 선택하세요.');
+        if (!draft?.spare_group_key) return alert('Select PMS Group No. first.');
         const wrap = document.getElementById('consumeJobPick');
         if (!wrap) return;
         const opening = !wrap.classList.contains('open');
@@ -5411,7 +5411,7 @@ const TVC_SpareMenu = (function () {
             ? `<input type="text" class="spare-req-meta-input spare-consume-meta-input wr-spare-meta-pms" value="${esc(groupLabel)}"${roAttr}>`
             : `<div class="spare-consume-meta-pick" id="consumeGroupPick">
                     <button type="button" id="consumeGroupPickTrigger" class="spare-consume-pick-trigger" onclick="TVC_SpareMenu.toggleConsumeGroupPick(event)">
-                        <span class="spare-consume-pick-text" id="consumeGroupPickText">${esc(groupLabel || '— PMS Group 선택 —')}</span>
+                        <span class="spare-consume-pick-text" id="consumeGroupPickText">${esc(groupLabel || '— Select PMS Group —')}</span>
                         <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
                     </button>
                     <div class="spare-consume-pick-menu" role="listbox" aria-label="PMS Group No.">
@@ -5427,7 +5427,7 @@ const TVC_SpareMenu = (function () {
             ? `<input type="text" class="spare-req-meta-input spare-consume-meta-input" value="${esc(jobLabel)}"${roAttr}>`
             : `<div class="spare-consume-meta-pick" id="consumeJobPick">
                         <button type="button" id="consumeJobPickTrigger" class="spare-consume-pick-trigger"${jobDisabled ? ' disabled' : ''} onclick="TVC_SpareMenu.toggleConsumeJobPick(event)">
-                            <span class="spare-consume-pick-text" id="consumeJobPickText">${esc(jobLabel || '— JOB CODE 선택 —')}</span>
+                            <span class="spare-consume-pick-text" id="consumeJobPickText">${esc(jobLabel || '— Select JOB CODE —')}</span>
                             <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
                         </button>
                         <div class="spare-consume-pick-menu" role="listbox" aria-label="JOB CODE">
@@ -5492,7 +5492,7 @@ const TVC_SpareMenu = (function () {
             st.idx = TVC_Indexes.build(st);
         }
         if (!st.idx) {
-            root.innerHTML = '<div class="tree-empty muted">Maintenance Plan을 불러오는 중…</div>';
+            root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…</div>';
             return;
         }
         const q = (st.treeSearch || '').toLowerCase();
@@ -5523,7 +5523,7 @@ const TVC_SpareMenu = (function () {
             const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             mergeSpareTreeNodes(nodes).forEach(n => {
-                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
+                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="No job items">0</span>` : '';
                 const sel = st.selectedGroupKey === n.key ? ' selected' : '';
                 html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_SpareMenu.consumeSelectGroup('${escAttr(n.key)}')"><span>${esc(safeTreeLabel(n.label))}</span>${emptyTag}</div>`;
             });
@@ -5557,7 +5557,7 @@ const TVC_SpareMenu = (function () {
             const lowTag = modState(st).showLowOnly ? 'Low stock' : '';
             const filterLabel = [gLabel, lowTag].filter(Boolean).join(' · ');
             scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">
-                표시할 부품이 없습니다.${filterLabel ? ' (필터: ' + esc(filterLabel) + ')' : ''}
+                No parts to display.${filterLabel ? ' (Filter: ' + esc(filterLabel) + ')' : ''}
             </div>`;
             vlConsume = null;
             return;
@@ -5679,7 +5679,7 @@ const TVC_SpareMenu = (function () {
         if (m.consumeShowSelectedOnly) {
             m.consumeShowSelectedOnly = false;
         } else {
-            if (!consumeCheckedSpareCount(st)) return alert('선택된 부품이 없습니다.');
+            if (!consumeCheckedSpareCount(st)) return alert('No parts selected.');
             m.consumeShowSelectedOnly = true;
         }
         refreshConsumeListUi();
@@ -5872,7 +5872,7 @@ ${renderWrSpareMetaHtml(meta)}
             st.idx = TVC_Indexes.build(st);
         }
         if (!st.idx) {
-            root.innerHTML = '<div class="tree-empty muted">Maintenance Plan을 불러오는 중…</div>';
+            root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…</div>';
             return;
         }
         const q = (st.treeSearch || '').toLowerCase();
@@ -5903,7 +5903,7 @@ ${renderWrSpareMetaHtml(meta)}
             const nodes = byDept.get(dept);
             html += `<div class="tree-dept">${esc(dept)}</div>`;
             mergeSpareTreeNodes(nodes).forEach(n => {
-                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
+                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="No job items">0</span>` : '';
                 const sel = st.selectedGroupKey === n.key ? ' selected' : '';
                 html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_SpareMenu.wrSpareSelectGroup('${escAttr(n.key)}')"><span>${esc(safeTreeLabel(n.label))}</span>${emptyTag}</div>`;
             });
@@ -5936,12 +5936,12 @@ ${renderWrSpareMetaHtml(meta)}
             const m = modState(st);
             const isPreview = wrSparePreviewMode(st, m.wrSpareReadonly);
             const emptyMsg = isPreview
-                ? '기록된 SPARE 사용 내역이 없습니다.'
-                : `표시할 부품이 없습니다.${(() => {
+                ? 'No recorded SPARE usage.'
+                : `No parts to display.${(() => {
                     const gLabel = groupFilterLabel(st);
                     const lowTag = modState(st).showLowOnly ? 'Low stock' : '';
                     const filterLabel = [gLabel, lowTag].filter(Boolean).join(' · ');
-                    return filterLabel ? ' (필터: ' + esc(filterLabel) + ')' : '';
+                    return filterLabel ? ' (Filter: ' + esc(filterLabel) + ')' : '';
                 })()}`;
             scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">${emptyMsg}</div>`;
             vlWrSpare = null;
@@ -5987,11 +5987,25 @@ ${renderWrSpareMetaHtml(meta)}
         }
     }
 
-    function refreshWrSpareListRows() {
+    function refreshWrSpareJobContext() {
         const st = getState();
-        const m = modState(st);
+        rebuildWrSpareCachedList(st);
+        syncWrLineMap();
         const block = document.getElementById('wrSpareEditBlock');
         if (block) block.innerHTML = renderWrSpareGroupHeaderHtml(st);
+        const scroll = document.getElementById('wrSpareListScroll');
+        if (vlWrSpare && scroll?.querySelector('.vl-inner')) {
+            vlWrSpare.refresh();
+            requestAnimationFrame(syncWrSpareHeadLayout);
+        } else if (scroll) {
+            mountWrSpareVirtualList();
+        }
+        updateWrSpareHeadStats();
+        updateWrSpareHeadCheckAll();
+    }
+
+    function refreshWrSpareListRows() {
+        const st = getState();
         const scroll = document.getElementById('wrSpareListScroll');
         const head = document.getElementById('wrSpareListHead');
         if (head && !head.querySelector('.spare-data-head')) {
@@ -6103,7 +6117,7 @@ ${renderWrSpareMetaHtml(meta)}
             st._wrUsedParts = st._wrUsedParts.filter(l => !wrSameSpareId(l.spare_part_id, sid));
         }
         syncWrLineMap();
-        refreshWrSpareListUi();
+        refreshWrSpareListRows();
     }
 
     function wrSpareToggleAll(checked) {
@@ -6122,7 +6136,7 @@ ${renderWrSpareMetaHtml(meta)}
             st._wrUsedParts = st._wrUsedParts.filter(l => !ids.has(wrSpareIdKey(l.spare_part_id)));
         }
         syncWrLineMap();
-        refreshWrSpareListUi();
+        refreshWrSpareListRows();
     }
 
     function wrSpareSetQty(spareId, rawQty) {
@@ -6143,7 +6157,7 @@ ${renderWrSpareMetaHtml(meta)}
             }
         }
         syncWrLineMap();
-        refreshWrSpareListUi();
+        refreshWrSpareListRows();
     }
 
     function initWrSparePage2(ro) {
@@ -6210,7 +6224,7 @@ ${renderWrSpareMetaHtml(meta)}
         const wrReportId = draft?.work_report_id || resolveConsumeDraftWorkReportId(draft, st);
 
         const headActions = isPreview
-            ? `<button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumePreviewOpenWorkReport()"${wrReportId ? '' : ' disabled'} title="${wrReportId ? '연결된 Work Report 보기' : 'Work Report에서 생성되지 않은 항목'}">Work Report</button>
+            ? `<button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumePreviewOpenWorkReport()"${wrReportId ? '' : ' disabled'} title="${wrReportId ? 'View linked Work Report' : 'Not created from Work Report'}">Work Report</button>
                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumePreviewModify()"${canConsume ? '' : ' disabled'}>Modify</button>
                <button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.consumeLogPrintPreview()">🖨 Print</button>
                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumeLogOpenList()">List</button>
@@ -6300,7 +6314,7 @@ ${renderWrSpareMetaHtml(meta)}
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
         if (!user || !canCreateConsume(st)) {
-            return alert('소비(Consumption) 입력 권한이 없습니다.');
+            return alert('No permission to enter consumption records.');
         }
         _consumeDraft = newConsumeDraft(st, user);
         syncConsumeLineMap();
@@ -6326,10 +6340,10 @@ ${renderWrSpareMetaHtml(meta)}
     async function startConsumeEditSession(logId) {
         const { st } = await vesselScope();
         if (!canCreateConsume(st)) {
-            return alert('소비(Consumption) 입력 권한이 없습니다.');
+            return alert('No permission to enter consumption records.');
         }
         const log = await TVC_Inventory.getConsumeLog(logId);
-        if (!log) return alert('소비 일지를 찾을 수 없습니다.');
+        if (!log) return alert('Consumption log not found.');
         _consumeDraft = consumeDraftFromLog(log);
         syncConsumeLineMap();
         const m = modState(st);
@@ -6355,7 +6369,7 @@ ${renderWrSpareMetaHtml(meta)}
     async function startConsumePreviewSession(logId) {
         const { st } = await vesselScope();
         const log = await TVC_Inventory.getConsumeLog(logId);
-        if (!log) return alert('소비 일지를 찾을 수 없습니다.');
+        if (!log) return alert('Consumption log not found.');
         _consumeDraft = consumeDraftFromLog(log);
         if (!_consumeDraft.work_report_id) {
             _consumeDraft.work_report_id = resolveConsumeDraftWorkReportId(_consumeDraft, st);
@@ -6499,19 +6513,19 @@ ${renderWrSpareMetaHtml(meta)}
         captureConsumeLineQtys();
         const { st, vesselId } = await vesselScope();
         const user = spareInventoryUser(st);
-        if (!user) return alert('로그인이 필요합니다.');
+        if (!user) return alert('Login required.');
         const draft = getConsumeSession();
         if (!draft) return;
         const m = modState(st);
         const lines = (draft.lines || [])
             .filter(l => consumeSpareIdKey(l.spare_part_id) && (Number(l.qty_consumed) || 0) > 0)
             .map(l => ({ spare_part_id: l.spare_part_id, qty: Number(l.qty_consumed), note: '' }));
-        if (!lines.length) return alert('부품을 선택하고 Consumed 수량을 입력하세요.');
+        if (!lines.length) return alert('Select parts and enter Consumed quantity.');
 
         if (draft.log_id) {
             const saved = await persistConsumeLogFromDraft(draft, { st, user, vesselId });
             m.consumeLastSavedLogId = saved.id;
-            alert(`소비 일지 수정 완료 — ${lines.length} line(s).`);
+            alert(`Consumption log updated — ${lines.length} line(s).`);
             if (_consumeListReturnAfterSave) {
                 closeConsumeModal();
             } else {
@@ -6539,9 +6553,9 @@ ${renderWrSpareMetaHtml(meta)}
             closeConsumeModal();
             await refresh();
             await render();
-            alert(`CONSUMPTION 기록 완료 — ${res.count}건`);
+            alert(`CONSUMPTION recorded — ${res.count} item(s)`);
         } catch (e) {
-            if (e.code === 'STOCK' && confirm(e.message + '\n\n그래도 진행?')) {
+            if (e.code === 'STOCK' && confirm(e.message + '\n\nProceed anyway?')) {
                 const res = await TVC_InventoryService.recordConsumption(user, lines, { ref, note, forceOk: true });
                 const saved = await persistConsumeLogFromDraft(draft, { st, user, vesselId });
                 m.consumeLastSavedLogId = saved.id;
@@ -6549,8 +6563,8 @@ ${renderWrSpareMetaHtml(meta)}
                 closeConsumeModal();
                 await refresh();
                 await render();
-                alert(`CONSUMPTION — ${res.count}건`);
-            } else alert(e.message || e.code || '저장 실패');
+                alert(`CONSUMPTION — ${res.count} item(s)`);
+            } else alert(e.message || e.code || 'Save failed');
         }
     }
 
@@ -6586,7 +6600,7 @@ ${renderWrSpareMetaHtml(meta)}
         const hits = txSearchHits();
         if (!hits.length) {
             const q = (_txDraft.search || '').trim();
-            return q ? '<p class="muted spics-tx-empty">검색 결과 없음</p>' : '';
+            return q ? '<p class="muted spics-tx-empty">No search results</p>' : '';
         }
         return `<div class="spics-tx-hits"><table class="spics-tx-table"><thead><tr>
             <th>Part No</th><th>Description</th><th>Stock</th><th></th>
@@ -6632,15 +6646,15 @@ ${renderWrSpareMetaHtml(meta)}
             <td style="text-align:center">${l.stock}</td>
             <td style="text-align:center"><input type="number" min="1" class="spics-tx-qty" data-tx-spare="${esc(l.spare_part_id)}" data-tx-field="qty" value="${l.qty}"></td>
             <td><button type="button" class="btn btn-sm btn-red" onclick="TVC_SpareMenu.removeTxLine('${esc(l.spare_part_id)}')">×</button></td>
-        </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:16px">부품을 검색하여 추가하세요</td></tr>`;
+        </tr>`).join('') : `<tr><td colspan="5" class="muted" style="text-align:center;padding:16px">Search and add parts</td></tr>`;
 
         body.innerHTML = `
             <button class="modal-x" onclick="TVC_SpareMenu.closeTxModal()">×</button>
             <h3 class="spics-tx-title">${title}</h3>
-            <p class="spics-tx-hint">저장 시 inventory_history에 날짜·시간·작업자·증감·잔여 수량이 기록됩니다.</p>
+            <p class="spics-tx-hint">On save, date, time, user, change, and remaining qty are recorded in inventory_history.</p>
             <div class="spics-tx-search">
-                <label>Part No / Name 검색</label>
-                <input type="search" id="spareTxSearch" class="search-input" placeholder="예: 01-001, Stud"
+                <label>Search Part No / Name</label>
+                <input type="search" id="spareTxSearch" class="search-input" placeholder="e.g. 01-001, Stud"
                     value="${esc(_txDraft.search)}" oninput="TVC_SpareMenu.onTxSearchInput(this.value)">
                 <div id="spareTxHitsWrap">${buildTxHitsHtml()}</div>
             </div>
@@ -6663,9 +6677,9 @@ ${renderWrSpareMetaHtml(meta)}
         captureTxDraftFromDom();
         const { st } = await vesselScope();
         const user = st.user;
-        if (!user) return alert('로그인이 필요합니다.');
+        if (!user) return alert('Login required.');
         const lines = _txDraft.lines.filter(l => l.qty > 0).map(l => ({ spare_part_id: l.spare_part_id, qty: l.qty, note: _txDraft.note }));
-        if (!lines.length) return alert('수량을 입력하세요.');
+        if (!lines.length) return alert('Enter quantity.');
         try {
             const res = _txDraft.type === TVC_INVENTORY_TX.CONSUMPTION
                 ? await TVC_InventoryService.recordConsumption(user, lines, { ref: _txDraft.ref, note: _txDraft.note })
@@ -6673,13 +6687,13 @@ ${renderWrSpareMetaHtml(meta)}
             closeTxModal();
             await refresh();
             await render();
-            alert(`${res.tx_type} 기록 완료 — ${res.count}건`);
+            alert(`${res.tx_type} recorded — ${res.count} item(s)`);
         } catch (e) {
-            if (e.code === 'STOCK' && _txDraft.type === TVC_INVENTORY_TX.CONSUMPTION && confirm(e.message + '\n\n그래도 진행?')) {
+            if (e.code === 'STOCK' && _txDraft.type === TVC_INVENTORY_TX.CONSUMPTION && confirm(e.message + '\n\nProceed anyway?')) {
                 const res = await TVC_InventoryService.recordConsumption(user, lines, { ref: _txDraft.ref, note: _txDraft.note, forceOk: true });
                 closeTxModal(); await refresh(); await render();
-                alert(`CONSUMPTION — ${res.count}건`);
-            } else alert(e.message || e.code || '저장 실패');
+                alert(`CONSUMPTION — ${res.count} item(s)`);
+            } else alert(e.message || e.code || 'Save failed');
         }
     }
 
@@ -6690,19 +6704,19 @@ ${renderWrSpareMetaHtml(meta)}
         try {
             _hqAssessment = await TVC_InventoryService.diffHqImport(JSON.parse(await file.text()));
             openAssessmentModal();
-        } catch (e) { alert('HQ Import JSON 실패: ' + (e.message || e)); }
+        } catch (e) { alert('HQ Import JSON failed: ' + (e.message || e)); }
         finally { const fi = document.getElementById('spareHqImportFile'); if (fi) fi.value = ''; }
     }
 
     function openAssessmentModal() {
         const body = document.getElementById('spareAssessmentBody');
-        if (!body || !_hqAssessment) return alert('먼저 Data Import로 JSON을 불러오세요.');
+        if (!body || !_hqAssessment) return alert('Load JSON via Data Import first.');
         const s = _hqAssessment.summary;
         const rows = (_hqAssessment.diff || []).slice(0, 200).map(d => `<tr>
             <td><span class="pill ${d.type === 'NEW' ? 'ok' : 'overdue'}">${esc(d.type)}</span></td>
             <td>${esc(d.part_no)}</td><td>${esc(d.name)}</td><td>${esc(d.field)}</td>
             <td style="text-align:right">${esc(String(d.before))}</td><td style="text-align:right">${esc(String(d.after))}</td>
-        </tr>`).join('') || '<tr><td colspan="6" class="muted" style="text-align:center">차이 없음</td></tr>';
+        </tr>`).join('') || '<tr><td colspan="6" class="muted" style="text-align:center">No differences</td></tr>';
         body.innerHTML = `
             <button class="modal-x" onclick="TVC_SpareMenu.closeAssessmentModal()">×</button>
             <h3>Assessment Result (HQ Import Diff)</h3>
@@ -6725,7 +6739,7 @@ ${renderWrSpareMetaHtml(meta)}
         try {
             const res = await TVC_InventoryService.applyHqAssessment(st.user, _hqAssessment);
             await refresh(); await render(); closeAssessmentModal();
-            alert(`Assessment 적용 — ${res.updated}건`);
+            alert(`Assessment applied — ${res.updated} item(s)`);
         } catch (e) { alert(e.message || e.code); }
     }
 
@@ -6743,7 +6757,7 @@ ${renderWrSpareMetaHtml(meta)}
                 <td>${esc(r.part_no)}</td><td>${esc(r.part_name)}</td>
                 <td style="text-align:center;color:${r.qty_delta < 0 ? '#c53030' : '#276749'}">${r.qty_delta > 0 ? '+' : ''}${r.qty_delta}</td>
                 <td style="text-align:center">${r.qty_after}</td><td>${esc(r.operator_name)}</td><td>${esc(r.ref || '—')}</td>
-            </tr>`).join('') || '<tr><td colspan="9" class="muted" style="text-align:center">이력 없음</td></tr>'}
+            </tr>`).join('') || '<tr><td colspan="9" class="muted" style="text-align:center">No history</td></tr>'}
             </tbody></table></div>
             <div class="modal-actions"><button type="button" class="btn" onclick="TVC_SpareMenu.closeHistoryModal()">Close</button></div>`;
         showSpicsModal('spareHistoryModal');
@@ -6812,7 +6826,7 @@ ${renderWrSpareMetaHtml(meta)}
     async function openReqSheetModal() {
         const { st, vesselId } = await vesselScope();
         if (window.TVC_RBAC && !TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION)) {
-            alert('청구서 작성 권한이 없습니다.'); return;
+            alert('No permission to create requisitions.'); return;
         }
         try {
             const req = _reqSheet.reqId
@@ -6823,7 +6837,7 @@ ${renderWrSpareMetaHtml(meta)}
             if (!_reqSheet.step) _reqSheet.step = 3;
             await renderReqSheetModal();
             showSpicsModal('spareReqSheetModal');
-        } catch (e) { alert(e.message || e.code || '청구서를 열 수 없습니다.'); }
+        } catch (e) { alert(e.message || e.code || 'Cannot open requisition.'); }
     }
 
     function closeReqSheetModal() {
@@ -6863,7 +6877,7 @@ ${renderWrSpareMetaHtml(meta)}
             if (_reqSheet.lineOrders && _reqSheet.lineOrders[i] != null) l.qty_requested = _reqSheet.lineOrders[i];
         });
         await TVC_Inventory.saveRequisition(req);
-        alert('청구서가 저장되었습니다.');
+        alert('Requisition saved.');
         await renderReqSheetModal();
         render();
     }
@@ -6992,7 +7006,7 @@ ${renderWrSpareMetaHtml(meta)}
         const hits = reqSheetSearchHits();
         const q = (_reqSheet.partSearch || '').trim();
         if (!q) return '';
-        if (!hits.length) return '<p class="muted req-sheet-empty">검색 결과 없음</p>';
+        if (!hits.length) return '<p class="muted req-sheet-empty">No search results</p>';
         return `<div class="req-sheet-hits"><table class="req-sheet-table req-sheet-hits-table"><thead><tr>
             <th>Part No</th><th>Universal Code</th><th>Description</th><th>Stock</th><th></th>
         </tr></thead><tbody>${hits.map(s => `<tr class="req-hit-row" onclick="TVC_SpareMenu.reqSheetAddSpare('${escAttr(s.id)}')">
@@ -7017,7 +7031,7 @@ ${renderWrSpareMetaHtml(meta)}
         captureReqSheetForm();
         const req = await TVC_Inventory.getRequisition(_reqSheet.reqId);
         if (!req) return;
-        if ((req.lines || []).some(l => l.spare_part_id === spareId)) { alert('이미 추가된 부품입니다.'); return; }
+        if ((req.lines || []).some(l => l.spare_part_id === spareId)) { alert('Part already added.'); return; }
         const spare = (getState().spares || []).find(s => s.id === spareId);
         if (!spare) return;
         req.lines = req.lines || [];
@@ -7084,7 +7098,7 @@ ${renderWrSpareMetaHtml(meta)}
         if (!host) return;
         const { st, vesselId, isHq } = await vesselScope();
         const req = await TVC_Inventory.getRequisition(_reqSheet.reqId);
-        if (!req) { host.innerHTML = '<p class="muted">청구서를 찾을 수 없습니다.</p>'; return; }
+        if (!req) { host.innerHTML = '<p class="muted">Requisition not found.</p>'; return; }
 
         const reqs = await TVC_Inventory.listRequisitions(vesselId);
         const vesselName = await vesselLabel(vesselId, req.department || st.user?.department);
@@ -7123,7 +7137,7 @@ ${renderWrSpareMetaHtml(meta)}
                 <td><button type="button" class="btn btn-sm btn-red" onclick="event.stopPropagation();TVC_SpareMenu.reqSheetRemoveLine(${i})">×</button></td>
             </tr>`;
         }).join('') : `<tr><td colspan="12" class="muted" style="text-align:center;padding:20px">
-            청구 부품 없음 — 아래 검색에서 추가하거나 <a href="#" onclick="TVC_SpareMenu.reqSheetFillLowStock();return false">Low Stock 자동 추가</a>
+            No requisition lines — add via search below or <a href="#" onclick="TVC_SpareMenu.reqSheetFillLowStock();return false">Add low stock automatically</a>
         </td></tr>`;
 
         const flowStep = (n, label) =>
@@ -7189,12 +7203,12 @@ ${renderWrSpareMetaHtml(meta)}
                 ${flowStep(4, 'Complete')}
             </div>
             <div class="req-sheet-add">
-                <label class="req-add-label">REQD Parts 검색 (Part No / Name / Universal Code)</label>
-                <input type="search" id="reqSheetSearch" class="req-sheet-search" placeholder="예: gasket, 01-001, U_ENG_001"
+                <label class="req-add-label">Search REQD Parts (Part No / Name / Universal Code)</label>
+                <input type="search" id="reqSheetSearch" class="req-sheet-search" placeholder="e.g. gasket, 01-001, U_ENG_001"
                     value="${esc(_reqSheet.partSearch || '')}" oninput="TVC_SpareMenu.onReqSheetSearchInput(this.value)">
                 <div id="reqSheetHitsWrap">${buildReqSheetHitsHtml()}</div>
                 <div class="req-sheet-add-actions">
-                    <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqSheetFillLowStock()">Low Stock 자동 추가</button>
+                    <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqSheetFillLowStock()">Add low stock automatically</button>
                     <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqSheetNew()">+ New Requisition</button>
                 </div>
             </div>
@@ -7260,7 +7274,7 @@ ${renderWrSpareMetaHtml(meta)}
         return consumeJobsForGroup(st, groupKey);
     }
 
-    function exportDeliveryData() { alert('Delivery Export — 다음 단계'); }
+    function exportDeliveryData() { alert('Delivery Export — coming next'); }
 
     return {
         init, render, renderSpareGroupTree, refreshList, syncSpareToolbarUi, spareToolbarFlags, applySpareToolbarFlags,
@@ -7283,6 +7297,7 @@ ${renderWrSpareMetaHtml(meta)}
         CRITICAL_GROUP_KEY,
         wrSpareSelectGroup, wrSpareSetTreeSearch, wrSpareSetSearch, wrSpareToggleLowOnly,
         wrSpareToggleSelectedOnly, wrSpareFocusRow, wrSpareToggleRow, wrSpareToggleAll, wrSpareSetQty,
+        refreshWrSpareJobContext,
         onTxSearchInput, addTxLine, removeTxLine,
         openHqImportModal, onHqImportFile, openAssessmentModal, closeAssessmentModal, applyHqAssessment,
         openHistoryModal, closeHistoryModal,

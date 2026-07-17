@@ -76,6 +76,20 @@ const TVC_DataPurge = (function () {
         return { requisitions };
     }
 
+    /** 테스트 재시작: Work History + Defect Report 전부 삭제 (일회성) */
+    async function purgeAllReportsForTestingOnce() {
+        const KEY = 'reports_purge_version';
+        const VER = '20260717-clear-reports';
+        const done = await TVC_DB.getMeta(KEY).catch(() => null);
+        if (done === VER) return { skipped: true };
+
+        const workReports = await TVC_Transaction.purgeAllWorkReports().catch(() => 0);
+        const defectCases = await clearStore('defect_cases');
+        await TVC_DB.setMeta(KEY, VER);
+        console.info('[TVC_DataPurge] all reports cleared', { workReports, defectCases });
+        return { workReports, defectCases };
+    }
+
     /** 구 DM_CHEMICAL_01 태그·PMS Import/Export 이력 전부 삭제 (HQ·선박 공통) */
     async function run() {
         const done = await TVC_DB.getMeta('data_purge_version').catch(() => null);
@@ -102,5 +116,5 @@ const TVC_DataPurge = (function () {
         return summary;
     }
 
-    return { run, purgeAllRequisitionsOnce, PURGE_VERSION, LEGACY_VESSEL_ID };
+    return { run, purgeAllRequisitionsOnce, purgeAllReportsForTestingOnce, PURGE_VERSION, LEGACY_VESSEL_ID };
 })();

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover">
@@ -15,15 +15,15 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260717-df-spare-p2">
+    <link rel="stylesheet" href="css/app.css?v=20260717-df-header">
 </head>
 <body>
 
 <!-- 1. Login -->
 <div id="loginScreen" class="login-screen">
     <div id="loginFileBanner" class="login-file-banner hidden">
-        ⚠️ <b>file:// 로 열렸습니다</b> — 데이터·재고가 비어 보일 수 있습니다.
-        <code>START-TVC-PMS.bat</code> 더블클릭 또는 <code>npm start</code> → localhost:3000
+        ⚠️ <b>Opened via file://</b> — PMS/SPARE data may appear empty.
+        Double-click <code>START-TVC-PMS.bat</code> or run <code>npm start</code> → localhost:3000
     </div>
 
     <header class="login-brand" aria-label="THE VESSEL CODE">
@@ -72,10 +72,10 @@
                 <span class="login-hint-label">Demo access</span>
                 Password <strong>0000</strong>
                 <ul class="login-hint-list">
-                    <li><b>Master</b> · captain (Hub · 전 구역)</li>
+                    <li><b>Master</b> · captain (Hub · all zones)</li>
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / captain</li>
-                    <li><b>HQ</b> · hq (Department 선택 불필요)</li>
+                    <li><b>HQ</b> · hq (Department not required)</li>
                 </ul>
             </div>
         </div>
@@ -86,7 +86,7 @@
 
 <div id="appShell" class="hidden">
     <div id="fileProtocolBanner" class="file-protocol-banner hidden">
-        ⚠️ <b>file:// 모드</b> — localhost와 저장소가 다릅니다. <code>START-TVC-PMS.bat</code> 사용 권장
+        ⚠️ <b>file:// mode</b> — Uses a different storage than localhost. Use <code>START-TVC-PMS.bat</code>.
     </div>
     <div id="seedBanner" class="hidden">
         ⚠️ Load seed: <input type="file" id="seedFile" accept=".json" hidden onchange="TVC_App.loadSeedFile(this.files[0])">
@@ -180,7 +180,6 @@
                 <span class="sheet-sub">Select a row · double-click or Detail Report · check (ㅁ) for Report Confirm</span>
                 <span style="flex:1"></span>
                 <button type="button" class="btn btn-sm btn-amber" data-feature="showDefectReport" onclick="TVC_DefectReport.openNewBlank()">＋ New Defect Report</button>
-                <button type="button" class="btn btn-sm" data-feature="showDefectImportUrgent" onclick="document.getElementById('importDefectUrgent').click()">Import Package</button>
             </div>
             <div class="hist-toolbar filter-bar df-list-toolbar">
                 <button type="button" id="dfBtnDetail" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfDetailReport()">Detail Report</button>
@@ -192,11 +191,11 @@
                 <input class="search-input" id="dfListSearch" placeholder="Search FILE NO / JOB CODE / JOB NAME…" oninput="TVC_DefectReport.dfListSearch(this.value)">
                 <span class="count-label" id="dfListCount">—</span>
             </div>
-            <div class="sheet-table-wrap">
+            <div class="sheet-table-wrap list-table-scroll-wrap">
                 <table class="sheet-table df-list-table">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="dfSelectAll" title="Select all draft" onclick="TVC_DefectReport.toggleDfListSelectAll(this.checked)"></th>
-                        <th>Occurred Date</th>
+                        <th>Reported Date</th>
                         <th>File No.</th>
                         <th>Job Code</th>
                         <th>Job Name</th>
@@ -225,7 +224,7 @@
                         <span>🌳 PMS GROUP Tree</span>
                         <button type="button" id="actPlanTreeModifyBtn" class="btn spare-tree-modify-btn hidden"
                             onclick="TVC_SpareMenu.startGroupHeaderEdit()"
-                            title="선택한 그룹의 장비 정보(Maker/Model/Capacity/Serial No.) 수정" aria-label="Modify">✏️</button>
+                            title="Edit equipment info (Maker/Model/Capacity/Serial No.) for the selected group" aria-label="Modify">✏️</button>
                     </div>
                     <div class="tree-search-bar">
                         <input class="search-input" id="actTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
@@ -244,7 +243,7 @@
                     </div>
                     <div id="actFilterDashboard" class="act-filter-dashboard"></div>
                     <div class="filter-bar spare-list-search-bar">
-                        <div id="actPeriodFilter" class="act-period-filter" title="기간으로 작업 검색">
+                        <div id="actPeriodFilter" class="act-period-filter" title="Filter jobs by date range">
                             <span class="act-period-label">Period</span>
                             <input type="date" id="actPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onActualPeriodChange()">
                             <span class="act-period-sep">~</span>
@@ -278,13 +277,13 @@
                 <span class="count-label" id="histCount">—</span>
             </div>
             <p class="hist-legend">D: Defect Report · P: Postponed · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
-            <div class="sheet-table-wrap">
+            <div class="sheet-table-wrap list-table-scroll-wrap">
                 <table class="sheet-table hist-table">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
                         <th class="hist-type-h" title="Defect / Postponed">D/P</th>
-                        <th>Job Code</th><th>SORT-1</th><th>SORT-2</th><th>JOB DETAIL</th>
-                        <th>Work Date</th><th>Status</th>
+                        <th>Job Code</th><th class="hist-sort1-h">SORT-1</th><th class="hist-sort2-h">SORT-2</th><th class="hist-detail-h">JOB DETAIL</th>
+                        <th>Reported Date</th><th>Status</th>
                         <th class="hist-flag-h" title="Repair Request">RR</th>
                         <th class="hist-flag-h" title="Conducted by Shore Support">SS</th>
                         <th class="hist-flag-h" title="Defect Cleared">DC</th>
@@ -371,8 +370,8 @@
 <div id="deptPickModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('deptPickModal')">
     <div class="modal-box dept-pick-box">
         <button class="modal-x" onclick="TVC_App.closeModal('deptPickModal')">×</button>
-        <h3 id="deptPickTitle">부서를 선택하세요</h3>
-        <p class="muted">데이터가 섞이지 않도록 부서를 정확히 선택하세요.</p>
+        <h3 id="deptPickTitle">Select your department</h3>
+        <p class="muted">Choose the correct department to keep data separated.</p>
         <div class="dept-pick-row">
             <button class="btn dept-pick-btn engine" onclick="TVC_App.resolveDeptPick('ENGINE')">⚙️<br>Engine</button>
             <button class="btn dept-pick-btn deck" onclick="TVC_App.resolveDeptPick('DECK')">⚓<br>Deck</button>
@@ -441,14 +440,14 @@
 </div>
 <!-- spareDetailModal kept for legacy; unified SPARE uses slide panel -->
 
-<div id="defectReportModal" class="modal hidden spare-req-work-modal-wrap" onclick="if(event.target===this)TVC_DefectReport.requestCloseModal()">
+<div id="defectReportModal" class="modal hidden spare-req-work-modal-wrap">
     <div class="modal-box wr-modal spare-req-work-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_DefectReport.requestCloseModal()">×</button>
         <div id="defectReportBody"></div>
     </div>
 </div>
 <div id="dfCancelConfirmModal" class="modal hidden df-cancel-confirm-modal" onclick="if(event.target===this)TVC_DefectReport.dismissCancelConfirm()">
     <div class="modal-box df-cancel-confirm-box" onclick="event.stopPropagation()">
-        <p class="df-cancel-confirm-msg">레포트 작성을 취소하시겠습니까?</p>
+        <p class="df-cancel-confirm-msg">Cancel report editing?</p>
         <div class="modal-actions df-cancel-confirm-actions">
             <button type="button" class="btn btn-green" onclick="TVC_DefectReport.confirmCancelNew(true)">YES</button>
             <button type="button" class="btn" onclick="TVC_DefectReport.confirmCancelNew(false)">NO</button>
@@ -459,16 +458,16 @@
 <div id="fileProtocolModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('fileProtocolModal')">
     <div class="modal-box">
         <button class="modal-x" onclick="TVC_App.closeModal('fileProtocolModal')">×</button>
-        <h3>⚠️ index.html 직접 열기 (file://)</h3>
-        <p>브라우저 보안상 <b>localhost와 다른 저장소</b>를 사용합니다.</p>
+        <h3>⚠️ Opening index.html directly (file://)</h3>
+        <p>Browser security uses a <b>different storage</b> than localhost.</p>
         <ul class="file-protocol-list">
-            <li>PMS·SPARE 데이터가 <b>비어 보이거나</b> Import가 안 됩니다</li>
-            <li><code>npm start</code> 로 본 데이터와 <b>공유되지 않습니다</b></li>
+            <li>PMS/SPARE data may <b>appear empty</b> or Import may fail</li>
+            <li>Data is <b>not shared</b> with <code>npm start</code></li>
         </ul>
-        <p><b>해결:</b> 프로젝트 폴더의 <code>START-TVC-PMS.bat</code> 더블클릭<br>
-        (또는 터미널에서 <code>npm start</code> → <code>http://localhost:3000</code>)</p>
+        <p><b>Fix:</b> Double-click <code>START-TVC-PMS.bat</code> in the project folder<br>
+        (or run <code>npm start</code> → <code>http://localhost:3000</code>)</p>
         <div class="modal-actions">
-            <button class="btn btn-green" onclick="TVC_App.closeModal('fileProtocolModal')">확인</button>
+            <button class="btn btn-green" onclick="TVC_App.closeModal('fileProtocolModal')">OK</button>
         </div>
     </div>
 </div>
@@ -476,15 +475,15 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/rbac.js?v=20260716-report-flow"></script>
-<script src="js/core/schema.js?v=20260717-df-wf-status"></script>
+<script src="js/rbac.js?v=20260717-wh-confirmed"></script>
+<script src="js/core/schema.js?v=20260717-df-outline"></script>
 <script src="js/core/db.js"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260716-postpone-nextdate"></script>
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260717-df-spare-p2"></script>
+<script src="js/ui/spareMenu.js?v=20260717-wr-fast"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -493,17 +492,17 @@
 <script src="js/core/pbkdf2-fallback.js"></script>
 <script src="js/space.js?v=20260716-menu-flow"></script>
 <script src="js/auth.js?v=20260715-login-dept"></script>
-<script src="js/services/transaction.js?v=20260716-maint-schedule"></script>
+<script src="js/services/transaction.js?v=20260717-clear-reports"></script>
 <script src="js/services/maintenancePlan.js"></script>
-<script src="js/services/defectCase.js?v=20260717-df-approval"></script>
+<script src="js/services/defectCase.js?v=20260717-df-status"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
 <script src="js/services/sync.js?v=20260717-df-wf-status"></script>
 <script src="js/services/stationSync.js?v=20260715-space-auth"></script>
 <script src="js/services/fleet.js"></script>
-<script src="js/services/dataPurge.js?v=20260708-req-draft-only"></script>
+<script src="js/services/dataPurge.js?v=20260717-clear-reports"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/ui/defectReport.js?v=20260717-df-wf-status"></script>
-<script src="js/app.js?v=20260717-df-wf-status"></script>
-<script src="js/pwa.js?v=20260715-defect-v3"></script>
+<script src="js/ui/defectReport.js?v=20260717-df-header"></script>
+<script src="js/app.js?v=20260717-wr-fast"></script>
+<script src="js/pwa.js?v=20260717-date-fmt2"></script>
 </body>
 </html>
