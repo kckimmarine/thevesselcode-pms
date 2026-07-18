@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260718-df-tab-hist">
+    <link rel="stylesheet" href="css/app.css?v=20260718-df-balance">
 </head>
 <body>
 
@@ -196,7 +196,7 @@
                 <table class="sheet-table hist-table">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="dfSelectAll" title="Select all confirmable" onclick="TVC_DefectReport.toggleDfListSelectAll(this.checked)"></th>
-                        <th class="hist-type-h" title="Defect Report">D</th>
+                        <th class="hist-type-h" title="Defect Report" aria-label="Defect Report"></th>
                         <th>Job Code</th><th class="hist-sort1-h">SORT-1</th><th class="hist-sort2-h">SORT-2</th><th class="hist-detail-h">JOB DETAIL</th>
                         <th>Reported Date</th><th>Status</th>
                         <th class="hist-flag-h" title="Repair Request">RR</th>
@@ -286,7 +286,7 @@
                 <table class="sheet-table hist-table">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
-                        <th class="hist-type-h" title="Defect / Postponed">D/P</th>
+                        <th class="hist-type-h" title="Defect / Postponed" aria-label="Type"></th>
                         <th>Job Code</th><th class="hist-sort1-h">SORT-1</th><th class="hist-sort2-h">SORT-2</th><th class="hist-detail-h">JOB DETAIL</th>
                         <th>Reported Date</th><th>Status</th>
                         <th class="hist-flag-h" title="Repair Request">RR</th>
@@ -346,7 +346,7 @@
     </div>
 </div>
 <div id="workProcedureModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('workProcedureModal')">
-    <div class="modal-box wp-modal"><button class="modal-x" onclick="TVC_App.closeModal('workProcedureModal')">×</button>
+    <div class="modal-box wp-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_App.closeModal('workProcedureModal')">×</button>
         <div id="workProcedureBody"></div>
     </div>
 </div>
@@ -481,7 +481,7 @@
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/rbac.js?v=20260717-wh-confirmed"></script>
-<script src="js/core/schema.js?v=20260717-df-outline"></script>
+<script src="js/core/schema.js?v=20260718-df-workflow"></script>
 <script src="js/core/db.js"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260716-postpone-nextdate"></script>
@@ -499,15 +499,15 @@
 <script src="js/auth.js?v=20260715-login-dept"></script>
 <script src="js/services/transaction.js?v=20260717-clear-reports"></script>
 <script src="js/services/maintenancePlan.js"></script>
-<script src="js/services/defectCase.js?v=20260717-df-status"></script>
+<script src="js/services/defectCase.js?v=20260718-df-delete-fix"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
 <script src="js/services/sync.js?v=20260717-df-wf-status"></script>
 <script src="js/services/stationSync.js?v=20260715-space-auth"></script>
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260717-clear-reports"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/ui/defectReport.js?v=20260718-df-tab-hist"></script>
-<script src="js/app.js?v=20260718-df-tab-hist"></script>
+<script src="js/ui/defectReport.js?v=20260718-df-balance"></script>
+<script src="js/app.js?v=20260718-wr-ship-cmt"></script>
 <script src="js/pwa.js?v=20260717-date-fmt2"></script>
 </body>
 </html>

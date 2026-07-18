@@ -275,6 +275,54 @@ const TVC_DefectCaseService = (function () {
         return row;
     }
 
+    async function saveShipVerification(user, id, payload) {
+        if (TVC_RBAC.isHqAccount(user)) {
+            throw Object.assign(new Error('Ship only.'), { code: 'FORBIDDEN' });
+        }
+        const row = await get(id);
+        if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
+        if (!TVC_DefectCase.isShipVerificationEditable(row)) {
+            throw Object.assign(new Error('Available after Company approval.'), { code: 'INVALID_STATUS' });
+        }
+        const keys = [
+            'ship_verified_after_clear', 'working_hours', 'working_member',
+            'shore_support', 'defect_cleared', 'shore_technician', 'ship_attachments',
+        ];
+        keys.forEach(k => {
+            if (payload[k] !== undefined) row[k] = payload[k];
+        });
+        if (row.shore_support) row.shore_technician = true;
+        const cleared = !!row.defect_cleared && String(row.ship_verified_after_clear || '').trim();
+        if (cleared && !row.phase3_locked) {
+            row.ship_verified_by = row.ship_verified_by || TVC_RBAC.getRankLabel(user);
+            row.ship_verified_date = row.ship_verified_date || now().slice(0, 10);
+            row.status = TVC_DefectCase.Status.AWAITING_COMPLETION;
+            row.phase3_locked = true;
+            row.completed_at = now();
+        }
+        markPending(row);
+        await TVC_DB.put('defect_cases', row);
+        await TVC_DB.put('audit_logs', {
+            timestamp: new Date().toLocaleString(),
+            log: `✏️ [Defect/Ship Verify] ${row.case_no}`,
+            sync_status: 'LOCAL',
+        });
+        return row;
+    }
+
+    async function saveHqCompanyFields(user, id, payload) {
+        if (!TVC_RBAC.isHqAccount(user)) {
+            throw Object.assign(new Error('HQ only.'), { code: 'FORBIDDEN' });
+        }
+        const row = await get(id);
+        if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
+        if (payload.company_comment !== undefined) row.company_comment = payload.company_comment;
+        if (payload.company_attachments !== undefined) row.company_attachments = payload.company_attachments;
+        markPending(row);
+        await TVC_DB.put('defect_cases', row);
+        return row;
+    }
+
     async function deleteCase(user, id) {
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
@@ -291,8 +339,8 @@ const TVC_DefectCaseService = (function () {
     }
 
     return {
-        listAll, get, saveDraft, submitToCompany, saveHqPhase2, saveShipPhase3, saveHqPhase4,
-        startWork, createFromJob, deleteCase, saveApprovalMeta,
+        listAll, get, saveDraft, submitToCompany, saveHqPhase2, saveShipPhase3, saveShipVerification, saveHqPhase4,
+        saveHqCompanyFields, startWork, createFromJob, deleteCase, saveApprovalMeta,
         resolveVesselId, nextCaseNo, markPending,
     };
 })();

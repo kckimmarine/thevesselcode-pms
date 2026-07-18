@@ -771,8 +771,17 @@ const TVC_DefectCase = (function () {
     /** Phase 2 완료 후 선박이 결함 해소를 확인·보고 */
     function isPhase3Editable(row) {
         if (!row || row.phase3_locked) return false;
+        if (!(row.approved_at || row.approved_by)) return false;
         return row.status === Status.COMPANY_REVIEWED
-            || row.status === Status.WORK_IN_PROGRESS;
+            || row.status === Status.WORK_IN_PROGRESS
+            || row.status === Status.SUBMITTED_TO_COMPANY;
+    }
+
+    /** HQ Approve 후 선박 — Verified by Ship / Working hours 등 */
+    function isShipVerificationEditable(row) {
+        if (!row || row.phase3_locked) return false;
+        if (!(row.approved_at || row.approved_by)) return false;
+        return row.status !== Status.CLOSED;
     }
 
     /** 선박 Phase 3 제출 후 HQ D.P. 종결 */
@@ -862,7 +871,7 @@ const TVC_DefectCase = (function () {
         SCHEMA_VERSION, Status, PHASE1_FIELDS, PHASE2_FIELDS, PHASE3_FIELDS, PHASE4_FIELDS,
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, belongsToDepartment,
-        listWorkflowStatus, listWorkflowTone, canModifyListWorkflow,
+        listWorkflowStatus, listWorkflowTone, canModifyListWorkflow, isShipVerificationEditable,
     };
 })();
 

@@ -956,12 +956,15 @@ const TVC_App = (function () {
         }
     }
 
-    function schedulePlanRowVisualRefresh() {
-        clearPlanRowRefreshTimer();
-        _planRowRefreshTimer = setTimeout(() => {
-            _planRowRefreshTimer = null;
-            if (state.vlActual) state.vlActual.refresh();
-        }, 320);
+    function updatePlanRowSelectionHighlight(jobId) {
+        const scroll = document.getElementById('actScroll');
+        if (!scroll) return;
+        scroll.querySelectorAll('.vl-cells.row-selected').forEach(el => el.classList.remove('row-selected'));
+        if (!jobId) return;
+        const id = String(jobId);
+        scroll.querySelectorAll('.vl-cells[data-job-id]').forEach(el => {
+            if (el.getAttribute('data-job-id') === id) el.classList.add('row-selected');
+        });
     }
 
     /** Work Plan 행 클릭 — 선택 / 빠른 두 번 클릭 시 Procedure 모달 */
@@ -984,10 +987,10 @@ const TVC_App = (function () {
         _planRowLastTap = { id, t: now };
         if (isOrigJobInlineEditing()) return;
         state.selectedJobId = id;
+        updatePlanRowSelectionHighlight(id);
         renderSidePanel();
         renderPlanGroupHeader();
         if (state.currentTab === 'actual') syncPlanItemUi();
-        schedulePlanRowVisualRefresh();
     }
 
     function openPlanWorkProcedure() {
@@ -1027,7 +1030,7 @@ const TVC_App = (function () {
         clearPlanRowRefreshTimer();
         _planRowLastTap = { id: null, t: 0 };
         state.selectedJobId = jobId;
-        if (state.vlActual) state.vlActual.refresh();
+        updatePlanRowSelectionHighlight(jobId);
         renderSidePanel();
         renderPlanGroupHeader();
         if (state.currentTab === 'actual') syncPlanItemUi();
@@ -2787,14 +2790,17 @@ const TVC_App = (function () {
     function jobConsumedSpareParts(jobId) {
         const spareById = new Map((state.spares || []).map(s => [s.id, s]));
         const consumed = [];
-        jobWorkHistoryEntries(jobId).forEach(({ report: r, item }) => {
+        jobWorkHistoryEntries(jobId).forEach(entry => {
+            if (entry.source !== 'report') return;
+            const { report: r, item } = entry;
+            if (!r || !item) return;
             const parts = item.used_parts?.length ? item.used_parts : (r.is_batch ? [] : (r.used_parts || []));
             const dt = formatCmaxsHistDate(r.work_date || r.report_date || r.created_at);
             parts.forEach(u => {
                 const s = spareById.get(u.spare_part_id) || {};
                 consumed.push({
                     date: dt,
-                    part_no: s.part_no || u.spare_part_id,
+                    part_no: s.part_no || u.part_no || u.spare_part_id,
                     name: s.name || '—',
                     unit: s.unit || '—',
                     qty: u.qty_used,
@@ -2923,15 +2929,60 @@ const TVC_App = (function () {
         });
     }
 
+    function ensureHistCellTipFloater() {
+        let el = document.getElementById('histCellTipFloater');
+        if (!el) {
+            el = document.createElement('div');
+            el.id = 'histCellTipFloater';
+            el.className = 'hist-cell-tip-floater hidden';
+            el.setAttribute('role', 'tooltip');
+            document.body.appendChild(el);
+        }
+        return el;
+    }
+
+    function hideHistCellTipFloater() {
+        const floater = document.getElementById('histCellTipFloater');
+        if (!floater) return;
+        floater.classList.add('hidden');
+        floater.textContent = '';
+    }
+
+    function showHistCellTipFloater(tip) {
+        const textEl = tip.querySelector('.vl-cell-tip-text');
+        const truncated = textEl && textEl.scrollWidth > textEl.clientWidth + 1;
+        if (!truncated) {
+            hideHistCellTipFloater();
+            return false;
+        }
+        const floater = ensureHistCellTipFloater();
+        const text = tip.dataset.tip || textEl.textContent || '';
+        floater.textContent = text;
+        floater.classList.remove('hidden');
+        floater.style.left = '-9999px';
+        floater.style.top = '0';
+        const fw = floater.offsetWidth;
+        const fh = floater.offsetHeight;
+        const anchor = tip.getBoundingClientRect();
+        let left = anchor.left;
+        let top = anchor.bottom + 4;
+        if (top + fh > window.innerHeight - 8) top = anchor.top - fh - 4;
+        if (top < 8) top = 8;
+        if (left + fw > window.innerWidth - 8) left = Math.max(8, window.innerWidth - fw - 8);
+        if (left < 8) left = 8;
+        floater.style.left = `${left}px`;
+        floater.style.top = `${top}px`;
+        return true;
+    }
+
     function initHistCellTips() {
         document.querySelectorAll('#tab-history .sheet-table-wrap, #tab-defect .sheet-table-wrap').forEach(container => {
             if (container._histTipsBound) return;
             container._histTipsBound = true;
             const syncTip = (tip) => {
-                const textEl = tip.querySelector('.vl-cell-tip-text');
-                const truncated = textEl && textEl.scrollWidth > textEl.clientWidth + 1;
-                tip.classList.toggle('vl-cell-tip-active', !!truncated);
-                tip.closest('td')?.classList.toggle('hist-cell-tip-open', !!truncated);
+                const active = showHistCellTipFloater(tip);
+                tip.classList.toggle('vl-cell-tip-active', active);
+                tip.closest('td')?.classList.toggle('hist-cell-tip-open', active);
             };
             container.addEventListener('mouseover', (e) => {
                 const tip = e.target.closest('.vl-cell-tip');
@@ -2944,8 +2995,10 @@ const TVC_App = (function () {
                 if (from && from !== to) {
                     from.classList.remove('vl-cell-tip-active');
                     from.closest('td')?.classList.remove('hist-cell-tip-open');
+                    hideHistCellTipFloater();
                 }
             });
+            container.addEventListener('scroll', hideHistCellTipFloater, { passive: true });
         });
     }
 
@@ -3479,6 +3532,7 @@ const TVC_App = (function () {
         if (state._wpJobId !== job.id) state._wpTab = 'procedure';
         state._wpJobId = job.id;
         state.selectedJobId = job.id;
+        updatePlanRowSelectionHighlight(job.id);
         if (tab) state._wpTab = tab;
         try {
             renderWorkProcedureModal();
@@ -3496,7 +3550,12 @@ const TVC_App = (function () {
 
     function setWorkProcedureTab(tab) {
         state._wpTab = tab;
-        renderWorkProcedureModal();
+        try {
+            renderWorkProcedureModal();
+        } catch (err) {
+            console.error('[WorkProcedure tab]', err);
+            alert('Work History 화면을 불러오지 못했습니다.');
+        }
     }
 
     function renderWorkProcedureModal() {
@@ -3568,8 +3627,8 @@ const TVC_App = (function () {
             </div>
             <p class="wp-job-detail">${esc(job.job_detail || '')}</p>
             <div class="wp-tabs">
-                <button class="wp-tab${procActive}" onclick="TVC_App.setWorkProcedureTab('procedure')">Work Procedure</button>
-                <button class="wp-tab${histActive}" onclick="TVC_App.setWorkProcedureTab('history')">Work History &amp; Consumed Spare Parts</button>
+                <button type="button" class="wp-tab${procActive}" onclick="TVC_App.setWorkProcedureTab('procedure')">Work Procedure</button>
+                <button type="button" class="wp-tab${histActive}" onclick="TVC_App.setWorkProcedureTab('history')">Work History &amp; Consumed Spare Parts</button>
             </div>
             <div class="wp-tab-pane">${tabContent}</div>
             <div class="modal-actions">
@@ -4109,7 +4168,7 @@ const TVC_App = (function () {
                 <div class="wr-maint-field wr-maint-chk-field">${flagChk('shoreSupport', 'Conducted by Shore Support')}</div>
             </div>
             ${showShipComment ? `
-                ${fld("Ship's Comments", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3"${roAttr}${dis}>${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld("Ship's Comments (If any)", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3"${roAttr}${dis}>${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
                 ${fld("Ship's Attachment", renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach && !ro }), 'wr-maint-span-all wr-maint-grid-gap')}
             ` : ''}
             ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
@@ -4157,16 +4216,15 @@ const TVC_App = (function () {
                     ${fld('Work Date', `<input type="date" data-wf="workDate" value="${esc(wf('workDate', today))}"${ro ? ' disabled' : ''}>`)}
                     ${fld('Reported Date', `<input type="date" data-wf="reportDate" value="${esc(wf('reportDate', today))}"${ro ? ' disabled' : ''}>`)}
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByName)}" readonly>`)}
-                    ${fld('PMS Group No.', batchMode ? roWf('pmsGroupNo', hdr.pmsGroupNo) : renderWrGroupPick(ro), 'wr-maint-span-all')}
+                    ${fld('PMS Group No.', roWf('pmsGroupNo', hdr.pmsGroupNo || job.group || ''), 'wr-maint-span-all')}
                 </div>
                 ${jobInfoBlock}
                 ${!batchMode ? `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
-                    ${fld('Job Code', renderWrJobPick(ro))}
+                    ${fld('Job Code', `<input class="wr-ro" value="${esc(job.job_code || '')}" readonly>`)}
                     ${fld('SORT-1', `<input class="wr-ro" value="${esc(job.item_sort1 || '')}" readonly>`)}
                     ${fld('SORT-2', `<input class="wr-ro" value="${esc(job.item_sort2 || '')}" readonly>`)}
                     ${fld('Job Detail', `<input class="wr-ro" value="${esc(job.job_detail || '')}" readonly>`)}
-                </div>
-                ${fld('Job Name', inp('jobName', ''), 'wr-maint-span-all wr-maint-grid-gap')}` : ''}
+                </div>` : ''}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
                     ${fld('Maker', roWf('maker', hdr.maker))}
                     ${fld('Model / Type', roWf('modelType', hdr.modelType))}

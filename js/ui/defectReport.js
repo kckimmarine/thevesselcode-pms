@@ -571,7 +571,9 @@ const TVC_DefectReport = (function () {
         const uploadBtn = canUpload
             ? `<button type="button" class="wr-attach-btn" onclick="document.getElementById('${inputId}').click()">📎 ${esc(label)}</button>
                <input type="file" id="${inputId}" class="hidden" multiple onchange="TVC_DefectReport.uploadAttachment('${kind}')">`
-            : (list.length ? '' : `<span class="wr-attach-label">${esc(label)}</span>`);
+            : (list.length
+                ? ''
+                : `<button type="button" class="wr-attach-btn" disabled tabindex="-1">📎 ${esc(label)}</button>`);
         const listHtml = list.length ? `<ul class="wr-attach-list">${items}</ul>` : '';
         return `<div class="wr-attach-block">${uploadBtn}${listHtml}</div>`;
     }
@@ -1053,42 +1055,77 @@ const TVC_DefectReport = (function () {
         return !!dfVal(row, name);
     }
 
-    function renderDfReportFooter(row, opts = {}) {
-        const ro = opts.readonly;
-        const dis = ro ? ' disabled' : '';
-        const roAttr = ro ? ' readonly' : '';
-        const canEditShipAttach = !ro;
-        const canEditCompanyAttach = isHq() && TVC_DefectCase.isPhase2Editable(row);
+    function renderDfPostActionSections(row, opts = {}) {
+        const {
+            canEditCompanyReply = false,
+            canEditShipVerify = false,
+            canEditCompanyFinal = false,
+        } = opts;
         const fld = (label, inner, extraCls = '') =>
             `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
-        const inp = (name, val, type = 'text') => {
+        const inp = (name, val, type, ro) => {
             const v = esc(dfVal(row, name, val));
-            if (type === 'number') return `<input type="number" data-df="${name}" class="${ro ? 'wr-ro' : ''}" value="${v}"${roAttr}${dis}>`;
-            return `<input data-df="${name}" class="${ro ? 'wr-ro' : ''}" value="${v}"${roAttr}${dis}>`;
+            const roAttr = ro ? ' readonly' : '';
+            const dis = ro ? ' disabled' : '';
+            const roCls = ro ? ' wr-ro' : '';
+            if (type === 'date') return `<input type="date" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}${dis}>`;
+            if (type === 'number') return `<input type="number" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}${dis}>`;
+            return `<input data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}${dis}>`;
         };
-        const flagChk = (name, label) => `<label class="wr-footer-flag">
-            <input type="checkbox" data-df="${name}"${dfFlagChecked(row, name) ? ' checked' : ''}${dis}>
-            <span>${esc(label)}</span>
-        </label>`;
+        const ta = (name, val, rows, ro) => {
+            const roAttr = ro ? ' readonly' : '';
+            const roCls = ro ? ' wr-ro' : '';
+            return `<textarea class="wr-maint-textarea${roCls}" data-df="${name}" rows="${rows}"${roAttr}>${esc(dfVal(row, name, val))}</textarea>`;
+        };
+        const flagChk = (name, label, enabled) => {
+            const dis = enabled ? '' : ' disabled';
+            return `<label class="wr-footer-flag">
+                <input type="checkbox" data-df="${name}"${dfFlagChecked(row, name) ? ' checked' : ''}${dis}>
+                <span>${esc(label)}</span>
+            </label>`;
+        };
+        const reportChk = (name, label, ro) =>
+            fieldInput(name, label, dfVal(row, name), { checkbox: true, readonly: ro });
 
-        return `<footer class="wr-report-footer">
-            <div class="wr-footer-flags" role="group" aria-label="Report status flags">
-                ${flagChk('repair_request', 'Repair Request')}
-                ${flagChk('shore_support', 'Conducted by Shore Support')}
-                ${flagChk('defect_cleared', 'Defect Cleared')}
-            </div>
-            <div class="wr-footer-labor">
-                ${fld('Working Hours', inp('working_hours', '0', 'number'))}
-                ${fld('Working Member', inp('working_member', '0', 'number'))}
-            </div>
-            <div class="wr-footer-section wr-footer-ship">
-                <div class="wr-footer-attach">${renderDfAttachmentBlock('ship', { canUpload: canEditShipAttach })}</div>
-            </div>
-            <div class="wr-footer-section wr-footer-company">
-                ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(dfVal(row, 'company_comment', row.company_initial_reply || ''))}</textarea>`, 'wr-maint-span-all')}
-                <div class="wr-footer-attach">${renderDfAttachmentBlock('company', { canUpload: canEditCompanyAttach })}</div>
-            </div>
-        </footer>`;
+        const p2ro = !canEditCompanyReply;
+        const p3ro = !canEditShipVerify;
+        const p4ro = !canEditCompanyFinal;
+        const canUploadCompanyAttach = canEditCompanyReply || canEditCompanyFinal;
+
+        return `<div class="df-post-action-stack">
+            <section class="df-post-block df-company-reply">
+                <h4 class="df-post-title">INITIAL REPLY FROM COMPANY / PERMIT TO WORK FOR UNPLANNED MAINTENANCE</h4>
+                <div class="df-post-date-row">
+                    ${fld('DATE', inp('reply_date', row.reply_date || '', 'date', p2ro))}
+                </div>
+                ${fld('', ta('company_initial_reply', '', 4, p2ro), 'wr-maint-span-all')}
+                <textarea class="hidden" data-df="permit_to_work" aria-hidden="true">${esc(dfVal(row, 'permit_to_work', dfVal(row, 'company_initial_reply', '')))}</textarea>
+                <div class="df-checks df-post-checks">
+                    <span class="df-checks-label">Require to report to</span>
+                    ${reportChk('report_to_class', 'Class', p2ro)}
+                    ${reportChk('report_to_flag', 'Flag State', p2ro)}
+                    ${reportChk('report_to_external_stakeholder', 'External Stakeholder', p2ro)}
+                    ${reportChk('report_to_psc', 'PSC', p2ro)}
+                    ${reportChk('report_na', 'N/A', p2ro)}
+                </div>
+            </section>
+            <section class="df-post-block df-ship-verify">
+                <h4 class="df-post-title">Verified by Ship (After defect was cleared)</h4>
+                ${fld('', ta('ship_verified_after_clear', '', 4, p3ro), 'wr-maint-span-all')}
+                <div class="wr-footer-labor df-verify-labor">
+                    ${fld('Working Hours', inp('working_hours', '0', 'number', p3ro))}
+                    ${fld('Working Member', inp('working_member', '0', 'number', p3ro))}
+                    <div class="wr-footer-flags df-verify-flags" role="group" aria-label="Verification flags">
+                        ${flagChk('shore_support', 'Conducted by Shore Support', canEditShipVerify)}
+                        ${flagChk('defect_cleared', 'Defect Cleared', canEditShipVerify)}
+                    </div>
+                </div>
+            </section>
+            <section class="df-post-block df-company-final">
+                ${fld("Company's Comments", ta('company_comment', '', 3, p4ro), 'wr-maint-span-all')}
+                ${fld("Company's Attachment", `<div class="wr-maint-inline-box wr-maint-inline-attach">${renderDfAttachmentBlock('company', { canUpload: canUploadCompanyAttach })}</div>`, 'wr-maint-span-all')}
+            </section>
+        </div>`;
     }
 
     function dfApprovalState(row) {
@@ -1126,7 +1163,8 @@ const TVC_DefectReport = (function () {
     }
 
     function renderPhase1(row, readonly, opts = {}) {
-        const { includeApproval = true } = opts;
+        const { includeApproval = true, postAction = {} } = opts;
+        const canEditShipInitial = postAction.canEditShipInitial ?? !readonly;
         ensureDfDraft(row);
         const s = getState();
         const hasJob = dfHasLinkedJob(row);
@@ -1144,6 +1182,7 @@ const TVC_DefectReport = (function () {
             return `<input data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
         };
         const ta = (name, val, rows = 3) => `<textarea class="wr-maint-textarea${roCls}" data-df="${name}" rows="${rows}"${roAttr}>${esc(dfVal(row, name, val))}</textarea>`;
+        const repairChk = `<label class="wr-maint-chk"><input type="checkbox" data-df="repair_request"${dfFlagChecked(row, 'repair_request') ? ' checked' : ''}${canEditShipInitial ? '' : ' disabled'} aria-label="Repair Request"></label>`;
 
         return `<div class="wr-maint-form">
             ${includeApproval ? renderDfApprovalHtml(row) : ''}
@@ -1179,51 +1218,18 @@ const TVC_DefectReport = (function () {
                 ${fld('Estimated Cause of Defect', ta('estimated_cause', ''), 'wr-maint-span-all')}
                 ${fld('Possible Effect to Other System', ta('possible_effect', ''), 'wr-maint-span-all')}
                 ${fld('Action Plan / Corrective Action', ta('action_taken', ''), 'wr-maint-span-all')}
-                ${renderDfReportFooter(row, { readonly: ro })}
+                <div class="wr-maint-grid wr-maint-grid-2 df-ship-initial-pair">
+                    ${fld('Repair Request', `<div class="wr-maint-inline-box">${repairChk}</div>`)}
+                    ${fld("Ship's Attachment", `<div class="wr-maint-inline-box wr-maint-inline-attach">${renderDfAttachmentBlock('ship', { canUpload: canEditShipInitial })}</div>`)}
+                </div>
+                ${renderDfPostActionSections(row, opts.postAction || {})}
             </section>
         </div>`;
     }
 
-    function renderPhase2(row, readonly) {
-        const show = row.status !== TVC_DefectCase.Status.DRAFT || isHq();
-        if (!show) return '';
-        const p2ro = readonly || !TVC_DefectCase.isPhase2Editable(row);
-        return `<section class="df-phase df-phase-hq">
-            <h3 class="df-phase-title">Phase 2 — Company Initial Reply / Permit to Work <span class="df-urgent">URGENT</span></h3>
-            <div class="df-grid">
-                ${fieldInput('company_initial_reply', 'Initial Reply from Company', row.company_initial_reply, { span: 2, textarea: true, rows: 3, readonly: p2ro })}
-                ${fieldInput('permit_to_work', 'Permit to Work (Unplanned Maintenance)', row.permit_to_work, { span: 2, textarea: true, rows: 2, readonly: p2ro })}
-                ${fieldInput('reply_by', 'Reply by', row.reply_by, { readonly: p2ro })}
-                ${fieldInput('reply_date', 'Reply Date', row.reply_date, { type: 'date', readonly: p2ro })}
-            </div>
-            <div class="df-checks">
-                <span class="df-checks-label">Require to report to:</span>
-                ${fieldInput('report_to_class', 'Class', row.report_to_class, { checkbox: true, readonly: p2ro })}
-                ${fieldInput('report_to_flag', 'Flag', row.report_to_flag, { checkbox: true, readonly: p2ro })}
-                ${fieldInput('report_to_external_stakeholder', 'External Stakeholder', row.report_to_external_stakeholder, { checkbox: true, readonly: p2ro })}
-                ${fieldInput('report_to_psc', 'PSC', row.report_to_psc, { checkbox: true, readonly: p2ro })}
-                ${fieldInput('report_na', 'N/A', row.report_na, { checkbox: true, readonly: p2ro })}
-            </div>
-        </section>`;
-    }
+    function renderPhase2() { return ''; }
 
-    function renderPhase3(row, readonly) {
-        const show = row.phase2_locked || row.phase3_locked
-            || row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS
-            || row.status === TVC_DefectCase.Status.AWAITING_COMPLETION
-            || row.status === TVC_DefectCase.Status.CLOSED;
-        if (!show) return '';
-        const p3ro = readonly || !TVC_DefectCase.isPhase3Editable(row);
-        return `<section class="df-phase df-phase-ship">
-            <h3 class="df-phase-title">Phase 3 — Verified by Ship (After trouble cleared)</h3>
-            <div class="df-grid">
-                ${fieldInput('ship_verified_after_clear', 'Verification — trouble cleared / work completed', row.ship_verified_after_clear, { span: 2, textarea: true, rows: 4, readonly: p3ro })}
-                ${fieldInput('ship_verified_by', 'Verified by (C/E or Master)', row.ship_verified_by, { readonly: p3ro })}
-                ${fieldInput('ship_verified_date', 'Verification Date', row.ship_verified_date, { type: 'date', readonly: p3ro })}
-            </div>
-            ${row.phase3_locked ? '<p class="df-phase-note">✔ Completion reported to Company.</p>' : ''}
-        </section>`;
-    }
+    function renderPhase3() { return ''; }
 
     function renderPhase4(row, readonly) {
         const show = row.phase3_locked || row.phase4_locked
@@ -1288,36 +1294,61 @@ const TVC_DefectReport = (function () {
         refreshDefectModal();
     }
 
+    async function applyDfApprovalFromUi() {
+        const s = getState();
+        const id = s._defectCaseId;
+        const user = s.user;
+        if (!id || !user) return;
+        const cfCb = document.getElementById('dfConfirmedBy');
+        const apCb = document.getElementById('dfApprovedBy');
+        const doConfirm = cfCb?.checked && !cfCb.disabled;
+        const doApprove = apCb?.checked && !apCb.disabled;
+        if (doConfirm || doApprove) {
+            await TVC_DefectCaseService.saveApprovalMeta(user, id, { confirm: doConfirm, approve: doApprove });
+        }
+    }
+
     function renderModalBody(row, mode) {
         const hq = isHq();
         const forceView = mode === 'view';
         const fromListNav = !!getState()._dfNavSource;
         const dfPage = getState()._dfPage || '1';
-        const wfModifiable = TVC_DefectCase.canModifyListWorkflow(row);
-        const phase1ro = forceView || hq || !wfModifiable;
-        const canEditP1 = !forceView && !hq && wfModifiable && row.status !== TVC_DefectCase.Status.CLOSED;
-        const canEditP2 = !forceView && hq && wfModifiable && TVC_DefectCase.isPhase2Editable(row);
-        const canEditP3 = !forceView && !hq && wfModifiable && TVC_DefectCase.isPhase3Editable(row);
-        const canEditP4 = !forceView && hq && wfModifiable && TVC_DefectCase.isPhase4Editable(row);
-        const canSave = !forceView && wfModifiable && (canEditP1 || canEditP2 || canEditP3 || canEditP4);
+        const approval = dfApprovalState(row);
+        const canEditP1 = !forceView && !hq && TVC_DefectCase.isPhase1Editable(row);
+        const canEditShipInitial = canEditP1;
+        const canEditCompanyReply = !forceView && hq && TVC_DefectCase.isPhase2Editable(row);
+        const canEditShipVerify = !forceView && !hq && TVC_DefectCase.isShipVerificationEditable(row);
+        const canEditP4 = !forceView && hq && TVC_DefectCase.isPhase4Editable(row);
+        const canEditCompanyFinal = !forceView && hq && (canEditP4 || canEditCompanyReply);
+        const canHqApproveOnly = !forceView && hq && approval.canApproveNow;
+        const canSave = !forceView && (
+            canEditP1 || canEditCompanyReply || canEditShipVerify || canEditP4 || canEditCompanyFinal || canHqApproveOnly
+        );
+        const titleText = fromListNav ? 'Defect Report' : (forceView ? 'Defect Report (View)' : 'Defect Report');
 
         const pageTabs = `
             <div class="wr-pagetabs">
                 <button type="button" class="wr-pagetab${dfPage === '1' ? ' active' : ''}" onclick="TVC_DefectReport.setDefectReportPage('1')">Page 1</button>
                 <button type="button" class="wr-pagetab${dfPage === '2' ? ' active' : ''}" onclick="TVC_DefectReport.setDefectReportPage('2')">Page 2</button>
             </div>`;
-        const pageTabsBar = `<div class="wr-pagetabs-bar modal-drag-handle">${pageTabs}</div>`;
+        const pageTabsBar = `<div class="wr-pagetabs-bar">${pageTabs}</div>`;
 
         const headHtml = dfPage === '2' ? renderDfApprovalHtml(row) : '';
         let body = '';
         if (dfPage === '2') {
-            const page2ro = forceView || !wfModifiable;
+            const page2ro = forceView || !TVC_DefectCase.canModifyListWorkflow(row);
             body = renderDfPage2Body(row, page2ro);
         } else {
-            body = `${renderPhase1(row, !canEditP1, { includeApproval: true })}
+            body = `${renderPhase1(row, !canEditP1, {
+                includeApproval: true,
+                postAction: {
+                    canEditShipInitial,
+                    canEditCompanyReply,
+                    canEditShipVerify,
+                    canEditCompanyFinal,
+                },
+            })}
                 <div class="df-workflow-phases">
-                    ${renderPhase2(row, !canEditP2)}
-                    ${renderPhase3(row, !canEditP3)}
                     ${renderPhase4(row, !canEditP4)}
                 </div>`;
         }
@@ -1334,6 +1365,7 @@ const TVC_DefectReport = (function () {
         }
 
         return `<div class="df-modal-inner">
+            <div class="wr-titlebar">${titleText}</div>
             ${pageTabsBar}
             <div class="wr-page tone-defect">
                 ${headHtml}
@@ -1433,10 +1465,39 @@ const TVC_DefectReport = (function () {
         if (!id) return;
         const row = await TVC_DefectCaseService.get(id);
         if (!row) return;
+        const form = captureForm();
+        try {
+            await applyDfApprovalFromUi();
+        } catch (e) {
+            alert(e.message || e.code || 'Approval failed');
+            return;
+        }
         if (isHq() && TVC_DefectCase.isPhase4Editable(row)) return saveHqPhase4();
         if (isHq() && TVC_DefectCase.isPhase2Editable(row)) return saveHqReply();
+        if (isHq() && dfApprovalState(row).canApproveNow) {
+            await refresh();
+            await openCase(id);
+            alert('Report approved.');
+            return;
+        }
+        if (!isHq() && TVC_DefectCase.isShipVerificationEditable(row)) return saveShipVerificationModal();
         if (!isHq() && TVC_DefectCase.isPhase3Editable(row)) return saveShipPhase3();
         return saveDraft();
+    }
+
+    async function saveShipVerificationModal() {
+        const s = getState();
+        const id = s._defectCaseId;
+        if (!id) return;
+        try {
+            await TVC_DefectCaseService.saveShipVerification(s.user, id, captureForm());
+            s._dfSavedToList = true;
+            await refresh();
+            await openCase(id);
+            alert('Ship verification saved.');
+        } catch (e) {
+            alert(e.message || e.code || 'Save failed');
+        }
     }
 
     async function saveDraft() {
@@ -1472,10 +1533,20 @@ const TVC_DefectReport = (function () {
         const id = s._defectCaseId;
         if (!id) return;
         try {
-            await TVC_DefectCaseService.saveHqPhase2(s.user, id, captureForm());
+            const form = captureForm();
+            if (!String(form.permit_to_work || '').trim() && String(form.company_initial_reply || '').trim()) {
+                form.permit_to_work = form.company_initial_reply;
+            }
+            await TVC_DefectCaseService.saveHqPhase2(s.user, id, form);
+            if (form.company_comment || (form.company_attachments || []).length) {
+                await TVC_DefectCaseService.saveHqCompanyFields(s.user, id, {
+                    company_comment: form.company_comment,
+                    company_attachments: form.company_attachments,
+                });
+            }
             await refresh();
             await openCase(id);
-            alert('HQ Phase 2 saved.');
+            alert('Company reply saved.');
             if (andExport) await TVC_DefectSync.exportHqReplyZip(s.user, id);
         } catch (e) {
             alert(e.message || e.code || 'HQ reply failed');
@@ -1559,19 +1630,10 @@ const TVC_DefectReport = (function () {
         const s = getState();
         const id = s._defectCaseId;
         const user = s.user;
-        const cfCb = document.getElementById('dfConfirmedBy');
-        const apCb = document.getElementById('dfApprovedBy');
 
         if (id && user) {
             try {
-                const doConfirm = cfCb?.checked && !cfCb.disabled;
-                const doApprove = apCb?.checked && !apCb.disabled;
-                if (doConfirm || doApprove) {
-                    await TVC_DefectCaseService.saveApprovalMeta(user, id, {
-                        confirm: doConfirm,
-                        approve: doApprove,
-                    });
-                }
+                await applyDfApprovalFromUi();
             } catch (e) {
                 alert(e.message || e.code || 'Approval failed');
                 return;
