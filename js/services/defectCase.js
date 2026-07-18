@@ -44,6 +44,14 @@ const TVC_DefectCaseService = (function () {
             if (!TVC_DefectCase.canModifyListWorkflow(row)) {
                 throw Object.assign(new Error('Phase 1 is locked after submission.'), { code: 'LOCKED' });
             }
+            const st = TVC_DefectCase.listWorkflowStatus(row);
+            if (!TVC_RBAC.canModifyDeleteListReport(user, row.department, st)) {
+                throw Object.assign(new Error(
+                    st === 'Confirmed'
+                        ? 'Confirmed cases can only be modified by Captain / Chief Engineer.'
+                        : 'Modify permission denied.'
+                ), { code: 'FORBIDDEN' });
+            }
             Object.assign(row, payload, {
                 vessel_id: vesselId || row.vessel_id,
                 reported_by: user?.username || row.reported_by,
@@ -326,8 +334,15 @@ const TVC_DefectCaseService = (function () {
     async function deleteCase(user, id) {
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
-        if (row.phase1_locked || row.status !== TVC_DefectCase.Status.DRAFT) {
-            throw Object.assign(new Error('Only draft cases can be deleted.'), { code: 'LOCKED' });
+        if (!TVC_DefectCase.canDeleteListWorkflow(row)) {
+            throw Object.assign(new Error('Submitted or Approved cases cannot be deleted.'), { code: 'LOCKED' });
+        }
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (!TVC_RBAC.canModifyDeleteListReport(user, row.department, st)) {
+            const msg = st === 'Confirmed'
+                ? 'Confirmed cases can only be deleted by Captain / Chief Engineer.'
+                : 'Delete permission denied.';
+            throw Object.assign(new Error(msg), { code: 'FORBIDDEN' });
         }
         await TVC_DB.delete('defect_cases', id);
         await TVC_DB.put('audit_logs', {

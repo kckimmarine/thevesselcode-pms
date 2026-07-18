@@ -530,6 +530,44 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .act-period-clear { padding: 3px 8px; font-size: 11px; background: #edf2f7; color: #4a5568; border: none; border-radius: 4px; cursor: pointer; }
 .act-period-clear:hover { background: #e2e8f0; }
 .search-input { flex: 1; min-width: 100px; padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 12px; }
+.search-field-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 100px;
+}
+.search-field-wrap .search-input {
+    width: 100%;
+    box-sizing: border-box;
+    padding-right: 28px;
+}
+.tree-search-bar .search-field-wrap { width: 100%; min-width: 0; }
+.spare-list-search-bar .search-field-wrap { flex: 1; min-width: 220px; }
+.hist-toolbar .search-field-wrap,
+.hist-toolbar .act-period-filter { flex-shrink: 0; }
+.filter-bar .search-field-wrap { flex: 1; min-width: 140px; max-width: 320px; }
+.search-clear-btn {
+    position: absolute;
+    right: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 18px;
+    height: 18px;
+    border: none;
+    border-radius: 50%;
+    background: #e2e8f0;
+    color: #4a5568;
+    font-size: 13px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.search-clear-btn:hover { background: #cbd5e0; color: #1a202c; }
+.search-clear-btn.hidden { display: none; }
 .count-label { padding: 4px 14px; font-size: 11px; color: #718096; }
 
 /* Virtual List */
@@ -1644,6 +1682,21 @@ input[type="date"]:not(.tvc-date-empty) {
     box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
 }
 .hist-toolbar { padding: 8px 14px; }
+.hist-toolbar-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    margin: 0 20px 8px;
+}
+.hist-toolbar-stack .hist-toolbar-actions {
+    padding-bottom: 4px;
+    border-bottom: none;
+}
+.hist-toolbar-stack .hist-toolbar-filters {
+    padding-top: 6px;
+    padding-bottom: 8px;
+}
+#tab-history .hist-toolbar-stack { margin: 0 20px 8px; }
 .hist-legend {
     margin: 0 20px 8px;
     font-size: 11px;
@@ -4318,7 +4371,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 .defect-status.tone-blue { background: #bee3f8; color: #2c5282; }
 .defect-status.tone-gray { background: #edf2f7; color: #4a5568; }
 
-#tab-defect .hist-toolbar { margin: 0 20px 8px; }
+#tab-defect .hist-toolbar-stack { margin: 0 20px 8px; }
 #tab-defect .sheet-table-wrap { margin: 0 20px 16px; }
 
 .df-cancel-confirm-modal { z-index: 10200; }

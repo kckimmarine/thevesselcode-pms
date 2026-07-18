@@ -1,6 +1,6 @@
 /* THE VESSEL CODE — PWA bootstrap (service worker + mobile nav helpers) */
 const TVC_PWA = (function () {
-    const SW_URL = 'service-worker.js?v=20260717-wp-fix3';
+    const SW_URL = 'service-worker.js?v=20260718-tab-print';
 
     function canRegister() {
         return 'serviceWorker' in navigator

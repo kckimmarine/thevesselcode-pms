@@ -863,6 +863,17 @@ const TVC_DefectCase = (function () {
     function canModifyListWorkflow(row) {
         if (!row) return false;
         if (row.status === Status.CLOSED) return false;
+        if (row.approved_at || row.approved_by) return false;
+        if ((row.confirmed_at || row.confirmed_by) && row.sync_status === 'SYNCED') return false;
+        const st = listWorkflowStatus(row);
+        return st !== 'Approved' && st !== 'Submitted';
+    }
+
+    /** Approved · Submitted 제외 — 목록 Delete 허용 */
+    function canDeleteListWorkflow(row) {
+        if (!row) return false;
+        if (row.approved_at || row.approved_by) return false;
+        if ((row.confirmed_at || row.confirmed_by) && row.sync_status === 'SYNCED') return false;
         const st = listWorkflowStatus(row);
         return st !== 'Approved' && st !== 'Submitted';
     }
@@ -871,7 +882,7 @@ const TVC_DefectCase = (function () {
         SCHEMA_VERSION, Status, PHASE1_FIELDS, PHASE2_FIELDS, PHASE3_FIELDS, PHASE4_FIELDS,
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, belongsToDepartment,
-        listWorkflowStatus, listWorkflowTone, canModifyListWorkflow, isShipVerificationEditable,
+        listWorkflowStatus, listWorkflowTone, canModifyListWorkflow, canDeleteListWorkflow, isShipVerificationEditable,
     };
 })();
 

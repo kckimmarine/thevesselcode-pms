@@ -695,8 +695,16 @@ const TVC_DefectReport = (function () {
         return TVC_App.matchDefectHistSearch?.(row, _dfListSearch) ?? true;
     }
 
+    function matchDfListPeriod(row) {
+        return TVC_App.matchReportPeriodDate?.(TVC_App.defectCaseReportDate?.(row) || '') ?? true;
+    }
+
+    function hasDfListFilterActive() {
+        return !!(_dfListSearch || TVC_App.hasReportPeriodFilter?.());
+    }
+
     function defectListRows() {
-        return defectListRowsRaw().filter(matchDfListSearch);
+        return defectListRowsRaw().filter(r => matchDfListSearch(r) && matchDfListPeriod(r));
     }
 
     function getSelectedDfRow() {
@@ -731,12 +739,16 @@ const TVC_DefectReport = (function () {
 
     function canModifyDfListRow(row) {
         if (!row || !getState().user) return false;
-        return TVC_DefectCase.canModifyListWorkflow(row);
+        if (!TVC_DefectCase.canModifyListWorkflow(row)) return false;
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
     function canDeleteDfListRow(row) {
         if (!row || !getState().user || isHq()) return false;
-        return row.status === TVC_DefectCase.Status.DRAFT && !row.phase1_locked;
+        if (!TVC_DefectCase.canDeleteListWorkflow(row)) return false;
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
     function dfListCheckDisabledTitle(row) {
@@ -745,8 +757,8 @@ const TVC_DefectReport = (function () {
             if (row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Awaiting HQ 항목만 선택 가능';
             return '선택 불가';
         }
-        if (row.status !== TVC_DefectCase.Status.DRAFT) return 'Draft만 선택 가능';
-        if (row.phase1_locked) return '제출된 케이스';
+        if (row.status !== TVC_DefectCase.Status.DRAFT && !canDeleteDfListRow(row)) return '삭제 권한 없음';
+        if (row.phase1_locked && !canDeleteDfListRow(row)) return '삭제 권한 없음';
         return '선택 불가';
     }
 
@@ -831,6 +843,16 @@ const TVC_DefectReport = (function () {
     function dfListSearch(v) {
         _dfListSearch = v || '';
         renderTab();
+        TVC_App.updateSearchClearBtn?.('dfListSearch');
+    }
+
+    function clearDfListSearch() {
+        _dfListSearch = '';
+        const el = document.getElementById('dfListSearch');
+        if (el) el.value = '';
+        TVC_App.updateSearchClearBtn?.('dfListSearch');
+        renderTab();
+        el?.focus();
     }
 
     function defectNavList() {
@@ -865,8 +887,12 @@ const TVC_DefectReport = (function () {
         if (!user || !id) return;
         const row = await TVC_DefectCaseService.get(id);
         if (!row) return;
-        if (!canDeleteDfListRow(row)) return alert('Draft 상태만 삭제할 수 있습니다.');
-        if (!confirm(`${row.case_no} Defect Report Draft를 삭제하시겠습니까?`)) return;
+        if (!canDeleteDfListRow(row)) {
+            const st = TVC_DefectCase.listWorkflowStatus(row);
+            if (st === 'Confirmed') return alert('Confirmed 상태는 Captain / Chief Engineer만 삭제할 수 있습니다.');
+            return alert('삭제할 수 없는 상태입니다.');
+        }
+        if (!confirm(`${row.case_no} Defect Report를 삭제하시겠습니까?`)) return;
         try {
             await TVC_DefectCaseService.deleteCase(user, id);
             delete _dfListChecked[id];
@@ -889,6 +915,10 @@ const TVC_DefectReport = (function () {
     function openCaseFromNav(id, navSource) {
         const row = (getState().defectCases || []).find(c => c.id === id);
         getState()._dfNavSource = navSource;
+        if (navSource === 'history') {
+            openCase(id, 'view');
+            return;
+        }
         openCase(id, row ? resolveDfOpenMode(row) : 'edit');
     }
 
@@ -901,7 +931,11 @@ const TVC_DefectReport = (function () {
     function dfModifyReport() {
         const row = getSelectedDfRow();
         if (!row) return alert('Defect Report 목록에서 항목을 선택하세요.');
-        if (!canModifyDfListRow(row)) return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
+        if (!canModifyDfListRow(row)) {
+            const st = TVC_DefectCase.listWorkflowStatus(row);
+            if (st === 'Confirmed') return alert('Confirmed 상태는 Captain / Chief Engineer만 수정할 수 있습니다.');
+            return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
+        }
         openCaseFromNav(row.id, 'list');
     }
 
@@ -946,11 +980,11 @@ const TVC_DefectReport = (function () {
         let ids = getCheckedDfListIds();
         const sel = getSelectedDfRow();
         if (!ids.length && sel && canDeleteDfListRow(sel)) ids = [sel.id];
-        if (!ids.length) return alert('삭제할 Draft 항목을 선택하세요.');
+        if (!ids.length) return alert('삭제할 항목을 선택하세요.');
         const rows = ids.map(id => defectListRowsRaw().find(r => r.id === id)).filter(Boolean);
         const deletable = rows.filter(canDeleteDfListRow);
-        if (!deletable.length) return alert('Draft 상태만 삭제할 수 있습니다.');
-        if (!confirm(`${deletable.length}건의 Defect Report Draft를 삭제하시겠습니까?`)) return;
+        if (!deletable.length) return alert('삭제 권한이 없거나 Submitted · Approved 상태입니다.');
+        if (!confirm(`${deletable.length}건의 Defect Report를 삭제하시겠습니까?`)) return;
 
         for (const row of deletable) {
             try {
@@ -982,6 +1016,8 @@ const TVC_DefectReport = (function () {
         if (countEl) countEl.textContent = `${rows.length} / ${all.length} entries`;
         const searchEl = document.getElementById('dfListSearch');
         if (searchEl && document.activeElement !== searchEl) searchEl.value = _dfListSearch || '';
+        TVC_App.updateSearchClearBtn?.('dfListSearch');
+        TVC_App.syncReportPeriodInputs?.();
 
         if (!all.length) {
             body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No defect cases yet. Create a Defect Report when trouble is identified.</td></tr>`;
@@ -989,7 +1025,10 @@ const TVC_DefectReport = (function () {
             return;
         }
         if (!rows.length) {
-            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No matches for "${esc(_dfListSearch)}".</td></tr>`;
+            const noMatchMsg = hasDfListFilterActive()
+                ? 'No matches for the current search or period filter.'
+                : `No matches for "${esc(_dfListSearch)}".`;
+            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">${noMatchMsg}</td></tr>`;
             updateDfListToolbarState();
             return;
         }
@@ -1008,6 +1047,7 @@ const TVC_DefectReport = (function () {
             });
         }).join('');
         updateDfListToolbarState();
+        TVC_App.bindSearchClearInput?.('dfListSearch');
     }
 
     function renderInboxTo(bodyId, headId) {
@@ -1140,7 +1180,9 @@ const TVC_DefectReport = (function () {
             isApproved,
             canConfirmNow,
             canApproveNow,
-            confirmedByVal: isConfirmed ? 'Captain, Chief Engineer' : '',
+            confirmedByVal: isConfirmed
+                ? (TVC_RBAC.getDepartmentConfirmLabel(row.department) || row.confirmed_by || '')
+                : '',
             approvedByVal: isApproved ? 'Company' : '',
         };
     }
@@ -1310,8 +1352,10 @@ const TVC_DefectReport = (function () {
 
     function renderModalBody(row, mode) {
         const hq = isHq();
-        const forceView = mode === 'view';
-        const fromListNav = !!getState()._dfNavSource;
+        const navSource = getState()._dfNavSource;
+        const fromHistoryNav = navSource === 'history';
+        const fromListNav = navSource === 'list';
+        const forceView = mode === 'view' || fromHistoryNav;
         const dfPage = getState()._dfPage || '1';
         const approval = dfApprovalState(row);
         const canEditP1 = !forceView && !hq && TVC_DefectCase.isPhase1Editable(row);
@@ -1354,7 +1398,7 @@ const TVC_DefectReport = (function () {
         }
 
         let actionsHtml;
-        if (fromListNav) {
+        if (fromListNav || fromHistoryNav) {
             actionsHtml = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>
                 ${canSave ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">💾 Save</button>` : ''}
@@ -1687,7 +1731,7 @@ const TVC_DefectReport = (function () {
         toggleDfGroupPick, toggleDfJobPick, pickDfGroup, pickDfJob, clearDfJob, dfGroupPickSearch, dfJobPickSearch,
         filteredCases, statusLabel, defectListRows,
         dfDetailReport, dfReportConfirm, dfModifyReport, dfDeleteReport,
-        dfListSearch, selectDfListRow, toggleDfListCheck, toggleDfListSelectAll,
+        dfListSearch, clearDfListSearch, selectDfListRow, toggleDfListCheck, toggleDfListSelectAll,
         navDefectModal, modifyDefectModal, deleteDefectModal, setDefectReportPage,
     };
 })();

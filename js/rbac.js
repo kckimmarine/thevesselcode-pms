@@ -323,9 +323,36 @@ const TVC_RBAC = (function () {
         return ACCOUNT_TITLES[username] || (username || 'User');
     }
 
+    /** Confirmed by 표시 — ENGINE: Chief Engineer, DECK: Captain */
+    function getDepartmentConfirmLabel(dept) {
+        const d = String(dept || '').toUpperCase();
+        if (d === 'ENGINE') return 'Chief Engineer';
+        if (d === 'DECK') return 'Captain';
+        return '';
+    }
+
+    /**
+     * 목록 Modify/Delete — Reported·Draft: Engineer/Officer(동 부서)
+     * Confirmed: Chief Engineer/Captain(동 부서) · Submitted/Approved: 불가
+     */
+    function canModifyDeleteListReport(user, dept, listStatus) {
+        if (!user || isHqAccount(user)) return false;
+        const st = String(listStatus || '').trim();
+        if (st === 'Submitted' || st === 'Approved') return false;
+        const department = dept || user.department || '';
+        if (st === 'Draft' || st === 'Reported') {
+            if (!can(user, Action.CREATE_DAILY_REPORT)) return false;
+            if (department && user.department && user.department !== department) return false;
+            return true;
+        }
+        if (st === 'Confirmed') return canConfirmDepartment(user, department);
+        return false;
+    }
+
     return {
         AccountType, Role, Department, ReportStatus, Action,
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle,
+        getDepartmentConfirmLabel, canModifyDeleteListReport,
         isShipAccount, isHqAccount, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan,
         canModifySpareInventory, resolveUserRole,

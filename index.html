@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260718-df-balance">
+    <link rel="stylesheet" href="css/app.css?v=20260718-hist-filter-row">
 </head>
 <body>
 
@@ -118,8 +118,6 @@
             <div class="dept-toggle" role="group" aria-label="Department">
                 <span class="dept-label">Department</span>
             </div>
-            <button class="btn btn-ghost cmaxs-action-print" onclick="TVC_App.printCurrentTab(false)">🖨 Print</button>
-            <button class="btn btn-ghost cmaxs-action-print" onclick="TVC_App.printCurrentTab(true)">👁 Preview</button>
             <button class="btn btn-red" onclick="TVC_App.handleLogout()">End</button>
         </div>
     </header>
@@ -181,15 +179,31 @@
                 <span style="flex:1"></span>
                 <button type="button" class="btn btn-sm btn-amber" data-feature="showDefectReport" onclick="TVC_DefectReport.openNewBlank()">＋ New Defect Report</button>
             </div>
-            <div class="hist-toolbar filter-bar">
-                <button type="button" id="dfBtnDetail" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfDetailReport()">Detail Defect Report</button>
-                <button type="button" id="dfBtnConfirm" class="btn btn-sm btn-green" disabled onclick="TVC_DefectReport.dfReportConfirm()">Report Confirm</button>
-                <span class="orig-toolbar-sep"></span>
-                <button type="button" id="dfBtnModify" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfModifyReport()">Modify</button>
-                <button type="button" id="dfBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_DefectReport.dfDeleteReport()">Delete</button>
-                <span class="orig-toolbar-sep"></span>
-                <input class="search-input" id="dfListSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_DefectReport.dfListSearch(this.value)">
-                <span class="count-label" id="dfListCount">—</span>
+            <div class="hist-toolbar-stack">
+                <div class="hist-toolbar hist-toolbar-actions filter-bar">
+                    <button type="button" id="dfBtnDetail" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfDetailReport()">Detail Defect Report</button>
+                    <button type="button" id="dfBtnConfirm" class="btn btn-sm btn-green" disabled onclick="TVC_DefectReport.dfReportConfirm()">Report Confirm</button>
+                    <span class="orig-toolbar-sep"></span>
+                    <button type="button" id="dfBtnModify" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfModifyReport()">Modify</button>
+                    <button type="button" id="dfBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_DefectReport.dfDeleteReport()">Delete</button>
+                    <span class="orig-toolbar-sep"></span>
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', false)">🖨 Print</button>
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', true)">👁 Preview</button>
+                </div>
+                <div class="hist-toolbar hist-toolbar-filters filter-bar spare-list-search-bar">
+                    <div id="dfPeriodFilter" class="act-period-filter" title="Filter by Reported Date">
+                        <span class="act-period-label">Period</span>
+                        <input type="date" id="dfPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onReportPeriodChange()">
+                        <span class="act-period-sep">~</span>
+                        <input type="date" id="dfPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onReportPeriodChange()">
+                        <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearReportPeriod()">Clear</button>
+                    </div>
+                    <div class="search-field-wrap">
+                        <input class="search-input" id="dfListSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_DefectReport.dfListSearch(this.value)">
+                        <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_DefectReport.clearDfListSearch()">×</button>
+                    </div>
+                    <span class="count-label" id="dfListCount">—</span>
+                </div>
             </div>
             <p class="hist-legend">D: Defect Report · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
             <div class="sheet-table-wrap list-table-scroll-wrap">
@@ -232,7 +246,10 @@
                             title="Edit equipment info (Maker/Model/Capacity/Serial No.) for the selected group" aria-label="Modify">✏️</button>
                     </div>
                     <div class="tree-search-bar">
-                        <input class="search-input" id="actTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
+                        <div class="search-field-wrap">
+                            <input class="search-input" id="actTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
+                            <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('actTreeSearch')">×</button>
+                        </div>
                     </div>
                     <div class="tree-actions hidden" id="actTreeActions">
                         <button type="button" id="actGroupAddBtn" class="btn btn-sm" onclick="TVC_App.openOrigGroupAdd()">➕ Add Group</button>
@@ -245,6 +262,9 @@
                         <button type="button" id="actModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">✏️ Modify</button>
                         <button type="button" id="actAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">➕ Append</button>
                         <button type="button" id="actDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">🗑 Delete</button>
+                        <span class="orig-toolbar-sep"></span>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', false)">🖨 Print</button>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', true)">👁 Preview</button>
                     </div>
                     <div id="actFilterDashboard" class="act-filter-dashboard"></div>
                     <div class="filter-bar spare-list-search-bar">
@@ -255,7 +275,10 @@
                             <input type="date" id="actPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onActualPeriodChange()">
                             <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearActualPeriod()">Clear</button>
                         </div>
-                        <input class="search-input spare-list-search-input" id="actSearch" placeholder="Search JOB CODE…" oninput="TVC_App.setSearch(this.value)">
+                        <div class="search-field-wrap">
+                            <input class="search-input spare-list-search-input" id="actSearch" placeholder="Search JOB CODE…" oninput="TVC_App.setSearch(this.value)">
+                            <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('actSearch')">×</button>
+                        </div>
                         <span class="count-label" id="actCount">—</span>
                     </div>
                     <div id="actPlanGroupHeader" class="plan-group-header"></div>
@@ -271,15 +294,31 @@
         <!-- TAB: Work History -->
         <section id="tab-history" class="tab-pane hidden">
             <div class="sheet-head"><h2>📜 Work History</h2><span class="sheet-sub">Select a row · double-click or Detail Work Report · check (ㅁ) for Report Approval</span></div>
-            <div class="hist-toolbar filter-bar">
-                <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Work Report</button>
-                <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Report Confirm</button>
-                <span class="orig-toolbar-sep"></span>
-                <button type="button" id="histBtnModify" class="btn btn-sm" disabled onclick="TVC_App.histModifyReport()">Modify</button>
-                <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
-                <span class="orig-toolbar-sep"></span>
-                <input class="search-input" id="histSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_App.setSearch(this.value)">
-                <span class="count-label" id="histCount">—</span>
+            <div class="hist-toolbar-stack">
+                <div class="hist-toolbar hist-toolbar-actions filter-bar">
+                    <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Work Report</button>
+                    <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Report Confirm</button>
+                    <span class="orig-toolbar-sep"></span>
+                    <button type="button" id="histBtnModify" class="btn btn-sm" disabled onclick="TVC_App.histModifyReport()">Modify</button>
+                    <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
+                    <span class="orig-toolbar-sep"></span>
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', false)">🖨 Print</button>
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', true)">👁 Preview</button>
+                </div>
+                <div class="hist-toolbar hist-toolbar-filters filter-bar spare-list-search-bar">
+                    <div id="histPeriodFilter" class="act-period-filter" title="Filter by Reported Date">
+                        <span class="act-period-label">Period</span>
+                        <input type="date" id="histPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onReportPeriodChange()">
+                        <span class="act-period-sep">~</span>
+                        <input type="date" id="histPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onReportPeriodChange()">
+                        <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearReportPeriod()">Clear</button>
+                    </div>
+                    <div class="search-field-wrap">
+                        <input class="search-input" id="histSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_App.setSearch(this.value)">
+                        <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('histSearch')">×</button>
+                    </div>
+                    <span class="count-label" id="histCount">—</span>
+                </div>
             </div>
             <p class="hist-legend">D: Defect Report · P: Postponed · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
             <div class="sheet-table-wrap list-table-scroll-wrap">
@@ -480,15 +519,15 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/rbac.js?v=20260717-wh-confirmed"></script>
-<script src="js/core/schema.js?v=20260718-df-workflow"></script>
+<script src="js/rbac.js?v=20260718-role-moddel"></script>
+<script src="js/core/schema.js?v=20260718-list-lock"></script>
 <script src="js/core/db.js"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260716-postpone-nextdate"></script>
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260717-wr-fast"></script>
+<script src="js/ui/spareMenu.js?v=20260718-search-clear"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -499,15 +538,15 @@
 <script src="js/auth.js?v=20260715-login-dept"></script>
 <script src="js/services/transaction.js?v=20260717-clear-reports"></script>
 <script src="js/services/maintenancePlan.js"></script>
-<script src="js/services/defectCase.js?v=20260718-df-delete-fix"></script>
+<script src="js/services/defectCase.js?v=20260718-role-moddel"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
 <script src="js/services/sync.js?v=20260717-df-wf-status"></script>
 <script src="js/services/stationSync.js?v=20260715-space-auth"></script>
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260717-clear-reports"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/ui/defectReport.js?v=20260718-df-balance"></script>
-<script src="js/app.js?v=20260718-wr-ship-cmt"></script>
-<script src="js/pwa.js?v=20260717-date-fmt2"></script>
+<script src="js/ui/defectReport.js?v=20260718-report-period"></script>
+<script src="js/app.js?v=20260718-tab-print"></script>
+<script src="js/pwa.js?v=20260718-tab-print"></script>
 </body>
 </html>

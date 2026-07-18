@@ -1670,7 +1670,10 @@ const TVC_SpareMenu = (function () {
                 ${canModify ? `<button type="button" class="btn spare-tree-modify-btn" onclick="TVC_SpareMenu.startGroupHeaderEdit()" title="Edit equipment info (Machinery/Model/Capacity/Maker) for the selected group" aria-label="Modify">✏️</button>` : ''}
               </div>
               <div class="tree-search-bar">
-                <input class="search-input" id="spareTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
+                <div class="search-field-wrap">
+                  <input class="search-input" id="spareTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
+                  <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('spareTreeSearch')">×</button>
+                </div>
               </div>
               <div class="panel-body tree-scroll" id="spareGroupTree"></div>
             </aside>
@@ -1691,9 +1694,12 @@ const TVC_SpareMenu = (function () {
                 <button class="btn btn-sm" onclick="TVC_SpareMenu.toggleReqPanel()">🧾 Requisitions</button>` : ''}
               </div>
               <div class="filter-bar spare-list-search-bar">
-                <input type="search" class="search-input spare-list-search-input" id="spareSearch" placeholder="Search Code / Item / Part No / Working"
-                    value="${esc(m.partNo || m.description ? [m.partNo, m.description].filter(Boolean).join(' ') : (st.spareSearch || ''))}"
-                    oninput="TVC_SpareMenu.setSearch(this.value)">
+                <div class="search-field-wrap">
+                  <input type="search" class="search-input spare-list-search-input" id="spareSearch" placeholder="Search Code / Item / Part No / Working"
+                      value="${esc(m.partNo || m.description ? [m.partNo, m.description].filter(Boolean).join(' ') : (st.spareSearch || ''))}"
+                      oninput="TVC_SpareMenu.setSearch(this.value)">
+                  <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_SpareMenu.clearSpareSearch()">×</button>
+                </div>
                 <label class="sr-check"><input type="checkbox" ${m.showLowOnly ? 'checked' : ''}
                     onchange="TVC_SpareMenu.toggleLowOnly()"> Low stock only</label>
                 <span class="count-label" id="spareCount">${_cachedList.length} / ${allCanon.length}</span>
@@ -1727,6 +1733,10 @@ const TVC_SpareMenu = (function () {
         if (panelOpen) await renderDetailPanel(getFocusedSpareId(st), canRequisition, canModify);
         if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
         else syncSpareToolbarUi();
+        TVC_App.bindSearchClearInput?.('spareSearch');
+        TVC_App.bindSearchClearInput?.('spareTreeSearch');
+        TVC_App.updateSearchClearBtn?.('spareSearch');
+        TVC_App.updateSearchClearBtn?.('spareTreeSearch');
     }
 
     function refreshList() {
@@ -2960,7 +2970,18 @@ const TVC_SpareMenu = (function () {
         m.description = v;
         st.spareSearch = v;
         clearTimeout(_searchT);
-        _searchT = setTimeout(() => applySpareListFilter(), 150);
+        _searchT = setTimeout(() => {
+            applySpareListFilter();
+            TVC_App.updateSearchClearBtn?.('spareSearch');
+        }, 150);
+    }
+
+    function clearSpareSearch() {
+        setSearch('');
+        const el = document.getElementById('spareSearch');
+        if (el) el.value = '';
+        TVC_App.updateSearchClearBtn?.('spareSearch');
+        el?.focus();
     }
 
     function setFilter(key, val) {
@@ -7278,7 +7299,7 @@ ${renderWrSpareMetaHtml(meta)}
 
     return {
         init, render, renderSpareGroupTree, refreshList, syncSpareToolbarUi, spareToolbarFlags, applySpareToolbarFlags,
-        setFilter, setSearch, clearListFilters, toggleLowOnly, toggleReqPanel,
+        setFilter, setSearch, clearSpareSearch, clearListFilters, toggleLowOnly, toggleReqPanel,
         selectSpareRow, focusSpareRow, openSpareModify, openSpareAppend, deleteSpareItem, deleteSpareItems,
         openDetail, closeDetail, saveDetailGroup,
         createRequisition, assignToTask, suggestRequisition,
