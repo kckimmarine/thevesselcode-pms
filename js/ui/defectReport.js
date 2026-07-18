@@ -1042,6 +1042,7 @@ const TVC_DefectReport = (function () {
             return TVC_App.buildDefectHistRowHtml(r, {
                 selected: _dfListSelId === r.id,
                 checkboxHtml: chk,
+                criticalColumn: true,
                 onclick: `TVC_DefectReport.selectDfListRow('${escAttr(r.id)}', event)`,
                 ondblclick: `TVC_DefectReport.openCaseFromList('${escAttr(r.id)}')`,
             });

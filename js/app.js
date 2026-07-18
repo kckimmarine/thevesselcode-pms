@@ -18,7 +18,7 @@ const TVC_App = (function () {
         idx: null,
         selectedGroupKey: null,
         treeSearch: '',
-        actualFilter: 'total',        // total | overdue | due30 | postponed
+        actualFilter: 'total',        // total | overdue | due30 | postponed | critical
         actualPeriodFrom: '',         // YYYY-MM-DD Due date range (Work Plan)
         actualPeriodTo: '',
         reportPeriodFrom: '',         // YYYY-MM-DD Reported Date (Defect · Work History)
@@ -675,6 +675,28 @@ const TVC_App = (function () {
         return `<td class="hist-type ${m.cls}" title="${escAttr(m.title)}"><span class="hist-type-mark">${esc(m.letter)}</span></td>`;
     }
 
+    function histCriticalCell(entry) {
+        let show = false;
+        if (isHistDefectEntry(entry)) {
+            show = defectShowsCriticalEquipmentMark(entry.defect);
+        } else {
+            const job = state.idx?.jobById.get(entry.item.maintenance_job_id)
+                || state.jobs.find(j => j.job_code === entry.item.job_code);
+            show = !!(job && jobShowsCriticalEquipmentMark(job));
+        }
+        if (!show) return '<td class="hist-crit" aria-hidden="true"></td>';
+        return `<td class="hist-crit" title="Critical Equipment">${planCriticalMarkHtml()}</td>`;
+    }
+
+    function printHistCriticalMark(entry) {
+        if (isHistDefectEntry(entry)) {
+            return defectShowsCriticalEquipmentMark(entry.defect) ? '⚠' : '';
+        }
+        const job = state.idx?.jobById.get(entry.item.maintenance_job_id)
+            || state.jobs.find(j => j.job_code === entry.item.job_code);
+        return job && jobShowsCriticalEquipmentMark(job) ? '⚠' : '';
+    }
+
     function defectHistoryHasJob(dc) {
         return !!(dc.pms_job_code || dc.maintenance_job_id || dc.job_code);
     }
@@ -838,6 +860,7 @@ const TVC_App = (function () {
         if (filter === 'postponed') {
             return keys.postponed.ids.has(j.id) || keys.postponed.codes.has(j.job_code);
         }
+        if (filter === 'critical') return jobShowsCriticalEquipmentMark(j);
         return true;
     }
 
@@ -847,13 +870,15 @@ const TVC_App = (function () {
         let overdue = 0;
         let due30 = 0;
         let postponed = 0;
+        let critical = 0;
         jobs.forEach(j => {
             if (j.is_overdue && !isActualJobCompleted(j)) overdue++;
             const d = daysUntil(j.next_date);
             if (!j.is_overdue && d >= 0 && d <= 30) due30++;
             if (keys.postponed.ids.has(j.id) || keys.postponed.codes.has(j.job_code)) postponed++;
+            if (jobShowsCriticalEquipmentMark(j)) critical++;
         });
-        return { total: jobs.length, overdue, due30, postponed };
+        return { total: jobs.length, overdue, due30, postponed, critical };
     }
 
     function jobActualStatusPill(j) {
@@ -1130,6 +1155,77 @@ const TVC_App = (function () {
         if (state.currentTab === 'actual') syncPlanItemUi();
     }
 
+    function jobShowsCriticalEquipmentMark(j) {
+        if (!j) return false;
+        if (j.is_critical_equipment === true) return true;
+        if (j.is_critical_equipment === false) return false;
+        return !!TVC_SpareMenu?.isGroupCriticalEquipmentYes?.(state, j.group);
+    }
+
+    function jobCriticalEditValue(j) {
+        if (j?.is_critical_equipment === true) return 'Yes';
+        if (j?.is_critical_equipment === false) return 'No';
+        return '';
+    }
+
+    function parseJobCriticalEditValue(raw) {
+        if (raw === 'Yes') return true;
+        if (raw === 'No') return false;
+        return null;
+    }
+
+    function resolveDefectLinkedJob(dc) {
+        if (!dc) return null;
+        if (dc.maintenance_job_id) {
+            const byId = state.idx?.jobById.get(dc.maintenance_job_id);
+            if (byId) return byId;
+        }
+        const code = dc.pms_job_code || dc.job_code;
+        if (code) return state.jobs.find(j => j.job_code === code) || null;
+        return null;
+    }
+
+    function defectShowsCriticalEquipmentMark(dc) {
+        const job = resolveDefectLinkedJob(dc);
+        if (job) return jobShowsCriticalEquipmentMark(job);
+        const groupLabel = dc?.pms_group_no || dc?.group || '';
+        if (groupLabel) return !!TVC_SpareMenu?.isGroupCriticalEquipmentYes?.(state, groupLabel);
+        return false;
+    }
+
+    function defectCriticalTypeCell(dc) {
+        if (!defectShowsCriticalEquipmentMark(dc)) {
+            return '<td class="hist-crit" aria-hidden="true"></td>';
+        }
+        return `<td class="hist-crit" title="Critical Equipment">${planCriticalMarkHtml()}</td>`;
+    }
+
+    function defectReportTypeCell() {
+        return '<td class="hist-type hist-type-defect" title="Defect Report"><span class="hist-type-mark">D</span></td>';
+    }
+
+    function planCriticalMarkHtml() {
+        return `<svg class="plan-crit-mark" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
+            <path fill="none" stroke="#9b2c2c" stroke-width="1.35" stroke-linejoin="round" d="M8 2.8 13.6 12.8H2.4Z"/>
+            <path fill="none" stroke="#9b2c2c" stroke-width="1.35" stroke-linecap="round" d="M8 6.4v3.1"/>
+            <circle fill="#9b2c2c" cx="8" cy="11.1" r="0.85"/>
+        </svg>`;
+    }
+
+    function planCriticalCellHtml(j) {
+        if (!jobShowsCriticalEquipmentMark(j)) return '<span class="c-crit" aria-hidden="true"></span>';
+        return `<span class="c-crit" title="Critical Equipment">${planCriticalMarkHtml()}</span>`;
+    }
+
+    function origJobCriticalSelect(id, value) {
+        const v = value || '';
+        return `<select class="spare-inline-input orig-inline-critical" id="${escAttr(id)}" onclick="event.stopPropagation()" aria-label="Critical Equipment">
+            <option value=""${v === '' ? ' selected' : ''}>—</option>
+            <option value="Yes"${v === 'Yes' ? ' selected' : ''}>Yes</option>
+            <option value="No"${v === 'No' ? ' selected' : ''}>No</option>
+        </select>`;
+    }
+
     function renderJobRowHtml(j) {
         const st = jobActualStatusPill(j);
         const selected = state.selectedJobId === j.id ? ' row-selected' : '';
@@ -1141,6 +1237,7 @@ const TVC_App = (function () {
                 <input type="checkbox" class="act-batch-chk" ${batchOn ? 'checked' : ''} aria-label="Select for batch"
                     onchange="TVC_App.toggleBatchJob('${escAttr(j.id)}', this.checked)">
             </span>
+            ${planCriticalCellHtml(j)}
             <span class="c-code"><strong>${esc(j.job_code)}</strong></span>
             ${planCellHtml(j.item_sort1, 'c-s1')}
             ${planCellHtml(j.item_sort2, 'c-d1')}
@@ -1179,6 +1276,7 @@ const TVC_App = (function () {
                 <span class="c-chk" title="Select all visible">
                     <input type="checkbox" ${allBatch ? 'checked' : ''} onchange="TVC_App.toggleBatchSelectAll(this.checked)">
                 </span>
+                <span class="c-crit" title="Critical Equipment">⚠</span>
                 <span class="c-code sortable" onclick="TVC_App.sortJobs('job_code')">JOB CODE${arrow('job_code')}</span>
                 <span class="c-s1">SORT-1</span><span class="c-d1">SORT-2</span><span class="c-d2">JOB DETAIL</span>
                 <span class="c-per">PERIOD</span><span class="c-pic">P.I.C</span>
@@ -1214,7 +1312,8 @@ const TVC_App = (function () {
         const defectPending = (state.defectCases || []).filter(d =>
             d.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
         ).length;
-        return { total: jobs.length, overdue, due30, dueMonth, pending: pending.length, approved, defectPending };
+        const critical = jobs.filter(jobShowsCriticalEquipmentMark).length;
+        return { total: jobs.length, overdue, due30, dueMonth, pending: pending.length, approved, defectPending, critical };
     }
 
     function menuModel() {
@@ -1224,6 +1323,7 @@ const TVC_App = (function () {
 
         const dailyItems = [
             { label: 'Check Work Plan', tag: 'D', action: "TVC_App.menuAction('checkPlan')", badge: c.overdue, badgeTone: 'red' },
+            { label: 'Critical Equipment', tag: 'D', action: "TVC_App.menuAction('checkCritical')", badge: c.critical, badgeTone: 'red' },
             { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
         ];
 
@@ -1511,6 +1611,7 @@ const TVC_App = (function () {
     function menuAction(action) {
         switch (action) {
             case 'checkPlan': menuNavigate('actual', { actualFilter: 'overdue' }); break;
+            case 'checkCritical': menuNavigate('actual', { actualFilter: 'critical' }); break;
             case 'inputReport': menuNavigate('actual', { actualFilter: 'total' }); break;
             case 'approveReport': menuNavigate('history'); break;
             case 'hqConfirm': menuNavigate('history'); break;
@@ -1885,7 +1986,7 @@ const TVC_App = (function () {
         const codeCell = isNew
             ? origJobCellInput('oie_code', r.job_code)
             : `<span class="orig-inline-ro">${esc(r.job_code || '')}</span>`;
-        const colgroup = '<colgroup><col style="width:32px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
+        const colgroup = '<colgroup><col style="width:32px"><col style="width:32px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
         return `<section class="spare-item-edit-panel orig-job-inline-panel" aria-label="Maintenance job edit">
             <div class="spare-item-edit-head">${panelHead}</div>
             <div class="orig-job-inline-meta">
@@ -1897,6 +1998,7 @@ const TVC_App = (function () {
                     ${colgroup}
                     <thead><tr>
                         <th class="c-chk" aria-hidden="true"></th>
+                        <th class="c-crit" title="Critical Equipment">⚠</th>
                         <th class="c-code">JOB CODE</th>
                         <th class="c-s1">SORT-1</th>
                         <th class="c-d1">SORT-2</th>
@@ -1908,6 +2010,7 @@ const TVC_App = (function () {
                     </tr></thead>
                     <tbody><tr class="spare-row-editing">
                         <td class="c-chk"></td>
+                        <td class="c-crit">${origJobCriticalSelect('oie_critical', jobCriticalEditValue(r))}</td>
                         <td class="c-code">${codeCell}</td>
                         <td class="c-s1">${origJobCellInput('oie_sort1', r.item_sort1)}</td>
                         <td class="c-d1">${origJobCellInput('oie_sort2', r.item_sort2)}</td>
@@ -1943,6 +2046,7 @@ const TVC_App = (function () {
             pic: job.pic || '',
             next_date: (job.next_date || '').slice(0, 10),
             last_done: (job.last_done || '').slice(0, 10),
+            is_critical_equipment: jobCriticalEditValue(job),
         };
         state._origJobEditMode = 'modify';
         state._origJobEditId = job.id;
@@ -1968,6 +2072,7 @@ const TVC_App = (function () {
             pic: '',
             next_date: '',
             last_done: '',
+            is_critical_equipment: '',
         };
         state._origJobEditMode = 'append';
         state._origJobEditId = null;
@@ -2000,7 +2105,12 @@ const TVC_App = (function () {
             pic: g('oie_pic'),
             next_date: g('oie_next'),
             last_done: g('oie_last'),
+            is_critical_equipment: g('oie_critical'),
         };
+    }
+
+    function refreshActualPlan() {
+        if (state.currentTab === 'actual') renderActualPlan();
     }
 
     async function saveOrigJobInlineEdit() {
@@ -2014,10 +2124,17 @@ const TVC_App = (function () {
         try {
             if (m.mode === 'append') {
                 const ctx = defaultAppendContext();
-                await TVC_MaintenancePlan.createJob(user, { ...data, department: ctx.dept });
+                await TVC_MaintenancePlan.createJob(user, {
+                    ...data,
+                    department: ctx.dept,
+                    is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
+                });
                 alert(`${data.job_code} 항목이 추가되었습니다.`);
             } else {
-                await TVC_MaintenancePlan.updateJob(user, m.editId, data);
+                await TVC_MaintenancePlan.updateJob(user, m.editId, {
+                    ...data,
+                    is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
+                });
                 alert(`${data.job_code} 항목이 수정되었습니다.`);
             }
             cancelOrigJobInlineEdit();
@@ -2370,20 +2487,16 @@ const TVC_App = (function () {
     function renderGroupTree(rootId) {
         const root = document.getElementById(rootId);
         if (!root || !state.idx) return;
+        if (state.selectedGroupKey === CRITICAL_GROUP_KEY) state.selectedGroupKey = null;
         const q = state.treeSearch;
         const matchNode = (n) => !q || (n.label || '').toLowerCase().includes(q) || (n.department || '').toLowerCase().includes(q);
-        const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
         const byDept = new Map();
         state.idx.groupNodes
             .filter(n => (!state.department || n.department === state.department) && matchNode(n))
             .forEach(n => { if (!byDept.has(n.department)) byDept.set(n.department, []); byDept.get(n.department).push(n); });
         const allSelected = !state.selectedGroupKey;
         let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_App.selectGroup(null)"><span>📋 All Groups</span></div>`;
-        if (matchCritical) {
-            const critSel = state.selectedGroupKey === CRITICAL_GROUP_KEY ? ' selected' : '';
-            html += `<div class="tree-node tree-node-critical${critSel}" onclick="TVC_App.selectGroup('${CRITICAL_GROUP_KEY}')"><span>⚠ Critical Equipment</span></div>`;
-        }
-        if (!byDept.size && q && !matchCritical) {
+        if (!byDept.size && q) {
             html += `<div class="tree-empty muted">No groups match "${esc(q)}"</div>`;
         }
         DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
@@ -2745,6 +2858,7 @@ const TVC_App = (function () {
             { key: 'overdue', label: 'Overdue', count: c.overdue, cls: 'act-dash-overdue' },
             { key: 'due30', label: 'Due (30d)', count: c.due30, cls: 'act-dash-due30' },
             { key: 'postponed', label: 'Postponed', count: c.postponed, cls: 'act-dash-postponed' },
+            { key: 'critical', label: '⚠ Critical', count: c.critical, cls: 'act-dash-critical' },
         ];
         const btnHtml = items.map(b => `
             <button type="button" class="act-dash-btn ${b.cls}${f === b.key ? ' active' : ''}" data-afilter="${b.key}"
@@ -3128,9 +3242,12 @@ const TVC_App = (function () {
         const chk = opts.checkboxHtml ?? '<input type="checkbox" disabled>';
         const onclick = opts.onclick ? ` onclick="${opts.onclick}"` : '';
         const ondblclick = opts.ondblclick ? ` ondblclick="${opts.ondblclick}"` : '';
+        const typeCell = opts.criticalColumn ? defectCriticalTypeCell(dc) : defectReportTypeCell();
+        const critCell = opts.includeCriticalColumn ? defectCriticalTypeCell(dc) : '';
         return `<tr class="hist-row hist-row-defect${sel}" data-df-id="${escAttr(dc.id)}" data-hist-key="${escAttr(rowKey)}"${onclick}${ondblclick}>
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
-                <td class="hist-type hist-type-defect" title="Defect Report"><span class="hist-type-mark">D</span></td>
+                ${typeCell}
+                ${critCell}
                 <td class="hist-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
                 <td class="hist-sort1">${histCellHtml(cols.sort1)}</td>
                 <td class="hist-sort2">${histCellHtml(cols.sort2)}</td>
@@ -3372,7 +3489,7 @@ const TVC_App = (function () {
         pruneHistChecked();
         const all = workHistoryEntriesRaw();
         const entries = workHistoryEntries();
-        const colSpan = 15;
+        const colSpan = 16;
         setText('histCount', `${entries.length} / ${all.length} entries`);
         const searchEl = document.getElementById('histSearch');
         if (searchEl && document.activeElement !== searchEl) searchEl.value = state.search || '';
@@ -3401,6 +3518,7 @@ const TVC_App = (function () {
                     rowKey,
                     selected: sel,
                     checkboxHtml: chk,
+                    includeCriticalColumn: true,
                     onclick: `TVC_App.selectHistRow('${escAttr(rowKey)}', event)`,
                     ondblclick: `TVC_App.openDefectFromHistory('${escAttr(dc.id)}')`,
                 });
@@ -3423,6 +3541,7 @@ const TVC_App = (function () {
             return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(item.maintenance_job_id)}')">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 ${histTypeCell(wrEntry)}
+                ${histCriticalCell(wrEntry)}
                 <td class="hist-code">${batchTag}${item.job_code ? `<strong>${esc(item.job_code)}</strong>` : '—'}</td>
                 <td class="hist-sort1">${histCellHtml(job?.item_sort1)}</td>
                 <td class="hist-sort2">${histCellHtml(job?.item_sort2)}</td>
@@ -5116,7 +5235,7 @@ const TVC_App = (function () {
         </tr>`;
 
     const PRINT_WORK_HIST_HEAD = `<tr>
-            <th>Type</th><th>Job Code</th><th>SORT-1</th><th>SORT-2</th><th>JOB DETAIL</th>
+            <th>Type</th><th>⚠</th><th>Job Code</th><th>SORT-1</th><th>SORT-2</th><th>JOB DETAIL</th>
             <th>Reported Date</th><th>Status</th>
             <th>RR</th><th>SS</th><th>DC</th><th>SC</th><th>CC</th>
             <th>Ship's AT</th><th>Company's AT</th>
@@ -5131,6 +5250,10 @@ const TVC_App = (function () {
             filterParts.push(`Period: ${state.actualPeriodFrom || '…'} ~ ${state.actualPeriodTo || '…'}`);
         }
         if (state.selectedGroupKey) filterParts.push('Group filter applied');
+        if (state.actualFilter === 'critical') filterParts.push('Filter: Critical Equipment');
+        else if (state.actualFilter === 'overdue') filterParts.push('Filter: Overdue');
+        else if (state.actualFilter === 'due30') filterParts.push('Filter: Due (30d)');
+        else if (state.actualFilter === 'postponed') filterParts.push('Filter: Postponed');
         const rows = jobs.map(j => `<tr>
             <td>${esc(j.job_code)}</td>
             <td>${esc(j.item_sort1 || '')}</td>
@@ -5175,7 +5298,7 @@ const TVC_App = (function () {
         }
         const bodyRows = entries.map(entry => {
             if (isHistDefectEntry(entry)) {
-                return `<tr><td>D</td>${printDefectRowCells(entry.defect)}</tr>`;
+                return `<tr><td>D</td><td>${esc(printHistCriticalMark(entry))}</td>${printDefectRowCells(entry.defect)}</tr>`;
             }
             const { report: r, item } = entry;
             const job = state.idx?.jobById.get(item.maintenance_job_id)
@@ -5188,6 +5311,7 @@ const TVC_App = (function () {
             const batch = r.is_batch ? 'B ' : '';
             return `<tr>
                 <td>${esc(type)}</td>
+                <td>${esc(printHistCriticalMark(entry))}</td>
                 <td>${esc(batch + (item.job_code || '—'))}</td>
                 <td>${esc(job?.item_sort1 || '')}</td>
                 <td>${esc(job?.item_sort2 || '')}</td>
@@ -5202,7 +5326,7 @@ const TVC_App = (function () {
         return `${printListMeta('Work History')}
             ${printFilterNote(filterParts)}
             <p class="meta">${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}</p>
-            <table>${PRINT_WORK_HIST_HEAD}${bodyRows || `<tr><td colspan="14">No history entries to print.</td></tr>`}</table>`;
+            <table>${PRINT_WORK_HIST_HEAD}${bodyRows || `<tr><td colspan="15">No history entries to print.</td></tr>`}</table>`;
     }
 
     function openListPrintWindow(title, bodyHtml, preview) {
@@ -5437,7 +5561,7 @@ const TVC_App = (function () {
         uploadWrAttachment, removeWrAttachment,
         toggleWrGroupPick, toggleWrJobPick, pickWrGroup, pickWrJob, wrGroupPickSearch, wrJobPickSearch,
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,
-        togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader,
+        togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader, refreshActualPlan,
         setBatchActiveJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
         openWorkReportFromHistory, openDefectFromHistory, getWorkHistoryDefectNavList, modifyWorkReport, selectHistRow,
         buildDefectHistRowHtml, matchDefectHistSearch, initHistCellTips,

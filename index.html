@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260718-hist-filter-row">
+    <link rel="stylesheet" href="css/app.css?v=20260718-crit-align">
 </head>
 <body>
 
@@ -205,12 +205,12 @@
                     <span class="count-label" id="dfListCount">—</span>
                 </div>
             </div>
-            <p class="hist-legend">D: Defect Report · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
+            <p class="hist-legend">⚠: Critical Equipment · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
             <div class="sheet-table-wrap list-table-scroll-wrap">
                 <table class="sheet-table hist-table">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="dfSelectAll" title="Select all confirmable" onclick="TVC_DefectReport.toggleDfListSelectAll(this.checked)"></th>
-                        <th class="hist-type-h" title="Defect Report" aria-label="Defect Report"></th>
+                        <th class="hist-crit-h" title="Critical Equipment" aria-label="Critical Equipment">⚠</th>
                         <th>Job Code</th><th class="hist-sort1-h">SORT-1</th><th class="hist-sort2-h">SORT-2</th><th class="hist-detail-h">JOB DETAIL</th>
                         <th>Reported Date</th><th>Status</th>
                         <th class="hist-flag-h" title="Repair Request">RR</th>
@@ -320,12 +320,13 @@
                     <span class="count-label" id="histCount">—</span>
                 </div>
             </div>
-            <p class="hist-legend">D: Defect Report · P: Postponed · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
+            <p class="hist-legend">D: Defect Report · P: Postponed · ⚠: Critical Equipment · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
             <div class="sheet-table-wrap list-table-scroll-wrap">
                 <table class="sheet-table hist-table">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
                         <th class="hist-type-h" title="Defect / Postponed" aria-label="Type"></th>
+                        <th class="hist-crit-h" title="Critical Equipment" aria-label="Critical Equipment">⚠</th>
                         <th>Job Code</th><th class="hist-sort1-h">SORT-1</th><th class="hist-sort2-h">SORT-2</th><th class="hist-detail-h">JOB DETAIL</th>
                         <th>Reported Date</th><th>Status</th>
                         <th class="hist-flag-h" title="Repair Request">RR</th>
@@ -527,7 +528,7 @@
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260718-search-clear"></script>
+<script src="js/ui/spareMenu.js?v=20260718-tree-no-crit"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -545,8 +546,8 @@
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260717-clear-reports"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/ui/defectReport.js?v=20260718-report-period"></script>
-<script src="js/app.js?v=20260718-tab-print"></script>
+<script src="js/ui/defectReport.js?v=20260718-df-crit"></script>
+<script src="js/app.js?v=20260718-crit-label"></script>
 <script src="js/pwa.js?v=20260718-tab-print"></script>
 </body>
 </html>

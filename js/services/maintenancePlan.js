@@ -40,6 +40,9 @@ const TVC_MaintenancePlan = (function () {
         if (p.period != null && p.period !== '') p.period = Number(p.period);
         if (p.next_date === '') p.next_date = null;
         if (p.last_done === '') p.last_done = null;
+        if (p.is_critical_equipment === 'Yes') p.is_critical_equipment = true;
+        else if (p.is_critical_equipment === 'No') p.is_critical_equipment = false;
+        else if (p.is_critical_equipment === '' || p.is_critical_equipment === '—') p.is_critical_equipment = null;
         return p;
     }
 
@@ -51,7 +54,7 @@ const TVC_MaintenancePlan = (function () {
         assertDept(user, job);
 
         const fields = ['group', 'job_code', 'sort', 'item_sort1', 'item_sort2', 'job_detail',
-            'period', 'unit', 'pic', 'next_date', 'last_done'];
+            'period', 'unit', 'pic', 'next_date', 'last_done', 'is_critical_equipment'];
         const p = normalizePatch(patch);
         fields.forEach(f => { if (p[f] !== undefined) job[f] = p[f]; });
 
@@ -103,6 +106,7 @@ const TVC_MaintenancePlan = (function () {
             last_done: p.last_done || null,
             original_next_date: p.next_date || null,
             ship_component_id: p.ship_component_id || null,
+            is_critical_equipment: p.is_critical_equipment == null ? null : !!p.is_critical_equipment,
             is_locked: false,
             plan_status: 'PLANNED',
             schedule_basis: null,

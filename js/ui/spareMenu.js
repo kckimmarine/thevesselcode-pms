@@ -377,7 +377,8 @@ const TVC_SpareMenu = (function () {
             def = (st.groups || []).find(gr => inDept(gr) && normalizeGroupLabel(gr.label) === target);
         }
         if (!def) return null;
-        const has = def.machinery_name || def.model_type || def.maker || def.capacity || def.dwg_no || def.serial_no;
+        const has = def.machinery_name || def.model_type || def.maker || def.capacity || def.dwg_no || def.serial_no
+            || def.is_critical_equipment != null;
         // header_edited가 없고 저장된 값도 없으면 무시(폴백 사용)
         if (!def.header_edited && !has) return null;
         return {
@@ -388,7 +389,117 @@ const TVC_SpareMenu = (function () {
             capacity: headerFieldText(def.capacity),
             dwgNo: headerFieldText(def.dwg_no),
             serialNo: headerFieldText(def.serial_no),
+            criticalEquipment: criticalEquipmentLabel(def.is_critical_equipment),
         };
+    }
+
+    function parseCriticalEquipmentValue(raw) {
+        if (raw === 'Yes' || raw === true) return true;
+        if (raw === 'No' || raw === false) return false;
+        return null;
+    }
+
+    function criticalEquipmentLabel(val) {
+        if (val === true || val === 'Yes') return 'Yes';
+        if (val === false || val === 'No') return 'No';
+        return '';
+    }
+
+    function renderCriticalEquipmentControl(st, h, opts = {}) {
+        const {
+            hasContent = true,
+            inputId = 'sgh_planCriticalEquipment',
+            editMode = false,
+            onSaveHandler = 'TVC_SpareMenu.savePlanCriticalEquipment(this.value)',
+        } = opts;
+        const val = criticalEquipmentLabel(h.criticalEquipment);
+        const canPick = hasContent && canEditGroupHeader(st)
+            && st.selectedGroupKey && st.selectedGroupKey !== CRITICAL_GROUP_KEY;
+        if (!hasContent) {
+            return '<span class="spare-gh-value empty">—</span>';
+        }
+        if (!canPick && !editMode) {
+            const t = val || '—';
+            const empty = !val;
+            return `<span class="spare-gh-value${empty ? ' empty' : ''}">${esc(t)}</span>`;
+        }
+        const id = editMode ? 'sgh_g_criticalEquipment' : inputId;
+        const onchange = editMode ? '' : ` onchange="${onSaveHandler}"`;
+        return `<select class="spare-gh-select" id="${escAttr(id)}" aria-label="Critical Equipment"${onchange}${!canPick ? ' disabled' : ''}>
+            <option value=""${val === '' ? ' selected' : ''}>—</option>
+            <option value="Yes"${val === 'Yes' ? ' selected' : ''}>Yes</option>
+            <option value="No"${val === 'No' ? ' selected' : ''}>No</option>
+        </select>`;
+    }
+
+    async function upsertGroupCriticalEquipment(st, yesNo) {
+        const key = st.selectedGroupKey;
+        if (!key || key === CRITICAL_GROUP_KEY) return;
+        const node = groupSelectedNode(st);
+        const dept = node?.department || st.department || '';
+        const label = groupFilterLabel(st) || node?.label || '';
+        if (!label) return;
+        const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+        const norm = normalizeGroupLabel;
+        let targetLabels;
+        if (key === MERGED_GEN_ENGINE_KEY) {
+            targetLabels = (st.idx?.groupNodes || [])
+                .filter(n => (!dept || n.department === dept) && isGeneratorEngineGroupLabel(n.label))
+                .map(n => n.label);
+            if (!targetLabels.length) targetLabels = [label];
+        } else {
+            targetLabels = [label];
+        }
+        for (const lab of [...new Set(targetLabels.filter(Boolean))]) {
+            const existing = (defs || []).find(gr => (!dept || gr.department === dept) && norm(gr.label) === norm(lab));
+            const defBase = existing || {
+                id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+                department: dept,
+                label: lab,
+                sort_order: 0,
+                created_at: new Date().toISOString(),
+            };
+            const row = {
+                ...defBase,
+                label: lab,
+                is_critical_equipment: yesNo,
+                header_edited: !!defBase.header_edited || yesNo !== null,
+                updated_at: new Date().toISOString(),
+                sync_status: 'LOCAL',
+            };
+            await TVC_DB.put('maintenance_groups', row);
+            const groups = st.groups || [];
+            const gi = groups.findIndex(gr => gr.id === row.id);
+            if (gi >= 0) groups[gi] = row;
+            else groups.push(row);
+            st.groups = groups;
+        }
+    }
+
+    function isGroupCriticalEquipmentYes(st, groupLabel) {
+        const h = groupDefHeader(st, groupLabel);
+        if (h) return h.criticalEquipment === 'Yes';
+        const lab = String(groupLabel || '').trim();
+        if (!lab) return false;
+        const inDept = (gr) => (!st.department || gr.department === st.department);
+        const target = normalizeGroupLabel(lab);
+        const def = (st.groups || []).find(gr => inDept(gr) && normalizeGroupLabel(gr.label) === target);
+        return def?.is_critical_equipment === true;
+    }
+
+    async function savePlanCriticalEquipment(rawVal) {
+        const st = getState();
+        if (!canEditGroupHeader(st)) {
+            alert('Chief Engineer / Captain permission required.');
+            return;
+        }
+        if (!st.selectedGroupKey || st.selectedGroupKey === CRITICAL_GROUP_KEY) return;
+        try {
+            await upsertGroupCriticalEquipment(st, parseCriticalEquipmentValue(rawVal));
+            afterSpareListChange(st);
+        } catch (e) {
+            alert(e.message || e.code || 'Save failed');
+        }
     }
 
     function resolveSpareHeaderFromGroup(st) {
@@ -399,6 +510,7 @@ const TVC_SpareMenu = (function () {
             capacity: '',
             maker: '',
             serialNo: '',
+            criticalEquipment: '',
             assyName: '',
             dwgNo: '',
         };
@@ -423,6 +535,7 @@ const TVC_SpareMenu = (function () {
                 capacity: def.capacity,
                 maker: def.maker,
                 serialNo: def.serialNo,
+                criticalEquipment: def.criticalEquipment || '',
                 assyName: '',
                 dwgNo: '',
             };
@@ -438,6 +551,7 @@ const TVC_SpareMenu = (function () {
             capacity: def?.capacity || headerFieldText(comp?.capacity || comp?.remarks) || itemHeader?.capacity || '',
             maker: def?.maker || headerFieldText(comp?.maker) || itemHeader?.maker || '',
             serialNo: def?.serialNo || headerFieldText(comp?.serial_no) || itemHeader?.serialNo || '',
+            criticalEquipment: def?.criticalEquipment || '',
             assyName: '',
             dwgNo: '',
         };
@@ -498,10 +612,12 @@ const TVC_SpareMenu = (function () {
         if (m.groupHeaderEdit && m.groupHeaderDraft && m.groupHeaderEditKey === st.selectedGroupKey) {
             return renderSpareGroupHeaderGroupEditHtml(st, m.groupHeaderDraft, {
                 pmsLabel: opts.pmsLabel || 'SPARE Group No.',
+                showCriticalEquipment: opts.showCriticalEquipment,
             });
         }
         const h = resolveSpareGroupHeader(st, { focusedId: focusOverride });
         const hasContent = spareHeaderHasContent(st, focusOverride);
+        const showCriticalEquipment = !!opts.showCriticalEquipment;
         const field = (v, extraClass = '') => {
             const t = String(v || '').trim();
             const empty = !t;
@@ -511,13 +627,24 @@ const TVC_SpareMenu = (function () {
         const idleHintText = opts.idleHint || 'Click an item or select a group in the SPARE GROUP Tree to display equipment information.';
         const idleHint = `<span class="spare-gh-idle-hint">${idleHintText}</span>`;
         const ariaLabel = opts.ariaLabel || 'SPARE Group information';
+        const primaryRowClass = showCriticalEquipment
+            ? 'spare-gh-row spare-gh-row-primary spare-gh-row-plan-split'
+            : 'spare-gh-row spare-gh-row-primary';
+        const pmsFieldClass = showCriticalEquipment
+            ? 'spare-gh-field spare-gh-field-wide spare-gh-field-span3'
+            : 'spare-gh-field spare-gh-field-wide';
+        const criticalField = showCriticalEquipment ? `
+                    <div class="spare-gh-field">
+                        <span class="spare-gh-label">Critical Equipment</span>
+                        ${renderCriticalEquipmentControl(st, h, { hasContent })}
+                    </div>` : '';
         return `<section class="spare-group-header${hasContent ? '' : ' is-idle'}" aria-label="${esc(ariaLabel)}">
             <div class="spare-group-header-card">
-                <div class="spare-gh-row spare-gh-row-primary">
-                    <div class="spare-gh-field spare-gh-field-wide">
+                <div class="${primaryRowClass}">
+                    <div class="${pmsFieldClass}">
                         <span class="spare-gh-label">${pmsLabel}</span>
                         ${hasContent ? field(h.pmsGroupNo, 'spare-gh-value-primary') : `<span class="spare-gh-value spare-gh-value-primary empty">${idleHint}</span>`}
-                    </div>
+                    </div>${criticalField}
                 </div>
                 <div class="spare-gh-row spare-gh-row-quad">
                     <div class="spare-gh-field">
@@ -557,6 +684,7 @@ const TVC_SpareMenu = (function () {
             pmsLabel: 'PMS Group No.',
             idleHint: 'Click a job or select a group in the PMS GROUP Tree to display equipment information.',
             ariaLabel: 'PMS Group information',
+            showCriticalEquipment: true,
         });
     }
 
@@ -702,13 +830,25 @@ const TVC_SpareMenu = (function () {
     // 그룹 단위 헤더 편집 (Machinery Name / Model / Capacity / Maker → 그룹 내 전체 아이템 일괄 적용)
     function renderSpareGroupHeaderGroupEditHtml(st, h, opts = {}) {
         const pmsLabel = opts.pmsLabel || 'SPARE Group No.';
+        const showCriticalEquipment = !!opts.showCriticalEquipment;
+        const primaryRowClass = showCriticalEquipment
+            ? 'spare-gh-row spare-gh-row-primary spare-gh-row-plan-split'
+            : 'spare-gh-row spare-gh-row-primary';
+        const pmsFieldClass = showCriticalEquipment
+            ? 'spare-gh-field spare-gh-field-wide spare-gh-field-span3'
+            : 'spare-gh-field spare-gh-field-wide';
+        const criticalField = showCriticalEquipment ? `
+                    <div class="spare-gh-field">
+                        <span class="spare-gh-label">Critical Equipment</span>
+                        ${renderCriticalEquipmentControl(st, h, { hasContent: true, editMode: true })}
+                    </div>` : '';
         return `<section class="spare-group-header is-editing is-group-editing" aria-label="Edit group header">
             <div class="spare-group-header-card">
-                <div class="spare-gh-row spare-gh-row-primary">
-                    <div class="spare-gh-field spare-gh-field-wide">
+                <div class="${primaryRowClass}">
+                    <div class="${pmsFieldClass}">
                         <span class="spare-gh-label">${esc(pmsLabel)}</span>
                         ${ghInput('sgh_g_pmsGroupNo', h.pmsGroupNo, 'spare-gh-input-primary')}
-                    </div>
+                    </div>${criticalField}
                 </div>
                 <div class="spare-gh-row spare-gh-row-quad">
                     <div class="spare-gh-field">
@@ -1367,6 +1507,7 @@ const TVC_SpareMenu = (function () {
             syncSpareToolbarUi();
         } else if (st.currentTab === 'actual') {
             if (window.TVC_App?.renderPlanGroupHeader) TVC_App.renderPlanGroupHeader();
+            if (window.TVC_App?.refreshActualPlan) TVC_App.refreshActualPlan();
         } else {
             render();
         }
@@ -1407,6 +1548,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const root = document.getElementById('spareGroupTree');
         if (!root) return;
+        if (st.selectedGroupKey === CRITICAL_GROUP_KEY) st.selectedGroupKey = null;
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -1416,7 +1558,6 @@ const TVC_SpareMenu = (function () {
         }
         const q = (st.treeSearch || '').toLowerCase();
         const matchNode = (n) => !q || (n.label || '').toLowerCase().includes(q) || (n.department || '').toLowerCase().includes(q);
-        const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
         const byDept = new Map();
         (st.idx.groupNodes || [])
             .filter(n => {
@@ -1431,11 +1572,7 @@ const TVC_SpareMenu = (function () {
             });
         const allSelected = !st.selectedGroupKey;
         let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_App.selectGroup(null)"><span>📋 All Groups</span></div>`;
-        if (matchCritical) {
-            const critSel = st.selectedGroupKey === CRITICAL_GROUP_KEY ? ' selected' : '';
-            html += `<div class="tree-node tree-node-critical${critSel}" onclick="TVC_App.selectGroup('${CRITICAL_GROUP_KEY}')"><span>⚠ Critical Equipment</span></div>`;
-        }
-        if (!byDept.size && q && !matchCritical) {
+        if (!byDept.size && q) {
             html += `<div class="tree-empty muted">No groups match "${esc(q)}"</div>`;
         }
         DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
@@ -3590,6 +3727,9 @@ const TVC_SpareMenu = (function () {
             capacity: g('sgh_g_capacity'),
             maker: g('sgh_g_maker'),
             serialNo: g('sgh_g_serialNo'),
+            criticalEquipment: document.getElementById('sgh_g_criticalEquipment')
+                ? g('sgh_g_criticalEquipment')
+                : (draft.criticalEquipment || ''),
             assyName: draft.assyName || '',
             dwgNo: draft.dwgNo || '',
         };
@@ -3626,6 +3766,7 @@ const TVC_SpareMenu = (function () {
             }
             for (const lab of [...new Set(targetLabels.filter(Boolean))]) {
                 const existing = (defs || []).find(gr => (!dept || gr.department === dept) && norm(gr.label) === norm(lab));
+                const critEl = document.getElementById('sgh_g_criticalEquipment');
                 const defBase = existing || {
                     id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
                     department: dept,
@@ -3643,6 +3784,9 @@ const TVC_SpareMenu = (function () {
                     capacity: header.capacity || '',
                     dwg_no: header.dwgNo || '',
                     serial_no: header.serialNo || '',
+                    is_critical_equipment: critEl
+                        ? parseCriticalEquipmentValue(header.criticalEquipment)
+                        : (existing?.is_critical_equipment ?? null),
                     header_edited: true,
                     updated_at: new Date().toISOString(),
                     sync_status: 'LOCAL',
@@ -7304,7 +7448,7 @@ ${renderWrSpareMetaHtml(meta)}
         openDetail, closeDetail, saveDetailGroup,
         createRequisition, assignToTask, suggestRequisition,
         append, startInlineAppend, edit, cancelEdit, cancelInlineEdit, saveEdit, saveInlineEdit, startInlineEdit, pickEditGroup, toggleEditGroupPick, pickSpareClass, toggleSpareClassPick,
-        startGroupHeaderEdit, saveGroupHeaderEdit, cancelGroupHeaderEdit,
+        startGroupHeaderEdit, saveGroupHeaderEdit, cancelGroupHeaderEdit, savePlanCriticalEquipment,
         loadBundledXls, loadSpareInventory, ensureInventoryLoaded,
         openConsumeModal, openDeliverModal, closeTxModal, saveTx, closeConsumeModal, saveConsume, captureConsumeMeta,
         syncConsumeLogFromWorkReport,
@@ -7315,6 +7459,7 @@ ${renderWrSpareMetaHtml(meta)}
         renderSpareGroupHeaderHtml, renderPlanGroupHeaderHtml,
         renderWrSparePage2Html, initWrSparePage2, teardownWrSparePage2, resolveWrJobHeader,
         resolveGroupHeaderByKey, getPlanGroupPickNodes, getJobsForGroupKey, findJobByCode, safeTreeLabel,
+        isGroupCriticalEquipmentYes,
         CRITICAL_GROUP_KEY,
         wrSpareSelectGroup, wrSpareSetTreeSearch, wrSpareSetSearch, wrSpareToggleLowOnly,
         wrSpareToggleSelectedOnly, wrSpareFocusRow, wrSpareToggleRow, wrSpareToggleAll, wrSpareSetQty,
