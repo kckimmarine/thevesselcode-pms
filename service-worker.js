@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260718-tab-print';
+const CACHE_VERSION = 'tvc-pms-20260718-ot';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -23,6 +23,7 @@ const PRECACHE_ASSETS = [
     '/js/ui/virtualList.js',
     '/js/ui/modalDrag.js',
     '/js/ui/runHours.js',
+    '/js/ui/outstandingTasks.js',
     '/js/ui/spareMenu.js',
     '/js/ui/spareRequest.js',
     '/js/services/jobMeta.js',

@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260718-crit-align">
+    <link rel="stylesheet" href="css/app.css?v=20260718-spare-align">
 </head>
 <body>
 
@@ -134,9 +134,8 @@
         <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 Work Plan</button>
         <button class="tab-btn" data-tab="defect" onclick="TVC_App.switchTab('defect')">🚨 Defect Report</button>
         <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Work History</button>
-        <button class="tab-btn" data-tab="runhrs" onclick="TVC_App.switchTab('runhrs')">⚙️ Equipment Run Hrs</button>
+        <button class="tab-btn" data-tab="runhrs" onclick="TVC_App.switchTab('runhrs')">⏱ Running Hours</button>
         <button class="tab-btn" data-tab="spare" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
-        <button class="tab-btn" data-tab="notice" onclick="TVC_App.switchTab('notice')">📢 Preparation Notice</button>
     </nav>
 
     <div id="tabContent">
@@ -169,6 +168,7 @@
                     <div class="cmaxs-cards" id="cmaxsCards"></div>
                 </div>
             </div>
+            <div id="outstandingTasksPanel" class="outstanding-tasks-host"></div>
         </section>
 
         <!-- TAB: Defect Report -->
@@ -342,19 +342,27 @@
             </div>
         </section>
 
-        <!-- TAB: Equipment Run Hrs -->
+        <!-- TAB: Running Hours -->
         <section id="tab-runhrs" class="tab-pane hidden">
-            <div class="sheet-head"><h2>⚙️ Equipment Run Hrs</h2><span class="sheet-sub">Run-hour based predictive scheduling · M/E &amp; No.1~3 G/E</span></div>
-            <div class="sheet-table-wrap">
+            <div class="sheet-head">
+                <h2>⏱ Running Hours</h2>
+                <span class="sheet-sub">Run-hour based predictive scheduling · M/E &amp; No.1~3 G/E</span>
+            </div>
+            <div class="rh-toolbar filter-bar">
+                <button type="button" id="rhUpdateBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateRunHrs()">↻ Update</button>
+                <button type="button" id="rhRevertBtn" class="btn btn-sm" onclick="TVC_App.revertRunHrs()" disabled>↩ Revert</button>
+                <span class="rh-toolbar-sep" aria-hidden="true"></span>
+                <label class="rh-last-label" for="rhLastUpdated">Last Updated Date</label>
+                <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="—" aria-label="Last Updated Date">
+            </div>
+            <div class="sheet-table-wrap list-table-scroll-wrap">
                 <table class="sheet-table runhrs-table">
                     <thead><tr>
-                        <th>Equipment / Group</th>
-                        <th>Run-hour Jobs</th>
-                        <th>Actual Run Hrs<br>Prev. Month</th>
+                        <th>Group / Equipment</th>
+                        <th>Run hour Jobs</th>
+                        <th>Actual Run Hours<br>Previous Month</th>
                         <th>Total Run Hours</th>
-                        <th>Expected Run Hrs<br>Next Month</th>
-                        <th>Updated</th>
-                        <th></th>
+                        <th>Estimated Run Hours<br>Next month</th>
                     </tr></thead>
                     <tbody id="runHrsBody"></tbody>
                 </table>
@@ -365,12 +373,6 @@
         <section id="tab-spare" class="tab-pane hidden">
             <div class="sheet-head"><h2>🔩 SPARE</h2><span class="sheet-sub">Select a row · Modify / Append / Delete · double-click for detail</span></div>
             <div id="spareMenuBody"></div>
-        </section>
-
-        <!-- TAB: Preparation Notice -->
-        <section id="tab-notice" class="tab-pane hidden">
-            <div class="sheet-head"><h2>📢 Preparation Notice</h2><span class="sheet-sub">Upcoming major maintenance &amp; inspections</span></div>
-            <div id="noticeList" class="notice-list"></div>
         </section>
     </div>
 
@@ -527,8 +529,8 @@
 <script src="js/pms.js?v=20260716-postpone-nextdate"></script>
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
-<script src="js/ui/runHours.js"></script>
-<script src="js/ui/spareMenu.js?v=20260718-tree-no-crit"></script>
+<script src="js/ui/runHours.js?v=20260718-rh"></script>
+<script src="js/ui/spareMenu.js?v=20260718-spare-clear"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -547,7 +549,8 @@
 <script src="js/services/dataPurge.js?v=20260717-clear-reports"></script>
 <script src="js/services/seed.js"></script>
 <script src="js/ui/defectReport.js?v=20260718-df-crit"></script>
-<script src="js/app.js?v=20260718-crit-label"></script>
+<script src="js/ui/outstandingTasks.js?v=20260718-ot-fix"></script>
+<script src="js/app.js?v=20260718-ot"></script>
 <script src="js/pwa.js?v=20260718-tab-print"></script>
 </body>
 </html>

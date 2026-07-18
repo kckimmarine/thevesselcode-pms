@@ -2,7 +2,7 @@
 const TVC_App = (function () {
     const ROW_H = 36;
     const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
-    const TABS = ['menu', 'actual', 'defect', 'history', 'runhrs', 'spare', 'notice'];
+    const TABS = ['menu', 'actual', 'defect', 'history', 'runhrs', 'spare'];
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
     const NEW_ORIG_JOB_EDIT_ID = '__new_orig_job__';
     let _wrSpareSearchT = null;
@@ -98,6 +98,13 @@ const TVC_App = (function () {
         TVC_RunHours.init({ getState: () => state, refresh: refreshAll });
         TVC_SpareMenu.init({ getState: () => state, refresh: refreshAll });
         TVC_DefectReport.init({ getState: () => state, refresh: refreshAll });
+        TVC_OutstandingTasks.init({
+            getState: () => state,
+            deptJobs,
+            jobMatchesActualFilter,
+            jobActualStatusKind,
+            menuNavigate,
+        });
         window.addEventListener('tvc:spics-requisition-suggest', (e) => {
             state.spicsAlerts = e.detail?.alerts || [];
             renderSpicsAlertBanner();
@@ -307,6 +314,9 @@ const TVC_App = (function () {
         if (!lockDept || !isOriginalPlanUpdateLocked(lockDept)) {
             try { await TVC_PMS.updateMaintenanceSchedule(state, { silent: true }); } catch (e) { console.warn('[TVC_PMS] schedule recalc skipped:', e); }
         }
+        clearActualFilterKeysCache();
+        state._outstandingReqLoaded = false;
+        state._outstandingReqCache = null;
     }
 
     /** seed JSON 기준 Due Date — run-hour 리셋 시 Original Plan 복원용 */
@@ -385,7 +395,6 @@ const TVC_App = (function () {
         defect: renderDefectTab,
         runhrs: renderRunHrs,
         spare: renderSpareMenu,
-        notice: renderNotice,
     };
 
     /** 상단 탭 전환 — 부서 필터 상태는 그대로 유지된다. */
@@ -581,7 +590,14 @@ const TVC_App = (function () {
     /** Captain Hub — All / Deck / Engine 모니터링 대시보드 뼈대 */
     function renderCaptainViewDashboard() {
         const host = document.getElementById('captainViewDashboard');
-        if (!host || !state.user || !TVC_Space.isCaptainHub(state.user)) return;
+        if (!host || !state.user) return;
+        const f = typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(state.user) : {};
+        if (!f.showCaptainDashboard) {
+            host.innerHTML = '';
+            host.classList.add('hidden');
+            return;
+        }
+        if (!TVC_Space.isCaptainHub(state.user)) return;
 
         const c = menuCounts();
         const deckPending = state.reports.filter(r => repSt(r) === 'REPORTED' && reportDept(r) === 'DECK').length;
@@ -881,17 +897,33 @@ const TVC_App = (function () {
         return { total: jobs.length, overdue, due30, postponed, critical };
     }
 
-    function jobActualStatusPill(j) {
+    function jobActualStatusKind(j) {
         const keys = getActualFilterKeys();
-        if (keys.postponed.ids.has(j.id) || keys.postponed.codes.has(j.job_code)) {
-            return '<span class="pill postponed">POSTPONED</span>';
-        }
-        if (j.is_overdue && !isActualJobCompleted(j)) {
-            return '<span class="pill overdue">OVERDUE</span>';
-        }
+        if (keys.postponed.ids.has(j.id) || keys.postponed.codes.has(j.job_code)) return 'postponed';
+        if (j.is_overdue && !isActualJobCompleted(j)) return 'overdue';
         const d = daysUntil(j.next_date);
-        if (d >= 0 && d <= 30) return '<span class="pill warn">DUE</span>';
-        return '<span class="pill ok">OK</span>';
+        if (d >= 0 && d <= 30) return 'due';
+        return 'ok';
+    }
+
+    const PLAN_STATUS_META = {
+        postponed: { mark: 'P', title: 'Postponed', cls: 'plan-st-postponed' },
+        overdue: { mark: '!', title: 'Overdue', cls: 'plan-st-overdue' },
+        due: { mark: '◷', title: 'Due (30d)', cls: 'plan-st-due' },
+        ok: { mark: '', title: 'OK', cls: 'plan-st-ok' },
+    };
+
+    function jobActualStatusCellHtml(j) {
+        const kind = jobActualStatusKind(j);
+        const m = PLAN_STATUS_META[kind];
+        if (kind === 'ok') {
+            return `<span class="pill ok plan-st-ok" title="${escAttr(m.title)}">OK</span>`;
+        }
+        return `<span class="plan-st-mark ${m.cls}" title="${escAttr(m.title)}"><span class="plan-st-badge">${m.mark}</span></span>`;
+    }
+
+    function jobActualStatusPill(j) {
+        return jobActualStatusCellHtml(j);
     }
 
     /** 부서 필터(전역) 후 mode별 세부 필터 적용 */
@@ -1323,7 +1355,6 @@ const TVC_App = (function () {
 
         const dailyItems = [
             { label: 'Check Work Plan', tag: 'D', action: "TVC_App.menuAction('checkPlan')", badge: c.overdue, badgeTone: 'red' },
-            { label: 'Critical Equipment', tag: 'D', action: "TVC_App.menuAction('checkCritical')", badge: c.critical, badgeTone: 'red' },
             { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
         ];
 
@@ -1361,7 +1392,7 @@ const TVC_App = (function () {
                 { label: 'Data Export (to Engine, Deck)', tag: 'C', action: "TVC_App.menuAction('export')", feature: 'showHubStationExport' },
             ];
             const monthlyCore = [
-                { label: 'Update Run Hour', tag: 'C', action: "TVC_App.menuAction('runHour')" },
+                { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" },
                 { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
             ];
             return [
@@ -1386,7 +1417,7 @@ const TVC_App = (function () {
                 ...stationSync,
             ] },
             { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
-                { label: 'Update Run Hour', tag: 'C', action: "TVC_App.menuAction('runHour')" },
+                { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" },
                 { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
                 ...stationSync,
             ] },
@@ -1496,6 +1527,7 @@ const TVC_App = (function () {
         document.getElementById('menuMainCol')?.classList.remove('hidden');
         renderMenuCards(mainCards);
         if (sidebarCards) sidebarCards.innerHTML = '';
+        TVC_OutstandingTasks.render();
     }
 
     function renderDefectTab() {
@@ -2855,9 +2887,9 @@ const TVC_App = (function () {
         const c = actualDashboardCounts();
         const f = state.actualFilter;
         const items = [
-            { key: 'overdue', label: 'Overdue', count: c.overdue, cls: 'act-dash-overdue' },
-            { key: 'due30', label: 'Due (30d)', count: c.due30, cls: 'act-dash-due30' },
-            { key: 'postponed', label: 'Postponed', count: c.postponed, cls: 'act-dash-postponed' },
+            { key: 'overdue', label: '! Overdue', count: c.overdue, cls: 'act-dash-overdue' },
+            { key: 'due30', label: '◷ Due (30d)', count: c.due30, cls: 'act-dash-due30' },
+            { key: 'postponed', label: 'P Postponed', count: c.postponed, cls: 'act-dash-postponed' },
             { key: 'critical', label: '⚠ Critical', count: c.critical, cls: 'act-dash-critical' },
         ];
         const btnHtml = items.map(b => `
@@ -3567,8 +3599,10 @@ const TVC_App = (function () {
         renderWorkHistory();
     }
 
-    // ── TAB: Equipment Run Hrs (예측 정비 엔진 UI) ───────────────────
+    // ── TAB: Running Hours (예측 정비 엔진 UI) ───────────────────────
     function renderRunHrs() { TVC_RunHours.render(); }
+    function updateRunHrs() { return TVC_RunHours.updateAll(); }
+    function revertRunHrs() { return TVC_RunHours.revert(); }
     function saveRunHrs(i) { return TVC_RunHours.save(i); }
     function runHrsPreview(i) { TVC_RunHours.preview(i); }
     function runHrsTotalEdit(i) { TVC_RunHours.totalEdit(i); }
@@ -3726,30 +3760,6 @@ const TVC_App = (function () {
     }
     function openSpicsRequisition() { TVC_SpareMenu.suggestRequisition(state.spicsAlerts || []); }
     function dismissSpicsAlerts() { state.spicsAlerts = []; renderSpicsAlertBanner(); }
-
-    // ── TAB: Preparation Notice ──────────────────────────────────────
-    function renderNotice() {
-        const list = document.getElementById('noticeList');
-        if (!list) return;
-        const notices = deptJobs().filter(j => {
-            const major = (j.unit || '').toUpperCase() === 'Y' || Number(j.period) >= 12;
-            const soon = j.is_overdue || daysUntil(j.next_date) <= 60;
-            return major && soon;
-        }).sort((a, b) => (a.next_date || '').localeCompare(b.next_date || '')).slice(0, 60);
-        if (!notices.length) { list.innerHTML = '<p class="muted" style="padding:24px">No upcoming major maintenance or inspection notices for this department.</p>'; return; }
-        list.innerHTML = notices.map(j => {
-            const od = j.is_overdue, d = daysUntil(j.next_date);
-            const tone = od ? 'red' : (d <= 30 ? 'amber' : 'blue');
-            return `<div class="notice-card tone-${tone}" onclick="TVC_App.openJobDetail('${j.id}')">
-                <div class="nc-icon">${od ? '🚨' : '🛠️'}</div>
-                <div class="nc-body">
-                    <div class="nc-title">${esc(j.item_sort2 || j.job_detail || j.job_code)}</div>
-                    <div class="nc-meta">${esc(j.job_code)} · ${esc(j.group || '')} · ${esc(j.department)} · ${j.period ?? ''}${esc(j.unit || '')}</div>
-                </div>
-                <div class="nc-date"><span class="nc-dtag ${od ? 'od' : ''}">${od ? 'OVERDUE' : 'D-' + d}</span><small>${esc(j.next_date || '')}</small></div>
-            </div>`;
-        }).join('');
-    }
 
     // ── Job detail / procedure modals ────────────────────────────────
     /** Original / Work Plan: 더블 클릭 — CMAXS Work Procedure / Work History 모달 */
@@ -5170,11 +5180,10 @@ const TVC_App = (function () {
     }
 
     function jobActualStatusText(j) {
-        const keys = getActualFilterKeys();
-        if (keys.postponed.ids.has(j.id) || keys.postponed.codes.has(j.job_code)) return 'POSTPONED';
-        if (j.is_overdue && !isActualJobCompleted(j)) return 'OVERDUE';
-        const d = daysUntil(j.next_date);
-        if (d >= 0 && d <= 30) return 'DUE';
+        const kind = jobActualStatusKind(j);
+        if (kind === 'postponed') return 'P POSTPONED';
+        if (kind === 'overdue') return '! OVERDUE';
+        if (kind === 'due') return '◷ DUE';
         return 'OK';
     }
 
@@ -5251,9 +5260,9 @@ const TVC_App = (function () {
         }
         if (state.selectedGroupKey) filterParts.push('Group filter applied');
         if (state.actualFilter === 'critical') filterParts.push('Filter: Critical Equipment');
-        else if (state.actualFilter === 'overdue') filterParts.push('Filter: Overdue');
-        else if (state.actualFilter === 'due30') filterParts.push('Filter: Due (30d)');
-        else if (state.actualFilter === 'postponed') filterParts.push('Filter: Postponed');
+        else if (state.actualFilter === 'overdue') filterParts.push('Filter: ! Overdue');
+        else if (state.actualFilter === 'due30') filterParts.push('Filter: ◷ Due (30d)');
+        else if (state.actualFilter === 'postponed') filterParts.push('Filter: P Postponed');
         const rows = jobs.map(j => `<tr>
             <td>${esc(j.job_code)}</td>
             <td>${esc(j.item_sort1 || '')}</td>
@@ -5355,6 +5364,15 @@ const TVC_App = (function () {
         } else if (tab === 'history') {
             title = 'Work History';
             body = buildWorkHistoryPrintBody();
+        } else if (tab === 'spare') {
+            title = 'SPARE Parts List';
+            body = typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.buildPrintBody
+                ? TVC_SpareMenu.buildPrintBody()
+                : '';
+            if (!body) {
+                alert('SPARE list is not ready to print.');
+                return;
+            }
         } else {
             alert('Print is not available on this tab.');
             return;
@@ -5570,7 +5588,7 @@ const TVC_App = (function () {
         navReport, deleteWorkReport, printWorkReport, closeWorkReport,
         selectJobRow,
         selectSpareRow, focusSpareRow, toggleSpareRow, syncSpareItemToolbar, spareActionIds, canEditSpareItems, openSpareAppend, openSpareModify, deleteSpareItem,
-        saveRunHrs, runHrsPreview, runHrsTotalEdit,         updateOriginalPlanFromRunHours,
+        saveRunHrs, updateRunHrs, revertRunHrs, runHrsPreview, runHrsTotalEdit,         updateOriginalPlanFromRunHours,
         openOrigJobModify, openOrigJobAppend, saveOrigJobEditor, saveOrigJobInlineEdit, cancelOrigJobInlineEdit, deleteOrigJob,
         openOrigGroupAdd, openOrigGroupRename, saveGroupEditor,
         confirmPlanUpdate, closePlanUpdateModal, printTabList, printCurrentTab,

@@ -227,7 +227,7 @@ const TVC_Space = (function () {
             base.showDefectInbox = true;
         }
         if (isCaptainHub(user)) {
-            base.showCaptainDashboard = true;
+            base.showCaptainDashboard = false;
             base.showHubImport = true;
             base.showCompanyExport = user.role === 'SHIP_CAPTAIN';
             base.showCompanyImport = user.role === 'SHIP_CAPTAIN';

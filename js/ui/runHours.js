@@ -1,18 +1,46 @@
-/* THE VESSEL CODE — Equipment Run Hours UI
+/* THE VESSEL CODE — Running Hours UI
  *
  * 시간 기반 관리 장비(M/E, No.1~3 G/E)의 가동시간을 입력/누적하고,
  * TVC_PMS.updateMaintenanceSchedule 로 Due Date 를 재계산한다.
- *
- * 컬럼: Equipment / Group | Run-hour Jobs | Actual Run Hrs Prev. Month
- *       | Total Run Hours | Expected Run Hrs Next Month | Updated | Action
  */
 const TVC_RunHours = (function () {
     let ctx = null; // { getState: () => state, refresh: async () => {} }
+    let revertSnapshot = null;
 
     function init(context) { ctx = context; }
 
     function esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+    }
+
+    function todayYmd() {
+        return new Date().toISOString().slice(0, 10);
+    }
+
+    function formatUpdatedDate(raw) {
+        if (!raw) return '';
+        const s = String(raw).trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
+        const m = s.match(/(\d{4})-(\d{2})-(\d{2})/);
+        return m ? `${m[1]}-${m[2]}-${m[3]}` : '';
+    }
+
+    function readLastUpdatedDate(store) {
+        const s = store || TVC_PMS.readStore();
+        return formatUpdatedDate(s._lastUpdatedDate || '');
+    }
+
+    function syncLastUpdatedField(store) {
+        const el = document.getElementById('rhLastUpdated');
+        if (!el) return;
+        el.value = readLastUpdatedDate(store);
+    }
+
+    function updateRevertButtonState() {
+        const btn = document.getElementById('rhRevertBtn');
+        if (btn) btn.disabled = !revertSnapshot;
     }
 
     /** 시간 기반 관리 대상 장비 그룹만 추출 (부서 필터 반영) */
@@ -32,8 +60,11 @@ const TVC_RunHours = (function () {
         const nodes = trackedNodes(state);
         state._rhNodes = nodes;
 
+        syncLastUpdatedField(store);
+        updateRevertButtonState();
+
         if (!nodes.length) {
-            body.innerHTML = '<tr><td colspan="7" class="muted" style="text-align:center">No run-hour tracked equipment for this view. (Only M/E and No.1~3 G/E are time-based.)</td></tr>';
+            body.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center">No run-hour tracked equipment for this view. (Only M/E and No.1~3 G/E are time-based.)</td></tr>';
             return;
         }
 
@@ -42,22 +73,20 @@ const TVC_RunHours = (function () {
             const total = Number(rec.totalRunHours) || 0;
             const hourJobs = n.jobIds.filter(id => TVC_PMS.isRunHourJob(state.idx.jobById.get(id))).length;
             return `<tr>
-                <td><strong>${esc(n.label)}</strong></td>
-                <td>${hourJobs}</td>
-                <td><input type="number" min="0" step="1" class="rh-input" id="rh-prev-${i}" placeholder="0"
+                <td class="rh-equip"><strong>${esc(n.label)}</strong></td>
+                <td class="rh-jobs">${hourJobs}</td>
+                <td class="rh-prev"><input type="number" min="0" step="1" class="rh-input" id="rh-prev-${i}" placeholder="0"
                     oninput="TVC_App.runHrsPreview(${i})"></td>
-                <td><input type="number" min="0" step="1" class="rh-input rh-total" id="rh-total-${i}"
+                <td class="rh-total-cell"><input type="number" min="0" step="1" class="rh-input rh-total" id="rh-total-${i}"
                     data-base="${total}" value="${total}"
                     oninput="TVC_App.runHrsTotalEdit(${i})"></td>
-                <td><input type="number" min="0" step="1" class="rh-input" id="rh-exp-${i}"
+                <td class="rh-exp"><input type="number" min="0" step="1" class="rh-input" id="rh-exp-${i}"
                     value="${rec.expectedNextMonth ?? ''}" placeholder="0"></td>
-                <td class="rh-updated">${esc(rec.updated || '—')}</td>
-                <td><button class="btn-sm btn-green" onclick="TVC_App.saveRunHrs(${i})">↻ Update</button></td>
             </tr>`;
         }).join('');
     }
 
-    /** Actual Run Hrs Prev. Month 입력 시 Total Run Hours 실시간 합산 미리보기 */
+    /** Actual Run Hours Previous Month 입력 시 Total Run Hours 실시간 합산 미리보기 */
     function preview(i) {
         const prevEl = document.getElementById('rh-prev-' + i);
         const totalEl = document.getElementById('rh-total-' + i);
@@ -80,49 +109,94 @@ const TVC_RunHours = (function () {
         totalEl.classList.toggle('rh-total-live', fromPreview);
     }
 
-    /** 입력값 저장 → 누적 → Due Date 재계산 (IndexedDB 반영) */
-    async function save(i) {
-        const state = ctx.getState();
-        const n = state._rhNodes?.[i];
-        if (!n) return;
-
+    function collectRowInput(i) {
         const prevEl = document.getElementById('rh-prev-' + i);
         const totalEl = document.getElementById('rh-total-' + i);
         const expEl = document.getElementById('rh-exp-' + i);
-        const add = Number(prevEl?.value) || 0;
-        const expected = Number(expEl?.value) || 0;
-        const newTotal = Number(totalEl?.value) || 0;
+        return {
+            add: Number(prevEl?.value) || 0,
+            newTotal: Number(totalEl?.value) || 0,
+            expected: Number(expEl?.value) || 0,
+        };
+    }
+
+    /** 모든 장비 입력값 저장 → 누적 → Due Date 재계산 */
+    async function updateAll() {
+        const state = ctx.getState();
+        const nodes = state._rhNodes || trackedNodes(state);
+        if (!nodes.length) return;
+
+        const storeBefore = TVC_PMS.readStore();
+        revertSnapshot = {
+            store: JSON.parse(JSON.stringify(storeBefore)),
+            lastUpdatedDate: readLastUpdatedDate(storeBefore),
+        };
+        updateRevertButtonState();
 
         const store = TVC_PMS.readStore();
-        const rec = store[n.key] || { totalRunHours: 0 };
-        const prevTotal = Number(rec.totalRunHours) || 0;
-        rec.totalRunHours = newTotal;
-        rec.prevMonth = add;
-        rec.expectedNextMonth = expected;
-        rec.updated = new Date().toLocaleString();
-        store[n.key] = rec;
+        const updatedYmd = todayYmd();
+        const summaries = [];
+
+        for (let i = 0; i < nodes.length; i++) {
+            const n = nodes[i];
+            const { add, newTotal, expected } = collectRowInput(i);
+            const rec = store[n.key] || { totalRunHours: 0 };
+            const prevTotal = Number(rec.totalRunHours) || 0;
+
+            rec.totalRunHours = newTotal;
+            rec.prevMonth = add;
+            rec.expectedNextMonth = expected;
+            rec.updated = updatedYmd;
+            store[n.key] = rec;
+
+            const delta = newTotal - prevTotal;
+            if (delta || add || expected !== Number(storeBefore[n.key]?.expectedNextMonth || 0)) {
+                const deltaStr = delta ? ` (${delta > 0 ? '+' : ''}${delta.toLocaleString()} h)` : '';
+                summaries.push(`${n.label}: ${newTotal.toLocaleString()} h${deltaStr}`);
+            }
+        }
+
+        store._lastUpdatedDate = updatedYmd;
         TVC_PMS.writeStore(store);
 
-        // 시간 기반 정비 항목 Due Date 재계산 + DB 저장
         const res = await TVC_PMS.updateMaintenanceSchedule(state, { persist: true });
-
-        // 데이터 재로드 후 현재 탭 + 본 화면 갱신
         if (ctx.refresh) await ctx.refresh();
         render();
 
-        const delta = newTotal - prevTotal;
-        const deltaStr = delta ? `  (${delta > 0 ? '+' : ''}${delta.toLocaleString()} h)` : '';
-        const resetMsg = newTotal === 0
-            ? `\n↺ Total Run Hours = 0 → Original / Work Plan Due Date 원복\n`
+        const resetNote = summaries.some(s => s.includes(': 0 h'))
+            ? '\n↺ Total Run Hours = 0 인 장비는 Work Plan Due Date가 원복됩니다.'
             : '';
         alert(
-            `${n.label}\n` +
-            `Total Run Hours: ${newTotal.toLocaleString()} h${deltaStr}\n` +
-            (add ? `Prev. Month: +${add.toLocaleString()} h\n` : '') +
-            `Expected Next Month: ${expected.toLocaleString()} h${resetMsg}\n` +
-            `시간 기반 정비 ${res.changed}건의 Due Date를 ${newTotal === 0 ? '원복' : '재계산'}했습니다.\n(개발자 콘솔 로그에서 상세 확인 가능)`
+            `Running Hours updated · ${updatedYmd}\n\n` +
+            (summaries.length ? summaries.join('\n') + '\n\n' : '') +
+            `시간 기반 정비 ${res.changed}건의 Due Date를 재계산했습니다.${resetNote}\n` +
+            `(개발자 콘솔 로그에서 상세 확인 가능)`
         );
     }
 
-    return { init, render, preview, totalEdit, save };
+    /** 마지막 Update 이전 상태로 되돌림 */
+    async function revert() {
+        if (!revertSnapshot) {
+            alert('되돌릴 Update 기록이 없습니다.');
+            return;
+        }
+        if (!confirm('마지막 Running Hours Update를 되돌리시겠습니까?\nWork Plan Due Date도 이전 상태로 재계산됩니다.')) {
+            return;
+        }
+
+        TVC_PMS.writeStore(JSON.parse(JSON.stringify(revertSnapshot.store)));
+        revertSnapshot = null;
+        updateRevertButtonState();
+
+        const state = ctx.getState();
+        await TVC_PMS.updateMaintenanceSchedule(state, { persist: true });
+        if (ctx.refresh) await ctx.refresh();
+        render();
+        alert('Running Hours Update가 되돌려졌습니다.');
+    }
+
+    /** @deprecated per-row save — use updateAll */
+    async function save(i) { return updateAll(); }
+
+    return { init, render, preview, totalEdit, updateAll, revert, save };
 })();

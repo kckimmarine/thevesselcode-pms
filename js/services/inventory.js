@@ -153,11 +153,18 @@ const TVC_Inventory = (function () {
     // ── Requisition ───────────────────────────────────────────────────
     const REQ_STATUS = {
         DRAFT: 'DRAFT',        // 선내 작성
-        EXPORTED: 'EXPORTED',  // 업체에 엑셀 발송(가격/코멘트 요청)
+        EXPORTED: 'EXPORTED',  // Data Export 완료 (레거시)
+        SUBMITTED: 'SUBMITTED', // Data Export 완료 (Submitted)
         QUOTED: 'QUOTED',      // 업체 견적 회신 반영
         HQ_REVIEW: 'HQ_REVIEW',// 본사 검토(수량 조정)
         APPROVED: 'APPROVED',  // 본사 승인/발주 확정
     };
+
+    /** Requisition — Data Export(Submitted) 완료 건만 Outstanding 집계 */
+    function isRequisitionSubmittedExport(req) {
+        const s = req?.status;
+        return s === REQ_STATUS.EXPORTED || s === REQ_STATUS.SUBMITTED;
+    }
 
     async function nextReqNo(vesselId) {
         const all = await TVC_DB.getAll('requisitions');
@@ -331,7 +338,7 @@ const TVC_Inventory = (function () {
     async function deleteConsumeLog(id) { return TVC_DB.del('consume_logs', id); }
 
     return {
-        SCHEMA_VERSION, REQ_STATUS,
+        SCHEMA_VERSION, REQ_STATUS, isRequisitionSubmittedExport,
         standardStock, minStock, currentStock, isLowStock, recommendedOrderQty, lowStockItems,
         blankSpare, saveSpare, deleteSpare, universalCodeFor,
         getBom, bomToUsedParts, addBomLine,

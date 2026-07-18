@@ -997,6 +997,7 @@ const TVC_SpareMenu = (function () {
         st.spareModule = st.spareModule || {
             partNo: '', description: '', universalCode: '',
             showLowOnly: false,
+            spareFilter: 'total',
             selectedId: null,
             focusedId: null,
             panelOpen: false,
@@ -1664,7 +1665,9 @@ const TVC_SpareMenu = (function () {
                 if (!spareMatchesGroup(s, node)) return false;
             }
         }
-        if (f.showLowOnly && !TVC_Inventory.isLowStock(s)) return false;
+        const sf = f.spareFilter || (f.showLowOnly ? 'lowStock' : 'total');
+        if (sf === 'lowStock' && !TVC_Inventory.isLowStock(s)) return false;
+        if (sf === 'legal' && spareClass(s) !== 'L') return false;
         return true;
     }
 
@@ -1761,6 +1764,80 @@ const TVC_SpareMenu = (function () {
         return items.sort((a, b) => (b.at || '').localeCompare(a.at || ''));
     }
 
+    function spareScopeSpares(st) {
+        const f = { partNo: '', description: '', spareFilter: 'total', showLowOnly: false };
+        return (st.spares || []).map(canon).filter(s => matchSpare(s, st, f));
+    }
+
+    function spareDashboardCounts(st) {
+        const scope = spareScopeSpares(st);
+        let lowStock = 0;
+        let legal = 0;
+        scope.forEach(s => {
+            if (TVC_Inventory.isLowStock(s)) lowStock++;
+            if (spareClass(s) === 'L') legal++;
+        });
+        return { total: scope.length, lowStock, legal };
+    }
+
+    function renderSpareFilterDashboard() {
+        const host = document.getElementById('spareFilterDashboard');
+        if (!host) return;
+        const st = getState();
+        const m = modState(st);
+        if (m.spareFilter === 'major') m.spareFilter = 'total';
+        const c = spareDashboardCounts(st);
+        const f = m.spareFilter || 'total';
+        const items = [
+            { key: 'lowStock', label: 'Low Stock', count: c.lowStock, cls: 'act-dash-overdue' },
+            { key: 'legal', label: 'Legal Spare', count: c.legal, cls: 'act-dash-pending' },
+        ];
+        const btnHtml = items.map(b => `
+            <button type="button" class="act-dash-btn ${b.cls}${f === b.key ? ' active' : ''}" data-sfilter="${b.key}"
+                onclick="TVC_SpareMenu.setSpareFilter('${b.key}')">
+                <span class="act-dash-count">${b.count}</span>
+                <span class="act-dash-label">${esc(b.label)}</span>
+            </button>`).join('');
+        host.innerHTML = `
+            <div class="act-filter-dashboard-inner">
+                ${btnHtml}
+                <span class="act-dash-sep" aria-hidden="true"></span>
+                <button type="button" class="act-dash-btn act-dash-total${f === 'total' ? ' active' : ''}" data-sfilter="total"
+                    onclick="TVC_SpareMenu.setSpareFilter('total')">
+                    <span class="act-dash-count">${c.total}</span>
+                    <span class="act-dash-label">Total</span>
+                </button>
+            </div>`;
+        bindSpareDashLayoutSync(host);
+        requestAnimationFrame(() => {
+            syncSpareHeadLayout();
+            requestAnimationFrame(syncSpareHeadLayout);
+        });
+    }
+
+    function bindSpareDashLayoutSync(host) {
+        if (!host || typeof ResizeObserver === 'undefined') return;
+        if (_spareDashResizeObs) _spareDashResizeObs.disconnect();
+        _spareDashResizeObs = new ResizeObserver(() => syncSpareHeadLayout());
+        _spareDashResizeObs.observe(host);
+    }
+
+    function setSpareFilter(filter) {
+        const st = getState();
+        const m = modState(st);
+        m.spareFilter = filter || 'total';
+        m.showLowOnly = m.spareFilter === 'lowStock';
+        renderSpareFilterDashboard();
+        applySpareListFilter();
+    }
+
+    function spareActiveFilterLabel(m) {
+        const f = m.spareFilter || (m.showLowOnly ? 'lowStock' : 'total');
+        if (f === 'lowStock') return 'Low stock';
+        if (f === 'legal') return 'Legal Spare';
+        return '';
+    }
+
     async function render() {
         const root = document.getElementById('spareMenuBody');
         if (!root) return;
@@ -1773,7 +1850,6 @@ const TVC_SpareMenu = (function () {
         _cachedList = filteredSpares(st);
         const canRequisition = window.TVC_RBAC && st.user && TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION);
         const canModify = canModifySpare(st);
-        const canView = window.TVC_RBAC && st.user && TVC_RBAC.can(st.user, TVC_RBAC.Action.VIEW_INVENTORY);
         const canConsume = window.TVC_RBAC && st.user && TVC_RBAC.can(st.user, TVC_RBAC.Action.DEDUCT_INVENTORY);
         const canDeliver = window.TVC_RBAC && st.user && TVC_RBAC.can(st.user, TVC_RBAC.Action.SUPPLY_PARTS);
         const canHqImport = window.TVC_RBAC && st.user && TVC_RBAC.can(st.user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
@@ -1819,26 +1895,18 @@ const TVC_SpareMenu = (function () {
                 <button type="button" id="spareModifyBtn" class="btn btn-sm" onclick="TVC_App.openSpareModify()"${tb.modifyEnabled ? '' : ' disabled'} title="${esc(tb.modifyTitle)}">✏️ Modify</button>
                 <button type="button" id="spareAppendBtn" class="btn btn-sm" onclick="TVC_App.openSpareAppend()"${tb.appendEnabled ? '' : ' disabled'} title="${esc(tb.appendTitle)}">➕ Append</button>
                 <button type="button" id="spareDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteSpareItem()"${tb.deleteEnabled ? '' : ' disabled'} title="${esc(tb.deleteTitle)}">🗑 Delete</button>
-                <span style="flex:1"></span>
-                ${canModify ? (fileMode
-                    ? `<label class="btn btn-sm btn-green spare-file-pick" for="srInventoryImportFile">📂 Select XLS</label>
-                       <label class="btn btn-sm spare-file-pick" for="srCsvUploadFile">📄 Select CSV</label>`
-                    : `<button class="btn btn-sm btn-green" onclick="TVC_SpareMenu.loadBundledXls()">📥 Import XLS</button>
-                  <button class="btn btn-sm" onclick="TVC_SpareMenu.triggerInventoryImport()">📂 Select XLS</button>
-                  <button class="btn btn-sm" onclick="TVC_SpareMenu.triggerCsvUpload()">📄 CSV</button>`) : ''}
-                ${!canModify && canView && needsImport ? `<span class="muted">Import: Chief/Captain permission required</span>` : ''}
-                ${canRequisition ? `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.addToRequisition()">Add to Requisition</button>
-                <button class="btn btn-sm" onclick="TVC_SpareMenu.toggleReqPanel()">🧾 Requisitions</button>` : ''}
+                <span class="orig-toolbar-sep"></span>
+                <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('spare', false)">🖨 Print</button>
+                <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('spare', true)">👁 Preview</button>
               </div>
+              <div id="spareFilterDashboard" class="act-filter-dashboard"></div>
               <div class="filter-bar spare-list-search-bar">
                 <div class="search-field-wrap">
-                  <input type="search" class="search-input spare-list-search-input" id="spareSearch" placeholder="Search Code / Item / Part No / Working"
+                  <input type="text" class="search-input spare-list-search-input" id="spareSearch" placeholder="Search Code / Item / Part No / Working"
                       value="${esc(m.partNo || m.description ? [m.partNo, m.description].filter(Boolean).join(' ') : (st.spareSearch || ''))}"
                       oninput="TVC_SpareMenu.setSearch(this.value)">
                   <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_SpareMenu.clearSpareSearch()">×</button>
                 </div>
-                <label class="sr-check"><input type="checkbox" ${m.showLowOnly ? 'checked' : ''}
-                    onchange="TVC_SpareMenu.toggleLowOnly()"> Low stock only</label>
                 <span class="count-label" id="spareCount">${_cachedList.length} / ${allCanon.length}</span>
               </div>
               <div id="spareEditBlock">${renderSpareEditBlockHtml(st)}</div>
@@ -1865,6 +1933,7 @@ const TVC_SpareMenu = (function () {
         mountVirtualList();
         bindSpareListEvents();
         bindFileInputs();
+        renderSpareFilterDashboard();
 
         if (st._spareEdit && !st._spareEdit.id) renderEditor(st._spareEdit);
         if (panelOpen) await renderDetailPanel(getFocusedSpareId(st), canRequisition, canModify);
@@ -1968,7 +2037,6 @@ const TVC_SpareMenu = (function () {
 
     const SPARE_CLASS_OPTIONS = [
         { value: 'L', label: 'L : Legal spare parts' },
-        { value: 'M', label: 'M : Major spare parts' },
         { value: 'G', label: 'G : General spare parts' },
     ];
     function rowCellClassSelect(id, value, extraClass = '') {
@@ -2094,7 +2162,6 @@ const TVC_SpareMenu = (function () {
                 : ctx === 'wrSpare'
                     ? (wrSpareRowChecked(s) ? 'checked' : '')
                     : (batchMap && batchMap[s.id] ? 'checked' : '');
-        const crit = s.isCritical ? ' <span class="spics-crit">CRIT</span>' : '';
         const sid = escAttr(s.id);
         const focusFn = ctx === 'reqWork' ? 'TVC_SpareMenu.reqWorkFocusRow'
             : ctx === 'consume' ? 'TVC_SpareMenu.consumeFocusRow'
@@ -2138,7 +2205,7 @@ const TVC_SpareMenu = (function () {
                     onclick="event.stopPropagation()"
                     onchange="${toggleFn}('${sid}', this.checked)">
             </td>
-            <td class="c-num"${cellTitleAttr(spareNumbering(s))}><strong>${esc(spareNumbering(s))}</strong>${crit}</td>
+            <td class="c-num"${cellTitleAttr(spareNumbering(s))}><strong>${esc(spareNumbering(s))}</strong></td>
             <td class="c-cls">${esc(spareClass(s))}</td>
             <td class="c-item"${cellTitleAttr(itemName)}>${esc(s.name)}</td>
             <td class="c-pno"${cellTitleAttr(pnoText)}>${esc(spareDrawingNo(s) || '—')}</td>
@@ -2151,6 +2218,7 @@ const TVC_SpareMenu = (function () {
 
     let _reqWorkResizeObs = null;
     let _spareListResizeObs = null;
+    let _spareDashResizeObs = null;
     let _consumeResizeObs = null;
 
     function syncHeadLayout(scrollId, headId, trackId, minWidth) {
@@ -2277,8 +2345,8 @@ const TVC_SpareMenu = (function () {
         if (!_cachedList.length) {
             const st = getState();
             const gLabel = groupFilterLabel(st);
-            const lowTag = modState(st).showLowOnly ? 'Low stock' : '';
-            const filterLabel = [gLabel, lowTag].filter(Boolean).join(' · ');
+            const filterTag = spareActiveFilterLabel(modState(st));
+            const filterLabel = [gLabel, filterTag].filter(Boolean).join(' · ');
             scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">
                 No parts to display.${filterLabel ? ' (Filter: ' + esc(filterLabel) + ' — <a href="#" onclick="TVC_App.selectGroup(null);TVC_SpareMenu.clearListFilters();return false">View all</a>)' : ''}
                 ${gLabel ? '<br><small>No parts assigned to this GROUP. Use ✏️ Modify or the detail panel to set <b>GROUP (PMS)</b>.</small>' : ''}
@@ -2297,6 +2365,10 @@ const TVC_SpareMenu = (function () {
         });
         if (head) bindHeadLayoutSync(scroll, syncSpareHeadLayout, 'spare');
         updateSpareHeadCheckAll();
+        requestAnimationFrame(() => {
+            syncSpareHeadLayout();
+            requestAnimationFrame(syncSpareHeadLayout);
+        });
     }
 
     async function renderDetailPanel(id, canRequisition, canModify) {
@@ -3087,12 +3159,16 @@ const TVC_SpareMenu = (function () {
         const hasItems = _cachedList.length > 0;
         const countEl = document.getElementById('spareCount');
         if (countEl) countEl.textContent = `${_cachedList.length} / ${allCanon.length}`;
-        if (!document.getElementById('spareListScroll') && !modState(st).reqWorkOpen && !modState(st).consumeOpen && !modState(st).wrSpareOpen) return;
+        if (!document.getElementById('spareListScroll') && !modState(st).reqWorkOpen && !modState(st).consumeOpen && !modState(st).wrSpareOpen) {
+            renderSpareFilterDashboard();
+            return;
+        }
         if (vl && hadItems && hasItems && document.getElementById('spareListScroll')) {
             vl.refresh();
         } else if (document.getElementById('spareListScroll')) {
             mountVirtualList();
         }
+        renderSpareFilterDashboard();
         if (modState(st).reqWorkOpen) refreshReqWorkListUi();
         if (modState(st).consumeOpen) refreshConsumeListUi();
         if (modState(st).wrSpareOpen) refreshWrSpareListUi();
@@ -3130,14 +3206,29 @@ const TVC_SpareMenu = (function () {
 
     function clearListFilters() {
         const st = getState();
-        modState(st).showLowOnly = false;
+        const m = modState(st);
+        m.showLowOnly = false;
+        m.spareFilter = 'total';
+        renderSpareFilterDashboard();
         applySpareListFilter();
     }
 
     function toggleLowOnly() {
         const st = getState();
-        modState(st).showLowOnly = !modState(st).showLowOnly;
+        const m = modState(st);
+        if (m.spareFilter === 'lowStock') {
+            m.spareFilter = 'total';
+            m.showLowOnly = false;
+        } else {
+            m.spareFilter = 'lowStock';
+            m.showLowOnly = true;
+        }
+        renderSpareFilterDashboard();
         applySpareListFilter();
+    }
+
+    function showLowStockOnly() {
+        setSpareFilter('lowStock');
     }
 
     function toggleReqPanel() {
@@ -3528,6 +3619,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (alerts[0]?.sparePartId) { setFocusedSpareId(getState(), alerts[0].sparePartId); modState(getState()).panelOpen = true; }
+        m.spareFilter = 'lowStock';
         m.showLowOnly = true;
         if (window.TVC_App?.switchTab) TVC_App.switchTab('spare');
         await refresh();
@@ -5161,6 +5253,40 @@ const TVC_SpareMenu = (function () {
 
     async function openNewRequisition() {
         await startReqWorkSession(true);
+    }
+
+    function buildPrintBody() {
+        const st = getState();
+        const list = _cachedList.length ? _cachedList : filteredSpares(st);
+        const ship = document.getElementById('cmaxsShipName')?.textContent?.trim() || '—';
+        const dept = window.TVC_RBAC ? TVC_RBAC.getDeptLabel(st.department) : 'All';
+        const filterParts = [];
+        const q = spareListSearchQuery(st);
+        if (q) filterParts.push(`Search: "${q}"`);
+        const sf = spareActiveFilterLabel(modState(st));
+        if (sf) filterParts.push(`Filter: ${sf}`);
+        const gLabel = groupFilterLabel(st);
+        if (gLabel) filterParts.push(`Group: ${gLabel}`);
+        const filterNote = filterParts.length
+            ? `<p class="meta">${filterParts.map(p => esc(p)).join(' · ')}</p>` : '';
+        const rows = list.map(s => `<tr>
+            <td>${esc(spareNumbering(s))}</td>
+            <td>${esc(spareClass(s))}</td>
+            <td>${esc(s.name || '')}</td>
+            <td>${esc(spareDrawingNo(s) || '—')}</td>
+            <td>${esc(spareUnit(s))}</td>
+            <td>${esc(String(spareWorking(s) || ''))}</td>
+            <td>${esc(String(spareStandardQty(s)))}</td>
+            <td>${esc(String(TVC_Inventory.currentStock(s)))}</td>
+        </tr>`).join('');
+        return `<h1>SPARE Parts List</h1>
+            <p class="meta">${esc(ship)} · ${esc(dept)} · ${new Date().toLocaleString()}</p>
+            ${filterNote}
+            <p class="meta">${list.length} part${list.length === 1 ? '' : 's'}</p>
+            <table><tr>
+                <th>Code</th><th>Class</th><th>Item</th><th>Part No.</th>
+                <th>Unit</th><th>Working</th><th>Standard</th><th>Stock</th>
+            </tr>${rows || '<tr><td colspan="8">No parts to print.</td></tr>'}</table>`;
     }
 
     function exportPartsList() {
@@ -7443,7 +7569,7 @@ ${renderWrSpareMetaHtml(meta)}
 
     return {
         init, render, renderSpareGroupTree, refreshList, syncSpareToolbarUi, spareToolbarFlags, applySpareToolbarFlags,
-        setFilter, setSearch, clearSpareSearch, clearListFilters, toggleLowOnly, toggleReqPanel,
+        setFilter, setSearch, clearSpareSearch, clearListFilters, toggleLowOnly, showLowStockOnly, setSpareFilter, toggleReqPanel,
         selectSpareRow, focusSpareRow, openSpareModify, openSpareAppend, deleteSpareItem, deleteSpareItems,
         openDetail, closeDetail, saveDetailGroup,
         createRequisition, assignToTask, suggestRequisition,
@@ -7473,7 +7599,7 @@ ${renderWrSpareMetaHtml(meta)}
         reqSheetSelectReq, reqSheetNew, reqSheetFillLowStock, reqSheetAddSpare,
         reqSheetRemoveLine, reqSheetSelectLine, reqSheetSetStep, reqSheetComplete,
         reqSheetExport, reqSheetPrint, onReqSheetSearchInput,
-        exportRequisitionData, exportDeliveryData, exportPartsList,
+        exportRequisitionData, exportDeliveryData, exportPartsList, buildPrintBody,
         viewRequisitionList, openNewRequisition,
         viewConsumedLog, openConsumeLogModal, closeConsumeLogModal,
         consumeLogNew, consumeLogModify, consumePreviewModify, consumePreviewOpenWorkReport, cleanupConsumeWorkReportOverlay,
