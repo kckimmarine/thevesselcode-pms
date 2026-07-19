@@ -23,8 +23,12 @@ const TVC_SpareMenu = (function () {
     let _reqSheetSearchT = null;
     let _reqWorkDraft = null;
     let vlConsume = null;
+    let vlReceive = null;
     let vlWrSpare = null;
     let _consumeCachedList = [];
+    let _receiveCachedList = [];
+    let _receiveDraft = null;
+    let _receiveLineBySpareId = null;
     let _wrSpareCachedList = [];
     let _consumeDraft = null;
     let _consumeLineBySpareId = null;
@@ -36,23 +40,23 @@ const TVC_SpareMenu = (function () {
     let _reqLineBySpareId = null;
     let _reqLineMapReqId = null;
 
-    const SPARE_MAIN_MIN_WIDTH = 836;
+    const SPARE_MAIN_MIN_WIDTH = 948;
     const SPARE_REQ_WORK_STD_WIDTH = 68;
-    const SPARE_REQ_EXTRA_COL_WIDTHS = [48, 62, 58, 54];
+    const SPARE_REQ_EXTRA_COL_WIDTHS = [56, 56, 58, 54];
     const SPARE_REQ_MIN_WIDTH = SPARE_MAIN_MIN_WIDTH
         + 2 * (SPARE_REQ_WORK_STD_WIDTH - 56)
         + SPARE_REQ_EXTRA_COL_WIDTHS.reduce((a, b) => a + b, 0);
-    const SPARE_MAIN_COLGROUP = '<colgroup><col style="width:32px"><col style="width:92px"><col style="width:62px"><col><col style="width:150px"><col style="width:44px"><col style="width:56px"><col style="width:56px"><col style="width:56px"></colgroup>';
+    const SPARE_MAIN_COLGROUP = '<colgroup><col style="width:32px"><col style="width:92px"><col style="width:62px"><col><col style="width:150px"><col style="width:44px"><col style="width:56px"><col style="width:56px"><col style="width:56px"><col style="width:56px"><col style="width:56px"></colgroup>';
     const SPARE_REQ_BASE_COLGROUP = `<colgroup><col style="width:32px"><col style="width:92px"><col style="width:44px"><col><col style="width:150px"><col style="width:44px"><col style="width:${SPARE_REQ_WORK_STD_WIDTH}px"><col style="width:${SPARE_REQ_WORK_STD_WIDTH}px"><col style="width:56px"></colgroup>`;
     const SPARE_REQ_EXTRA_COLS = SPARE_REQ_EXTRA_COL_WIDTHS.map(w => `<col style="width:${w}px">`).join('');
     const SPARE_REQ_COLGROUP = SPARE_REQ_BASE_COLGROUP.replace('</colgroup>', SPARE_REQ_EXTRA_COLS + '</colgroup>');
     const REQ_LIST_COLGROUP = `<colgroup>
         <col class="rl-col-chk"><col class="rl-col-reqno"><col class="rl-col-date"><col class="rl-col-date">
-        <col class="rl-col-port"><col class="rl-col-date"><col class="rl-col-assess"><col class="rl-col-total">
+        <col class="rl-col-port"><col class="rl-col-reported"><col class="rl-col-assessed"><col class="rl-col-received"><col class="rl-col-total">
     </colgroup>`;
     const CONSUME_LOG_COLGROUP = `<colgroup>
-        <col class="cl-col-chk"><col class="cl-col-date"><col class="cl-col-pms"><col class="cl-col-job">
-        <col class="cl-col-comments"><col class="cl-col-made"><col class="cl-col-total">
+        <col class="cl-col-chk"><col class="cl-col-job"><col class="cl-col-sort1"><col class="cl-col-sort2">
+        <col class="cl-col-detail"><col class="cl-col-reported"><col class="cl-col-status"><col class="cl-col-total">
     </colgroup>`;
     function consumeLogTableHeadHtml(headChkId = 'consumeLogHeadChkAll') {
         return `<thead><tr>
@@ -60,11 +64,12 @@ const TVC_SpareMenu = (function () {
             <input type="checkbox" id="${headChkId}" class="spare-head-chk spare-consume-log-head-chk" aria-label="Select all consumed logs"
                 onclick="event.stopPropagation()" onchange="TVC_SpareMenu.consumeLogToggleAll(this.checked)">
         </th>
-        <th>Consumed Date</th>
-        <th>PMS Group no.</th>
-        <th>JOB CODE</th>
-        <th>Ship's Comments</th>
-        <th>Made on</th>
+        <th>Job Code</th>
+        <th class="cl-col-sort-h">SORT-1</th>
+        <th class="cl-col-sort-h">SORT-2</th>
+        <th>JOB DETAIL</th>
+        <th>Reported Date</th>
+        <th>Status</th>
         <th class="spare-consume-log-th-num">Total Data</th>
     </tr></thead>`;
     }
@@ -77,8 +82,9 @@ const TVC_SpareMenu = (function () {
         <th class="spare-req-list-th-reqno" rowspan="2">Requisition No.</th>
         <th class="spare-req-list-th-group" colspan="2">Required Date</th>
         <th rowspan="2">Port of Delivery</th>
-        <th rowspan="2">Made on</th>
+        <th rowspan="2">Reported</th>
         <th rowspan="2">Assessed</th>
+        <th rowspan="2">Received</th>
         <th class="spare-req-list-th-num" rowspan="2">Total Data</th>
     </tr><tr>
         <th class="spare-req-list-th-sub">From</th>
@@ -96,6 +102,8 @@ const TVC_SpareMenu = (function () {
                     <th class="c-work">Working</th>
                     <th class="c-std">Standard</th>
                     <th class="c-stk">Stock</th>
+                    <th class="c-await">Awaiting</th>
+                    <th class="c-need">Need</th>
                 </tr></thead>`;
     const SPARE_REQ_TABLE_HEAD = `<thead><tr>
                     <th class="c-chk"><input type="checkbox" id="reqWorkHeadChkAll" class="spare-head-chk" aria-label="Select all"
@@ -108,14 +116,31 @@ const TVC_SpareMenu = (function () {
                     <th class="c-work">Working</th>
                     <th class="c-std">Standard</th>
                     <th class="c-stk">Stock</th>
-                    <th class="c-ord spare-col-head-stack">On<span class="spare-head-sub">Order</span></th>
-                    <th class="c-reqd">Required</th>
+                    <th class="c-await">Awaiting</th>
+                    <th class="c-need">Need</th>
                     <th class="c-req">Request</th>
                     <th class="c-assess">Assess</th>
                 </tr></thead>`;
     const SPARE_CONSUME_EXTRA_COL_WIDTH = 62;
-    const SPARE_CONSUME_MIN_WIDTH = SPARE_MAIN_MIN_WIDTH + SPARE_CONSUME_EXTRA_COL_WIDTH;
-    const SPARE_CONSUME_COLGROUP = SPARE_MAIN_COLGROUP.replace('</colgroup>', `<col style="width:${SPARE_CONSUME_EXTRA_COL_WIDTH}px"></colgroup>`);
+    const SPARE_CONSUME_MIN_WIDTH = 836 + SPARE_CONSUME_EXTRA_COL_WIDTH;
+    const SPARE_CONSUME_COLGROUP = '<colgroup><col style="width:32px"><col style="width:92px"><col style="width:62px"><col><col style="width:150px"><col style="width:44px"><col style="width:56px"><col style="width:56px"><col style="width:56px"><col style="width:62px"></colgroup>';
+    const SPARE_RECEIVE_INPUT_WIDTH = 62;
+    const SPARE_RECEIVE_MIN_WIDTH = 954;
+    const SPARE_RECEIVE_COLGROUP = '<colgroup><col style="width:32px"><col style="width:92px"><col style="width:62px"><col><col style="width:150px"><col style="width:44px"><col style="width:56px"><col style="width:56px"><col style="width:56px"><col style="width:56px"><col style="width:62px"></colgroup>';
+    const SPARE_RECEIVE_TABLE_HEAD = `<thead><tr>
+                    <th class="c-chk"><input type="checkbox" id="receiveHeadChkAll" class="spare-head-chk" aria-label="Select all"
+                        onclick="event.stopPropagation()" onchange="TVC_SpareMenu.receiveToggleAll(this.checked)"></th>
+                    <th class="c-num">Code</th>
+                    <th class="c-cls">Class</th>
+                    <th class="c-item">Item</th>
+                    <th class="c-pno spare-col-head-stack">Part No.<span class="spare-head-sub">(Code No.)</span></th>
+                    <th class="c-unit">Unit</th>
+                    <th class="c-work">Working</th>
+                    <th class="c-std">Standard</th>
+                    <th class="c-stk">Stock</th>
+                    <th class="c-await">Awaiting</th>
+                    <th class="c-recv">Received</th>
+                </tr></thead>`;
     const SPARE_CONSUME_TABLE_HEAD = `<thead><tr>
                     <th class="c-chk"><input type="checkbox" id="consumeHeadChkAll" class="spare-head-chk" aria-label="Select all"
                         onclick="event.stopPropagation()" onchange="TVC_SpareMenu.consumeToggleAll(this.checked)"></th>
@@ -1013,13 +1038,22 @@ const TVC_SpareMenu = (function () {
             consumeEditMode: false,
             consumePreview: false,
             consumeLastSavedLogId: null,
+            receiveOpen: false,
+            receiveFocusedId: null,
+            receiveShowSelectedOnly: false,
             wrSpareOpen: false,
             wrSpareFocusedId: null,
             wrSpareShowSelectedOnly: false,
             wrSpareReadonly: false,
             reqListCheckedIds: {},
+            reqListPeriodFrom: '',
+            reqListPeriodTo: '',
+            reqListSearch: '',
             consumeLogCheckedIds: {},
             selectedConsumeLogId: null,
+            consumeLogPeriodFrom: '',
+            consumeLogPeriodTo: '',
+            consumeLogSearch: '',
             inlineEditId: null,
             inlineDraft: null,
             groupHeaderEdit: false,
@@ -1264,6 +1298,63 @@ const TVC_SpareMenu = (function () {
             onchange="TVC_SpareMenu.consumeSetQty('${sid}', this.value)">`;
     }
 
+    function receiveSpareIdKey(id) {
+        return id == null ? '' : String(id);
+    }
+
+    function receiveSameSpareId(a, b) {
+        return receiveSpareIdKey(a) === receiveSpareIdKey(b);
+    }
+
+    function getReceiveSession() {
+        return _receiveDraft;
+    }
+
+    function syncReceiveLineMap() {
+        const map = new Map();
+        (_receiveDraft?.lines || []).forEach(l => {
+            const id = receiveSpareIdKey(l.spare_part_id);
+            if (id) map.set(id, l);
+        });
+        _receiveLineBySpareId = map;
+    }
+
+    function receiveRowChecked(s) {
+        return !!_receiveLineBySpareId?.get(receiveSpareIdKey(s.id));
+    }
+
+    function receiveCheckedSpareCount(st) {
+        return (st.spares || []).reduce((n, s) => n + (receiveRowChecked(canon(s)) ? 1 : 0), 0);
+    }
+
+    function receiveSelectedBtnMeta(st) {
+        const m = modState(st);
+        const n = receiveCheckedSpareCount(st);
+        const on = !!m.receiveShowSelectedOnly;
+        return {
+            label: on ? `Show All (${n})` : `Selected Items${n >= 1 ? ` (${n})` : ''}`,
+            title: on ? 'Show full parts list' : (n >= 1 ? 'Show selected parts only' : 'Select parts using the checkbox'),
+            disabled: !on && n < 1,
+            active: on,
+        };
+    }
+
+    function receiveSelectedCountLabel(st, visibleCount) {
+        const allCanon = (st.spares || []).length;
+        if (spareListSearchQuery(st)) return `${visibleCount} / ${allCanon}`;
+        return `${receiveCheckedSpareCount(st)} selected`;
+    }
+
+    function receiveQtyCellHtml(s, sid) {
+        const line = _receiveLineBySpareId?.get(receiveSpareIdKey(s.id));
+        if (!line) return '0';
+        const qty = Number(line.qty_received) || 0;
+        return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-receive-qty-input" value="${qty}"
+            onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
+            onfocus="event.stopPropagation();this.select()"
+            onchange="TVC_SpareMenu.receiveSetQty('${sid}', this.value)">`;
+    }
+
     function wrSpareIdKey(id) {
         return id == null ? '' : String(id);
     }
@@ -1424,15 +1515,33 @@ const TVC_SpareMenu = (function () {
         refreshConsumeListUi();
     }
 
-    function spareOrderCols(s) {
+    function spareBaselineQty(s) {
+        const c = canon(s);
+        const std = Number(TVC_Inventory.standardStock(c)) || 0;
+        if (std > 0) return std;
+        const min = Number(TVC_Inventory.minStock(c)) || 0;
+        if (min > 0) return min;
+        return null;
+    }
+
+    function formatNeedHtml(need) {
+        if (need == null) return '<span class="qty-na muted" title="Standard or Min not set">—</span>';
+        return esc(String(need));
+    }
+
+    function sparePipelineCols(s, line = null) {
         const stock = TVC_Inventory.currentStock(s);
-        const std = spareStandardQty(s);
-        const onOrder = Number(canon(s).on_order ?? s.on_order ?? 0) || 0;
-        const required = Math.max(0, (Number(std) || 0) - stock - onOrder);
-        const line = _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id));
+        const awaiting = Number(canon(s).on_order ?? s.on_order ?? 0) || 0;
+        const baseline = spareBaselineQty(s);
+        const need = baseline != null ? Math.max(0, baseline - stock - awaiting) : null;
         const request = line ? (Number(line.qty_requested) || 0) : 0;
         const assess = line?.qty_approved != null ? String(line.qty_approved) : '—';
-        return { stock, onOrder, required, request, assess };
+        return { stock, awaiting, need, request, assess };
+    }
+
+    /** @deprecated alias */
+    function spareOrderCols(s) {
+        return sparePipelineCols(s, _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id)));
     }
 
     function spareInventoryUser(st) {
@@ -1462,6 +1571,11 @@ const TVC_SpareMenu = (function () {
         return !!(typeof TVC_RBAC !== 'undefined' && user && TVC_RBAC.can(user, TVC_RBAC.Action.DEDUCT_INVENTORY));
     }
 
+    function canCreateDeliver(st) {
+        const user = spareInventoryUser(st);
+        return !!(typeof TVC_RBAC !== 'undefined' && user && TVC_RBAC.can(user, TVC_RBAC.Action.SUPPLY_PARTS));
+    }
+
     /** New Requisition Complete — Chief Engineer(SHIP_CHIEF)만 사용 가능 */
     function canCompleteRequisition(st) {
         const user = spareInventoryUser(st);
@@ -1473,6 +1587,7 @@ const TVC_SpareMenu = (function () {
     function getFocusedSpareId(st) {
         const m = modState(st);
         if (m.wrSpareOpen) return m.wrSpareFocusedId || null;
+        if (m.receiveOpen) return m.receiveFocusedId || null;
         if (m.consumeOpen) return m.consumeFocusedId || null;
         if (m.reqWorkOpen) return m.reqWorkFocusedId || null;
         return st?.focusedSpareId || m.focusedId || null;
@@ -1482,6 +1597,10 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (m.wrSpareOpen) {
             m.wrSpareFocusedId = id || null;
+            return;
+        }
+        if (m.receiveOpen) {
+            m.receiveFocusedId = id || null;
             return;
         }
         if (m.consumeOpen) {
@@ -1500,6 +1619,9 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (m.consumeOpen) {
             refreshConsumeListUi();
+            syncSpareToolbarUi();
+        } else if (m.receiveOpen) {
+            refreshReceiveListUi();
             syncSpareToolbarUi();
         } else if (m.wrSpareOpen) {
             refreshWrSpareListUi();
@@ -1719,6 +1841,13 @@ const TVC_SpareMenu = (function () {
         return list.filter(s => consumeRowChecked(s));
     }
 
+    function filteredReceiveSpares(st) {
+        const m = modState(st);
+        const list = filteredSpares(st);
+        if (!m.receiveShowSelectedOnly) return list;
+        return list.filter(s => receiveRowChecked(s));
+    }
+
     function filteredWrSpares(st) {
         const m = modState(st);
         if (!m.wrSpareShowSelectedOnly) return filteredSpares(st);
@@ -1875,7 +2004,7 @@ const TVC_SpareMenu = (function () {
                 : 'Import using Chief Engineer / Captain account.'}
             ${st._spareImportMsg ? `<span class="muted">${esc(st._spareImportMsg)}</span>` : ''}
           </div>` : (st._spareImportMsg ? `<div class="spare-import-banner ok">${esc(st._spareImportMsg)}</div>` : '')}
-          ${renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport, canModify })}
+          ${renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport, canModify, user: st.user })}
           <div class="plan-layout spare-layout${panelOpen ? ' panel-open' : ''}">
             <aside class="panel tree-panel">
               <div class="panel-head spare-tree-head">
@@ -2159,39 +2288,53 @@ const TVC_SpareMenu = (function () {
             ? (reqWorkRowChecked(s) ? 'checked' : '')
             : ctx === 'consume'
                 ? (consumeRowChecked(s) ? 'checked' : '')
+                : ctx === 'receive'
+                    ? (receiveRowChecked(s) ? 'checked' : '')
                 : ctx === 'wrSpare'
                     ? (wrSpareRowChecked(s) ? 'checked' : '')
                     : (batchMap && batchMap[s.id] ? 'checked' : '');
         const sid = escAttr(s.id);
         const focusFn = ctx === 'reqWork' ? 'TVC_SpareMenu.reqWorkFocusRow'
             : ctx === 'consume' ? 'TVC_SpareMenu.consumeFocusRow'
+                : ctx === 'receive' ? 'TVC_SpareMenu.receiveFocusRow'
                 : ctx === 'wrSpare' ? 'TVC_SpareMenu.wrSpareFocusRow' : 'TVC_App.focusSpareRow';
         const toggleFn = ctx === 'reqWork' ? 'TVC_SpareMenu.reqWorkToggleRow'
             : ctx === 'consume' ? 'TVC_SpareMenu.consumeToggleRow'
+                : ctx === 'receive' ? 'TVC_SpareMenu.receiveToggleRow'
                 : ctx === 'wrSpare' ? 'TVC_SpareMenu.wrSpareToggleRow' : 'TVC_App.toggleSpareRow';
         const dblFn = ctx === 'reqWork' ? `TVC_SpareMenu.reqWorkAddSpare('${sid}')`
             : ctx === 'consume' ? `TVC_SpareMenu.consumeToggleRow('${sid}', true)`
+                : ctx === 'receive' ? `TVC_SpareMenu.receiveToggleRow('${sid}', true)`
                 : ctx === 'wrSpare' ? `TVC_SpareMenu.wrSpareToggleRow('${sid}', true)` : '';
         const dblAttr = dblFn ? ` ondblclick="event.preventDefault();${dblFn}"` : '';
         const colgroup = ctx === 'reqWork' ? SPARE_REQ_COLGROUP
             : ctx === 'consume' ? SPARE_CONSUME_COLGROUP
+                : ctx === 'receive' ? SPARE_RECEIVE_COLGROUP
                 : ctx === 'wrSpare' ? SPARE_WR_COLGROUP : SPARE_MAIN_COLGROUP;
-        const ord = ctx === 'reqWork' ? spareOrderCols(s) : null;
-        const stockCell = ctx === 'reqWork' ? ord.stock : TVC_Inventory.currentStock(s);
+        const reqLine = ctx === 'reqWork' ? _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id)) : null;
+        const pipe = sparePipelineCols(s, reqLine);
+        const stockCell = pipe.stock;
         const locked = ctx === 'reqWork' && reqWorkFormLocked();
         const wrRo = ctx === 'wrSpare' && modState(getState()).wrSpareReadonly;
         const consumeRo = ctx === 'consume' && modState(getState()).consumePreview;
-        const reqCells = ctx === 'reqWork'
-            ? `<td class="c-ord">${ord.onOrder}</td><td class="c-reqd">${ord.required}</td><td class="c-req">${reqWorkRequestCellHtml(s, sid, locked)}</td><td class="c-assess">${esc(ord.assess)}</td>`
+        const pipelineCells = (ctx === 'main' || ctx === 'reqWork')
+            ? `<td class="c-await">${pipe.awaiting}</td><td class="c-need">${formatNeedHtml(pipe.need)}</td>`
             : '';
+        const reqCells = ctx === 'reqWork'
+            ? `${pipelineCells}<td class="c-req">${reqWorkRequestCellHtml(s, sid, locked)}</td><td class="c-assess">${esc(pipe.assess)}</td>`
+            : (ctx === 'main' ? pipelineCells : '');
         const consumeCell = ctx === 'consume'
             ? `<td class="c-cons">${consumeQtyCellHtml(s, sid)}</td>`
+            : '';
+        const receiveCell = ctx === 'receive'
+            ? `<td class="c-await">${pipe.awaiting}</td><td class="c-recv">${receiveQtyCellHtml(s, sid)}</td>`
             : '';
         const wrQtyCell = ctx === 'wrSpare'
             ? `<td class="c-cons">${wrQtyCellHtml(s, sid, wrRo)}</td>`
             : '';
         const tableCls = ctx === 'reqWork' ? 'spare-data-table spare-data-table-req spare-data-row'
             : ctx === 'consume' ? 'spare-data-table spare-data-table-consume spare-data-row'
+                : ctx === 'receive' ? 'spare-data-table spare-data-table-receive spare-data-row'
                 : ctx === 'wrSpare' ? 'spare-data-table spare-data-table-wrspare spare-data-row'
                     : 'spare-data-table spare-data-row';
         const itemName = String(s.name || '').trim();
@@ -2212,7 +2355,7 @@ const TVC_SpareMenu = (function () {
             <td class="c-unit">${esc(spareUnit(s))}</td>
             <td class="c-work"${cellTitleAttr(workText)}>${spareWorking(s)}</td>
             <td class="c-std">${spareStandardQty(s)}</td>
-            <td class="c-stk">${stockCell}</td>${reqCells}${consumeCell}${wrQtyCell}
+            <td class="c-stk">${stockCell}</td>${reqCells}${consumeCell}${receiveCell}${wrQtyCell}
         </tr></tbody></table>`;
     }
 
@@ -2220,6 +2363,7 @@ const TVC_SpareMenu = (function () {
     let _spareListResizeObs = null;
     let _spareDashResizeObs = null;
     let _consumeResizeObs = null;
+    let _receiveResizeObs = null;
 
     function syncHeadLayout(scrollId, headId, trackId, minWidth) {
         const scroll = document.getElementById(scrollId);
@@ -2322,6 +2466,7 @@ const TVC_SpareMenu = (function () {
                 const m = modState(getState());
                 if (m.reqWorkOpen) syncReqWorkHeadLayout();
                 if (m.consumeOpen) syncConsumeHeadLayout();
+                if (m.receiveOpen) syncReceiveHeadLayout();
                 if (m.wrSpareOpen) syncWrSpareHeadLayout();
             });
         }
@@ -2446,6 +2591,207 @@ const TVC_SpareMenu = (function () {
         return esc(val || '—');
     }
 
+    function reqListReportedDate(req) {
+        return req.made_on || req.reported_on || '';
+    }
+
+    function reqListReceivedDate(req) {
+        return req.received_on || req.received_date || '';
+    }
+
+    function reqListStatusLabel(req) {
+        return spareListStatus(req) || SPARE_LIST_STATUS.DRAFT;
+    }
+
+    function reqListDateInPeriod(dateStr, from, to) {
+        if (!from && !to) return true;
+        const d = String(dateStr || '').slice(0, 10);
+        if (!d) return false;
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+    }
+
+    function reqListMatchSearch(req, q) {
+        if (!q) return true;
+        const hay = [
+            req.req_no, req.deliver_port, reqListReportedDate(req), req.assessed_on,
+            reqListReceivedDate(req), reqListStatusLabel(req), req.made_by, req.assessed_by,
+        ].join(' ').toLowerCase();
+        return hay.includes(q);
+    }
+
+    function filterReqList(reqs, st) {
+        const m = modState(st);
+        const from = m.reqListPeriodFrom || '';
+        const to = m.reqListPeriodTo || '';
+        const q = String(m.reqListSearch || '').trim().toLowerCase();
+        return (reqs || []).filter(req =>
+            reqListDateInPeriod(reqListReportedDate(req), from, to)
+            && reqListMatchSearch(req, q));
+    }
+
+    function reqListCanConfirm(st, req) {
+        if (!req) return false;
+        const user = spareInventoryUser(st);
+        return reqListStatusLabel(req) === SPARE_LIST_STATUS.REPORTED
+            && !!user && TVC_RBAC.canConfirmDepartment(user, req.department || st.department);
+    }
+
+    function syncReqListFilterUi(st) {
+        const m = modState(st);
+        const fromEl = document.getElementById('reqListPeriodFrom');
+        const toEl = document.getElementById('reqListPeriodTo');
+        const searchEl = document.getElementById('reqListSearch');
+        const filterEl = document.getElementById('reqListPeriodFilter');
+        if (fromEl) fromEl.value = m.reqListPeriodFrom || '';
+        if (toEl) toEl.value = m.reqListPeriodTo || '';
+        if (searchEl) searchEl.value = m.reqListSearch || '';
+        if (filterEl) filterEl.classList.toggle('active', !!(m.reqListPeriodFrom || m.reqListPeriodTo));
+    }
+
+    function reqListSetPeriod() {
+        const st = getState();
+        const m = modState(st);
+        m.reqListPeriodFrom = document.getElementById('reqListPeriodFrom')?.value || '';
+        m.reqListPeriodTo = document.getElementById('reqListPeriodTo')?.value || '';
+        renderReqListModal();
+    }
+
+    function reqListClearPeriod() {
+        const st = getState();
+        const m = modState(st);
+        m.reqListPeriodFrom = '';
+        m.reqListPeriodTo = '';
+        renderReqListModal();
+    }
+
+    function reqListSetSearch(v) {
+        modState(getState()).reqListSearch = v;
+        clearTimeout(_reqListSearchT);
+        _reqListSearchT = setTimeout(() => renderReqListModal(), 150);
+    }
+
+    function reqListClearSearch() {
+        modState(getState()).reqListSearch = '';
+        const el = document.getElementById('reqListSearch');
+        if (el) el.value = '';
+        renderReqListModal();
+    }
+
+    let _reqListSearchT = null;
+
+    function spareListToolbarBtn(label, onclick, disabled = false, cls = '') {
+        return `<button type="button" class="btn btn-sm${cls ? ' ' + cls : ''}" onclick="${onclick}"${disabled ? ' disabled' : ''}>${esc(label)}</button>`;
+    }
+
+    function spareListPrintStyles() {
+        return `body{font-family:system-ui,sans-serif;font-size:11px;margin:16px;color:#1a202c}
+            h1{font-size:18px;color:#1a365d;margin:0 0 4px}
+            .meta{color:#4a5568;margin:0 0 12px;font-size:11px}
+            table{width:100%;border-collapse:collapse}
+            th,td{border:1px solid #cbd5e0;padding:5px 7px;text-align:left;vertical-align:top}
+            th{background:#1a365d;color:#fff;font-weight:600;text-align:center}
+            td.num{text-align:center;font-variant-numeric:tabular-nums}
+            tr:nth-child(even){background:#f7fafc}
+            @media print{body{margin:10mm}}`;
+    }
+
+    async function spareListPrintMeta(title) {
+        const { st, vesselId } = await vesselScope();
+        const ship = await vesselLabel(vesselId, st.department)
+            || document.getElementById('cmaxsShipName')?.textContent?.trim() || '—';
+        const dept = TVC_RBAC.getDeptLabel(st.department);
+        return `<h1>${esc(title)}</h1><p class="meta">${esc(ship)} · ${esc(dept)} · ${new Date().toLocaleString()}</p>`;
+    }
+
+    function spareListPrintFilterNote(parts) {
+        const notes = parts.filter(Boolean);
+        return notes.length ? `<p class="meta">${notes.map(n => esc(n)).join(' · ')}</p>` : '';
+    }
+
+    function openSpareListPrintWindow(title, bodyHtml, preview) {
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TVC — ${esc(title)}</title>
+            <style>${spareListPrintStyles()}</style></head><body>${bodyHtml}</body></html>`;
+        const w = window.open('', '_blank');
+        if (!w) {
+            alert('Pop-up blocked. Allow pop-ups to print or preview.');
+            return;
+        }
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        if (!preview) setTimeout(() => { try { w.print(); } catch (_) {} }, 400);
+    }
+
+    async function buildConsumedLogListPrintBody() {
+        const { st, vesselId } = await vesselScope();
+        const m = modState(st);
+        const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const logs = filterConsumeLogs(allLogs, st);
+        const filterParts = [];
+        if (m.consumeLogSearch) filterParts.push(`Search: "${m.consumeLogSearch}"`);
+        if (m.consumeLogPeriodFrom || m.consumeLogPeriodTo) {
+            filterParts.push(`Period: ${m.consumeLogPeriodFrom || '…'} ~ ${m.consumeLogPeriodTo || '…'}`);
+        }
+        const head = `<tr>
+            <th>Job Code</th><th>SORT-1</th><th>SORT-2</th><th>JOB DETAIL</th>
+            <th>Reported Date</th><th>Status</th><th>Total Data</th>
+        </tr>`;
+        const rows = logs.map(log => {
+            const reported = log.made_on || log.consumed_date || '';
+            return `<tr>
+                <td>${esc(log.job_code || '—')}</td>
+                <td>${esc(log.sort1 || '—')}</td>
+                <td>${esc(log.sort2 || '—')}</td>
+                <td>${esc(log.job_detail || '—')}</td>
+                <td class="num">${esc(reported || '—')}</td>
+                <td class="num">${esc(consumeLogStatusLabel(log))}</td>
+                <td class="num">${consumeLogTotalData(log)}</td>
+            </tr>`;
+        }).join('');
+        const meta = await spareListPrintMeta('Consumed Log');
+        return `${meta}
+            ${spareListPrintFilterNote(filterParts)}
+            <p class="meta">${logs.length} item(s)</p>
+            <table>${head}${rows || `<tr><td colspan="7">No consumed logs to print.</td></tr>`}</table>`;
+    }
+
+    async function buildRequisitionListPrintBody() {
+        const { st, vesselId } = await vesselScope();
+        const m = modState(st);
+        const allReqs = await TVC_Inventory.listRequisitions(vesselId);
+        const reqs = filterReqList(allReqs, st);
+        const filterParts = [];
+        if (m.reqListSearch) filterParts.push(`Search: "${m.reqListSearch}"`);
+        if (m.reqListPeriodFrom || m.reqListPeriodTo) {
+            filterParts.push(`Period: ${m.reqListPeriodFrom || '…'} ~ ${m.reqListPeriodTo || '…'}`);
+        }
+        const head = `<tr>
+            <th>Requisition No.</th><th>Required From</th><th>Required To</th><th>Port of Delivery</th>
+            <th>Reported</th><th>Assessed</th><th>Received</th><th>Total Data</th>
+        </tr>`;
+        const rows = reqs.map(r => {
+            const reported = reqListReportedDate(r);
+            const received = reqListReceivedDate(r);
+            return `<tr>
+                <td>${esc(r.req_no || '—')}</td>
+                <td class="num">${reqListDateCell(r.deliver_date_from)}</td>
+                <td class="num">${reqListDateCell(r.deliver_date_to)}</td>
+                <td>${esc(r.deliver_port || '—')}</td>
+                <td class="num">${reqListDateCell(reported)}</td>
+                <td class="num">${reqListDateCell(r.assessed_on)}</td>
+                <td class="num">${reqListDateCell(received)}</td>
+                <td class="num">${reqListTotalData(r)}</td>
+            </tr>`;
+        }).join('');
+        const meta = await spareListPrintMeta('Requisition List');
+        return `${meta}
+            ${spareListPrintFilterNote(filterParts)}
+            <p class="meta">${reqs.length} item(s)</p>
+            <table>${head}${rows || `<tr><td colspan="8">No requisitions to print.</td></tr>`}</table>`;
+    }
+
     function clearReqListUiState(m) {
         m.reqListCheckedIds = {};
         m.selectedReqId = null;
@@ -2509,7 +2855,8 @@ const TVC_SpareMenu = (function () {
     async function reqListToggleAll(checked) {
         const m = modState(getState());
         const { vesselId } = await vesselScope();
-        const reqs = await TVC_Inventory.listRequisitions(vesselId);
+        const allReqs = await TVC_Inventory.listRequisitions(vesselId);
+        const reqs = filterReqList(allReqs, getState());
         if (checked) {
             const map = ensureReqListChecked(m);
             reqs.forEach(r => { map[r.id] = true; });
@@ -2539,12 +2886,12 @@ const TVC_SpareMenu = (function () {
 
     function buildReqListRowsHtml(reqs, mode = 'modal') {
         if (!reqs.length) {
-            return `<tr><td colspan="8" class="spare-req-list-empty">
+            return `<tr><td colspan="9" class="spare-req-list-empty">
                 <span class="spare-req-list-empty-icon" aria-hidden="true">🧾</span>
                 <p class="spare-req-list-empty-title">No requisitions yet</p>
                 <p class="spare-req-list-empty-sub muted">${mode === 'pick'
                     ? 'Save a requisition to see it here.'
-                    : 'Click <strong>New</strong> to create a requisition.'}</p>
+                    : 'Click <strong>New</strong> to create a requisition, or adjust Period / Search.'}</p>
             </td></tr>`;
         }
         const m = modState(getState());
@@ -2558,6 +2905,8 @@ const TVC_SpareMenu = (function () {
                 : `onclick="TVC_SpareMenu.reqListSelectRow('${rid}')"`;
             const toggleFn = mode === 'pick' ? 'reqListPickToggleRow' : 'reqListToggleRow';
             const port = String(r.deliver_port || '').trim();
+            const reported = reqListReportedDate(r);
+            const received = reqListReceivedDate(r);
             return `<tr class="${sel ? 'sr-req-sel' : ''}" ${rowClick}>
                 <td class="spare-req-list-chk" onclick="event.stopPropagation()">
                     <input type="checkbox" aria-label="Select requisition ${no}"
@@ -2567,8 +2916,9 @@ const TVC_SpareMenu = (function () {
                 <td class="spare-req-list-date"${cellTitleAttr(r.deliver_date_from)}>${reqListDateCell(r.deliver_date_from)}</td>
                 <td class="spare-req-list-date"${cellTitleAttr(r.deliver_date_to)}>${reqListDateCell(r.deliver_date_to)}</td>
                 <td class="spare-req-list-port"${cellTitleAttr(port)}>${esc(r.deliver_port || '—')}</td>
-                <td class="spare-req-list-date"${cellTitleAttr(r.made_on)}>${reqListDateCell(r.made_on)}</td>
-                <td class="spare-req-list-date"${cellTitleAttr(r.assessed_on)}>${reqListDateCell(r.assessed_on)}</td>
+                <td class="spare-req-list-date spare-req-list-reported"${cellTitleAttr(reported)}>${reqListDateCell(reported)}</td>
+                <td class="spare-req-list-date spare-req-list-assessed"${cellTitleAttr(r.assessed_on)}>${reqListDateCell(r.assessed_on)}</td>
+                <td class="spare-req-list-date spare-req-list-received"${cellTitleAttr(received)}>${reqListDateCell(received)}</td>
                 <td class="spare-req-list-total">${reqListTotalData(r)}</td>
             </tr>`;
         }).join('');
@@ -2605,27 +2955,49 @@ const TVC_SpareMenu = (function () {
         const { st, vesselId } = await vesselScope();
         const m = modState(st);
         const canRequisition = canCreateRequisition(st);
-        const reqs = await TVC_Inventory.listRequisitions(vesselId);
+        const allReqs = await TVC_Inventory.listRequisitions(vesselId);
+        const reqs = filterReqList(allReqs, st);
         const reqRows = buildReqListRowsHtml(reqs, 'modal');
-        const hint = m.selectedReqId
-            ? 'Selected — Modify, Preview, Print, or Delete.'
-            : 'Select a row to Modify, Preview, Print, or Delete.';
+        const selId = m.selectedReqId;
+        const selReq = selId ? allReqs.find(r => r.id === selId) : null;
+        const hasSel = !!selReq;
+        const canConfirm = reqListCanConfirm(st, selReq);
 
         body.innerHTML = `
-            <div class="spare-req-list-wrap">
-              <div class="spare-req-list-head">
+            <div class="spare-req-list-wrap spare-req-list-main">
+              <div class="spare-req-list-head spare-req-list-toolbar">
                 <h3 class="spare-req-work-title">Requisition List
-                  <span class="muted spare-req-list-count">${reqs.length} item(s)</span>
+                  <span class="muted spare-req-list-count">${reqs.length}${reqs.length !== allReqs.length ? ` / ${allReqs.length}` : ''} item(s)</span>
                 </h3>
                 <span class="spare-req-work-head-spacer"></span>
-                <button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.reqListNew()"${canRequisition ? '' : ' disabled'}>New</button>
-                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqListModify()"${canRequisition && m.selectedReqId ? '' : ' disabled'}>Modify</button>
-                <button type="button" class="btn btn-sm btn-red" onclick="TVC_SpareMenu.reqListDelete()"${canRequisition && m.selectedReqId ? '' : ' disabled'}>Delete</button>
+                ${spareListToolbarBtn('Detail Report', 'TVC_SpareMenu.reqListDetailReport()', !hasSel)}
+                ${spareListToolbarBtn('Report Confirm', 'TVC_SpareMenu.reqListReportConfirm()', !canConfirm, 'btn-green')}
                 <span class="orig-toolbar-sep" aria-hidden="true"></span>
-                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqListPreview()"${m.selectedReqId ? '' : ' disabled'}>Preview</button>
-                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqListPrint()"${m.selectedReqId ? '' : ' disabled'}>Print</button>
-                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeReqListModal()">Close</button>
+                ${spareListToolbarBtn('New', 'TVC_SpareMenu.reqListNew()', !canRequisition, 'btn-green')}
+                ${spareListToolbarBtn('Modify', 'TVC_SpareMenu.reqListModify()', !canRequisition || !hasSel)}
+                ${spareListToolbarBtn('Delete', 'TVC_SpareMenu.reqListDelete()', !canRequisition || !hasSel, 'btn-red')}
+                <span class="orig-toolbar-sep" aria-hidden="true"></span>
+                ${spareListToolbarBtn('Print', 'TVC_SpareMenu.reqListPrint()')}
+                ${spareListToolbarBtn('Preview', 'TVC_SpareMenu.reqListDocPreview()')}
+                ${spareListToolbarBtn('Close', 'TVC_SpareMenu.closeReqListModal()')}
                 <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReqListModal()" title="Close">×</button>
+              </div>
+              <div class="hist-toolbar hist-toolbar-filters filter-bar spare-list-search-bar spare-req-list-filters">
+                <div id="reqListPeriodFilter" class="act-period-filter" title="Filter by Reported Date">
+                    <span class="act-period-label">Period</span>
+                    <input type="date" id="reqListPeriodFrom" class="act-period-input" aria-label="Period from"
+                        value="${escAttr(m.reqListPeriodFrom || '')}" onchange="TVC_SpareMenu.reqListSetPeriod()">
+                    <span class="act-period-sep">~</span>
+                    <input type="date" id="reqListPeriodTo" class="act-period-input" aria-label="Period to"
+                        value="${escAttr(m.reqListPeriodTo || '')}" onchange="TVC_SpareMenu.reqListSetPeriod()">
+                    <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.reqListClearPeriod()">Clear</button>
+                </div>
+                <div class="search-field-wrap">
+                    <input class="search-input" id="reqListSearch" placeholder="Search REQ NO / PORT / STATUS…"
+                        value="${esc(m.reqListSearch || '')}" oninput="TVC_SpareMenu.reqListSetSearch(this.value)">
+                    <button type="button" class="search-clear-btn${m.reqListSearch ? '' : ' hidden'}" title="Clear search" aria-label="Clear search"
+                        onclick="TVC_SpareMenu.reqListClearSearch()">×</button>
+                </div>
               </div>
               <div class="spare-req-list-panel-wrap">
                 <div class="panel spare-req-list-panel">
@@ -2637,9 +3009,9 @@ const TVC_SpareMenu = (function () {
                   </div>
                 </div>
               </div>
-              <p class="spare-req-list-hint muted">${hint}</p>
             </div>`;
         updateReqListHeadCheckAll(reqs);
+        syncReqListFilterUi(st);
         requestAnimationFrame(syncReqListHeadPad);
     }
 
@@ -2669,6 +3041,96 @@ const TVC_SpareMenu = (function () {
         return String(log.ships_comments || '').trim();
     }
 
+    function consumeLogDateInPeriod(dateStr, from, to) {
+        if (!from && !to) return true;
+        const d = String(dateStr || '').slice(0, 10);
+        if (!d) return false;
+        if (from && d < from) return false;
+        if (to && d > to) return false;
+        return true;
+    }
+
+    function consumeLogStatusLabel(log) {
+        const s = spareListStatus(log);
+        return s || SPARE_LIST_STATUS.DRAFT;
+    }
+
+    function consumeLogStatusCell(log) {
+        const label = consumeLogStatusLabel(log);
+        const cls = label.replace(/\s+/g, '');
+        return `<span class="sr-status cl-st-${escAttr(cls)}">${esc(label)}</span>`;
+    }
+
+    function consumeLogMatchSearch(log, q) {
+        if (!q) return true;
+        const hay = [
+            log.job_code, log.sort1, log.sort2, log.job_detail,
+            log.made_on, log.made_by, consumeLogStatusLabel(log),
+            log.pms_group_no, consumeLogComments(log),
+        ].join(' ').toLowerCase();
+        return hay.includes(q);
+    }
+
+    function filterConsumeLogs(logs, st) {
+        const m = modState(st);
+        const from = m.consumeLogPeriodFrom || '';
+        const to = m.consumeLogPeriodTo || '';
+        const q = String(m.consumeLogSearch || '').trim().toLowerCase();
+        return (logs || []).filter(log =>
+            consumeLogDateInPeriod(log.made_on || log.consumed_date, from, to)
+            && consumeLogMatchSearch(log, q));
+    }
+
+    function consumeLogCanConfirm(st, log) {
+        if (!log) return false;
+        const user = spareInventoryUser(st);
+        return consumeLogStatusLabel(log) === SPARE_LIST_STATUS.REPORTED
+            && !!user && TVC_RBAC.canConfirmDepartment(user, log.department || st.department);
+    }
+
+    function syncConsumeLogFilterUi(st) {
+        const m = modState(st);
+        const fromEl = document.getElementById('consumeLogPeriodFrom');
+        const toEl = document.getElementById('consumeLogPeriodTo');
+        const searchEl = document.getElementById('consumeLogSearch');
+        const filterEl = document.getElementById('consumeLogPeriodFilter');
+        if (fromEl) fromEl.value = m.consumeLogPeriodFrom || '';
+        if (toEl) toEl.value = m.consumeLogPeriodTo || '';
+        if (searchEl) searchEl.value = m.consumeLogSearch || '';
+        if (filterEl) filterEl.classList.toggle('active', !!(m.consumeLogPeriodFrom || m.consumeLogPeriodTo));
+    }
+
+    function consumeLogSetPeriod() {
+        const st = getState();
+        const m = modState(st);
+        m.consumeLogPeriodFrom = document.getElementById('consumeLogPeriodFrom')?.value || '';
+        m.consumeLogPeriodTo = document.getElementById('consumeLogPeriodTo')?.value || '';
+        renderConsumeLogModal();
+    }
+
+    function consumeLogClearPeriod() {
+        const st = getState();
+        const m = modState(st);
+        m.consumeLogPeriodFrom = '';
+        m.consumeLogPeriodTo = '';
+        renderConsumeLogModal();
+    }
+
+    function consumeLogSetSearch(v) {
+        modState(getState()).consumeLogSearch = v;
+        clearTimeout(_consumeLogSearchT);
+        _consumeLogSearchT = setTimeout(() => renderConsumeLogModal(), 150);
+    }
+
+    function consumeLogClearSearch() {
+        modState(getState()).consumeLogSearch = '';
+        const el = document.getElementById('consumeLogSearch');
+        if (el) el.value = '';
+        renderConsumeLogModal();
+    }
+
+    let _consumeLogSearchT = null;
+
     function resolveConsumeDraftWorkReportId(draft, st) {
         if (!draft) return '';
         if (draft.work_report_id) return draft.work_report_id;
@@ -2693,6 +3155,11 @@ const TVC_SpareMenu = (function () {
             sort2: log.sort2 || '',
             job_detail: log.job_detail || '',
             ships_comments: log.ships_comments || '',
+            list_status: log.list_status || spareListStatus(log),
+            confirmed_by: log.confirmed_by || '',
+            confirmed_at: log.confirmed_at || '',
+            approved_by: log.approved_by || '',
+            approved_at: log.approved_at || '',
             lines: (log.lines || []).map(l => ({
                 spare_part_id: l.spare_part_id,
                 part_no: l.part_no || '',
@@ -2753,10 +3220,10 @@ const TVC_SpareMenu = (function () {
 
     function buildConsumeLogRowsHtml(logs) {
         if (!logs.length) {
-            return `<tr><td colspan="7" class="spare-req-list-empty">
+            return `<tr><td colspan="8" class="spare-req-list-empty">
                 <span class="spare-req-list-empty-icon" aria-hidden="true">📋</span>
                 <p class="spare-req-list-empty-title">No consumed logs yet</p>
-                <p class="spare-req-list-empty-sub muted">Save consumed parts from <strong>Input Consumed Parts / Qty</strong>.</p>
+                <p class="spare-req-list-empty-sub muted">Save consumed parts from <strong>Input Consumed Spare Parts</strong>, or adjust Period / Search.</p>
             </td></tr>`;
         }
         const m = modState(getState());
@@ -2764,9 +3231,11 @@ const TVC_SpareMenu = (function () {
             const lid = escAttr(log.id);
             const checked = consumeLogIsRowChecked(m, log.id);
             const sel = m.selectedConsumeLogId === log.id;
-            const pmsText = safeTreeLabel(log.pms_group_no || '');
             const jobText = String(log.job_code || '').trim();
-            const commentsText = consumeLogComments(log);
+            const sort1Text = String(log.sort1 || '').trim();
+            const sort2Text = String(log.sort2 || '').trim();
+            const detailText = String(log.job_detail || '').trim();
+            const reported = log.made_on || log.consumed_date || '';
             return `<tr class="spare-consume-log-row${sel ? ' sr-req-sel' : ''}" data-consume-log-id="${lid}"
                 onclick="TVC_SpareMenu.consumeLogSelectRow('${lid}')">
                 <td class="spare-consume-log-chk" onclick="event.stopPropagation()">
@@ -2774,14 +3243,19 @@ const TVC_SpareMenu = (function () {
                         onclick="event.stopPropagation()"
                         onchange="TVC_SpareMenu.consumeLogToggleRow('${lid}', this.checked)">
                 </td>
-                <td class="spare-consume-log-date"${cellTitleAttr(log.consumed_date)}>${consumeLogDateCell(log.consumed_date)}</td>
-                <td class="spare-consume-log-pms"${cellTitleAttr(pmsText)}>${esc(pmsText) || '—'}</td>
                 <td class="spare-consume-log-job"${cellTitleAttr(jobText)}>${esc(log.job_code || '—')}</td>
-                <td class="spare-consume-log-comments"${cellTitleAttr(commentsText)}>${esc(commentsText || '—')}</td>
-                <td class="spare-consume-log-made"${cellTitleAttr(log.made_on)}>${consumeLogDateCell(log.made_on)}</td>
+                <td class="spare-consume-log-sort"${cellTitleAttr(sort1Text)}>${esc(log.sort1 || '—')}</td>
+                <td class="spare-consume-log-sort"${cellTitleAttr(sort2Text)}>${esc(log.sort2 || '—')}</td>
+                <td class="spare-consume-log-detail"${cellTitleAttr(detailText)}>${esc(log.job_detail || '—')}</td>
+                <td class="spare-consume-log-reported"${cellTitleAttr(reported)}>${consumeLogDateCell(reported)}</td>
+                <td class="spare-consume-log-status">${consumeLogStatusCell(log)}</td>
                 <td class="spare-consume-log-total">${consumeLogTotalData(log)}</td>
             </tr>`;
         }).join('');
+    }
+
+    function consumeLogToolbarBtn(label, onclick, disabled = false, cls = '') {
+        return spareListToolbarBtn(label, onclick, disabled, cls);
     }
 
     async function renderConsumeLogModal() {
@@ -2790,40 +3264,63 @@ const TVC_SpareMenu = (function () {
         const { st, vesselId } = await vesselScope();
         const m = modState(st);
         const canConsume = canCreateConsume(st);
-        const logs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const logs = filterConsumeLogs(allLogs, st);
         const rows = buildConsumeLogRowsHtml(logs);
-        const hint = m.selectedConsumeLogId
-            ? 'Selected — Preview, Print, or Delete.'
-            : 'Select a row to Preview, Print, or Delete.';
+        const selId = m.selectedConsumeLogId;
+        const selLog = selId ? allLogs.find(l => l.id === selId) : null;
+        const hasSel = !!selLog;
+        const canConfirm = consumeLogCanConfirm(st, selLog);
 
         body.innerHTML = `
             <div class="spare-req-list-wrap spare-consume-log-wrap">
-              <div class="spare-req-list-head">
+              <div class="spare-req-list-head spare-consume-log-toolbar">
                 <h3 class="spare-req-work-title">Consumed Log
-                  <span class="muted spare-req-list-count">${logs.length} item(s)</span>
+                  <span class="muted spare-req-list-count">${logs.length}${logs.length !== allLogs.length ? ` / ${allLogs.length}` : ''} item(s)</span>
                 </h3>
                 <span class="spare-req-work-head-spacer"></span>
-                <button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.consumeLogNew()"${canConsume ? '' : ' disabled'}>New</button>
-                <button type="button" class="btn btn-sm btn-red" onclick="TVC_SpareMenu.consumeLogDelete()"${canConsume && m.selectedConsumeLogId ? '' : ' disabled'}>Delete</button>
+                ${consumeLogToolbarBtn('Detail Report', 'TVC_SpareMenu.consumeLogDetailReport()', !hasSel)}
+                ${consumeLogToolbarBtn('Report Confirm', 'TVC_SpareMenu.consumeLogReportConfirm()', !canConfirm, 'btn-green')}
                 <span class="orig-toolbar-sep" aria-hidden="true"></span>
-                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumeLogPreview()"${m.selectedConsumeLogId ? '' : ' disabled'}>Preview</button>
-                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumeLogPrint()"${m.selectedConsumeLogId ? '' : ' disabled'}>Print</button>
-                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeConsumeLogModal()">Close</button>
+                ${consumeLogToolbarBtn('New', 'TVC_SpareMenu.consumeLogNew()', !canConsume, 'btn-green')}
+                ${consumeLogToolbarBtn('Modify', 'TVC_SpareMenu.consumeLogModify()', !canConsume || !hasSel)}
+                ${consumeLogToolbarBtn('Delete', 'TVC_SpareMenu.consumeLogDelete()', !canConsume || !hasSel, 'btn-red')}
+                <span class="orig-toolbar-sep" aria-hidden="true"></span>
+                ${consumeLogToolbarBtn('Print', 'TVC_SpareMenu.consumeLogPrint()')}
+                ${consumeLogToolbarBtn('Preview', 'TVC_SpareMenu.consumeLogDocPreview()')}
+                ${consumeLogToolbarBtn('Close', 'TVC_SpareMenu.closeConsumeLogModal()')}
                 <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeConsumeLogModal()" title="Close">×</button>
+              </div>
+              <div class="hist-toolbar hist-toolbar-filters filter-bar spare-list-search-bar spare-consume-log-filters">
+                <div id="consumeLogPeriodFilter" class="act-period-filter" title="Filter by Reported Date">
+                    <span class="act-period-label">Period</span>
+                    <input type="date" id="consumeLogPeriodFrom" class="act-period-input" aria-label="Period from"
+                        value="${escAttr(m.consumeLogPeriodFrom || '')}" onchange="TVC_SpareMenu.consumeLogSetPeriod()">
+                    <span class="act-period-sep">~</span>
+                    <input type="date" id="consumeLogPeriodTo" class="act-period-input" aria-label="Period to"
+                        value="${escAttr(m.consumeLogPeriodTo || '')}" onchange="TVC_SpareMenu.consumeLogSetPeriod()">
+                    <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.consumeLogClearPeriod()">Clear</button>
+                </div>
+                <div class="search-field-wrap">
+                    <input class="search-input" id="consumeLogSearch" placeholder="Search JOB CODE / SORT / DETAIL / STATUS…"
+                        value="${esc(m.consumeLogSearch || '')}" oninput="TVC_SpareMenu.consumeLogSetSearch(this.value)">
+                    <button type="button" class="search-clear-btn${m.consumeLogSearch ? '' : ' hidden'}" title="Clear search" aria-label="Clear search"
+                        onclick="TVC_SpareMenu.consumeLogClearSearch()">×</button>
+                </div>
               </div>
               <div class="spare-req-list-panel-wrap">
                 <div class="panel spare-req-list-panel spare-consume-log-panel">
                   <div class="spare-req-list-head-wrap" id="spareConsumeLogHead">
-                    <table class="spare-data-table spare-req-list-table spare-consume-log-table spare-req-list-head-table">${CONSUME_LOG_COLGROUP}${consumeLogTableHeadHtml()}</table>
+                    <table class="spare-data-table spare-req-list-table spare-consume-log-table spare-req-list-head-table spare-consume-log-head-table">${CONSUME_LOG_COLGROUP}${consumeLogTableHeadHtml()}</table>
                   </div>
                   <div class="spare-req-list-scroll" id="spareConsumeLogScroll">
-                    <table class="spare-data-table spare-req-list-table spare-consume-log-table spare-req-list-body-table">${CONSUME_LOG_COLGROUP}<tbody>${rows}</tbody></table>
+                    <table class="spare-data-table spare-req-list-table spare-consume-log-table spare-req-list-body-table spare-consume-log-body-table">${CONSUME_LOG_COLGROUP}<tbody>${rows}</tbody></table>
                   </div>
                 </div>
               </div>
-              <p class="spare-req-list-hint muted">${hint}</p>
             </div>`;
         updateConsumeLogHeadCheckAll(logs);
+        syncConsumeLogFilterUi(st);
         requestAnimationFrame(syncConsumeLogHeadPad);
     }
 
@@ -2866,7 +3363,8 @@ const TVC_SpareMenu = (function () {
     async function consumeLogToggleAll(checked) {
         const m = modState(getState());
         const { vesselId } = await vesselScope();
-        const logs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const logs = filterConsumeLogs(allLogs, getState());
         if (checked) {
             const map = ensureConsumeLogChecked(m);
             logs.forEach(l => { map[l.id] = true; });
@@ -2876,6 +3374,33 @@ const TVC_SpareMenu = (function () {
             m.selectedConsumeLogId = null;
         }
         await renderConsumeLogModal();
+    }
+
+    async function consumeLogReportConfirm() {
+        const st = getState();
+        const id = modState(st).selectedConsumeLogId;
+        if (!id) return alert('Select a consumption log.');
+        const log = await TVC_Inventory.getConsumeLog(id);
+        if (!log) return alert('Consumption log not found.');
+        if (!consumeLogCanConfirm(st, log)) {
+            return alert('Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
+        }
+        const user = spareInventoryUser(st);
+        log.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(log.department || st.department) || TVC_RBAC.getRankLabel(user);
+        log.confirmed_at = new Date().toISOString();
+        log.list_status = SPARE_LIST_STATUS.CONFIRMED;
+        await TVC_Inventory.saveConsumeLog(log);
+        await renderConsumeLogModal();
+        alert('Report confirmed.');
+    }
+
+    async function consumeLogDetailReport() {
+        return consumeLogPreview();
+    }
+
+    async function consumeLogDocPreview() {
+        const body = await buildConsumedLogListPrintBody();
+        openSpareListPrintWindow('Consumed Log', body, true);
     }
 
     async function consumeLogNew() {
@@ -2996,17 +3521,8 @@ const TVC_SpareMenu = (function () {
     }
 
     async function consumeLogPrint() {
-        const id = modState(getState()).selectedConsumeLogId;
-        if (!id) return alert('Select a consumption log.');
-        const html = await buildConsumeLogPrintDocument(id);
-        if (!html) return alert('Consumption log not found.');
-        const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return; }
-        w.document.write(`<!DOCTYPE html><html><head><title>Consumed Parts Log</title>
-            <style>${reqPreviewPrintStyles()}</style></head><body>${html}</body></html>`);
-        w.document.close();
-        w.focus();
-        w.print();
+        const body = await buildConsumedLogListPrintBody();
+        openSpareListPrintWindow('Consumed Log', body, false);
     }
 
     function buildConsumeLogPreviewPagesHtml(st, log, vesselName) {
@@ -3159,7 +3675,7 @@ const TVC_SpareMenu = (function () {
         const hasItems = _cachedList.length > 0;
         const countEl = document.getElementById('spareCount');
         if (countEl) countEl.textContent = `${_cachedList.length} / ${allCanon.length}`;
-        if (!document.getElementById('spareListScroll') && !modState(st).reqWorkOpen && !modState(st).consumeOpen && !modState(st).wrSpareOpen) {
+        if (!document.getElementById('spareListScroll') && !modState(st).reqWorkOpen && !modState(st).consumeOpen && !modState(st).receiveOpen && !modState(st).wrSpareOpen) {
             renderSpareFilterDashboard();
             return;
         }
@@ -3171,6 +3687,7 @@ const TVC_SpareMenu = (function () {
         renderSpareFilterDashboard();
         if (modState(st).reqWorkOpen) refreshReqWorkListUi();
         if (modState(st).consumeOpen) refreshConsumeListUi();
+        if (modState(st).receiveOpen) refreshReceiveListUi();
         if (modState(st).wrSpareOpen) refreshWrSpareListUi();
         requestAnimationFrame(syncSpareHeadLayout);
     }
@@ -3338,10 +3855,11 @@ const TVC_SpareMenu = (function () {
 
     function reqPreviewItemCells(spare, line) {
         const s = spare;
+        const pipe = s ? sparePipelineCols(s) : null;
         const std = s ? Number(spareStandardQty(s)) || 0 : (Number(line.standard_stock) || 0);
         const stock = s ? TVC_Inventory.currentStock(s) : (Number(line.qty_on_hand) || 0);
-        const onOrder = s ? (Number(canon(s).on_order ?? s.on_order ?? 0) || 0) : (Number(line.on_order) || 0);
-        const required = Math.max(0, std - stock - onOrder);
+        const awaiting = pipe ? pipe.awaiting : (Number(line.on_order) || 0);
+        const needVal = pipe ? pipe.need : Math.max(0, std - stock - awaiting);
         const request = Number(line.qty_requested) || 0;
         return {
             code: s ? spareNumbering(s) : (line.part_no || '—'),
@@ -3352,8 +3870,8 @@ const TVC_SpareMenu = (function () {
             working: s ? spareWorking(s) : '',
             std: String(std),
             stock: String(stock),
-            onOrder: String(onOrder),
-            required: String(required),
+            awaiting: String(awaiting),
+            need: needVal == null ? '—' : String(needVal),
             request: String(request),
         };
     }
@@ -3381,8 +3899,8 @@ const TVC_SpareMenu = (function () {
                     <td class="rpv-n">${esc(c.working)}</td>
                     <td class="rpv-n">${esc(c.std)}</td>
                     <td class="rpv-n">${esc(c.stock)}</td>
-                    <td class="rpv-n">${esc(c.onOrder)}</td>
-                    <td class="rpv-n">${esc(c.required)}</td>
+                    <td class="rpv-n">${esc(c.awaiting)}</td>
+                    <td class="rpv-n">${esc(c.need)}</td>
                     <td class="rpv-n rpv-req">${esc(c.request)}</td>
                 </tr>`;
             }).join('');
@@ -3392,7 +3910,7 @@ const TVC_SpareMenu = (function () {
                     <tbody>
                         <tr><th>Vessel Name</th><td>${esc(vesselName)}</td><th>Requisition No.</th><td>${esc(req.req_no || '—')}</td></tr>
                         <tr><th>Required Date</th><td>${dateRange}</td><th>Port of Delivery</th><td>${esc(req.deliver_port || '—')}</td></tr>
-                        <tr><th>Made on</th><td>${madeCell}</td><th>Assessed on</th><td>${assessedCell}</td></tr>
+                        <tr><th>Requested Date</th><td>${madeCell}</td><th>Assessed Date</th><td>${assessedCell}</td></tr>
                         <tr><th>Priority</th><td>${priority}</td><th>Page</th><td>${i + 1} / ${total}</td></tr>
                     </tbody>
                 </table>
@@ -3407,7 +3925,7 @@ const TVC_SpareMenu = (function () {
                 <table class="req-preview-items">
                     <thead><tr>
                         <th>Code</th><th>Class</th><th>Item</th><th>Part No.<br>(Code No.)</th><th>Unit</th>
-                        <th>Working</th><th>Standard</th><th>Stock</th><th>On Order</th><th>Required</th><th>Request</th>
+                        <th>Working</th><th>Standard</th><th>Stock</th><th>Awaiting</th><th>Need</th><th>Request</th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -3464,7 +3982,7 @@ const TVC_SpareMenu = (function () {
         return `
             <h2 style="text-align:center;color:#003366;margin:0 0 12px">${esc(vesselName)} — Parts Requisition</h2>
             <p><strong>Requisition No:</strong> ${esc(req.req_no)} · <strong>Status:</strong> ${esc(req.status)}</p>
-            <p><strong>Priority:</strong> ${esc(req.priority || 'ROUTINE')} · <strong>Made on:</strong> ${esc(req.made_on || '—')} · <strong>by:</strong> ${esc(req.made_by || req.creator_name || '—')}</p>
+            <p><strong>Priority:</strong> ${esc(req.priority || 'ROUTINE')} · <strong>Requested Date:</strong> ${esc(req.made_on || '—')} · <strong>by:</strong> ${esc(req.made_by || req.creator_name || '—')}</p>
             ${req.remarks ? `<p><strong>Remarks:</strong> ${esc(req.remarks)}</p>` : ''}
             <table><thead><tr><th>Part No</th><th>Name</th><th>Qty</th><th>Price</th></tr></thead>
             <tbody>${lineRows}</tbody></table>`;
@@ -3490,12 +4008,36 @@ const TVC_SpareMenu = (function () {
         await startReqWorkPreviewSession(id);
     }
 
-    async function reqListPrint() {
-        const id = modState(getState()).selectedReqId;
+    async function reqListDetailReport() {
+        return reqListPreview();
+    }
+
+    async function reqListDocPreview() {
+        const body = await buildRequisitionListPrintBody();
+        openSpareListPrintWindow('Requisition List', body, true);
+    }
+
+    async function reqListReportConfirm() {
+        const st = getState();
+        const id = modState(st).selectedReqId;
         if (!id) return alert('Select a requisition.');
-        const html = await buildReqPrintDocument(id);
-        if (!html) return alert('Requisition not found.');
-        openReqPrintWindow(html, { print: true });
+        const req = await TVC_Inventory.getRequisition(id);
+        if (!req) return alert('Requisition not found.');
+        if (!reqListCanConfirm(st, req)) {
+            return alert('Only Reported requisitions can be confirmed, and you need Chief Engineer / Captain permission.');
+        }
+        const user = spareInventoryUser(st);
+        req.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(req.department || st.department) || TVC_RBAC.getRankLabel(user);
+        req.confirmed_at = new Date().toISOString();
+        req.list_status = SPARE_LIST_STATUS.CONFIRMED;
+        await TVC_Inventory.saveRequisition(req);
+        await renderReqListModal();
+        alert('Report confirmed.');
+    }
+
+    async function reqListPrint() {
+        const body = await buildRequisitionListPrintBody();
+        openSpareListPrintWindow('Requisition List', body, false);
     }
 
     function focusSpareRow(id) {
@@ -4348,16 +4890,51 @@ const TVC_SpareMenu = (function () {
     }
 
     // ── SPARE workflow menu (4 columns) ────────────────────────────────
-    function renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport }) {
+    function renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport, canModify, user }) {
         const item = (label, onclick, enabled = true, primary = false) =>
             enabled
                 ? `<button type="button" class="spare-flow-item${primary ? ' primary' : ''}" onclick="${onclick}">${esc(label)}</button>`
                 : `<button type="button" class="spare-flow-item" disabled title="No permission">${esc(label)}</button>`;
-        const col = (tone, title, buttons) => `
+        const col = (tone, title, buttons, longHead = false) => `
           <section class="spare-flow-col tone-${tone}">
-            <header class="spare-flow-head">${esc(title)}</header>
+            <header class="spare-flow-head${longHead ? ' spare-flow-head-long' : ''}">${esc(title)}</header>
             <div class="spare-flow-items">${buttons}</div>
           </section>`;
+
+        const isStation = user && typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user);
+        if (isStation) {
+            const f = TVC_Space.getUiFeatures(user);
+            const canStationExport = !!f.showStationExport;
+            const canStationImport = !!f.showImportShip;
+            const hasAssessment = !!_hqAssessment;
+            return `
+        <nav class="spare-flow-panel" aria-label="SPARE workflow">
+          ${col('consume', 'Consumed', [
+                item('View Consumed Log', 'TVC_SpareMenu.viewConsumedLog()', canConsume),
+                item('Input Consumed Spare Parts', 'TVC_SpareMenu.openConsumeModal()', canConsume, true),
+            ].join(''))}
+          ${col('req', 'Requisition / Received', [
+                item('View Requisition List', 'TVC_SpareMenu.viewRequisitionList()', canRequisition),
+                item('Make New Requisition', 'TVC_SpareMenu.openNewRequisition()', canRequisition),
+                item('Data Export (to Master)', "TVC_App.menuAction('stationExport')", canStationExport),
+                item('Data Import (from Master)', "TVC_App.menuAction('import')", canStationImport),
+                item('Check Company\'s Assessment', 'TVC_SpareMenu.openAssessmentModal()', canHqImport && hasAssessment),
+                item('Input Received Spare Parts', 'TVC_SpareMenu.openDeliverModal()', canDeliver, true),
+                item('Data Export (to Master)', 'TVC_SpareMenu.exportRequisitionData()', canRequisition),
+            ].join(''), true)}
+          ${col('monthly', 'Monthly Report', [
+                item('Update Spare Parts Inventory', 'TVC_SpareMenu.triggerInventoryImport()', canModify),
+                item('Data Export (to Master)', "TVC_App.menuAction('stationExport')", canStationExport),
+                item('Data Import (from Master)', "TVC_App.menuAction('import')", canStationImport),
+            ].join(''))}
+          ${col('necessary', 'If Necessary', [
+                item('Data Backup', "TVC_App.menuAction('backup')", true),
+                item('Data Restore', "TVC_App.menuAction('import')", canStationImport),
+                item('View Data History', "TVC_App.switchTab('history')", true),
+            ].join(''))}
+        </nav>`;
+        }
+
         return `
         <nav class="spare-flow-panel" aria-label="SPARE workflow">
           ${col('consume', 'Consumed', [
@@ -4540,6 +5117,129 @@ const TVC_SpareMenu = (function () {
         req.made_by = reqWorkMadeByForDept(st.department);
     }
 
+    const SPARE_LIST_STATUS = { DRAFT: 'Draft', REPORTED: 'Reported', CONFIRMED: 'Confirmed', APPROVED: 'Approved' };
+
+    function spareRecordDepartment(record, st) {
+        return record?.department || st?.department || '';
+    }
+
+    function spareListStatus(record) {
+        if (!record) return SPARE_LIST_STATUS.DRAFT;
+        if (record.list_status) return record.list_status;
+        if (record.approved_by || record.approved_at) return SPARE_LIST_STATUS.APPROVED;
+        if (record.confirmed_by || record.confirmed_at) return SPARE_LIST_STATUS.CONFIRMED;
+        if (record.log_id || (record.id && record.req_no)) return SPARE_LIST_STATUS.REPORTED;
+        return SPARE_LIST_STATUS.DRAFT;
+    }
+
+    function spareApprovalState(record, department) {
+        const st = getState();
+        const user = spareInventoryUser(st);
+        const dept = department || spareRecordDepartment(record, st);
+        const status = spareListStatus(record);
+        const isConfirmed = status === SPARE_LIST_STATUS.CONFIRMED || status === SPARE_LIST_STATUS.APPROVED
+            || !!(record?.confirmed_by || record?.confirmed_at);
+        const isApproved = status === SPARE_LIST_STATUS.APPROVED || !!(record?.approved_by || record?.approved_at);
+        const hasKey = !!(record?.log_id || record?.id);
+        const canConfirmNow = hasKey && status === SPARE_LIST_STATUS.REPORTED && !isConfirmed && !isApproved
+            && !!user && TVC_RBAC.canConfirmDepartment(user, dept);
+        const canApproveNow = hasKey && (status === SPARE_LIST_STATUS.CONFIRMED || isConfirmed) && !isApproved
+            && !!user && TVC_RBAC.canApproveHqReport(user);
+        return {
+            isConfirmed,
+            isApproved,
+            canConfirmNow,
+            canApproveNow,
+            confirmedByVal: isConfirmed
+                ? (TVC_RBAC.getDepartmentConfirmLabel(dept) || record?.confirmed_by || '')
+                : '',
+            approvedByVal: isApproved ? 'Company' : '',
+        };
+    }
+
+    function renderSpareApprovalHtml(opts = {}) {
+        const {
+            prefix = 'spare',
+            canApproveNow = false,
+            canConfirmNow = false,
+            isRepApproved = false,
+            isRepConfirmed = false,
+            approvedByVal = '',
+            confirmedByVal = '',
+        } = opts;
+        return `<section class="wr-maint-card wr-maint-approval" aria-label="Approval">
+            <div class="wr-maint-approval-item${canConfirmNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="${prefix}ConfirmedBy"${isRepConfirmed ? ' checked' : ''}${canConfirmNow ? '' : ' disabled'}> Confirmed by</label>
+                <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
+            </div>
+            <div class="wr-maint-approval-item${canApproveNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="${prefix}ApprovedBy"${isRepApproved ? ' checked' : ''}${canApproveNow ? '' : ' disabled'}> Approved by</label>
+                <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
+            </div>
+        </section>`;
+    }
+
+    function renderSpareApprovalSection(record, { prefix, department } = {}) {
+        const approval = spareApprovalState(record, department);
+        return renderSpareApprovalHtml({
+            prefix,
+            canApproveNow: approval.canApproveNow,
+            canConfirmNow: approval.canConfirmNow,
+            isRepApproved: approval.isApproved,
+            isRepConfirmed: approval.isConfirmed,
+            approvedByVal: approval.approvedByVal,
+            confirmedByVal: approval.confirmedByVal,
+        });
+    }
+
+    function applySpareApprovalFromUi(record, prefix, department) {
+        const st = getState();
+        const user = spareInventoryUser(st);
+        if (!user || !record) return false;
+        const dept = department || spareRecordDepartment(record, st);
+        const cfCb = document.getElementById(`${prefix}ConfirmedBy`);
+        const apCb = document.getElementById(`${prefix}ApprovedBy`);
+        const now = new Date().toISOString();
+        let changed = false;
+        if (cfCb?.checked && !cfCb.disabled && TVC_RBAC.canConfirmDepartment(user, dept)) {
+            if (!record.confirmed_by && !record.confirmed_at) {
+                record.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(dept) || TVC_RBAC.getRankLabel(user);
+                record.confirmed_at = now;
+                record.list_status = SPARE_LIST_STATUS.CONFIRMED;
+                changed = true;
+            }
+        }
+        if (apCb?.checked && !apCb.disabled && TVC_RBAC.canApproveHqReport(user)) {
+            if (!record.approved_by && !record.approved_at) {
+                record.approved_by = 'Company';
+                record.approved_at = now;
+                record.list_status = SPARE_LIST_STATUS.APPROVED;
+                changed = true;
+            }
+        }
+        return changed;
+    }
+
+    async function tryApplySpareApprovalOnClose(kind, record, department) {
+        if (!record) return false;
+        const key = kind === 'consume' ? record.log_id : record.id;
+        if (!key) return false;
+        const before = spareListStatus(record);
+        if (!applySpareApprovalFromUi(record, kind === 'consume' ? 'consume' : 'reqWork', department)) return false;
+        const after = spareListStatus(record);
+        if (after === before) return false;
+        if (kind === 'consume') {
+            const { st, user, vesselId } = await vesselScope();
+            captureConsumeMeta();
+            await persistConsumeLogFromDraft(record, { st, user, vesselId });
+        } else {
+            await TVC_Inventory.saveRequisition(record);
+        }
+        if (after === SPARE_LIST_STATUS.CONFIRMED) alert('Confirmed.');
+        else if (after === SPARE_LIST_STATUS.APPROVED) alert('Approved by Company.');
+        return true;
+    }
+
     function captureReqWorkMeta() {
         const req = _reqWorkDraft;
         if (!req) return;
@@ -4575,6 +5275,7 @@ const TVC_SpareMenu = (function () {
                             <button type="button" id="reqWorkHistBtn" class="btn btn-sm spare-req-hist-btn" onclick="TVC_SpareMenu.toggleReqWorkHistList()">Requisition List</button>
                             <div id="reqWorkHistPanel" class="spare-req-hist-popover hidden" aria-hidden="true"></div>`;
         return `<section class="spare-req-work-meta" aria-label="Requisition information">
+            ${renderSpareApprovalSection(req, { prefix: 'reqWork', department: req.department || opts.department })}
             <div class="spare-req-meta-grid">
                 <div class="spare-req-meta-col spare-req-meta-col-left">
                     ${vesselRow}
@@ -4609,7 +5310,7 @@ const TVC_SpareMenu = (function () {
                         </div>
                     </div>
                     <div class="spare-req-meta-row spare-req-meta-row-audit">
-                        <span class="spare-req-meta-label">Made on</span>
+                        <span class="spare-req-meta-label">Requested Date</span>
                         <div class="spare-req-meta-field spare-req-meta-audit">
                             <input type="date" id="reqWorkMadeOn" class="spare-req-meta-input spare-req-meta-date" value="${esc(req.made_on || '')}" onchange="TVC_SpareMenu.captureReqWorkMeta()">
                             <span class="spare-req-meta-by">by</span>
@@ -4617,7 +5318,7 @@ const TVC_SpareMenu = (function () {
                         </div>
                     </div>
                     <div class="spare-req-meta-row spare-req-meta-row-audit">
-                        <span class="spare-req-meta-label">Assessed on</span>
+                        <span class="spare-req-meta-label">Assessed Date</span>
                         <div class="spare-req-meta-field spare-req-meta-audit">
                             <input type="date" id="reqWorkAssessedOn" class="spare-req-meta-input spare-req-meta-date" value="${esc(req.assessed_on || '')}" onchange="TVC_SpareMenu.captureReqWorkMeta()">
                             <span class="spare-req-meta-by">by</span>
@@ -4841,7 +5542,7 @@ const TVC_SpareMenu = (function () {
             ${headButtons}
           </div>
           <div class="spare-req-work-scroll">
-          ${renderReqWorkMetaHtml(req, { preview, vesselName: previewVesselName })}
+          ${renderReqWorkMetaHtml(req, { preview, vesselName: previewVesselName, department: st.department })}
           ${modifyHint}
           <div class="plan-layout spare-layout spare-req-work-layout${preview ? ' is-preview' : ''}">
             ${treeAside}
@@ -4876,6 +5577,7 @@ const TVC_SpareMenu = (function () {
             const scroll = body.querySelector('.spare-req-work-scroll');
             if (scroll) {
                 scroll.querySelectorAll('input, select, textarea, button').forEach(el => {
+                    if (el.id === 'reqWorkConfirmedBy' || el.id === 'reqWorkApprovedBy') return;
                     el.setAttribute('disabled', 'disabled');
                 });
                 scroll.classList.add('is-req-locked');
@@ -4987,8 +5689,12 @@ const TVC_SpareMenu = (function () {
         showSpicsModal('spareReqWorkModal');
     }
 
-    function closeReqWorkModal() {
+    async function closeReqWorkModal() {
         const st = getState();
+        const req = _reqWorkDraft;
+        if (req?.id) {
+            await tryApplySpareApprovalOnClose('requisition', req, req.department || st.department);
+        }
         const m = modState(st);
         m.reqWorkOpen = false;
         m.reqWorkFocusedId = null;
@@ -5036,6 +5742,7 @@ const TVC_SpareMenu = (function () {
 
         // 확인 시 Made on = 오늘, by = 부서별 직책(Captain / Chief Engineer)
         applyReqWorkCompleteMeta(st, _reqWorkDraft);
+        _reqWorkDraft.list_status = SPARE_LIST_STATUS.REPORTED;
 
         await TVC_Inventory.saveRequisition(_reqWorkDraft);
         const savedNo = _reqWorkDraft.req_no;
@@ -5269,7 +5976,9 @@ const TVC_SpareMenu = (function () {
         if (gLabel) filterParts.push(`Group: ${gLabel}`);
         const filterNote = filterParts.length
             ? `<p class="meta">${filterParts.map(p => esc(p)).join(' · ')}</p>` : '';
-        const rows = list.map(s => `<tr>
+        const rows = list.map(s => {
+            const pipe = sparePipelineCols(s);
+            return `<tr>
             <td>${esc(spareNumbering(s))}</td>
             <td>${esc(spareClass(s))}</td>
             <td>${esc(s.name || '')}</td>
@@ -5277,16 +5986,19 @@ const TVC_SpareMenu = (function () {
             <td>${esc(spareUnit(s))}</td>
             <td>${esc(String(spareWorking(s) || ''))}</td>
             <td>${esc(String(spareStandardQty(s)))}</td>
-            <td>${esc(String(TVC_Inventory.currentStock(s)))}</td>
-        </tr>`).join('');
+            <td>${esc(String(pipe.stock))}</td>
+            <td>${esc(String(pipe.awaiting))}</td>
+            <td>${pipe.need == null ? '—' : esc(String(pipe.need))}</td>
+        </tr>`;
+        }).join('');
         return `<h1>SPARE Parts List</h1>
             <p class="meta">${esc(ship)} · ${esc(dept)} · ${new Date().toLocaleString()}</p>
             ${filterNote}
             <p class="meta">${list.length} part${list.length === 1 ? '' : 's'}</p>
             <table><tr>
                 <th>Code</th><th>Class</th><th>Item</th><th>Part No.</th>
-                <th>Unit</th><th>Working</th><th>Standard</th><th>Stock</th>
-            </tr>${rows || '<tr><td colspan="8">No parts to print.</td></tr>'}</table>`;
+                <th>Unit</th><th>Working</th><th>Standard</th><th>Stock</th><th>Awaiting</th><th>Need</th>
+            </tr>${rows || '<tr><td colspan="10">No parts to print.</td></tr>'}</table>`;
     }
 
     function exportPartsList() {
@@ -5327,6 +6039,11 @@ const TVC_SpareMenu = (function () {
             consumed_date: today,
             made_on: today,
             made_by: user?.display_name || '',
+            list_status: SPARE_LIST_STATUS.DRAFT,
+            confirmed_by: '',
+            confirmed_at: '',
+            approved_by: '',
+            approved_at: '',
             spare_group_key: '',
             spare_group_label: '',
             job_code: '',
@@ -5731,6 +6448,7 @@ const TVC_SpareMenu = (function () {
                     </div>
                     <input type="hidden" id="consumeJobCode" value="${escAttr(draft.job_code || '')}">`;
         return `<section class="spare-consume-meta-form${ro ? ' wr-spare-meta-form' : ''}" aria-label="Consumed parts information">
+            ${renderSpareApprovalSection(draft, { prefix: 'consume', department: opts.department })}
             <div class="spare-consume-meta-row-top">
                 <div class="spare-consume-meta-field spare-consume-meta-field-date">
                     <label class="spare-consume-meta-inline-label" for="consumeDate">Consumed Date</label>
@@ -6570,7 +7288,7 @@ ${renderWrSpareMetaHtml(meta)}
             ${headActions}
           </div>
           <div class="spare-req-work-scroll">
-          ${renderConsumeMetaHtml(draft, { readonly: isPreview })}
+          ${renderConsumeMetaHtml(draft, { readonly: isPreview, department: st.department })}
           <div class="${layoutCls}">
             ${treePanel}
             <main class="panel spare-main">
@@ -6693,8 +7411,13 @@ ${renderWrSpareMetaHtml(meta)}
         showSpicsModal('spareConsumeModal');
     }
 
-    function closeConsumeModal() {
+    async function closeConsumeModal() {
         const st = getState();
+        const draft = getConsumeSession();
+        if (draft?.log_id) {
+            captureConsumeMeta();
+            await tryApplySpareApprovalOnClose('consume', draft, st.department);
+        }
         const m = modState(st);
         const returnToList = _consumeListReturnAfterSave;
         const selectId = m.consumeLastSavedLogId || m.selectedConsumeLogId || null;
@@ -6729,6 +7452,10 @@ ${renderWrSpareMetaHtml(meta)}
                 qty: Number(l.qty_consumed) || 0,
             }));
         const shipsComments = String(draft.ships_comments || '').trim();
+        const curStatus = spareListStatus(draft);
+        const nextStatus = (curStatus === SPARE_LIST_STATUS.CONFIRMED || curStatus === SPARE_LIST_STATUS.APPROVED)
+            ? curStatus
+            : SPARE_LIST_STATUS.REPORTED;
         return TVC_Inventory.saveConsumeLog({
             id: draft.log_id || undefined,
             vessel_id: vesselId,
@@ -6743,6 +7470,11 @@ ${renderWrSpareMetaHtml(meta)}
             sort1: draft.sort1 || '',
             sort2: draft.sort2 || '',
             job_detail: draft.job_detail || '',
+            list_status: draft.list_status || nextStatus,
+            confirmed_by: draft.confirmed_by || '',
+            confirmed_at: draft.confirmed_at || '',
+            approved_by: draft.approved_by || '',
+            approved_at: draft.approved_at || '',
             lines: logLines,
             line_count: logLines.length,
             operator_id: user?.id || user?.username || '',
@@ -6815,10 +7547,15 @@ ${renderWrSpareMetaHtml(meta)}
 
         if (draft.log_id) {
             const saved = await persistConsumeLogFromDraft(draft, { st, user, vesselId });
+            draft.log_id = saved.id;
+            draft.list_status = spareListStatus(draft);
+            if (applySpareApprovalFromUi(draft, 'consume', st.department)) {
+                await persistConsumeLogFromDraft(draft, { st, user, vesselId });
+            }
             m.consumeLastSavedLogId = saved.id;
             alert(`Consumption log updated — ${lines.length} line(s).`);
             if (_consumeListReturnAfterSave) {
-                closeConsumeModal();
+                await closeConsumeModal();
             } else {
                 await renderConsumeModal();
             }
@@ -6839,9 +7576,14 @@ ${renderWrSpareMetaHtml(meta)}
         try {
             const res = await TVC_InventoryService.recordConsumption(user, lines, { ref, note });
             const saved = await persistConsumeLogFromDraft(draft, { st, user, vesselId });
+            draft.log_id = saved.id;
+            draft.list_status = SPARE_LIST_STATUS.REPORTED;
             m.consumeLastSavedLogId = saved.id;
             m.selectedConsumeLogId = saved.id;
-            closeConsumeModal();
+            if (applySpareApprovalFromUi(draft, 'consume', st.department)) {
+                await persistConsumeLogFromDraft(draft, { st, user, vesselId });
+            }
+            await closeConsumeModal();
             await refresh();
             await render();
             alert(`CONSUMPTION recorded — ${res.count} item(s)`);
@@ -6849,9 +7591,14 @@ ${renderWrSpareMetaHtml(meta)}
             if (e.code === 'STOCK' && confirm(e.message + '\n\nProceed anyway?')) {
                 const res = await TVC_InventoryService.recordConsumption(user, lines, { ref, note, forceOk: true });
                 const saved = await persistConsumeLogFromDraft(draft, { st, user, vesselId });
+                draft.log_id = saved.id;
+                draft.list_status = SPARE_LIST_STATUS.REPORTED;
                 m.consumeLastSavedLogId = saved.id;
                 m.selectedConsumeLogId = saved.id;
-                closeConsumeModal();
+                if (applySpareApprovalFromUi(draft, 'consume', st.department)) {
+                    await persistConsumeLogFromDraft(draft, { st, user, vesselId });
+                }
+                await closeConsumeModal();
                 await refresh();
                 await render();
                 alert(`CONSUMPTION — ${res.count} item(s)`);
@@ -6861,8 +7608,415 @@ ${renderWrSpareMetaHtml(meta)}
 
     function resetTxDraft(type) { _txDraft = { type, lines: [], search: '', ref: '', note: '' }; }
 
+    // ── Received Spare Parts (Consumed Parts 스타일) ───────────────────
+    function newReceiveDraft(st, user) {
+        const today = new Date().toISOString().slice(0, 10);
+        return {
+            received_date: today,
+            made_on: today,
+            made_by: user?.display_name || '',
+            ships_comments: '',
+            ref: '',
+            lines: [],
+        };
+    }
+
+    function buildReceiveLine(spare, qty) {
+        const c = canon(spare);
+        return {
+            spare_part_id: c.id || spare.id,
+            part_no: spareNumbering(c) || spare.part_no || '',
+            name: c.name || spare.name || '',
+            qty_received: Math.max(0, Math.floor(Number(qty) || 0)),
+        };
+    }
+
+    function captureReceiveMeta() {
+        const draft = getReceiveSession();
+        if (!draft) return;
+        const g = (id) => document.getElementById(id)?.value ?? '';
+        draft.received_date = g('receiveDate');
+        draft.ships_comments = g('receiveShipComments');
+        draft.ref = g('receiveRef');
+    }
+
+    function renderReceiveMetaHtml(draft) {
+        return `<section class="spare-req-meta spare-receive-meta" aria-label="Received meta">
+            <div class="spare-req-meta-grid spare-receive-meta-grid">
+                <div class="spare-req-meta-col">
+                    <span class="spare-req-meta-label">Received Date</span>
+                    <input type="date" id="receiveDate" class="spare-req-meta-input spare-req-meta-date" value="${esc(draft.received_date || '')}" onchange="TVC_SpareMenu.captureReceiveMeta()">
+                </div>
+                <div class="spare-req-meta-col">
+                    <span class="spare-req-meta-label">Recorded by</span>
+                    <input type="text" class="spare-req-meta-input" value="${esc(draft.made_by || '')}" readonly disabled>
+                </div>
+                <div class="spare-req-meta-col spare-req-meta-col-wide">
+                    <span class="spare-req-meta-label">Ref / Delivery Note</span>
+                    <input type="text" id="receiveRef" class="spare-req-meta-input" value="${esc(draft.ref || '')}" placeholder="Optional" onchange="TVC_SpareMenu.captureReceiveMeta()">
+                </div>
+            </div>
+            <div class="spare-consume-meta-comments">
+                <label class="spare-consume-meta-col-head" for="receiveShipComments">Ship's Comments</label>
+                <textarea id="receiveShipComments" class="spare-req-meta-input spare-consume-meta-textarea" rows="2"
+                    placeholder="Remarks for this receipt…" oninput="TVC_SpareMenu.captureReceiveMeta()">${esc(draft.ships_comments || '')}</textarea>
+            </div>
+        </section>`;
+    }
+
+    function renderReceiveGroupTree() {
+        const st = getState();
+        const root = document.getElementById('receiveGroupTree');
+        if (!root) return;
+        if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
+            st.idx = TVC_Indexes.build(st);
+        }
+        if (!st.idx) {
+            root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…</div>';
+            return;
+        }
+        const q = (st.treeSearch || '').toLowerCase();
+        const matchNode = (n) => !q || (n.label || '').toLowerCase().includes(q) || (n.department || '').toLowerCase().includes(q);
+        const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
+        const byDept = new Map();
+        (st.idx.groupNodes || [])
+            .filter(n => {
+                if (isHiddenSpareGroup(n.label, n.department)) return false;
+                if (st.department && n.department !== st.department) return false;
+                if (matchNode(n)) return true;
+                return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
+            })
+            .forEach(n => {
+                if (!byDept.has(n.department)) byDept.set(n.department, []);
+                byDept.get(n.department).push(n);
+            });
+        const allSelected = !st.selectedGroupKey;
+        let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_SpareMenu.receiveSelectGroup(null)"><span>📋 All Groups</span></div>`;
+        if (matchCritical) {
+            const critSel = st.selectedGroupKey === CRITICAL_GROUP_KEY ? ' selected' : '';
+            html += `<div class="tree-node tree-node-critical${critSel}" onclick="TVC_SpareMenu.receiveSelectGroup('${CRITICAL_GROUP_KEY}')"><span>⚠ Critical Equipment</span></div>`;
+        }
+        DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
+            const nodes = byDept.get(dept);
+            html += `<div class="tree-dept">${esc(dept)}</div>`;
+            mergeSpareTreeNodes(nodes).forEach(n => {
+                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="No job items">0</span>` : '';
+                const sel = st.selectedGroupKey === n.key ? ' selected' : '';
+                html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_SpareMenu.receiveSelectGroup('${escAttr(n.key)}')"><span>${esc(safeTreeLabel(n.label))}</span>${emptyTag}</div>`;
+            });
+        });
+        root.innerHTML = html;
+        const searchEl = document.getElementById('receiveTreeSearch');
+        if (searchEl && document.activeElement !== searchEl) searchEl.value = st.treeSearch || '';
+    }
+
+    function syncReceiveHeadLayout() {
+        syncHeadLayout('receiveListScroll', 'receiveListHead', 'receiveListHeadTrack', SPARE_RECEIVE_MIN_WIDTH);
+    }
+
+    function updateReceiveHeadCheckAll() {
+        const el = document.getElementById('receiveHeadChkAll');
+        if (!el) return;
+        const list = _receiveCachedList || [];
+        if (!list.length) {
+            el.checked = false;
+            el.indeterminate = false;
+            return;
+        }
+        let n = 0;
+        list.forEach(s => { if (receiveRowChecked(s)) n++; });
+        el.checked = n === list.length;
+        el.indeterminate = n > 0 && n < list.length;
+    }
+
+    function mountReceiveVirtualList() {
+        const head = document.getElementById('receiveListHead');
+        if (head) {
+            head.innerHTML = `<div id="receiveListHeadTrack" class="spare-head-track"><table class="spare-data-table spare-data-head spare-data-table-receive">
+                ${SPARE_RECEIVE_COLGROUP}
+                ${SPARE_RECEIVE_TABLE_HEAD}
+            </table></div>`;
+        }
+        const scroll = document.getElementById('receiveListScroll');
+        if (!scroll) return;
+        const hscroll = scroll.closest('.spare-req-table-hscroll');
+        const scrollTop = scroll.scrollTop;
+        const hScrollLeft = hscroll?.scrollLeft || 0;
+        if (vlReceive) vlReceive.destroy();
+        if (!_receiveCachedList.length) {
+            scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">No parts to display.</div>`;
+            vlReceive = null;
+            return;
+        }
+        const m = modState(getState());
+        vlReceive = TVC_VirtualList.mount(scroll, {
+            getCount: () => _receiveCachedList.length,
+            renderRow: (i) => {
+                const s = _receiveCachedList[i];
+                return s ? rowHtml(s, m.receiveFocusedId, null, 'receive') : '';
+            },
+            overflowX: 'hidden',
+            overflowY: 'auto',
+        });
+        const inner = scroll.querySelector('.vl-inner');
+        if (inner) {
+            inner.style.minWidth = `${SPARE_RECEIVE_MIN_WIDTH}px`;
+            inner.style.width = '100%';
+        }
+        scroll.scrollTop = scrollTop;
+        if (hscroll) hscroll.scrollLeft = hScrollLeft;
+        if (vlReceive) vlReceive.refresh();
+        if (head) bindHeadLayoutSync(scroll, syncReceiveHeadLayout, 'receive');
+        updateReceiveHeadCheckAll();
+    }
+
+    function refreshReceiveListUi() {
+        const st = getState();
+        const m = modState(st);
+        const allCanon = (st.spares || []).map(canon);
+        _receiveCachedList = filteredReceiveSpares(st);
+        renderReceiveGroupTree();
+        mountReceiveVirtualList();
+        const countEl = document.getElementById('receiveCount');
+        if (countEl) {
+            countEl.textContent = m.receiveShowSelectedOnly
+                ? receiveSelectedCountLabel(st, _receiveCachedList.length)
+                : `${_receiveCachedList.length} / ${allCanon.length}`;
+        }
+        updateReceiveSelectedBtn();
+        const linesEl = document.querySelector('.spare-receive-lines');
+        if (linesEl && _receiveDraft) linesEl.textContent = `${(_receiveDraft.lines || []).length} line(s)`;
+    }
+
+    function updateReceiveSelectedBtn() {
+        const st = getState();
+        const meta = receiveSelectedBtnMeta(st);
+        const btn = document.getElementById('receiveSelectedBtn');
+        if (!btn) return;
+        btn.textContent = meta.label;
+        btn.title = meta.title;
+        btn.disabled = meta.disabled;
+        btn.classList.toggle('plan-selected-filter-active', meta.active);
+        btn.setAttribute('aria-pressed', meta.active ? 'true' : 'false');
+    }
+
+    async function renderReceiveModal() {
+        const body = document.getElementById('spareReceiveBody');
+        if (!body) return;
+        const st = getState();
+        const m = modState(st);
+        const draft = getReceiveSession();
+        if (!draft) return;
+        const lineCount = (draft.lines || []).length;
+        const selBtn = receiveSelectedBtnMeta(st);
+        const selectedBtnCls = selBtn.active ? ' plan-selected-filter-active' : '';
+        body.innerHTML = `
+        <div class="spare-req-work-wrap">
+          <div class="spare-req-work-head">
+            <h3 class="spare-req-work-title">Received Spare Parts
+              <span class="muted spare-receive-lines">${lineCount} line(s)</span></h3>
+            <span class="spare-req-work-head-spacer"></span>
+            <button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.saveReceive()">Save</button>
+            <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeReceiveModal()">Close</button>
+            <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReceiveModal()" title="Close">×</button>
+          </div>
+          <div class="spare-req-work-scroll">
+          ${renderReceiveMetaHtml(draft)}
+          <div class="plan-layout spare-layout spare-req-work-layout spare-receive-work-layout">
+            <aside class="panel tree-panel">
+              <div class="panel-head">🌳 SPARE GROUP Tree</div>
+              <div class="tree-search-bar">
+                <input class="search-input" id="receiveTreeSearch" placeholder="Search GROUP…"
+                    value="${esc(st.treeSearch || '')}" oninput="TVC_SpareMenu.receiveSetTreeSearch(this.value)">
+              </div>
+              <div class="panel-body tree-scroll" id="receiveGroupTree"></div>
+            </aside>
+            <main class="panel spare-main">
+              <div class="filter-bar orig-toolbar spare-item-toolbar">
+                <button type="button" id="receiveSelectedBtn" class="btn btn-sm spare-req-selected-btn${selectedBtnCls}"
+                    onclick="TVC_SpareMenu.receiveToggleSelectedOnly()" aria-pressed="${selBtn.active ? 'true' : 'false'}"
+                    title="${escAttr(selBtn.title)}"${selBtn.disabled ? ' disabled' : ''}>${esc(selBtn.label)}</button>
+                <span style="flex:1"></span>
+              </div>
+              <div class="filter-bar spare-list-search-bar">
+                <input type="text" class="search-input spare-list-search-input" id="receiveSearch" placeholder="Search Code / Item / Part No / Working"
+                    value="${esc(st.spareSearch || '')}" oninput="TVC_SpareMenu.receiveSetSearch(this.value)">
+                <span class="count-label" id="receiveCount">0</span>
+              </div>
+              <div class="panel spare-list-panel">
+                <div class="spare-req-table-hscroll">
+                  <div class="spare-req-table-wide">
+                    <div id="receiveListHead" class="vl-head-wrap sheet-scroll-original"></div>
+                    <div id="receiveListScroll" class="virtual-scroll sheet-scroll-original spare-vl-scroll"></div>
+                  </div>
+                </div>
+              </div>
+            </main>
+          </div>
+          </div>
+        </div>`;
+        refreshReceiveListUi();
+        requestAnimationFrame(() => {
+            syncReceiveHeadLayout();
+            requestAnimationFrame(syncReceiveHeadLayout);
+        });
+    }
+
+    async function startReceiveSession() {
+        const { st } = await vesselScope();
+        const user = spareInventoryUser(st);
+        if (!user || !canCreateDeliver(st)) {
+            return alert('No permission to record received parts.');
+        }
+        _receiveDraft = newReceiveDraft(st, user);
+        syncReceiveLineMap();
+        const m = modState(st);
+        m.receiveOpen = true;
+        m.receiveFocusedId = null;
+        m.receiveShowSelectedOnly = false;
+        st.spareSearch = '';
+        st.treeSearch = '';
+        st.selectedGroupKey = null;
+        await renderReceiveModal();
+        showSpicsModal('spareReceiveModal');
+    }
+
+    function closeReceiveModal() {
+        const st = getState();
+        const m = modState(st);
+        m.receiveOpen = false;
+        m.receiveFocusedId = null;
+        m.receiveShowSelectedOnly = false;
+        _receiveDraft = null;
+        _receiveLineBySpareId = null;
+        _receiveCachedList = [];
+        if (vlReceive) { vlReceive.destroy(); vlReceive = null; }
+        if (_receiveResizeObs) { _receiveResizeObs.disconnect(); _receiveResizeObs = null; }
+        closeSpicsModal('spareReceiveModal');
+        if (st.currentTab === 'spare') render();
+    }
+
+    function receiveToggleSelectedOnly() {
+        const st = getState();
+        const m = modState(st);
+        if (m.receiveShowSelectedOnly) m.receiveShowSelectedOnly = false;
+        else {
+            if (!receiveCheckedSpareCount(st)) return alert('No parts selected.');
+            m.receiveShowSelectedOnly = true;
+        }
+        refreshReceiveListUi();
+    }
+
+    function receiveSelectGroup(key) {
+        getState().selectedGroupKey = key || null;
+        modState(getState()).receiveFocusedId = null;
+        refreshReceiveListUi();
+    }
+
+    function receiveSetTreeSearch(v) {
+        getState().treeSearch = v;
+        renderReceiveGroupTree();
+    }
+
+    function receiveSetSearch(v) { setSearch(v); }
+
+    function receiveFocusRow(spareId) {
+        setFocusedSpareId(getState(), spareId || null);
+        if (vlReceive) { vlReceive.refresh(); updateReceiveHeadCheckAll(); }
+    }
+
+    function receiveToggleAll(checked) {
+        const draft = getReceiveSession();
+        if (!draft) return;
+        captureReceiveMeta();
+        if (checked) {
+            (_receiveCachedList || []).forEach(s => {
+                if (!receiveRowChecked(s)) {
+                    draft.lines.push(buildReceiveLine(s, 0));
+                }
+            });
+        } else {
+            const visibleIds = new Set((_receiveCachedList || []).map(s => receiveSpareIdKey(s.id)));
+            draft.lines = (draft.lines || []).filter(l => !visibleIds.has(receiveSpareIdKey(l.spare_part_id)));
+        }
+        syncReceiveLineMap();
+        refreshReceiveListUi();
+    }
+
+    function receiveToggleRow(spareId, checked) {
+        const draft = getReceiveSession();
+        if (!draft) return;
+        const sid = receiveSpareIdKey(spareId);
+        captureReceiveMeta();
+        draft.lines = draft.lines || [];
+        const spare = (getState().spares || []).find(s => receiveSameSpareId(s.id, sid));
+        if (checked) {
+            let line = draft.lines.find(l => receiveSameSpareId(l.spare_part_id, sid));
+            if (!line && spare) {
+                line = buildReceiveLine(spare, 0);
+                draft.lines.push(line);
+            }
+        } else {
+            draft.lines = draft.lines.filter(l => !receiveSameSpareId(l.spare_part_id, sid));
+        }
+        syncReceiveLineMap();
+        if (modState(getState()).receiveShowSelectedOnly && !receiveCheckedSpareCount(getState())) {
+            modState(getState()).receiveShowSelectedOnly = false;
+        }
+        refreshReceiveListUi();
+    }
+
+    function receiveSetQty(spareId, rawQty) {
+        const draft = getReceiveSession();
+        if (!draft) return;
+        const sid = receiveSpareIdKey(spareId);
+        captureReceiveMeta();
+        const qty = Math.max(0, Math.floor(Number(rawQty) || 0));
+        draft.lines = draft.lines || [];
+        let line = draft.lines.find(l => receiveSameSpareId(l.spare_part_id, sid));
+        const spare = (getState().spares || []).find(s => receiveSameSpareId(s.id, sid));
+        if (!line && spare) {
+            line = buildReceiveLine(spare, qty);
+            draft.lines.push(line);
+        } else if (line) {
+            line.qty_received = qty;
+        }
+        syncReceiveLineMap();
+        refreshReceiveListUi();
+    }
+
+    async function saveReceive() {
+        captureReceiveMeta();
+        const { st } = await vesselScope();
+        const user = spareInventoryUser(st);
+        if (!user) return alert('Login required.');
+        const draft = getReceiveSession();
+        if (!draft) return;
+        const lines = (draft.lines || [])
+            .filter(l => receiveSpareIdKey(l.spare_part_id) && (Number(l.qty_received) || 0) > 0)
+            .map(l => ({ spare_part_id: l.spare_part_id, qty: Number(l.qty_received), note: draft.ships_comments || '' }));
+        if (!lines.length) return alert('Select parts and enter Received quantity.');
+        const noteParts = [
+            draft.received_date ? `Received: ${draft.received_date}` : '',
+            draft.ref ? `Ref: ${draft.ref}` : '',
+            draft.ships_comments ? `Comments: ${draft.ships_comments}` : '',
+        ].filter(Boolean);
+        try {
+            const res = await TVC_InventoryService.recordDelivery(user, lines, {
+                ref: draft.ref || '',
+                note: noteParts.join(' · '),
+            });
+            closeReceiveModal();
+            await refresh();
+            await render();
+            alert(`RECEIVED — ${res.count} item(s)`);
+        } catch (e) {
+            alert(e.message || e.code || 'Save failed');
+        }
+    }
+
     function openConsumeModal() { startConsumeSession(); }
-    function openDeliverModal() { resetTxDraft(TVC_INVENTORY_TX.DELIVERY); renderTxModal(); showSpicsModal('spareTxModal'); }
+    function openDeliverModal() { startReceiveSession(); }
     function closeTxModal() { closeSpicsModal('spareTxModal'); resetTxDraft(null); }
 
     function captureTxDraftFromDom() {
@@ -7213,6 +8367,9 @@ ${renderWrSpareMetaHtml(meta)}
             deliver_date_from: today, deliver_date_to: deliverTo, deliver_port: '',
             made_on: '', made_by: '',
             assessed_on: '', assessed_by: '',
+            list_status: SPARE_LIST_STATUS.DRAFT,
+            confirmed_by: '', confirmed_at: '',
+            approved_by: '', approved_at: '',
         };
     }
 
@@ -7408,8 +8565,10 @@ ${renderWrSpareMetaHtml(meta)}
             const crit = (l.is_critical || c?.isCritical) ? '<span class="req-crit" title="Critical">*</span>' : '';
             const std = l.standard_stock ?? TVC_Inventory.standardStock(c || l);
             const rob = l.qty_on_hand ?? (spare ? TVC_Inventory.currentStock(spare) : 0);
-            const onOrder = l.on_order ?? 0;
-            const required = l.qty_required ?? Math.max(0, (Number(std) || 0) - rob - onOrder);
+            const pipe = c ? sparePipelineCols(c) : null;
+            const awaiting = l.on_order ?? (pipe?.awaiting ?? 0);
+            const needVal = l.qty_required ?? (pipe?.need != null ? pipe.need : Math.max(0, (Number(std) || 0) - rob - awaiting));
+            const needDisplay = needVal == null ? '—' : needVal;
             const selected = i === selIdx ? ' selected' : '';
             return `<tr class="req-line-row${selected}" onclick="TVC_SpareMenu.reqSheetSelectLine(${i})">
                 <td class="req-col-icon">${crit}</td>
@@ -7420,10 +8579,10 @@ ${renderWrSpareMetaHtml(meta)}
                 <td class="req-col-icon">${crit}</td>
                 <td style="text-align:center">${std}</td>
                 <td style="text-align:center">${rob}</td>
-                <td style="text-align:center">${onOrder}</td>
-                <td style="text-align:center">${required}</td>
+                <td style="text-align:center">${awaiting}</td>
+                <td style="text-align:center">${needDisplay}</td>
                 <td style="text-align:center"><input type="number" min="0" step="1" class="req-order-qty"
-                    data-req-line="${i}" data-req-field="order" value="${l.qty_requested ?? required}"
+                    data-req-line="${i}" data-req-field="order" value="${l.qty_requested ?? (needVal ?? '')}"
                     onclick="event.stopPropagation()"></td>
                 <td><button type="button" class="btn btn-sm btn-red" onclick="event.stopPropagation();TVC_SpareMenu.reqSheetRemoveLine(${i})">×</button></td>
             </tr>`;
@@ -7478,9 +8637,9 @@ ${renderWrSpareMetaHtml(meta)}
                     <label>Delivered Port<input type="text" id="reqDelPort" value="${esc(req.deliver_port || '')}"></label>
                 </div>
                 <div class="req-form-row req-form-track">
-                    <label>Made on<input type="date" id="reqMadeOn" value="${esc(req.made_on || '')}"></label>
+                    <label>Requested Date<input type="date" id="reqMadeOn" value="${esc(req.made_on || '')}"></label>
                     <label>by<input type="text" id="reqMadeBy" value="${esc(req.made_by || '')}"></label>
-                    <label>Assessed on<input type="date" id="reqAssessedOn" value="${esc(req.assessed_on || '')}"></label>
+                    <label>Assessed Date<input type="date" id="reqAssessedOn" value="${esc(req.assessed_on || '')}"></label>
                     <label>by<input type="text" id="reqAssessedBy" value="${esc(req.assessed_by || '')}"></label>
                 </div>
             </div>
@@ -7507,7 +8666,7 @@ ${renderWrSpareMetaHtml(meta)}
                 <table class="req-sheet-table req-sheet-parts">
                     <thead><tr>
                         <th></th><th>Code</th><th></th><th>Equipment</th><th>Parts</th><th></th>
-                        <th>Standard</th><th>Spare R.O.B.</th><th>On Order</th><th>Required</th><th>Order</th><th></th>
+                        <th>Standard</th><th>Spare R.O.B.</th><th>Awaiting</th><th>Need</th><th>Order</th><th></th>
                     </tr></thead>
                     <tbody>${lineRows}</tbody>
                 </table>
@@ -7576,7 +8735,9 @@ ${renderWrSpareMetaHtml(meta)}
         append, startInlineAppend, edit, cancelEdit, cancelInlineEdit, saveEdit, saveInlineEdit, startInlineEdit, pickEditGroup, toggleEditGroupPick, pickSpareClass, toggleSpareClassPick,
         startGroupHeaderEdit, saveGroupHeaderEdit, cancelGroupHeaderEdit, savePlanCriticalEquipment,
         loadBundledXls, loadSpareInventory, ensureInventoryLoaded,
-        openConsumeModal, openDeliverModal, closeTxModal, saveTx, closeConsumeModal, saveConsume, captureConsumeMeta,
+        openConsumeModal, openDeliverModal, closeReceiveModal, saveReceive, closeTxModal, saveTx, closeConsumeModal, saveConsume, captureConsumeMeta,
+        receiveSelectGroup, receiveSetTreeSearch, receiveSetSearch, receiveToggleSelectedOnly,
+        receiveFocusRow, receiveToggleRow, receiveToggleAll, receiveSetQty, captureReceiveMeta,
         syncConsumeLogFromWorkReport,
         toggleConsumeGroupPick, consumeGroupPickSearch, pickConsumeMetaGroup,
         toggleConsumeJobPick, consumeJobPickSearch, pickConsumeMetaJob,
@@ -7593,8 +8754,10 @@ ${renderWrSpareMetaHtml(meta)}
         onTxSearchInput, addTxLine, removeTxLine,
         openHqImportModal, onHqImportFile, openAssessmentModal, closeAssessmentModal, applyHqAssessment,
         openHistoryModal, closeHistoryModal,
-        openReqListModal, closeReqListModal, reqListNew, reqListModify, reqListDelete, reqListPreview, reqListPrint,
+        openReqListModal, closeReqListModal, reqListNew, reqListModify, reqListDelete,
+        reqListPreview, reqListDetailReport, reqListReportConfirm, reqListDocPreview, reqListPrint,
         reqListSelectRow, reqListToggleRow, reqListToggleAll, reqListPickRow, reqListPickToggleRow,
+        reqListSetPeriod, reqListClearPeriod, reqListSetSearch, reqListClearSearch,
         openReqSheetModal, closeReqSheetModal, saveReqSheetModal,
         reqSheetSelectReq, reqSheetNew, reqSheetFillLowStock, reqSheetAddSpare,
         reqSheetRemoveLine, reqSheetSelectLine, reqSheetSetStep, reqSheetComplete,
@@ -7603,9 +8766,10 @@ ${renderWrSpareMetaHtml(meta)}
         viewRequisitionList, openNewRequisition,
         viewConsumedLog, openConsumeLogModal, closeConsumeLogModal,
         consumeLogNew, consumeLogModify, consumePreviewModify, consumePreviewOpenWorkReport, cleanupConsumeWorkReportOverlay,
-        consumeLogDelete, consumeLogPreview, consumeLogPrint,
+        consumeLogDelete, consumeLogPreview, consumeLogDetailReport, consumeLogReportConfirm, consumeLogDocPreview, consumeLogPrint,
         consumeLogPrintPreview, consumeLogOpenList,
         consumeLogSelectRow, consumeLogToggleRow, consumeLogToggleAll,
+        consumeLogSetPeriod, consumeLogClearPeriod, consumeLogSetSearch, consumeLogClearSearch,
         closeReqWorkModal, reqWorkComplete, reqWorkSave, reqWorkOpenList, reqWorkPrintPreview, reqWorkAddSpare, addToRequisition, reqWorkAddChecked, captureReqWorkMeta,
         toggleReqWorkHistList, reqWorkPickReqNo,
         reqWorkSetRequestQty,
