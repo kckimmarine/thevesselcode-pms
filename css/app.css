@@ -1908,7 +1908,13 @@ input[type="date"]:not(.tvc-date-empty) {
 #rhRevertBtn:disabled { opacity: .45; cursor: not-allowed; }
 
 /* Menu — Outstanding Tasks dashboard */
-.outstanding-tasks-host { padding: 0 20px 24px; }
+.menu-main-col .outstanding-tasks-host {
+    padding: 0 20px 0;
+    min-width: 0;
+}
+.menu-main-col .outstanding-tasks-panel {
+    margin-bottom: 4px;
+}
 .outstanding-tasks-panel {
     background: #fff;
     border: 1px solid #e2e8f0;
