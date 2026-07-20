@@ -11,6 +11,12 @@ const TVC_MaintenancePlan = (function () {
         TVC_RBAC.assertModifyOriginalPlan(user);
     }
 
+    function assertCanEditGroup(user) {
+        if (TVC_RBAC.canModifyOriginalPlan(user)) return;
+        if (TVC_RBAC.canModifySpareInventory(user)) return;
+        TVC_RBAC.assertModifyOriginalPlan(user);
+    }
+
     function assertDept(user, job) {
         if (user.department && job.department && user.department !== job.department) {
             throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
@@ -144,7 +150,7 @@ const TVC_MaintenancePlan = (function () {
 
     /** Original Plan GROUP Tree — 신규 그룹 추가 (작업 없이 트리에만 표시) */
     async function createGroup(user, department, label) {
-        assertCanEdit(user);
+        assertCanEditGroup(user);
         const dept = String(department || '').trim();
         const lab = String(label || '').trim();
         if (!dept) throw Object.assign(new Error('DEPARTMENT_REQUIRED'), { code: 'INVALID' });
@@ -215,5 +221,46 @@ const TVC_MaintenancePlan = (function () {
         return { updated, newKey };
     }
 
-    return { updateJob, createJob, deleteJob, createGroup, renameGroup, recalcOverdue, groupKeyOf };
+    /** Original Plan / SPARE GROUP Tree — 빈 그룹 삭제 (작업·부품 없을 때만) */
+    async function deleteGroup(user, department, label) {
+        assertCanEditGroup(user);
+        const dept = String(department || '').trim();
+        const lab = String(label || '').trim();
+        if (!dept || !lab) throw Object.assign(new Error('GROUP_REQUIRED'), { code: 'INVALID' });
+
+        const allJobs = await TVC_DB.getAll('maintenance_jobs');
+        const jobsInGroup = allJobs.filter(j => j.department === dept && String(j.group || '').trim() === lab);
+        if (jobsInGroup.length) {
+            throw Object.assign(new Error('GROUP_HAS_JOBS'), { code: 'HAS_JOBS', count: jobsInGroup.length });
+        }
+
+        const spares = await TVC_DB.getAll('spare_parts');
+        const sparesInGroup = spares.filter(s => {
+            const cat = String(s.category || s.department || '').trim();
+            if (cat && cat !== dept) return false;
+            return String(s.group || '').trim() === lab;
+        });
+        if (sparesInGroup.length) {
+            throw Object.assign(new Error('GROUP_HAS_SPARES'), { code: 'HAS_SPARES', count: sparesInGroup.length });
+        }
+
+        const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+        let removed = 0;
+        for (const g of defs) {
+            if (g.department === dept && String(g.label || '').trim() === lab) {
+                await TVC_DB.del('maintenance_groups', g.id);
+                removed++;
+            }
+        }
+
+        const key = groupKeyOf(dept, lab);
+        if (typeof TVC_PMS.deleteGroupKey === 'function') {
+            TVC_PMS.deleteGroupKey(key);
+        }
+
+        await logAudit(`🗑 [ORIG/GROUP-] ${dept} · ${lab} — ${user.display_name}`);
+        return { removed, key };
+    }
+
+    return { updateJob, createJob, deleteJob, createGroup, renameGroup, deleteGroup, recalcOverdue, groupKeyOf };
 })();

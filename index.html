@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260719-ot-width">
+    <link rel="stylesheet" href="css/app.css?v=20260720-xfer-wizard">
 </head>
 <body>
 
@@ -241,9 +241,17 @@
                 <aside class="panel tree-panel">
                     <div class="panel-head spare-tree-head">
                         <span>🌳 PMS GROUP Tree</span>
-                        <button type="button" id="actPlanTreeModifyBtn" class="btn spare-tree-modify-btn hidden"
-                            onclick="TVC_SpareMenu.startGroupHeaderEdit()"
-                            title="Edit equipment info (Maker/Model/Capacity/Serial No.) for the selected group" aria-label="Modify">✏️</button>
+                        <span class="spare-tree-actions">
+                            <button type="button" id="actPlanTreeModifyBtn" class="spare-tree-action-btn hidden"
+                                onclick="TVC_SpareMenu.startGroupHeaderEdit()"
+                                title="Modify group equipment info" aria-label="Modify">✏️</button>
+                            <button type="button" id="actPlanTreeAppendBtn" class="spare-tree-action-btn hidden"
+                                onclick="TVC_App.openOrigGroupAdd()"
+                                title="Add group" aria-label="Append">➕</button>
+                            <button type="button" id="actPlanTreeDeleteBtn" class="spare-tree-action-btn hidden"
+                                onclick="TVC_App.deleteOrigGroup()"
+                                title="Delete empty group" aria-label="Delete">🗑</button>
+                        </span>
                     </div>
                     <div class="tree-search-bar">
                         <div class="search-field-wrap">
@@ -378,6 +386,7 @@
 
     <input type="file" id="importZip" accept=".zip" hidden onchange="TVC_App.handleImport(this.files[0]);this.value=''">
     <input type="file" id="importStation" accept=".zip,.json,.csv" hidden onchange="TVC_App.handleHubImport(this.files[0]);this.value=''">
+    <input type="file" id="menuXferImportFile" accept=".zip,.json,.csv" hidden onchange="TVC_App.onMenuXferImportFile(this.files[0]);this.value=''">
     <input type="file" id="importDefectUrgent" accept=".zip" hidden onchange="TVC_App.handleDefectImport(this.files[0]);this.value=''">
 </div>
 
@@ -405,7 +414,7 @@
     </div>
 </div>
 <div id="workReportModal" class="modal hidden spare-req-work-modal-wrap">
-    <div class="modal-box wr-modal spare-req-work-modal"><button class="modal-x" onclick="TVC_App.closeWorkReport()">×</button>
+    <div class="modal-box wr-modal spare-req-work-modal"><button class="modal-x" onclick="TVC_App.requestCloseWorkReport()">×</button>
         <div id="workReportBody"></div>
     </div>
 </div>
@@ -439,6 +448,15 @@
 </div>
 <div id="spareHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeHistoryModal()">
     <div class="modal-box wide"><div id="spareHistoryBody"></div></div>
+</div>
+<div id="spareSyncModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeSpareSyncMenu()">
+    <div class="modal-box spare-sync-modal" onclick="event.stopPropagation()"><div id="spareSyncBody"></div></div>
+</div>
+<div id="menuXferModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeMenuXferMenu()">
+    <div class="modal-box spare-sync-modal" onclick="event.stopPropagation()"><div id="menuXferBody"></div></div>
+</div>
+<div id="menuHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeMenuHistoryModal()">
+    <div class="modal-box wide" onclick="event.stopPropagation()"><div id="menuHistoryBody"></div></div>
 </div>
 <div id="spareReqListModal" class="modal hidden spare-req-list-modal-wrap">
     <div class="modal-box spare-req-list-modal" onclick="event.stopPropagation()"><div id="spareReqListBody"></div></div>
@@ -505,6 +523,16 @@
     </div>
 </div>
 
+<div id="wrCancelConfirmModal" class="modal hidden df-cancel-confirm-modal" onclick="if(event.target===this)TVC_App.dismissWrCancelConfirm()">
+    <div class="modal-box df-cancel-confirm-box" onclick="event.stopPropagation()">
+        <p class="df-cancel-confirm-msg">Cancel report editing?</p>
+        <div class="modal-actions df-cancel-confirm-actions">
+            <button type="button" class="btn btn-green" onclick="TVC_App.confirmCancelWorkReport(true)">YES</button>
+            <button type="button" class="btn" onclick="TVC_App.confirmCancelWorkReport(false)">NO</button>
+        </div>
+    </div>
+</div>
+
 <div id="fileProtocolModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('fileProtocolModal')">
     <div class="modal-box">
         <button class="modal-x" onclick="TVC_App.closeModal('fileProtocolModal')">×</button>
@@ -529,11 +557,11 @@
 <script src="js/core/schema.js?v=20260718-list-lock"></script>
 <script src="js/core/db.js"></script>
 <script src="js/core/indexes.js"></script>
-<script src="js/pms.js?v=20260716-postpone-nextdate"></script>
+<script src="js/pms.js?v=20260720-tree-actions"></script>
 <script src="js/ui/virtualList.js?v=20260709-scroll"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js?v=20260718-rh"></script>
-<script src="js/ui/spareMenu.js?v=20260720-list-print"></script>
+<script src="js/ui/spareMenu.js?v=20260720-xfer-wizard"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -543,7 +571,7 @@
 <script src="js/space.js?v=20260716-menu-flow"></script>
 <script src="js/auth.js?v=20260715-login-dept"></script>
 <script src="js/services/transaction.js?v=20260717-clear-reports"></script>
-<script src="js/services/maintenancePlan.js"></script>
+<script src="js/services/maintenancePlan.js?v=20260720-tree-actions"></script>
 <script src="js/services/defectCase.js?v=20260718-role-moddel"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
 <script src="js/services/sync.js?v=20260717-df-wf-status"></script>
@@ -551,9 +579,9 @@
 <script src="js/services/fleet.js"></script>
 <script src="js/services/dataPurge.js?v=20260717-clear-reports"></script>
 <script src="js/services/seed.js"></script>
-<script src="js/ui/defectReport.js?v=20260718-df-crit"></script>
+<script src="js/ui/defectReport.js?v=20260720-df-job-detail"></script>
 <script src="js/ui/outstandingTasks.js?v=20260718-ot-fix"></script>
-<script src="js/app.js?v=20260718-ot"></script>
+<script src="js/app.js?v=20260720-menu-xfer-target"></script>
 <script src="js/pwa.js?v=20260718-tab-print"></script>
 </body>
 </html>

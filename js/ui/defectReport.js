@@ -1243,7 +1243,9 @@ const TVC_DefectReport = (function () {
                     ${fld('Job Code', renderDfJobPick(row, ro))}
                     ${fld('SORT-1', `<input class="wr-ro" data-df="item_sort1" value="${esc(hasJob ? dfVal(row, 'item_sort1', job?.item_sort1 || '') : '')}" readonly tabindex="-1">`)}
                     ${fld('SORT-2', `<input class="wr-ro" data-df="item_sort2" value="${esc(hasJob ? dfVal(row, 'item_sort2', job?.item_sort2 || '') : '')}" readonly tabindex="-1">`)}
-                    ${fld('Job Detail', `<input class="wr-ro" data-df="job_detail" value="${esc(hasJob ? dfVal(row, 'job_detail', job?.job_detail || '') : '')}" readonly tabindex="-1">`)}
+                    ${fld('Job Detail', hasJob
+                        ? inp('job_detail', job?.job_detail || '')
+                        : `<input class="wr-ro" data-df="job_detail" value="" readonly tabindex="-1">`)}
                 </div>
                 ${fld('Job Name', inp('job_name', ''), 'wr-maint-span-all wr-maint-grid-gap')}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
@@ -1400,10 +1402,26 @@ const TVC_DefectReport = (function () {
 
         let actionsHtml;
         if (fromListNav || fromHistoryNav) {
-            actionsHtml = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
-                <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>
-                ${canSave ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">💾 Save</button>` : ''}
-                <button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button>`;
+            const canModifyRow = canModifyDfListRow(row);
+            const canDeleteRow = canDeleteDfListRow(row);
+            const navBtns = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
+                <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>`;
+            const printBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.printDefectModal()">Print</button>`;
+            const closeBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button>`;
+            if (!canModifyRow) {
+                actionsHtml = `${navBtns}${printBtn}${closeBtn}`;
+            } else {
+                const modifyBtn = forceView
+                    ? `<button type="button" class="btn" onclick="TVC_DefectReport.modifyDefectModal()">Modify</button>`
+                    : '';
+                const deleteBtn = canDeleteRow
+                    ? `<button type="button" class="btn btn-red" onclick="TVC_DefectReport.deleteDefectModal()">Delete</button>`
+                    : '';
+                const saveBtn = canSave
+                    ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>`
+                    : '';
+                actionsHtml = `${navBtns}${modifyBtn}${deleteBtn}${saveBtn}${printBtn}${closeBtn}`;
+            }
         } else {
             actionsHtml = `${canSave ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">💾 Save</button>` : ''}
                 <button type="button" class="btn" onclick="TVC_DefectReport.requestCloseModal()">Cancel</button>`;
@@ -1505,6 +1523,7 @@ const TVC_DefectReport = (function () {
     }
 
     async function saveModal() {
+        if (!window.confirm('Save this Defect Report?')) return;
         const s = getState();
         const id = s._defectCaseId;
         if (!id) return;
@@ -1649,6 +1668,10 @@ const TVC_DefectReport = (function () {
         TVC_DefectSync.openPrintWindow(html, `Defect ${row.case_no}`);
     }
 
+    function printDefectModal() {
+        return printCase();
+    }
+
     function isNewUnsavedDefectSession() {
         const s = getState();
         return !!(s._dfNewSession && !s._dfSavedToList && s._defectCaseId && !s._dfNavSource);
@@ -1728,7 +1751,7 @@ const TVC_DefectReport = (function () {
     return {
         init, renderInbox, renderTab, openCase, openCaseFromList, openCaseFromNav, openNewFromJob, openNewBlank,
         saveDraft, saveModal, submitCase, saveHqReply, saveShipPhase3, saveHqPhase4, startWork,
-        printCase, closeModal, closeDefectModal, requestCloseModal, confirmCancelNew, dismissCancelConfirm, captureForm, uploadAttachment, removeAttachment,
+        printCase, printDefectModal, closeModal, closeDefectModal, requestCloseModal, confirmCancelNew, dismissCancelConfirm, captureForm, uploadAttachment, removeAttachment,
         toggleDfGroupPick, toggleDfJobPick, pickDfGroup, pickDfJob, clearDfJob, dfGroupPickSearch, dfJobPickSearch,
         filteredCases, statusLabel, defectListRows,
         dfDetailReport, dfReportConfirm, dfModifyReport, dfDeleteReport,

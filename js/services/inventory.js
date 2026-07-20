@@ -268,6 +268,7 @@ const TVC_Inventory = (function () {
             updated++;
         });
         req.status = REQ_STATUS.QUOTED;
+        if (!req.assessed_on) req.assessed_on = now().slice(0, 10);
         await saveRequisition(req);
         return { updated, total: req.lines.length, req };
     }
@@ -290,6 +291,7 @@ const TVC_Inventory = (function () {
             updated++;
         });
         req.status = REQ_STATUS.APPROVED;
+        if (!req.assessed_on) req.assessed_on = now().slice(0, 10);
         await saveRequisition(req);
         return { updated, total: req.lines.length, req };
     }

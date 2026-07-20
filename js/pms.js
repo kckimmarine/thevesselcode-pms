@@ -85,6 +85,23 @@ const TVC_PMS = (function () {
         }
     }
 
+    /** GROUP 삭제 시 Run-hour 저장소에서 키 제거 */
+    function deleteGroupKey(groupKey) {
+        if (!groupKey) return;
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const k = localStorage.key(i);
+                if (!k || !k.startsWith('tvc_run_hrs')) continue;
+                const store = JSON.parse(localStorage.getItem(k) || '{}');
+                if (!store[groupKey]) continue;
+                delete store[groupKey];
+                localStorage.setItem(k, JSON.stringify(store));
+            }
+        } catch (e) {
+            console.warn('[TVC_PMS] deleteGroupKey', e);
+        }
+    }
+
     /** fromDate 기준으로 months(소수 허용) 개월 뒤 날짜(YYYY-MM-DD) */
     function addMonths(fromDateStr, months) {
         const d = new Date(fromDateStr);
@@ -312,6 +329,7 @@ const TVC_PMS = (function () {
         writeStore,
         getRecord,
         renameGroupKey,
+        deleteGroupKey,
         addMonths,
         ensureOriginalSnapshot,
         restoreRunHourJob,
