@@ -16,7 +16,7 @@ const TVC_SpareInventoryParser = (function () {
         SECTION_NUM: /^\d{2}-\d{3}$/,
         PART_NUM: /^\d{2}-\d{3}-\d{2,3}$/,
         PART_NUM_ALT: /^\d{2}\.\d{3}-\d{2}$/,
-        PART_CLASS: /^[GML]$/i,
+        PART_CLASS: /^[GL]$/i,
         GROUP_LABEL: /^\d{2}(\.\s|\~|\s)/,
         SHEET_TITLE: /Sheet\s*No/i,
     };
@@ -127,7 +127,7 @@ const TVC_SpareInventoryParser = (function () {
         const stockA = TVC_SpareSchema.intStock(cell(c, COL.STOCK_A));
         const stockB = TVC_SpareSchema.intStock(cell(c, COL.STOCK_B));
         const current = stockA + stockB;
-        const pClass = cell(c, COL.CLASS).toUpperCase();
+        const pClass = TVC_SpareSchema.normalizePartClass(cell(c, COL.CLASS));
         const unitRaw = cell(c, COL.UNIT) || 'EA';
         const unit = /^PC$/i.test(unitRaw) ? 'EA' : unitRaw.toUpperCase();
         const drawingNo = sanitizePartNumber(cell(c, COL.PART_NO));
@@ -146,8 +146,8 @@ const TVC_SpareInventoryParser = (function () {
             workingQty: 0,
             minStock: 0,
             standardStock: 0,
-            partClass: RE.PART_CLASS.test(pClass) ? pClass : '',
-            isCritical: pClass === 'M' || pClass === 'L',
+            partClass: pClass,
+            isCritical: pClass === 'L',
             unit,
             category: ctx.department || 'ENGINE',
             group: (ctx.groupLabel || '').trim(),
@@ -776,6 +776,8 @@ const TVC_DB = (function () {
             if (existing && merge) {
                 row.id = existing.id;
                 if (String(existing.group || '').trim()) row.group = existing.group;
+                const existingClass = TVC_SpareSchema.normalizePartClass(existing.part_class);
+                if (existingClass) row.part_class = existingClass;
                 row.history = Array.isArray(existing.history) ? existing.history.slice() : [];
                 row.history.push({
                     at: ts,

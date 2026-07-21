@@ -9,8 +9,8 @@
  * 설계 원칙:
  *   - spare_parts 의 현 재고 필드명은 기존 그대로(qty_on_hand) 유지한다.
  *     "Current Stock" == qty_on_hand,  "Standard Stock" == standard_stock(신규,옵션, 없으면 min_qty).
- *   - 재고 차감/복구는 TVC_Transaction(approveReport/deleteReport)이 단일 소유한다.
- *     본 서비스는 "무엇을 얼마나 차감할지(BOM)"와 "청구서(Requisition)"만 책임진다.
+ *   - 재고 차감/복구는 TVC_InventoryService.applyStockTx / applyStockTxApi 가 단일 소유.
+ *     Work Report Confirm·Rollback 및 SPARE Consumed/Received UI가 이를 호출한다.
  */
 const TVC_Inventory = (function () {
     const now = () => new Date().toISOString();

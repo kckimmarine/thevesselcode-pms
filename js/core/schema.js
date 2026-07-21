@@ -93,6 +93,7 @@ const TVC_SCHEMA = {
 const TVC_INVENTORY_TX = {
     CONSUMPTION: 'CONSUMPTION',
     DELIVERY: 'DELIVERY',
+    REVERSAL: 'REVERSAL',
     REQUISITION: 'REQUISITION',
     ADJUSTMENT: 'ADJUSTMENT',
     IMPORT: 'IMPORT',
@@ -140,7 +141,7 @@ const TVC_SpareSchema = (function () {
      *  @property {number} minStock          - 최소 재고 (저장: min_qty)
      *  @property {number} [standardStock]   - 기준/청구 재고 (저장: standard_stock)
      *  @property {number} [workingQty]     - 사용(장착) 중 수량 (저장: qty_working)
-     *  @property {string} [partClass]       - G/M/L (저장: part_class)
+     *  @property {string} [partClass]       - G/L (저장: part_class) — Legal(L), General(G)
      *  @property {string} [inventoryNumbering] - SPICS Numbering (01-001-01)
      *  @property {string} [drawingPartNo]   - Part Number / Code Number
      *  @property {string} [shipComponentId] - 연결 장비/섹션
@@ -212,13 +213,20 @@ const TVC_SpareSchema = (function () {
         return String(row.universal_item_code || row.universal_code || row.universalCode || row.universalItemCode || '').trim();
     }
 
+    function normalizePartClass(v) {
+        const c = String(v ?? '').trim().toUpperCase();
+        if (c === 'L') return 'L';
+        if (c === 'G' || c === 'M') return 'G';
+        return '';
+    }
+
     /** IndexedDB row → canonical SparePart */
     function fromRow(row) {
         if (!row) return null;
         const uic = universalItemCodeOf(row);
         const minS = Number(row.min_qty ?? row.minStock ?? row.standard_stock ?? 0) || 0;
         const stdS = Number(row.standard_stock ?? row.standardStock ?? minS) || 0;
-        const pClass = String(row.part_class || row.partClass || '').trim().toUpperCase();
+        const pClass = normalizePartClass(row.part_class || row.partClass);
         const isCritFlag = row.is_critical ?? row.isCritical;
         return {
             id: row.id || '',
@@ -235,7 +243,7 @@ const TVC_SpareSchema = (function () {
             minStock: minS,
             standardStock: stdS,
             workingQty: intStock(row.qty_working ?? row.workingQty),
-            partClass: row.part_class || row.partClass || '',
+            partClass: pClass,
             inventoryNumbering: row.inventory_numbering || row.inventoryNumbering || '',
             drawingPartNo: textField(row.drawing_part_no ?? row.drawingPartNo),
             shipComponentId: row.ship_component_id || row.shipComponentId || '',
@@ -244,7 +252,7 @@ const TVC_SpareSchema = (function () {
             maker: row.maker || row.vendor_comment || '',
             model: row.model || row.modelType || '',
             group: String(row.group || '').trim(),
-            isCritical: isCritFlag != null ? !!isCritFlag : (pClass === 'M' || pClass === 'L'),
+            isCritical: isCritFlag != null ? !!isCritFlag : (pClass === 'L'),
             history: Array.isArray(row.history) ? row.history.slice() : [],
             category: row.category || 'GENERAL',
             unit: row.unit || 'EA',
@@ -280,7 +288,7 @@ const TVC_SpareSchema = (function () {
             min_qty: minS,
             standard_stock: stdS,
             qty_working: intStock(p.workingQty),
-            part_class: String(p.partClass || '').trim().toUpperCase(),
+            part_class: normalizePartClass(p.partClass),
             inventory_numbering: String(p.inventoryNumbering || '').trim(),
             drawing_part_no: textField(p.drawingPartNo),
             ship_component_id: String(p.shipComponentId || '').trim(),
@@ -371,7 +379,7 @@ const TVC_SpareSchema = (function () {
     return {
         SCHEMA_VERSION, blank, fromRow, toRow, validate, requiredPartsFromJob,
         generateUniversalItemCode, generateSequentialUic, uicPrefixForDepartment,
-        universalItemCodeOf, intStock, textField,
+        universalItemCodeOf, intStock, textField, normalizePartClass,
     };
 })();
 

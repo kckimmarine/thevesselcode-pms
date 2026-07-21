@@ -13,6 +13,7 @@ const TVC_DefectReport = (function () {
     const DF_PICK_Z = 10100;
     let _dfGroupPickSearch = '';
     let _dfJobPickSearch = '';
+    let _dfActiveJobRowIndex = 0;
     let _dfListSearch = '';
     let _dfListSelId = null;
     let _dfListChecked = {};
@@ -59,6 +60,39 @@ const TVC_DefectReport = (function () {
     function closeAllDfPicks() {
         closeDfPickMenu(document.getElementById('dfGroupPick'));
         closeDfPickMenu(document.getElementById('dfJobPick'));
+        closeDfJobRowPickMenu();
+    }
+
+    function closeDfJobRowPickMenu() {
+        const host = document.getElementById('dfJobRowPickHost');
+        const menu = document.getElementById('dfJobRowPickMenu');
+        if (menu) {
+            menu.classList.remove('spare-consume-pick-menu-portal');
+            menu.style.cssText = 'display:none';
+            if (menu._portalAttached && menu.parentNode === document.body && host) {
+                host.appendChild(menu);
+            }
+        }
+        if (host) host.classList.add('hidden');
+    }
+
+    function positionDfJobRowPickMenu(rowIdx = 0) {
+        const trigger = document.getElementById(`dfJobPickTrigger-${rowIdx}`);
+        const menu = document.getElementById('dfJobRowPickMenu');
+        if (!trigger || !menu) return;
+        if (!menu._portalAttached) menu._portalAttached = true;
+        if (menu.parentNode !== document.body) document.body.appendChild(menu);
+        menu.classList.add('spare-consume-pick-menu-portal');
+        const r = trigger.getBoundingClientRect();
+        menu.style.display = 'flex';
+        menu.style.flexDirection = 'column';
+        menu.style.position = 'fixed';
+        menu.style.left = `${r.left}px`;
+        menu.style.top = `${r.bottom + 2}px`;
+        menu.style.minWidth = `${Math.max(420, r.width)}px`;
+        menu.style.width = `${Math.max(420, r.width)}px`;
+        menu.style.zIndex = String(DF_PICK_Z);
+        menu.style.maxHeight = 'min(420px, 70vh)';
     }
 
     function positionDfPickMenu(wrap, minWidth = 320) {
@@ -130,7 +164,7 @@ const TVC_DefectReport = (function () {
         return html || '<div class="spare-consume-pick-empty muted">검색 결과 없음</div>';
     }
 
-    function buildDfJobPickList(row) {
+    function buildDfJobPickList(row, rowIdx) {
         const st = getState();
         const groupKey = dfGroupKey(row);
         if (!groupKey) {
@@ -142,12 +176,13 @@ const TVC_DefectReport = (function () {
             const hay = [j.job_code, j.item_sort1, j.item_sort2, j.job_detail].join(' ').toLowerCase();
             return hay.includes(q);
         });
-        const selectedCode = dfVal(row, 'pms_job_code');
-        const hasJob = !!(selectedCode || dfVal(row, 'maintenance_job_id'));
-        const clearBtn = `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-none${hasJob ? '' : ' selected'}"
-                onclick="TVC_DefectReport.clearDfJob()">
+        const items = ensureDfJobItems(row);
+        const activeRow = items[rowIdx ?? _dfActiveJobRowIndex ?? 0] || {};
+        const selectedCode = activeRow.job_code || '';
+        const clearBtn = `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-none${selectedCode ? '' : ' selected'}"
+                onclick="TVC_DefectReport.clearDfJobRow()">
                 <span class="spare-consume-pick-job-code">— Job Code 없음 —</span>
-                <span class="spare-consume-pick-job-sub muted">PMS Group만 지정 · Job Name 직접 입력</span>
+                <span class="spare-consume-pick-job-sub muted">PMS Group만 지정</span>
             </button>`;
         if (!jobs.length) {
             return clearBtn + '<div class="spare-consume-pick-empty muted">검색 결과 없음</div>';
@@ -156,11 +191,17 @@ const TVC_DefectReport = (function () {
             const sel = selectedCode === j.job_code ? ' selected' : '';
             const sub = [j.item_sort1, j.item_sort2].filter(Boolean).join(' · ');
             return `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-job${sel}"
-                onclick="TVC_DefectReport.pickDfJob('${escAttr(j.id)}')">
+                onclick="TVC_DefectReport.pickDfJobForRow('${escAttr(j.id)}')">
                 <span class="spare-consume-pick-job-code">${esc(j.job_code || '')}</span>
                 ${sub ? `<span class="spare-consume-pick-job-sub">${esc(sub)}</span>` : ''}
             </button>`;
         }).join('');
+    }
+
+    function refreshDfJobRowPickList() {
+        const list = document.getElementById('dfJobRowPickList');
+        const row = getState()._dfDraft || {};
+        if (list) list.innerHTML = buildDfJobPickList(row, _dfActiveJobRowIndex);
     }
 
     function refreshDfGroupPickList() {
@@ -185,8 +226,15 @@ const TVC_DefectReport = (function () {
     function dfJobPickSearch(v) {
         _dfJobPickSearch = v || '';
         refreshDfJobPickList();
+        refreshDfJobRowPickList();
         const wrap = document.getElementById('dfJobPick');
         if (wrap?.classList.contains('open')) positionDfPickMenu(wrap, 420);
+        const menu = document.getElementById('dfJobRowPickMenu');
+        if (menu?.style.display !== 'none') positionDfJobRowPickMenu(_dfActiveJobRowIndex);
+    }
+
+    function dfJobRowPickSearch(v) {
+        dfJobPickSearch(v);
     }
 
     function toggleDfGroupPick(ev) {
@@ -195,6 +243,7 @@ const TVC_DefectReport = (function () {
         if (!wrap) return;
         const opening = !wrap.classList.contains('open');
         closeDfPickMenu(document.getElementById('dfJobPick'));
+        closeDfJobRowPickMenu();
         if (!opening) {
             closeDfPickMenu(wrap);
             return;
@@ -252,45 +301,143 @@ const TVC_DefectReport = (function () {
             draft.item_sort1 = '';
             draft.item_sort2 = '';
             draft.job_detail = '';
+            draft.job_items = [TVC_SpareMenu.newConsumeJobRow()];
         }
         applyDfGroupHeader(s, draft, groupKey, groupLabel);
         closeDfPickMenu(document.getElementById('dfGroupPick'));
         rerenderDefectForm();
     }
 
+    function applyDfJobPickToDraft(draft, job, rowIdx = 0) {
+        const s = getState();
+        ensureDfJobItems(draft);
+        draft.job_items[rowIdx] = {
+            maintenance_job_id: job.id,
+            job_code: job.job_code || '',
+            sort1: job.item_sort1 || '',
+            sort2: job.item_sort2 || '',
+            job_detail: job.job_detail || '',
+        };
+        if (rowIdx === 0) {
+            draft.last_maintenance_date = job.last_done || draft.last_maintenance_date || '';
+            const hdr = TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || {};
+            draft.machinery_name = hdr.machineryName || job.item_sort1 || draft.machinery_name || '';
+        }
+        syncDfPrimaryJobFromItems(draft);
+    }
+
     function pickDfJob(jobId) {
         captureDfFormFields();
+        captureDfJobItems();
         const s = getState();
         const draft = s._dfDraft;
         if (!draft) return;
         const job = s.idx?.jobById?.get(jobId) || s.jobs?.find(j => j.id === jobId);
         if (!job) return;
-        draft.maintenance_job_id = job.id;
-        draft.pms_job_code = job.job_code || '';
-        draft.item_sort1 = job.item_sort1 || '';
-        draft.item_sort2 = job.item_sort2 || '';
-        draft.job_detail = job.job_detail || '';
-        draft.last_maintenance_date = job.last_done || draft.last_maintenance_date || '';
-        const hdr = TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || {};
-        draft.machinery_name = hdr.machineryName || job.item_sort1 || draft.machinery_name || '';
+        applyDfJobPickToDraft(draft, job, 0);
         closeDfPickMenu(document.getElementById('dfJobPick'));
+        closeDfJobRowPickMenu();
+        rerenderDefectForm();
+    }
+
+    function pickDfJobForRow(jobId) {
+        captureDfFormFields();
+        captureDfJobItems();
+        const s = getState();
+        const draft = s._dfDraft;
+        if (!draft) return;
+        const job = s.idx?.jobById?.get(jobId) || s.jobs?.find(j => j.id === jobId);
+        if (!job) return;
+        applyDfJobPickToDraft(draft, job, _dfActiveJobRowIndex || 0);
+        closeDfJobRowPickMenu();
+        rerenderDefectForm();
+    }
+
+    function clearDfJobRow() {
+        captureDfFormFields();
+        captureDfJobItems();
+        const s = getState();
+        const draft = s._dfDraft;
+        if (!draft) return;
+        const idx = _dfActiveJobRowIndex || 0;
+        ensureDfJobItems(draft);
+        draft.job_items[idx] = TVC_SpareMenu.newConsumeJobRow();
+        if (idx === 0) {
+            draft.maintenance_job_id = '';
+            draft.pms_job_code = '';
+            draft.item_sort1 = '';
+            draft.item_sort2 = '';
+            draft.job_detail = '';
+            const hdr = resolveDfGroupHeader(s, draft);
+            draft.machinery_name = hdr.machineryName || '';
+        }
+        syncDfPrimaryJobFromItems(draft);
+        closeDfJobRowPickMenu();
         rerenderDefectForm();
     }
 
     function clearDfJob() {
-        captureDfFormFields();
-        const s = getState();
-        const draft = s._dfDraft;
-        if (!draft) return;
-        draft.maintenance_job_id = '';
-        draft.job_code = '';
-        draft.pms_job_code = '';
-        draft.item_sort1 = '';
-        draft.item_sort2 = '';
-        draft.job_detail = '';
-        const hdr = resolveDfGroupHeader(s, draft);
-        draft.machinery_name = hdr.machineryName || '';
+        _dfActiveJobRowIndex = 0;
+        clearDfJobRow();
         closeDfPickMenu(document.getElementById('dfJobPick'));
+    }
+
+    function toggleDfJobRowPick(ev, idx) {
+        ev?.stopPropagation();
+        const row = getState()._dfDraft || {};
+        if (!dfGroupKey(row)) return alert('PMS Group No.를 먼저 선택하세요.');
+        const prevIdx = _dfActiveJobRowIndex;
+        _dfActiveJobRowIndex = idx;
+        const host = document.getElementById('dfJobRowPickHost');
+        const menu = document.getElementById('dfJobRowPickMenu');
+        if (!host || !menu) return;
+        closeDfPickMenu(document.getElementById('dfGroupPick'));
+        closeDfPickMenu(document.getElementById('dfJobPick'));
+        const isVisible = menu.style.display && menu.style.display !== 'none';
+        if (isVisible && prevIdx === idx) {
+            closeDfJobRowPickMenu();
+            return;
+        }
+        host.classList.remove('hidden');
+        refreshDfJobRowPickList();
+        positionDfJobRowPickMenu(idx);
+        const close = (e) => {
+            if (menu.contains(e.target) || document.getElementById(`dfJobPickTrigger-${idx}`)?.contains(e.target)) return;
+            closeDfJobRowPickMenu();
+            document.removeEventListener('click', close);
+            window.removeEventListener('scroll', onReposition, true);
+            window.removeEventListener('resize', onReposition);
+        };
+        const onReposition = () => positionDfJobRowPickMenu(idx);
+        setTimeout(() => {
+            document.addEventListener('click', close);
+            window.addEventListener('scroll', onReposition, true);
+            window.addEventListener('resize', onReposition);
+        }, 0);
+    }
+
+    function addDfJobRow() {
+        captureDfFormFields();
+        captureDfJobItems();
+        const draft = getState()._dfDraft;
+        if (!draft) return;
+        ensureDfJobItems(draft);
+        draft.job_items.push(TVC_SpareMenu.newConsumeJobRow());
+        rerenderDefectForm();
+    }
+
+    function removeDfJobRow(idx) {
+        captureDfFormFields();
+        captureDfJobItems();
+        const draft = getState()._dfDraft;
+        if (!draft) return;
+        ensureDfJobItems(draft);
+        if (draft.job_items.length <= 1) return;
+        draft.job_items.splice(idx, 1);
+        if (_dfActiveJobRowIndex >= draft.job_items.length) {
+            _dfActiveJobRowIndex = Math.max(0, draft.job_items.length - 1);
+        }
+        syncDfPrimaryJobFromItems(draft);
         rerenderDefectForm();
     }
 
@@ -316,26 +463,78 @@ const TVC_DefectReport = (function () {
         </div>`;
     }
 
-    function renderDfJobPick(row, ro) {
-        const code = dfVal(row, 'pms_job_code');
-        const text = code || '— JOB CODE 선택 —';
-        const disabled = !dfGroupKey(row);
-        if (ro) {
-            return `<input class="wr-ro" value="${esc(code || '—')}" readonly tabindex="-1">`;
-        }
-        return `<div class="spare-consume-meta-pick" id="dfJobPick">
-            <button type="button" class="spare-consume-pick-trigger"${disabled ? ' disabled' : ''} onclick="TVC_DefectReport.toggleDfJobPick(event)">
-                <span class="spare-consume-pick-text">${esc(text)}</span>
-                <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
-            </button>
-            <div class="spare-consume-pick-menu" role="listbox" aria-label="JOB CODE">
-                <div class="spare-consume-pick-search">
-                    <input type="search" class="search-input" placeholder="Search JOB CODE / SORT / DETAIL…" value="${esc(_dfJobPickSearch)}"
-                        oninput="TVC_DefectReport.dfJobPickSearch(this.value)" onclick="event.stopPropagation()">
+    function renderDfJobRowFieldHtml(item, idx, opts = {}) {
+        const ro = !!opts.readonly;
+        const batch = !!opts.batch;
+        const roAttr = ro ? ' readonly disabled' : '';
+        const jobDisabled = !opts.groupKey;
+        const head = (label, forId) => idx === 0
+            ? `<label class="spare-consume-meta-col-head" for="${forId}">${label}</label>`
+            : '';
+        const jobField = ro
+            ? `<input type="text" class="spare-req-meta-input spare-consume-meta-input" data-field="job_code" value="${esc(item.job_code || '')}"${roAttr}>`
+            : `<button type="button" id="dfJobPickTrigger-${idx}" class="spare-consume-pick-trigger spare-consume-job-pick-trigger"${jobDisabled ? ' disabled' : ''} onclick="TVC_DefectReport.toggleDfJobRowPick(event, ${idx})">
+                    <span class="spare-consume-pick-text">${esc(item.job_code || '— JOB CODE 선택 —')}</span>
+                    <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
+                </button>
+                <input type="hidden" data-field="job_code" value="${escAttr(item.job_code || '')}">`;
+        const rmBtn = batch && !ro && (opts.rowCount || 0) > 1
+            ? `<button type="button" class="btn btn-sm spare-consume-job-row-rm" onclick="TVC_DefectReport.removeDfJobRow(${idx})" title="Remove job row" aria-label="Remove job row">×</button>`
+            : '';
+        const sortRo = ro ? roAttr : ' readonly tabindex="-1"';
+        return `<div class="spare-consume-meta-job-grid spare-consume-meta-job-row${batch ? ' batch' : ''}" data-df-job-row="${idx}" data-job-id="${escAttr(item.maintenance_job_id || '')}">
+                <div class="spare-consume-meta-job-col spare-consume-meta-job-col-job">
+                    ${head('Job Code', `dfJobPickTrigger-${idx}`)}
+                    ${jobField}
                 </div>
-                <div class="spare-consume-pick-scroll" id="dfJobPickList"></div>
-            </div>
-        </div>`;
+                <div class="spare-consume-meta-job-col">
+                    ${head('SORT-1', `dfSort1-${idx}`)}
+                    <input type="text" id="dfSort1-${idx}" data-field="sort1" class="spare-req-meta-input spare-consume-meta-input wr-ro" value="${esc(item.sort1 || '')}"${sortRo}>
+                </div>
+                <div class="spare-consume-meta-job-col">
+                    ${head('SORT-2', `dfSort2-${idx}`)}
+                    <input type="text" id="dfSort2-${idx}" data-field="sort2" class="spare-req-meta-input spare-consume-meta-input wr-ro" value="${esc(item.sort2 || '')}"${sortRo}>
+                </div>
+                <div class="spare-consume-meta-job-col spare-consume-meta-job-col-detail">
+                    ${head('Job Detail', `dfJobDetail-${idx}`)}
+                    <input type="text" id="dfJobDetail-${idx}" data-field="job_detail" class="spare-req-meta-input spare-consume-meta-input" value="${esc(item.job_detail || '')}"${roAttr}>
+                </div>
+                ${batch ? `<div class="spare-consume-meta-job-col spare-consume-meta-job-col-act">${rmBtn}</div>` : ''}
+            </div>`;
+    }
+
+    function renderDfJobRowsBlock(row, ro) {
+        ensureDfJobItems(row);
+        const draft = getState()._dfDraft || row;
+        const items = draft.job_items;
+        const groupKey = dfGroupKey(row);
+        const rows = items.map((item, idx) => renderDfJobRowFieldHtml(item, idx, {
+            readonly: ro,
+            batch: !ro,
+            groupKey,
+            rowCount: items.length,
+        })).join('');
+        const addBtn = !ro
+            ? `<div class="spare-consume-meta-job-add">
+                <button type="button" class="btn btn-sm spare-consume-job-row-add" onclick="TVC_DefectReport.addDfJobRow()" title="Add JOB CODE row">+</button>
+               </div>`
+            : '';
+        const pickHost = !ro
+            ? `<div id="dfJobRowPickHost" class="spare-consume-job-pick-host hidden" aria-hidden="true">
+                <div id="dfJobRowPickMenu" class="spare-consume-pick-menu" role="listbox" aria-label="JOB CODE" style="display:none">
+                    <div class="spare-consume-pick-search">
+                        <input type="search" class="search-input" placeholder="Search JOB CODE / SORT / DETAIL…" value="${esc(_dfJobPickSearch)}"
+                            oninput="TVC_DefectReport.dfJobRowPickSearch(this.value)" onclick="event.stopPropagation()">
+                    </div>
+                    <div class="spare-consume-pick-scroll" id="dfJobRowPickList"></div>
+                </div>
+            </div>`
+            : '';
+        return `<div class="spare-consume-meta-jobs df-page1-job-rows wr-maint-grid-gap wr-maint-span-all" id="dfJobRows">${rows}${addBtn}</div>${pickHost}`;
+    }
+
+    function renderDfJobPick(row, ro) {
+        return renderDfJobRowsBlock(row, ro);
     }
 
     function init(ctx) { _ctx = ctx; }
@@ -343,7 +542,28 @@ const TVC_DefectReport = (function () {
     function getState() { return _ctx?.getState?.() || {}; }
 
     function dfHasLinkedJob(row) {
+        const items = row?.job_items;
+        if (Array.isArray(items) && items.some(i => String(i.job_code || '').trim())) return true;
         return !!(String(dfVal(row, 'pms_job_code') || '').trim() || String(dfVal(row, 'maintenance_job_id') || '').trim());
+    }
+
+    function syncDfPrimaryJobFromItems(draft) {
+        if (!draft) return;
+        const items = Array.isArray(draft.job_items) ? draft.job_items : [];
+        const primary = items.find(i => String(i.job_code || '').trim()) || items[0];
+        if (!primary) {
+            draft.maintenance_job_id = '';
+            draft.pms_job_code = '';
+            draft.item_sort1 = '';
+            draft.item_sort2 = '';
+            draft.job_detail = '';
+            return;
+        }
+        draft.maintenance_job_id = primary.maintenance_job_id || '';
+        draft.pms_job_code = primary.job_code || '';
+        draft.item_sort1 = primary.sort1 || '';
+        draft.item_sort2 = primary.sort2 || '';
+        draft.job_detail = primary.job_detail || '';
     }
 
     function resolveDfGroupHeader(st, row) {
@@ -354,13 +574,25 @@ const TVC_DefectReport = (function () {
 
     /** Submit/Save 전 — machinery_name·Job 연동 필드 정규화 */
     function normalizeDfSubmitRow(st, row) {
-        const hasJob = dfHasLinkedJob(row);
+        const rawItems = Array.isArray(row.job_items) ? row.job_items : [];
+        row.job_items = rawItems
+            .filter(i => String(i?.job_code || '').trim())
+            .map(i => ({
+                job_code: String(i.job_code || '').trim(),
+                sort1: i.sort1 || '',
+                sort2: i.sort2 || '',
+                job_detail: i.job_detail || '',
+                maintenance_job_id: i.maintenance_job_id || '',
+            }));
+        syncDfPrimaryJobFromItems(row);
+        const hasJob = row.job_items.length > 0 || dfHasLinkedJob(row);
         if (!hasJob) {
             row.maintenance_job_id = '';
             row.pms_job_code = '';
             row.item_sort1 = '';
             row.item_sort2 = '';
             row.job_detail = '';
+            row.job_items = [];
         }
         const groupHdr = resolveDfGroupHeader(st, row);
         const job = hasJob ? resolveJob(row) : null;
@@ -397,6 +629,7 @@ const TVC_DefectReport = (function () {
                 ship_attachments: Array.isArray(row.ship_attachments) ? row.ship_attachments.map(a => ({ ...a })) : [],
                 company_attachments: Array.isArray(row.company_attachments) ? row.company_attachments.map(a => ({ ...a })) : [],
                 used_parts: Array.isArray(row.used_parts) ? row.used_parts.map(p => ({ ...p })) : [],
+                job_items: Array.isArray(row.job_items) ? row.job_items.map(i => ({ ...i })) : [],
             };
         }
         return s._dfDraft;
@@ -465,26 +698,84 @@ const TVC_DefectReport = (function () {
         }
     }
 
+    function ensureDfJobItems(row) {
+        const draft = getState()._dfDraft;
+        if (!draft) return [];
+        if (Array.isArray(draft.job_items) && draft.job_items.length) {
+            return draft.job_items;
+        }
+        if (Array.isArray(row?.job_items) && row.job_items.length) {
+            draft.job_items = row.job_items.map(i => ({
+                ...TVC_SpareMenu.newConsumeJobRow(i),
+                maintenance_job_id: i.maintenance_job_id || '',
+            }));
+            return draft.job_items;
+        }
+        const job = resolveJob(row);
+        draft.job_items = [{
+            ...TVC_SpareMenu.newConsumeJobRow({
+                job_code: dfVal(row, 'pms_job_code', job?.job_code || row?.job_code || ''),
+                sort1: dfVal(row, 'item_sort1', job?.item_sort1 || ''),
+                sort2: dfVal(row, 'item_sort2', job?.item_sort2 || ''),
+                job_detail: dfVal(row, 'job_detail', job?.job_detail || ''),
+            }),
+            maintenance_job_id: row?.maintenance_job_id || job?.id || '',
+        }];
+        return draft.job_items;
+    }
+
+    function captureDfJobItems() {
+        const draft = getState()._dfDraft;
+        if (!draft) return;
+        const container = document.getElementById('dfJobRows');
+        if (!container) return;
+        ensureDfJobItems(draft);
+        const rowEls = container.querySelectorAll('[data-df-job-row]');
+        if (!rowEls.length) return;
+        draft.job_items = [...rowEls].map(rowEl => ({
+            job_code: rowEl.querySelector('[data-field="job_code"]')?.value?.trim()
+                || rowEl.querySelector('.spare-consume-pick-text')?.textContent?.trim()
+                || '',
+            sort1: rowEl.querySelector('[data-field="sort1"]')?.value?.trim() || '',
+            sort2: rowEl.querySelector('[data-field="sort2"]')?.value?.trim() || '',
+            job_detail: rowEl.querySelector('[data-field="job_detail"]')?.value?.trim() || '',
+            maintenance_job_id: rowEl.dataset.jobId || '',
+        }));
+        syncDfPrimaryJobFromItems(draft);
+    }
+
+    function ensureDfPage2JobItems(row) {
+        return ensureDfJobItems(row);
+    }
+
     function buildDfPage2Meta(row) {
         const s = getState();
         const job = resolveJob(row);
         const groupHdr = resolveDfGroupHeader(s, row);
         const jobHdr = job && TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || {};
+        const allJobItems = ensureDfJobItems(row);
+        const jobItems = allJobItems.filter(i => String(i.job_code || '').trim());
         return {
             reportDate: dfVal(row, 'report_date', row.report_date || ''),
             workDate: dfVal(row, 'work_date', row.work_date || ''),
             reportedBy: reportedByLabel(row),
             pmsGroupNo: dfVal(row, 'pms_group_no', jobHdr.pmsGroupNo || groupHdr.pmsGroupNo || row.pms_group_no || ''),
+            groupKey: dfGroupKey(row) || row.pms_group_key || '',
             jobCode: dfVal(row, 'pms_job_code', job?.job_code || row.job_code || ''),
             sort1: dfVal(row, 'item_sort1', job?.item_sort1 || ''),
             sort2: dfVal(row, 'item_sort2', job?.item_sort2 || ''),
             jobDetail: dfVal(row, 'job_detail', job?.job_detail || ''),
             shipComments: '',
+            jobItems,
+            allowAdd: false,
         };
     }
 
     function renderDfPage2Body(row, ro) {
-        return TVC_SpareMenu.renderWrSparePage2Html(null, ro, buildDfPage2Meta(row));
+        return TVC_SpareMenu.renderWrSparePage2Html(null, ro, {
+            ...buildDfPage2Meta(row),
+            allowAdd: false,
+        });
     }
 
     function syncDfSparePage2Ui(onPage2, ro) {
@@ -881,6 +1172,36 @@ const TVC_DefectReport = (function () {
         openCase(id, 'edit');
     }
 
+    async function syncDefectConsumeStock(row, usedParts) {
+        const s = getState();
+        const user = s.user;
+        if (!user || !row?.id) return row;
+        captureDfJobItems();
+        const draft = s._dfDraft || row;
+        try {
+            const enriched = enrichDfUsedParts(usedParts || row.used_parts || []);
+            const syncResult = await TVC_SpareMenu.syncConsumeLogFromDefectReport({
+                defectCase: { ...row, job_items: draft.job_items || row.job_items || [] },
+                usedParts: enriched,
+                user,
+                department: row.department || s.department || '',
+            });
+            const consumeLogId = syncResult?.logId ?? null;
+            const stockAppliedAt = syncResult?.stockAppliedAt || '';
+            if (row.consume_log_id !== consumeLogId
+                || (stockAppliedAt && row.stock_applied_at !== stockAppliedAt)
+                || (!consumeLogId && row.consume_log_id)) {
+                row.consume_log_id = consumeLogId || null;
+                row.stock_applied_at = stockAppliedAt || '';
+                await TVC_DB.put('defect_cases', row);
+            }
+        } catch (syncErr) {
+            console.error('Defect consumed log sync failed:', syncErr);
+            alert(syncErr.message || 'Spare parts stock sync failed.');
+        }
+        return row;
+    }
+
     async function deleteDefectModal() {
         const user = getState().user;
         const id = getState()._defectCaseId;
@@ -894,6 +1215,11 @@ const TVC_DefectReport = (function () {
         }
         if (!confirm(`${row.case_no} Defect Report를 삭제하시겠습니까?`)) return;
         try {
+            if (row.consume_log_id) {
+                const log = await TVC_Inventory.getConsumeLog(row.consume_log_id);
+                if (log) await TVC_SpareMenu.reverseConsumeLogStockForLog(user, log, undefined, { skipRbac: true });
+                await TVC_Inventory.deleteConsumeLog(row.consume_log_id);
+            }
             await TVC_DefectCaseService.deleteCase(user, id);
             delete _dfListChecked[id];
             if (_dfListSelId === id) _dfListSelId = null;
@@ -1209,9 +1535,15 @@ const TVC_DefectReport = (function () {
         const { includeApproval = true, postAction = {} } = opts;
         const canEditShipInitial = postAction.canEditShipInitial ?? !readonly;
         ensureDfDraft(row);
+        ensureDfJobItems(row);
         const s = getState();
-        const hasJob = dfHasLinkedJob(row);
-        const job = hasJob ? resolveJob(row) : null;
+        const draft = s._dfDraft || row;
+        const items = draft.job_items || [];
+        const hasJob = items.some(i => String(i.job_code || '').trim()) || dfHasLinkedJob(row);
+        const primaryJobId = items.find(i => i.maintenance_job_id)?.maintenance_job_id || row.maintenance_job_id;
+        const job = hasJob && primaryJobId
+            ? (s.idx?.jobById?.get(primaryJobId) || s.jobs?.find(j => j.id === primaryJobId))
+            : null;
         const hdr = job && TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || resolveDfGroupHeader(s, row);
         const ro = readonly;
         const roAttr = ro ? ' readonly' : '';
@@ -1239,14 +1571,7 @@ const TVC_DefectReport = (function () {
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByLabel(row))}" readonly>`)}
                     ${fld('PMS Group No.', renderDfGroupPick(row, ro), 'wr-maint-span-all')}
                 </div>
-                <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
-                    ${fld('Job Code', renderDfJobPick(row, ro))}
-                    ${fld('SORT-1', `<input class="wr-ro" data-df="item_sort1" value="${esc(hasJob ? dfVal(row, 'item_sort1', job?.item_sort1 || '') : '')}" readonly tabindex="-1">`)}
-                    ${fld('SORT-2', `<input class="wr-ro" data-df="item_sort2" value="${esc(hasJob ? dfVal(row, 'item_sort2', job?.item_sort2 || '') : '')}" readonly tabindex="-1">`)}
-                    ${fld('Job Detail', hasJob
-                        ? inp('job_detail', job?.job_detail || '')
-                        : `<input class="wr-ro" data-df="job_detail" value="" readonly tabindex="-1">`)}
-                </div>
+                ${renderDfJobRowsBlock(row, ro)}
                 ${fld('Job Name', inp('job_name', ''), 'wr-maint-span-all wr-maint-grid-gap')}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
                     ${fld('Maker', `<input class="wr-ro" data-df="maker" value="${esc(dfVal(row, 'maker', hdr.maker || row.manufacturer || ''))}" readonly tabindex="-1">`)}
@@ -1330,6 +1655,7 @@ const TVC_DefectReport = (function () {
 
     function setDefectReportPage(page) {
         captureDfFormFields();
+        if ((getState()._dfPage || '1') === '1') captureDfJobItems();
         if ((getState()._dfPage || '1') === '2') {
             captureDfUsedParts();
             TVC_SpareMenu.teardownWrSparePage2();
@@ -1441,7 +1767,11 @@ const TVC_DefectReport = (function () {
     }
 
     function captureForm() {
-        if ((getState()._dfPage || '1') === '2') captureDfUsedParts();
+        if ((getState()._dfPage || '1') === '1') {
+            captureDfJobItems();
+        } else if ((getState()._dfPage || '1') === '2') {
+            captureDfUsedParts();
+        }
         const draft = captureDfFormFields();
         const st = getState();
         return normalizeDfSubmitRow(st, {
@@ -1449,6 +1779,7 @@ const TVC_DefectReport = (function () {
             ship_attachments: dfAttachmentList('ship'),
             company_attachments: dfAttachmentList('company'),
             used_parts: dfUsedPartsPayload(),
+            job_items: draft.job_items || [],
         });
     }
 
@@ -1569,7 +1900,8 @@ const TVC_DefectReport = (function () {
         const id = s._defectCaseId;
         if (!id) return;
         const data = { ...captureForm(), visible_in_list: true };
-        await TVC_DefectCaseService.saveDraft(s.user, data, id);
+        let row = await TVC_DefectCaseService.saveDraft(s.user, data, id);
+        row = await syncDefectConsumeStock(row, data.used_parts);
         s._dfSavedToList = true;
         await refresh();
         await openCase(id);
@@ -1752,7 +2084,8 @@ const TVC_DefectReport = (function () {
         init, renderInbox, renderTab, openCase, openCaseFromList, openCaseFromNav, openNewFromJob, openNewBlank,
         saveDraft, saveModal, submitCase, saveHqReply, saveShipPhase3, saveHqPhase4, startWork,
         printCase, printDefectModal, closeModal, closeDefectModal, requestCloseModal, confirmCancelNew, dismissCancelConfirm, captureForm, uploadAttachment, removeAttachment,
-        toggleDfGroupPick, toggleDfJobPick, pickDfGroup, pickDfJob, clearDfJob, dfGroupPickSearch, dfJobPickSearch,
+        toggleDfGroupPick, toggleDfJobPick, toggleDfJobRowPick, pickDfGroup, pickDfJob, pickDfJobForRow,
+        clearDfJob, clearDfJobRow, addDfJobRow, removeDfJobRow, dfGroupPickSearch, dfJobPickSearch, dfJobRowPickSearch,
         filteredCases, statusLabel, defectListRows,
         dfDetailReport, dfReportConfirm, dfModifyReport, dfDeleteReport,
         dfListSearch, clearDfListSearch, selectDfListRow, toggleDfListCheck, toggleDfListSelectAll,

@@ -163,5 +163,74 @@ const TVC_Excel = (function () {
         return rows;
     }
 
-    return { available, exportRequisition, parseRequisitionFile, COLS };
+    const SPARE_LIST_COLS = [
+        { header: 'Code', key: 'code', width: 14 },
+        { header: 'Class', key: 'class', width: 10 },
+        { header: 'Item', key: 'item', width: 32 },
+        { header: 'Part No.', key: 'partNo', width: 18 },
+        { header: 'Unit', key: 'unit', width: 8 },
+        { header: 'Working', key: 'working', width: 10 },
+        { header: 'Standard', key: 'standard', width: 10 },
+        { header: 'Stock', key: 'stock', width: 10 },
+        { header: 'Awaiting', key: 'awaiting', width: 10 },
+        { header: 'Need', key: 'need', width: 10 },
+    ];
+
+    /**
+     * SPARE Parts List → xlsx (Print/Preview와 동일 컬럼)
+     * @param {{ ship, dept, filterParts?, rows, count, exportedAt? }} ctx
+     */
+    async function exportSparePartsList(ctx) {
+        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        const rows = ctx?.rows || [];
+        if (!rows.length) throw new Error('No parts to export.');
+
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'TVC-PMS';
+        wb.created = ctx.exportedAt || new Date();
+        const ws = wb.addWorksheet('SPARE Parts List', { views: [{ state: 'frozen', ySplit: 5 }] });
+
+        const lastCol = String.fromCharCode(64 + SPARE_LIST_COLS.length);
+        ws.mergeCells(`A1:${lastCol}1`);
+        ws.getCell('A1').value = 'SPARE Parts List';
+        ws.getCell('A1').font = { bold: true, size: 14, color: { argb: 'FF217346' } };
+
+        const exportedAt = (ctx.exportedAt || new Date()).toLocaleString();
+        ws.getCell('A2').value = `Vessel: ${ctx.ship || '—'}    Dept: ${ctx.dept || 'All'}    Exported: ${exportedAt}`;
+        const filterLine = (ctx.filterParts || []).join(' · ');
+        ws.getCell('A3').value = filterLine || '';
+        ws.getCell('A4').value = `${ctx.count ?? rows.length} part${(ctx.count ?? rows.length) === 1 ? '' : 's'}`;
+
+        const headerRow = ws.getRow(5);
+        SPARE_LIST_COLS.forEach((c, i) => {
+            const cell = headerRow.getCell(i + 1);
+            cell.value = c.header;
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF217346' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.border = { bottom: { style: 'thin', color: { argb: 'FF185C37' } } };
+            ws.getColumn(i + 1).width = c.width;
+        });
+        headerRow.commit();
+
+        rows.forEach((row, idx) => {
+            const r = ws.getRow(6 + idx);
+            SPARE_LIST_COLS.forEach((c, i) => {
+                const cell = r.getCell(i + 1);
+                cell.value = row[c.key] != null ? row[c.key] : '';
+                cell.border = { bottom: { style: 'hair', color: { argb: 'FFE2E8F0' } } };
+                if (['stock', 'working', 'standard', 'awaiting', 'need'].includes(c.key)) {
+                    cell.alignment = { horizontal: 'right' };
+                }
+            });
+            r.commit();
+        });
+
+        const dateStamp = (ctx.exportedAt || new Date()).toISOString().slice(0, 10);
+        const buf = await wb.xlsx.writeBuffer();
+        downloadBlob(buf, `SPARE-Parts-List-${dateStamp}.xlsx`);
+        return true;
+    }
+
+    return { available, exportRequisition, parseRequisitionFile, exportSparePartsList, COLS, SPARE_LIST_COLS };
 })();

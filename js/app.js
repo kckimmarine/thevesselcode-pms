@@ -1,6 +1,7 @@
 /* THE VESSEL CODE — Main Application (v3.0 · CMAXS Tab Navigation) */
 const TVC_App = (function () {
     const ROW_H = 36;
+    const PLAN_SHEET_MIN_WIDTH = 924;
     const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
     const TABS = ['menu', 'actual', 'defect', 'history', 'runhrs', 'spare'];
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
@@ -145,8 +146,8 @@ const TVC_App = (function () {
     }
 
     /** 부서별 데이터 독립성(영구 분리): 선박 계정은 로드 단계에서부터 자기 부서 데이터만 취득한다. */
-    // PMS Group 부서 재분류: DECK로 들어온 특정 그룹을 ENGINE으로 이동한다.
-    const FORCE_ENGINE_GROUP_NOS = new Set([28, 29, 30, 33, 35]);
+    /** PMS Group 부서 재분류: Engine Work Plan과 분리 — 지정 그룹은 DECK 전용 */
+    const FORCE_DECK_GROUP_NOS = new Set([24, 25, 26, 28, 29, 30, 33, 35]);
 
     function pmsGroupNoFromLabel(label) {
         const mm = String(label || '').trim().match(/^(\d+)\s*\./);
@@ -157,8 +158,8 @@ const TVC_App = (function () {
         const changedJobs = [];
         (jobs || []).forEach(j => {
             const n = pmsGroupNoFromLabel(j.group);
-            if (n != null && FORCE_ENGINE_GROUP_NOS.has(n) && j.department !== 'ENGINE') {
-                j.department = 'ENGINE';
+            if (n != null && FORCE_DECK_GROUP_NOS.has(n) && j.department !== 'DECK') {
+                j.department = 'DECK';
                 changedJobs.push(j);
             }
         });
@@ -166,20 +167,20 @@ const TVC_App = (function () {
         (components || []).forEach(c => {
             const grpLabel = Array.isArray(c.path) ? c.path[1] : null;
             const n = pmsGroupNoFromLabel(grpLabel);
-            if (n == null || !FORCE_ENGINE_GROUP_NOS.has(n)) return;
+            if (n == null || !FORCE_DECK_GROUP_NOS.has(n)) return;
             let changed = false;
-            if (Array.isArray(c.path) && c.path[0] && c.path[0] !== 'ENGINE') {
-                c.path = ['ENGINE', ...c.path.slice(1)];
+            if (Array.isArray(c.path) && c.path[0] && c.path[0] !== 'DECK') {
+                c.path = ['DECK', ...c.path.slice(1)];
                 changed = true;
             }
-            if (c.department && c.department !== 'ENGINE') { c.department = 'ENGINE'; changed = true; }
+            if (c.department && c.department !== 'DECK') { c.department = 'DECK'; changed = true; }
             if (changed) changedComps.push(c);
         });
         const changedGroups = [];
         (groups || []).forEach(g => {
             const n = pmsGroupNoFromLabel(g.label);
-            if (n != null && FORCE_ENGINE_GROUP_NOS.has(n) && g.department !== 'ENGINE') {
-                g.department = 'ENGINE';
+            if (n != null && FORCE_DECK_GROUP_NOS.has(n) && g.department !== 'DECK') {
+                g.department = 'DECK';
                 changedGroups.push(g);
             }
         });
@@ -1250,13 +1251,13 @@ const TVC_App = (function () {
         return `<span class="c-crit" title="Critical Equipment">${planCriticalMarkHtml()}</span>`;
     }
 
-    function origJobCriticalSelect(id, value) {
-        const v = value || '';
-        return `<select class="spare-inline-input orig-inline-critical" id="${escAttr(id)}" onclick="event.stopPropagation()" aria-label="Critical Equipment">
-            <option value=""${v === '' ? ' selected' : ''}>—</option>
-            <option value="Yes"${v === 'Yes' ? ' selected' : ''}>Yes</option>
-            <option value="No"${v === 'No' ? ' selected' : ''}>No</option>
-        </select>`;
+    function origJobCriticalReadonlyHtml(draft) {
+        const pseudo = {
+            group: draft?.group || '',
+            department: draft?.department || state.department || '',
+            is_critical_equipment: null,
+        };
+        return planCriticalCellHtml(pseudo);
     }
 
     function renderJobRowHtml(j) {
@@ -1291,6 +1292,45 @@ const TVC_App = (function () {
         const batch = batchSelectedJobIds();
         if (batch.length === 1) return resolveJobById(batch[0]);
         return null;
+    }
+
+    function syncPlanSheetLayout(scrollId, headId) {
+        const scroll = document.getElementById(scrollId);
+        const head = document.getElementById(headId);
+        const inner = scroll?.querySelector('.vl-inner');
+        const vlHead = head?.querySelector('.vl-head');
+        if (!scroll || !head || !inner || !vlHead) return;
+        const tableW = Math.max(scroll.clientWidth, PLAN_SHEET_MIN_WIDTH);
+        const sb = scroll.offsetWidth - scroll.clientWidth;
+        inner.style.setProperty('width', `${tableW}px`, 'important');
+        inner.style.setProperty('min-width', `${PLAN_SHEET_MIN_WIDTH}px`, 'important');
+        vlHead.style.width = `${tableW}px`;
+        vlHead.style.minWidth = `${PLAN_SHEET_MIN_WIDTH}px`;
+        head.style.paddingRight = sb > 0 ? `${sb}px` : '';
+        head.scrollLeft = scroll.scrollLeft;
+    }
+
+    function bindPlanSheetLayoutSync(scrollId, headId) {
+        const scroll = document.getElementById(scrollId);
+        if (!scroll) return;
+        if (scroll._planSheetLayoutHandler) {
+            scroll.removeEventListener('scroll', scroll._planSheetLayoutHandler);
+        }
+        const run = () => syncPlanSheetLayout(scrollId, headId);
+        scroll._planSheetLayoutHandler = run;
+        scroll.addEventListener('scroll', run, { passive: true });
+        run();
+        requestAnimationFrame(() => {
+            run();
+            requestAnimationFrame(run);
+        });
+        if (scroll._planSheetResizeObs) scroll._planSheetResizeObs.disconnect();
+        if (typeof ResizeObserver !== 'undefined') {
+            scroll._planSheetResizeObs = new ResizeObserver(run);
+            scroll._planSheetResizeObs.observe(scroll);
+            const head = document.getElementById(headId);
+            if (head) scroll._planSheetResizeObs.observe(head);
+        }
     }
 
     function mountJobSheet(headId, countId, scrollId, ids, vlKey) {
@@ -1330,7 +1370,7 @@ const TVC_App = (function () {
         });
         state[vlKey].refresh();
         if (scrollId === 'actScroll') initPlanCellTips(scrollId);
-        if (head) container.addEventListener('scroll', () => { head.scrollLeft = container.scrollLeft; });
+        bindPlanSheetLayoutSync(scrollId, headId);
     }
 
     // ── TAB: Menu ────────────────────────────────────────────────────
@@ -2313,7 +2353,7 @@ const TVC_App = (function () {
         const codeCell = isNew
             ? origJobCellInput('oie_code', r.job_code)
             : `<span class="orig-inline-ro">${esc(r.job_code || '')}</span>`;
-        const colgroup = '<colgroup><col style="width:32px"><col style="width:32px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
+        const colgroup = '<colgroup><col style="width:32px"><col style="width:56px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
         return `<section class="spare-item-edit-panel orig-job-inline-panel" aria-label="Maintenance job edit">
             <div class="spare-item-edit-head">${panelHead}</div>
             <div class="orig-job-inline-meta">
@@ -2337,7 +2377,7 @@ const TVC_App = (function () {
                     </tr></thead>
                     <tbody><tr class="spare-row-editing">
                         <td class="c-chk"></td>
-                        <td class="c-crit">${origJobCriticalSelect('oie_critical', jobCriticalEditValue(r))}</td>
+                        <td class="c-crit">${origJobCriticalReadonlyHtml(r)}</td>
                         <td class="c-code">${codeCell}</td>
                         <td class="c-s1">${origJobCellInput('oie_sort1', r.item_sort1)}</td>
                         <td class="c-d1">${origJobCellInput('oie_sort2', r.item_sort2)}</td>
@@ -2432,7 +2472,6 @@ const TVC_App = (function () {
             pic: g('oie_pic'),
             next_date: g('oie_next'),
             last_done: g('oie_last'),
-            is_critical_equipment: g('oie_critical'),
         };
     }
 
@@ -2454,13 +2493,13 @@ const TVC_App = (function () {
                 await TVC_MaintenancePlan.createJob(user, {
                     ...data,
                     department: ctx.dept,
-                    is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
+                    is_critical_equipment: null,
                 });
                 alert(`${data.job_code} 항목이 추가되었습니다.`);
             } else {
                 await TVC_MaintenancePlan.updateJob(user, m.editId, {
                     ...data,
-                    is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
+                    is_critical_equipment: null,
                 });
                 alert(`${data.job_code} 항목이 수정되었습니다.`);
             }
@@ -3658,32 +3697,39 @@ const TVC_App = (function () {
         return TVC_RBAC.canModifyDeleteListReport(state.user, reportDept(r), st);
     }
 
-    function getCheckedHistReportIds() {
-        const ids = new Set();
-        Object.keys(state._histChecked || {}).forEach(rowKey => {
-            if (!state._histChecked[rowKey]) return;
-            const reportId = rowKey.split('|')[0];
-            if (reportId) ids.add(reportId);
+    function getHistConfirmCandidates() {
+        const checkedEntries = workHistoryEntries().filter(e =>
+            state._histChecked?.[histEntryRowKey(e)]
+        );
+        if (checkedEntries.length) return checkedEntries.filter(isHistRowApprovable);
+        const entry = getSelectedHistEntry();
+        if (entry && isHistRowApprovable(entry)) return [entry];
+        return [];
+    }
+
+    function canConfirmHistReports(candidates) {
+        if (!candidates.length) return false;
+        const reportIds = [...new Set(candidates.map(e => e.report.id))];
+        return reportIds.every(id => {
+            const rep = state.reports.find(r => r.id === id);
+            if (!rep) return false;
+            const hasReported = TVC_WorkReport.getJobItems(rep).some(i => itemSt(i) === 'REPORTED');
+            if (!hasReported || rep.is_locked || reportIsApproved(rep)) return false;
+            if (TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked)) return false;
+            return state.user && TVC_RBAC.canConfirmDepartment(state.user, reportDept(rep));
         });
-        return [...ids];
     }
 
     function updateHistToolbarState() {
         const entry = getSelectedHistEntry();
-        const checkedIds = getCheckedHistReportIds();
         const checkedEntries = workHistoryEntries().filter(e =>
             state._histChecked?.[histEntryRowKey(e)]
         );
-        const canConfirm = checkedEntries.length > 0
-            && checkedEntries.every(isHistRowApprovable)
-            && checkedIds.every(id => {
-                const rep = state.reports.find(r => r.id === id);
-                if (!rep) return false;
-                const hasReported = TVC_WorkReport.getJobItems(rep).some(i => itemSt(i) === 'REPORTED');
-                if (!hasReported || rep.is_locked || reportIsApproved(rep)) return false;
-                if (TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked)) return false;
-                return state.user && TVC_RBAC.canConfirmDepartment(state.user, reportDept(rep));
-            });
+        const confirmCandidates = getHistConfirmCandidates();
+        const checkedApprovableCount = checkedEntries.filter(isHistRowApprovable).length;
+        const canConfirm = checkedEntries.length
+            ? checkedEntries.length === checkedApprovableCount && canConfirmHistReports(confirmCandidates)
+            : canConfirmHistReports(confirmCandidates);
         const setDis = (id, dis) => {
             const el = document.getElementById(id);
             if (el) { if (dis) el.setAttribute('disabled', ''); else el.removeAttribute('disabled'); }
@@ -3692,6 +3738,12 @@ const TVC_App = (function () {
         setDis('histBtnModify', !entry || !canModifyHistEntry(entry));
         setDis('histBtnDelete', !entry || !canDeleteHistEntry(entry));
         setDis('histBtnApprove', !canConfirm);
+        const approveBtn = document.getElementById('histBtnApprove');
+        if (approveBtn) {
+            approveBtn.textContent = checkedApprovableCount >= 1
+                ? `Report Confirm (${checkedApprovableCount})`
+                : 'Report Confirm';
+        }
 
         const approvable = workHistoryEntries().filter(isHistRowCheckable);
         const allEl = document.getElementById('histSelectAll');
@@ -3765,12 +3817,14 @@ const TVC_App = (function () {
         const checkedEntries = workHistoryEntries().filter(e =>
             state._histChecked?.[histEntryRowKey(e)]
         );
-        if (!checkedEntries.length) return alert('Confirm할 REPORTED 항목의 체크박스(ㅁ)를 선택하세요.');
-        const blocked = checkedEntries.filter(e => !isHistRowApprovable(e));
-        if (blocked.length) {
+        const confirmCandidates = getHistConfirmCandidates();
+        if (!confirmCandidates.length) {
+            return alert('Confirm할 REPORTED 항목의 체크박스(ㅁ)를 선택하세요.');
+        }
+        if (checkedEntries.length && confirmCandidates.length !== checkedEntries.length) {
             return alert('선택한 항목 중 Confirm할 수 없는 항목이 있습니다.\nEngine Mode(C/E) 또는 Master Mode(Captain) 로그인을 확인하세요.');
         }
-        const reportIds = getCheckedHistReportIds();
+        const reportIds = [...new Set(confirmCandidates.map(e => e.report.id))];
         const user = TVC_Auth.requirePermission(TVC_RBAC.Action.APPROVE_DAILY_REPORT);
         if (!user) return;
 
@@ -4305,6 +4359,8 @@ const TVC_App = (function () {
 
         try {
             if (rep?.consume_log_id) {
+                const log = await TVC_Inventory.getConsumeLog(rep.consume_log_id);
+                if (log) await TVC_SpareMenu.reverseConsumeLogStockForLog(user, log, undefined, { skipRbac: true });
                 await TVC_Inventory.deleteConsumeLog(rep.consume_log_id);
             }
             await TVC_Transaction.deleteReport(user, state._wrReportId);
@@ -4408,6 +4464,25 @@ const TVC_App = (function () {
         });
     }
 
+    function buildWrPage2JobItems(job) {
+        const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
+        if (state._batchMode && state._batchJobIds?.length >= 2) {
+            const jobs = state._batchJobIds
+                .map(id => state.idx?.jobById.get(id))
+                .filter(Boolean);
+            return TVC_SpareMenu.buildPage2JobItemsFromJobs(jobs);
+        }
+        if (rep?.is_batch && rep.job_items?.length) {
+            return rep.job_items.map(it => TVC_SpareMenu.newConsumeJobRow({
+                job_code: it.job_code || '',
+                sort1: it.item_sort1 || it.form?.sort1 || '',
+                sort2: it.item_sort2 || it.form?.sort2 || '',
+                job_detail: it.description || it.form?.jobDetail || it.job_detail || '',
+            }));
+        }
+        return TVC_SpareMenu.buildPage2JobItemsFromJobs([job]);
+    }
+
     function buildWrPage2Meta(job, reportedByName, today) {
         const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
         return {
@@ -4415,11 +4490,14 @@ const TVC_App = (function () {
             workDate: wf('workDate', today),
             reportedBy: reportedByName,
             pmsGroupNo: wf('pmsGroupNo', hdr.pmsGroupNo || job?.group || ''),
+            groupKey: `${job?.department || ''}|${String(job?.group || '').trim()}`,
             jobCode: job?.job_code || '',
             sort1: job?.item_sort1 || '',
             sort2: job?.item_sort2 || '',
             jobDetail: job?.job_detail || '',
             shipComments: wf('shipComments', ''),
+            jobItems: buildWrPage2JobItems(job),
+            allowAdd: false,
         };
     }
 
@@ -5351,7 +5429,7 @@ const TVC_App = (function () {
                         workDate: form.workDate || payload.workDate,
                         shipComments: form.shipComments || '',
                     };
-                    const consumeLogId = await TVC_SpareMenu.syncConsumeLogFromWorkReport({
+                    const syncResult = await TVC_SpareMenu.syncConsumeLogFromWorkReport({
                         report,
                         job,
                         usedParts: wrPartsForConsumeLog,
@@ -5359,12 +5437,17 @@ const TVC_App = (function () {
                         user,
                         department: job.department || state.department || '',
                     });
-                    if (report.consume_log_id !== consumeLogId) {
+                    const consumeLogId = syncResult?.logId ?? null;
+                    const stockAppliedAt = syncResult?.stockAppliedAt || '';
+                    if (report.consume_log_id !== consumeLogId
+                        || (stockAppliedAt && report.stock_applied_at !== stockAppliedAt)) {
                         report.consume_log_id = consumeLogId || null;
+                        if (stockAppliedAt) report.stock_applied_at = stockAppliedAt;
                         await TVC_DB.put('daily_work_reports', report);
                     }
                 } catch (syncErr) {
                     console.error('Consumed Log sync failed:', syncErr);
+                    alert(syncErr.message || 'Spare parts stock update failed.');
                 }
             }
 

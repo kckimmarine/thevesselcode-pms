@@ -241,14 +241,14 @@ const TVC_Transaction = (function () {
         });
     }
 
-    async function rollbackApprovedItem(api, item, user) {
-        for (const line of item.used_parts || []) {
-            const spare = await api.get('spare_parts', line.spare_part_id);
-            if (!spare) continue;
-            spare.qty_on_hand = (Number(spare.qty_on_hand) || 0) + (Number(line.qty_used) || 0);
-            spare.qty_working = Math.max(0, (Number(spare.qty_working) || 0) - (Number(line.qty_used) || 0));
-            markPending(spare);
-            await api.put('spare_parts', spare);
+    async function rollbackApprovedItem(api, item, user, report) {
+        if (report?.stock_applied_at && (item.used_parts || []).length) {
+            await TVC_InventoryService.reverseTaskPartsApi(api, user, item.used_parts, {
+                ref: item.job_code || '',
+                source_id: report.id,
+                source_type: 'work_report',
+                note: 'Work Report deleted — stock restored',
+            });
         }
         const job = await api.get('maintenance_jobs', item.maintenance_job_id);
         if (job && item.prev_job_state) {
@@ -290,7 +290,7 @@ const TVC_Transaction = (function () {
 
         TVC_RBAC.assert(user, TVC_RBAC.Action.APPROVE_DAILY_REPORT);
 
-        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'spare_parts', 'audit_logs'], async (api) => {
+        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'spare_parts', 'inventory_history', 'consume_logs', 'audit_logs'], async (api) => {
             const rep = await api.get('daily_work_reports', reportId);
             if (!rep) throw Object.assign(new Error('REPORT_NOT_FOUND'), { code: 'NOT_FOUND' });
             TVC_WorkReport.fromLegacy(rep);
@@ -302,11 +302,23 @@ const TVC_Transaction = (function () {
                     throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
                 }
                 if (rep.work_type !== 'POSTPONE') {
-                    await rollbackApprovedItem(api, item, user);
+                    await rollbackApprovedItem(api, item, user, rep);
                 } else {
                     await restoreJobScheduleFromSnapshot(api, item);
                 }
             }
+
+            if (rep.consume_log_id) {
+                const log = await api.get('consume_logs', rep.consume_log_id);
+                if (log) {
+                    log.list_status = 'Reported';
+                    log.stock_applied_at = '';
+                    log.confirmed_at = '';
+                    log.confirmed_by = '';
+                    await api.put('consume_logs', log);
+                }
+            }
+            rep.stock_applied_at = '';
 
             await api.del('daily_work_reports', reportId);
             await api.put('audit_logs', {
@@ -330,7 +342,7 @@ const TVC_Transaction = (function () {
     async function confirmReport(user, reportId) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.APPROVE_DAILY_REPORT);
 
-        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'spare_parts', 'audit_logs'], async (api) => {
+        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'spare_parts', 'inventory_history', 'consume_logs', 'audit_logs'], async (api) => {
             const report = await api.get('daily_work_reports', reportId);
             if (!report) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
             TVC_WorkReport.fromLegacy(report);
@@ -357,9 +369,14 @@ const TVC_Transaction = (function () {
                 }
             }
 
-            if (confirmTasks.length) {
-                const { alerts } = await TVC_PMS.confirmBatchTasks(api, confirmTasks, { forceOk });
+            if (confirmTasks.length && !report.stock_applied_at) {
+                const { alerts } = await TVC_InventoryService.deductTaskPartsBatchApi(api, user, confirmTasks, {
+                    forceOk,
+                    source_id: report.id,
+                    source_type: 'work_report',
+                });
                 report._spicsAlerts = alerts;
+                report.stock_applied_at = now();
             }
 
             for (const item of reportedItems) {
@@ -373,6 +390,18 @@ const TVC_Transaction = (function () {
                 report.prev_job_state = report.job_items[0].prev_job_state;
                 report.used_parts = report.job_items[0].used_parts || [];
             }
+
+            if (report.consume_log_id) {
+                const log = await api.get('consume_logs', report.consume_log_id);
+                if (log) {
+                    log.list_status = 'Confirmed';
+                    log.stock_applied_at = report.stock_applied_at;
+                    log.confirmed_at = report.confirmed_at;
+                    log.confirmed_by = user.display_name || user.username || '';
+                    await api.put('consume_logs', log);
+                }
+            }
+
             markPending(report);
             await api.put('daily_work_reports', report);
 

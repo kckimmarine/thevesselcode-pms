@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — SPICS Inventory Service
- * 소비(Consumption) · 입고(Delivery) · 본사 Import Diff · inventory_history 기록
+ * 재고 변경 단일入口 — spare_parts.qty_on_hand + inventory_history
  */
 const TVC_InventoryService = (function () {
     const now = () => new Date().toISOString();
@@ -9,7 +9,336 @@ const TVC_InventoryService = (function () {
         return TVC_RBAC.getRankLabel(user) || user.display_name || user.username || '—';
     }
 
-    /** 부품 검색 (Part No / Name / Universal Code) */
+    function normalizePartLines(lines) {
+        const map = new Map();
+        for (const l of lines || []) {
+            const id = String(l.spare_part_id || l.sparePartId || '').trim();
+            const qty = Math.floor(Number(l.qty ?? l.qty_used ?? l.qty_consumed) || 0);
+            if (!id || qty <= 0) continue;
+            map.set(id, (map.get(id) || 0) + qty);
+        }
+        return map;
+    }
+
+    function linesFromMap(map) {
+        return [...map.entries()].map(([spare_part_id, qty]) => ({ spare_part_id, qty }));
+    }
+
+    function assertStockPermission(user, txType, skipRbac) {
+        if (skipRbac) return;
+        if (txType === TVC_INVENTORY_TX.CONSUMPTION) {
+            TVC_RBAC.assert(user, TVC_RBAC.Action.DEDUCT_INVENTORY);
+        } else if (txType === TVC_INVENTORY_TX.DELIVERY) {
+            TVC_RBAC.assert(user, TVC_RBAC.Action.SUPPLY_PARTS);
+        } else {
+            TVC_RBAC.assert(user, TVC_RBAC.Action.MODIFY_INVENTORY);
+        }
+    }
+
+    function lowStockAlert(spare, ref) {
+        const minS = Number(spare.min_qty ?? spare.standard_stock ?? 0) || 0;
+        if ((Number(spare.qty_on_hand) || 0) >= minS) return null;
+        return {
+            sparePartId: spare.id,
+            partNo: spare.part_no,
+            name: spare.name,
+            stock: spare.qty_on_hand,
+            minStock: minS,
+            jobCode: ref || '',
+        };
+    }
+
+    function dispatchLowStockAlerts(alerts, ref) {
+        if (!alerts.length || typeof window === 'undefined') return;
+        window.dispatchEvent(new CustomEvent('tvc:spics-requisition-suggest', {
+            detail: { alerts, jobCode: ref || '' },
+        }));
+    }
+
+    /**
+     * @param {object} api — IndexedDB transaction api
+     * @param {object} user
+     * @param {Array<{ spare_part_id: string, qty: number, note?: string }>} lines
+     */
+    async function applyStockTxApi(api, user, lines, meta = {}) {
+        const txType = meta.tx_type;
+        const isConsumption = txType === TVC_INVENTORY_TX.CONSUMPTION;
+        const isReversal = txType === TVC_INVENTORY_TX.REVERSAL;
+        const isDelivery = txType === TVC_INVENTORY_TX.DELIVERY;
+
+        const validLines = (lines || []).filter(l => l.spare_part_id && Number(l.qty) > 0);
+        if (!validLines.length) {
+            return { tx_type: txType, count: 0, lines: [], at: now(), alerts: [] };
+        }
+
+        const results = [];
+        const alerts = [];
+        const ts = now();
+
+        for (const line of validLines) {
+            const qty = Math.floor(Number(line.qty) || 0);
+            if (qty <= 0) continue;
+
+            const row = await api.get('spare_parts', line.spare_part_id);
+            if (!row) {
+                throw Object.assign(new Error(`부품을 찾을 수 없습니다: ${line.spare_part_id}`), { code: 'NOT_FOUND' });
+            }
+
+            const onHand = Number(row.qty_on_hand) || 0;
+            if (isConsumption && onHand < qty && !meta.forceOk) {
+                throw Object.assign(
+                    new Error(`재고 부족: ${row.part_no} (보유 ${onHand}, 요청 ${qty})`),
+                    { code: 'STOCK', part: row.part_no }
+                );
+            }
+
+            let delta;
+            if (isConsumption) {
+                delta = -qty;
+                row.qty_on_hand = Math.max(0, onHand - qty);
+                row.qty_working = (Number(row.qty_working) || 0) + qty;
+            } else if (isReversal) {
+                delta = qty;
+                row.qty_on_hand = onHand + qty;
+                row.qty_working = Math.max(0, (Number(row.qty_working) || 0) - qty);
+            } else {
+                delta = qty;
+                row.qty_on_hand = onHand + qty;
+            }
+
+            row.history = Array.isArray(row.history) ? row.history : [];
+            row.history.push({
+                at: ts,
+                type: txType,
+                qty: delta,
+                ref: meta.ref || '',
+                source_id: meta.source_id || '',
+                source_type: meta.source_type || '',
+                note: line.note || meta.note || '',
+            });
+            row.sync_status = row.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (row.sync_status || 'LOCAL');
+            row.updated_at = ts;
+            await api.put('spare_parts', row);
+
+            await api.put('inventory_history', {
+                id: 'IH-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+                at: ts,
+                date: ts.slice(0, 10),
+                time: ts.slice(11, 19),
+                tx_type: txType,
+                spare_part_id: row.id,
+                part_no: row.part_no || '',
+                part_name: row.name || '',
+                universal_code: row.universal_code || row.universal_item_code || '',
+                qty_delta: delta,
+                qty_after: row.qty_on_hand,
+                operator_id: user?.id || '',
+                operator_name: operatorName(user),
+                department: user?.department || row.category || '',
+                ref: meta.ref || '',
+                source_id: meta.source_id || '',
+                source_type: meta.source_type || '',
+                note: line.note || meta.note || '',
+                sync_status: 'LOCAL',
+                updated_at: ts,
+            });
+
+            results.push({
+                spare_part_id: row.id,
+                part_no: row.part_no,
+                qty,
+                qty_after: row.qty_on_hand,
+            });
+
+            if (isConsumption) {
+                const alert = lowStockAlert(row, meta.ref);
+                if (alert) alerts.push(alert);
+            }
+        }
+
+        if (results.length && !meta.skipAudit) {
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `📦 [${txType}] ${results.length} items — ${operatorName(user)}`,
+                sync_status: 'LOCAL',
+            });
+        }
+
+        return { tx_type: txType, count: results.length, lines: results, at: ts, alerts };
+    }
+
+    /** Standalone transaction wrapper */
+    async function applyStockTx(user, lines, meta = {}) {
+        assertStockPermission(user, meta.tx_type, meta.skipRbac);
+        const validLines = (lines || []).filter(l => l.spare_part_id && Number(l.qty) > 0);
+        if (!validLines.length) {
+            throw Object.assign(new Error('적용할 부품/수량이 없습니다.'), { code: 'EMPTY' });
+        }
+        return TVC_DB.runTransaction(['spare_parts', 'inventory_history', 'audit_logs'], async (api) => {
+            const res = await applyStockTxApi(api, user, validLines, meta);
+            if (res.alerts?.length) dispatchLowStockAlerts(res.alerts, meta.ref);
+            return res;
+        });
+    }
+
+    async function recordConsumption(user, lines, opts = {}) {
+        return applyStockTx(user, lines, {
+            tx_type: TVC_INVENTORY_TX.CONSUMPTION,
+            ref: opts.ref || '',
+            note: opts.note || '',
+            forceOk: !!opts.forceOk,
+            source_id: opts.source_id || '',
+            source_type: opts.source_type || 'consume_log',
+            skipRbac: !!opts.skipRbac,
+        });
+    }
+
+    async function recordDelivery(user, lines, opts = {}) {
+        return applyStockTx(user, lines, {
+            tx_type: TVC_INVENTORY_TX.DELIVERY,
+            ref: opts.ref || '',
+            note: opts.note || '',
+            source_id: opts.source_id || '',
+            source_type: opts.source_type || 'received',
+        });
+    }
+
+    async function recordReversal(user, lines, opts = {}) {
+        return applyStockTx(user, lines, {
+            tx_type: TVC_INVENTORY_TX.REVERSAL,
+            ref: opts.ref || '',
+            note: opts.note || 'Stock reversal',
+            source_id: opts.source_id || '',
+            source_type: opts.source_type || 'reversal',
+            skipRbac: !!opts.skipRbac,
+        });
+    }
+
+    /** Work Report Confirm — used_parts 차감 (transaction 내부) */
+    async function deductTaskPartsApi(api, user, requiredParts, opts = {}) {
+        const lines = linesFromMap(normalizePartLines(
+            (requiredParts || []).map(l => ({
+                spare_part_id: l.spare_part_id || l.sparePartId,
+                qty: l.qty_used ?? l.qty,
+            }))
+        ));
+        if (!lines.length) return { alerts: [], deducted: 0 };
+        const res = await applyStockTxApi(api, user, lines, {
+            tx_type: TVC_INVENTORY_TX.CONSUMPTION,
+            ref: opts.ref || '',
+            note: opts.note || 'Work Report confirmed',
+            forceOk: !!opts.forceOk,
+            source_id: opts.source_id || '',
+            source_type: opts.source_type || 'work_report',
+            skipRbac: true,
+            skipAudit: opts.skipAudit,
+        });
+        if (res.alerts?.length) dispatchLowStockAlerts(res.alerts, opts.ref);
+        return { alerts: res.alerts || [], deducted: res.count || 0 };
+    }
+
+    async function deductTaskPartsBatchApi(api, user, tasks, opts = {}) {
+        const allAlerts = [];
+        let totalDeducted = 0;
+        for (const task of tasks || []) {
+            if (!task?.job) continue;
+            const parts = task.usedParts || task.requiredParts || [];
+            const { alerts, deducted } = await deductTaskPartsApi(api, user, parts, {
+                ...opts,
+                ref: task.job.job_code,
+                skipAudit: true,
+            });
+            if (alerts?.length) allAlerts.push(...alerts);
+            totalDeducted += deducted || 0;
+        }
+        if (totalDeducted > 0 && !opts.skipAudit) {
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `📦 [TASK_CONFIRM] ${totalDeducted} items — ${operatorName(user)}`,
+                sync_status: 'LOCAL',
+            });
+        }
+        return { alerts: allAlerts, deducted: totalDeducted };
+    }
+
+    async function reverseTaskPartsApi(api, user, usedParts, opts = {}) {
+        const lines = linesFromMap(normalizePartLines(
+            (usedParts || []).map(l => ({
+                spare_part_id: l.spare_part_id,
+                qty: l.qty_used ?? l.qty,
+            }))
+        ));
+        if (!lines.length) return { count: 0 };
+        return applyStockTxApi(api, user, lines, {
+            tx_type: TVC_INVENTORY_TX.REVERSAL,
+            ref: opts.ref || '',
+            note: opts.note || 'Work Report rollback',
+            source_id: opts.source_id || '',
+            source_type: opts.source_type || 'work_report',
+            skipRbac: true,
+        });
+    }
+
+    /** SPARE Consumed log 수정 — 이전/신규 수량 diff 반영 */
+    async function applyConsumptionDiff(user, prevLines, nextLines, opts = {}) {
+        const prev = normalizePartLines(prevLines);
+        const next = normalizePartLines(nextLines);
+        const ids = new Set([...prev.keys(), ...next.keys()]);
+        const consumeLines = [];
+        const reverseLines = [];
+        for (const id of ids) {
+            const d = (next.get(id) || 0) - (prev.get(id) || 0);
+            if (d > 0) consumeLines.push({ spare_part_id: id, qty: d });
+            else if (d < 0) reverseLines.push({ spare_part_id: id, qty: -d });
+        }
+        if (!consumeLines.length && !reverseLines.length) {
+            return { count: 0 };
+        }
+        return TVC_DB.runTransaction(['spare_parts', 'inventory_history', 'audit_logs'], async (api) => {
+            let count = 0;
+            const baseMeta = {
+                ref: opts.ref || '',
+                note: opts.note || 'Consumed log updated',
+                source_id: opts.source_id || '',
+                source_type: opts.source_type || 'consume_log',
+                skipRbac: true,
+            };
+            if (reverseLines.length) {
+                const r = await applyStockTxApi(api, user, reverseLines, {
+                    ...baseMeta,
+                    tx_type: TVC_INVENTORY_TX.REVERSAL,
+                    note: opts.note || 'Consumed log qty reduced',
+                });
+                count += r.count || 0;
+            }
+            if (consumeLines.length) {
+                const r = await applyStockTxApi(api, user, consumeLines, {
+                    ...baseMeta,
+                    tx_type: TVC_INVENTORY_TX.CONSUMPTION,
+                    forceOk: !!opts.forceOk,
+                    note: opts.note || 'Consumed log qty increased',
+                });
+                if (r.alerts?.length) dispatchLowStockAlerts(r.alerts, opts.ref);
+                count += r.count || 0;
+            }
+            if (count > 0) {
+                await api.put('audit_logs', {
+                    timestamp: new Date().toLocaleString(),
+                    log: `📦 [CONSUME_DIFF] ${count} items — ${operatorName(user)}`,
+                    sync_status: 'LOCAL',
+                });
+            }
+            return { count };
+        });
+    }
+
+    async function reverseConsumption(user, lines, opts = {}) {
+        const normalized = linesFromMap(normalizePartLines(lines));
+        if (!normalized.length) return { count: 0 };
+        const res = await recordReversal(user, normalized, opts);
+        return { count: res.count || 0 };
+    }
+
     async function searchParts(query, limit = 25) {
         const q = String(query || '').trim().toLowerCase();
         if (!q) return [];
@@ -23,127 +352,6 @@ const TVC_InventoryService = (function () {
         }).slice(0, limit);
     }
 
-    /**
-     * inventory_history + spare_parts 동시 갱신 (트랜잭션)
-     * @param {object} user
-     * @param {Array<{ spare_part_id: string, qty: number, note?: string }>} lines
-     * @param {{ tx_type: string, ref?: string, note?: string, forceOk?: boolean }} meta
-     */
-    async function applyStockTx(user, lines, meta) {
-        const txType = meta.tx_type;
-        const isConsumption = txType === TVC_INVENTORY_TX.CONSUMPTION;
-
-        if (isConsumption) {
-            TVC_RBAC.assert(user, TVC_RBAC.Action.DEDUCT_INVENTORY);
-        } else if (txType === TVC_INVENTORY_TX.DELIVERY) {
-            TVC_RBAC.assert(user, TVC_RBAC.Action.SUPPLY_PARTS);
-        } else {
-            TVC_RBAC.assert(user, TVC_RBAC.Action.MODIFY_INVENTORY);
-        }
-
-        const validLines = (lines || []).filter(l => l.spare_part_id && Number(l.qty) > 0);
-        if (!validLines.length) {
-            throw Object.assign(new Error('적용할 부품/수량이 없습니다.'), { code: 'EMPTY' });
-        }
-
-        return TVC_DB.runTransaction(['spare_parts', 'inventory_history', 'audit_logs'], async (api) => {
-            const results = [];
-            const ts = now();
-
-            for (const line of validLines) {
-                const qty = Math.floor(Number(line.qty) || 0);
-                if (qty <= 0) continue;
-
-                const row = await api.get('spare_parts', line.spare_part_id);
-                if (!row) {
-                    throw Object.assign(new Error(`부품을 찾을 수 없습니다: ${line.spare_part_id}`), { code: 'NOT_FOUND' });
-                }
-
-                const onHand = Number(row.qty_on_hand) || 0;
-                if (isConsumption && onHand < qty && !meta.forceOk) {
-                    throw Object.assign(
-                        new Error(`재고 부족: ${row.part_no} (보유 ${onHand}, 요청 ${qty})`),
-                        { code: 'STOCK', part: row.part_no }
-                    );
-                }
-
-                const delta = isConsumption ? -qty : qty;
-                row.qty_on_hand = isConsumption ? Math.max(0, onHand - qty) : onHand + qty;
-                if (isConsumption) row.qty_working = (Number(row.qty_working) || 0) + qty;
-                row.history = Array.isArray(row.history) ? row.history : [];
-                row.history.push({
-                    at: ts,
-                    type: txType,
-                    qty: delta,
-                    ref: meta.ref || '',
-                    note: line.note || meta.note || '',
-                });
-                row.sync_status = row.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (row.sync_status || 'LOCAL');
-                row.updated_at = ts;
-                await api.put('spare_parts', row);
-
-                const histRow = {
-                    at: ts,
-                    date: ts.slice(0, 10),
-                    time: ts.slice(11, 19),
-                    tx_type: txType,
-                    spare_part_id: row.id,
-                    part_no: row.part_no || '',
-                    part_name: row.name || '',
-                    universal_code: row.universal_code || row.universal_item_code || '',
-                    qty_delta: delta,
-                    qty_after: row.qty_on_hand,
-                    operator_id: user.id || '',
-                    operator_name: operatorName(user),
-                    department: user.department || row.category || '',
-                    ref: meta.ref || '',
-                    note: line.note || meta.note || '',
-                    sync_status: 'LOCAL',
-                    updated_at: ts,
-                };
-                await api.put('inventory_history', {
-                    id: 'IH-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
-                    ...histRow,
-                });
-
-                results.push({
-                    spare_part_id: row.id,
-                    part_no: row.part_no,
-                    qty,
-                    qty_after: row.qty_on_hand,
-                });
-            }
-
-            await api.put('audit_logs', {
-                timestamp: new Date().toLocaleString(),
-                log: `📦 [${txType}] ${results.length} items — ${operatorName(user)}`,
-                sync_status: 'LOCAL',
-            });
-
-            return { tx_type: txType, count: results.length, lines: results, at: ts };
-        });
-    }
-
-    /** 부품 사용(Consumption) — 재고 차감 + inventory_history */
-    async function recordConsumption(user, lines, opts = {}) {
-        return applyStockTx(user, lines, {
-            tx_type: TVC_INVENTORY_TX.CONSUMPTION,
-            ref: opts.ref || '',
-            note: opts.note || '',
-            forceOk: !!opts.forceOk,
-        });
-    }
-
-    /** 입고(Delivery) — 재고 증가 + inventory_history */
-    async function recordDelivery(user, lines, opts = {}) {
-        return applyStockTx(user, lines, {
-            tx_type: TVC_INVENTORY_TX.DELIVERY,
-            ref: opts.ref || '',
-            note: opts.note || '',
-        });
-    }
-
-    /** 입출고 이력 조회 */
     async function getHistory(filters = {}) {
         if (filters.spare_part_id) {
             return TVC_DB.InventoryHistory.listBySpare(filters.spare_part_id, filters.limit || 50);
@@ -154,10 +362,6 @@ const TVC_InventoryService = (function () {
         return TVC_DB.InventoryHistory.listRecent(filters.limit || 100);
     }
 
-    /**
-     * 본사 JSON Import → 현재 DB Diff
-     * @param {object} payload { spares?: [], meta?: {} }
-     */
     async function diffHqImport(payload) {
         const incoming = Array.isArray(payload?.spares) ? payload.spares : (payload?.spare_parts || []);
         const local = await TVC_DB.SparePart.listAll();
@@ -197,11 +401,6 @@ const TVC_InventoryService = (function () {
         };
     }
 
-    /**
-     * Assessment Result 적용 (Diff 승인 후)
-     * @param {object} user
-     * @param {object} assessment diffHqImport 결과
-     */
     async function applyHqAssessment(user, assessment, opts = {}) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
         const payload = assessment.payload || assessment;
@@ -236,6 +435,7 @@ const TVC_InventoryService = (function () {
                     operator_name: operatorName(user),
                     department: user.department || '',
                     ref: 'HQ_IMPORT',
+                    source_type: 'hq_import',
                     note: opts.note || 'HQ Assessment applied',
                 });
                 updated++;
@@ -247,8 +447,17 @@ const TVC_InventoryService = (function () {
 
     return {
         searchParts,
+        applyStockTxApi,
+        applyStockTx,
         recordConsumption,
         recordDelivery,
+        recordReversal,
+        deductTaskPartsApi,
+        deductTaskPartsBatchApi,
+        reverseTaskPartsApi,
+        applyConsumptionDiff,
+        reverseConsumption,
+        normalizePartLines,
         getHistory,
         diffHqImport,
         applyHqAssessment,

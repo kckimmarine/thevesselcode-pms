@@ -236,82 +236,28 @@ const TVC_PMS = (function () {
 
     /**
      * confirmTask — 정비 Task 완료 시 연결 부품 currentStock 자동 차감.
-     * currentStock < minStock 이면 spareRequest 청구 제안 이벤트 발생.
+     * 재고 변경은 TVC_InventoryService가 단일 소유.
      */
     async function confirmTask(api, job, requiredParts, opts = {}) {
-        const alerts = [];
-        let deducted = 0;
-        const forceOk = !!opts.forceOk;
-        const ref = opts.ref || job?.job_code || '';
-
-        for (const line of requiredParts || []) {
-            const id = line.spare_part_id || line.sparePartId;
-            const qty = Number(line.qty_used ?? line.qty) || 0;
-            if (!id || qty <= 0) continue;
-
-            const spare = await api.get('spare_parts', id);
-            if (!spare) continue;
-
-            const onHand = Number(spare.qty_on_hand) || 0;
-            if (onHand < qty && !forceOk) {
-                throw Object.assign(new Error('INSUFFICIENT_STOCK'), { code: 'STOCK', part: spare.part_no });
-            }
-
-            spare.qty_on_hand = Math.max(0, onHand - qty);
-            spare.qty_working = (Number(spare.qty_working) || 0) + qty;
-            spare.history = Array.isArray(spare.history) ? spare.history : [];
-            spare.history.push({
-                at: new Date().toISOString(),
-                type: 'TASK_CONFIRM',
-                qty: -qty,
-                ref,
-                note: `Task ${ref} confirmed`,
-            });
-            spare.updated_at = new Date().toISOString();
-            spare.sync_status = spare.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (spare.sync_status || 'LOCAL');
-            await api.put('spare_parts', spare);
-            deducted++;
-
-            const minS = Number(spare.min_qty ?? spare.standard_stock ?? 0) || 0;
-            if (spare.qty_on_hand < minS) {
-                alerts.push({
-                    sparePartId: spare.id,
-                    partNo: spare.part_no,
-                    name: spare.name,
-                    stock: spare.qty_on_hand,
-                    minStock: minS,
-                    jobCode: ref,
-                });
-            }
+        if (typeof TVC_InventoryService === 'undefined') {
+            return { alerts: [], deducted: 0 };
         }
-
-        if (alerts.length && typeof window !== 'undefined') {
-            window.dispatchEvent(new CustomEvent('tvc:spics-requisition-suggest', { detail: { alerts, jobCode: ref } }));
-        }
-
-        return { alerts, deducted };
+        return TVC_InventoryService.deductTaskPartsApi(api, opts.user, requiredParts, {
+            forceOk: !!opts.forceOk,
+            ref: opts.ref || job?.job_code || '',
+            source_id: opts.source_id || '',
+            source_type: opts.source_type || 'work_report',
+        });
     }
 
     /**
      * confirmBatchTasks — 다중 Job Code에 대해 confirmTask를 순차 수행 (재고 개별 차감).
-     * @param {object} api — IndexedDB transaction api
-     * @param {Array<{job: object, usedParts?: Array, requiredParts?: Array}>} tasks
-     * @param {object} [opts]
      */
     async function confirmBatchTasks(api, tasks, opts = {}) {
-        const allAlerts = [];
-        let totalDeducted = 0;
-        for (const task of tasks || []) {
-            if (!task?.job) continue;
-            const parts = task.usedParts || task.requiredParts || [];
-            const { alerts, deducted } = await confirmTask(api, task.job, parts, {
-                ...opts,
-                ref: task.job.job_code,
-            });
-            if (alerts?.length) allAlerts.push(...alerts);
-            totalDeducted += deducted || 0;
+        if (typeof TVC_InventoryService === 'undefined') {
+            return { alerts: [], deducted: 0 };
         }
-        return { alerts: allAlerts, deducted: totalDeducted };
+        return TVC_InventoryService.deductTaskPartsBatchApi(api, opts.user, tasks, opts);
     }
 
     /** @deprecated alias */ async function confirmWorkCompletion(api, job, requiredParts, opts) {
