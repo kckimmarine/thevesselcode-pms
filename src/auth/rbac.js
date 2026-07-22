@@ -89,6 +89,9 @@ const ROLE_PERMISSIONS = {
         Action.ADD_COMPANY_COMMENT,
         Action.CONFIRM_REPORT,
         Action.VIEW_AUDIT_LOG,
+        Action.DEDUCT_INVENTORY,
+        Action.MODIFY_INVENTORY,
+        Action.CREATE_REQUISITION,
     ]),
 };
 

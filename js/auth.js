@@ -6,11 +6,11 @@ const TVC_Auth = (function () {
 
     const DEFAULT_USERS = [
         // Deck part
-        { id: 'user-officer', username: 'officer', display_name: 'Kim 2/O (Deck Officer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'TEST_V01' },
-        { id: 'user-captain', username: 'captain', display_name: 'Choi Captain (선장)', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'TEST_V01' },
+        { id: 'user-officer', username: 'officer', display_name: 'Kim 2/O (Deck Officer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'INCHEON CHEMI' },
+        { id: 'user-captain', username: 'captain', display_name: 'Choi Captain (선장)', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'INCHEON CHEMI' },
         // Engine part
-        { id: 'user-engineer', username: 'engineer', display_name: 'Kim 3/E (Engineer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'ENGINE', vessel_id: 'TEST_V01' },
-        { id: 'user-chief', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'TEST_V01' },
+        { id: 'user-engineer', username: 'engineer', display_name: 'Kim 3/E (Engineer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'ENGINE', vessel_id: 'INCHEON CHEMI' },
+        { id: 'user-chief', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'INCHEON CHEMI' },
         // Head office
         { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent (본사)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null },
     ];

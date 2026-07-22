@@ -126,6 +126,8 @@ const TVC_RBAC = (function () {
             Action.ADD_COMPANY_COMMENT, Action.CONFIRM_REPORT,
             Action.VIEW_AUDIT_LOG, Action.MODIFY_MAINTENANCE_ITEM,
             Action.REPLY_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
+            Action.DEDUCT_INVENTORY, Action.MODIFY_INVENTORY,
+            Action.CREATE_REQUISITION, Action.SUPPLY_PARTS,
         ]),
     };
 

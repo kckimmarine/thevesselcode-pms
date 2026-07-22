@@ -320,7 +320,7 @@ const TVC_DefectSync = (function () {
         const vCheck = TVC_Sync.validateImportVesselId(expectedVesselId, importVesselId, isHq);
         if (!vCheck.ok) throw new Error(vCheck.message);
 
-        await TVC_Sync.mergePayload(payload, null, isHq, importVesselId);
+        await TVC_Sync.mergePayload(payload, null, isHq, importVesselId, { importAuthoritative: true });
 
         if (typeof TVC_Sync.recordSyncHistory !== 'undefined') {
             await TVC_Sync.recordSyncHistory({

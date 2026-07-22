@@ -330,6 +330,13 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 
 .cmaxs-cards { min-width: 0; }
 .menu-flow-panel { padding: 0; }
+/* Vessel Menu — 4 columns in one row (Daily / Defect / Monthly / If Necessary) */
+.menu-flow-panel.spare-flow-panel {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.cmaxs-body.hq-mode .menu-flow-panel.spare-flow-panel {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 .menu-flow-panel .spare-flow-item {
     display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
 }
@@ -4188,6 +4195,11 @@ label.spare-file-pick input[type=file] { display: none; }
     flex: 1;
     min-width: 0;
 }
+.spare-req-hist-anchor {
+    position: relative;
+    flex-shrink: 0;
+    display: inline-flex;
+}
 .spare-req-hist-btn {
     flex-shrink: 0;
     white-space: nowrap;
@@ -4200,13 +4212,16 @@ label.spare-file-pick input[type=file] { display: none; }
     color: #fff;
     border-color: #2b6cb0;
 }
+.spare-req-work-meta.is-req-hist-open {
+    z-index: 500;
+}
 .spare-req-hist-popover {
     position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    width: min(1080px, 88vw);
-    max-width: min(1080px, 88vw);
-    z-index: 300;
+    left: 14px;
+    right: 14px;
+    width: auto;
+    max-width: none;
+    z-index: 2;
     background: #fff;
     border: 2px solid #cbd5e1;
     border-radius: 10px;
@@ -4214,7 +4229,37 @@ label.spare-file-pick input[type=file] { display: none; }
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    max-height: min(560px, 82vh);
+    max-height: min(420px, 52vh);
+    box-sizing: border-box;
+}
+.spare-req-hist-popover.hidden {
+    display: none !important;
+}
+.spare-req-hist-popover .spare-req-list-table {
+    min-width: 0;
+    width: 100%;
+    table-layout: fixed;
+}
+.spare-req-hist-popover .spare-req-list-table col.rl-col-chk { width: 36px; }
+.spare-req-hist-popover .spare-req-list-table col.rl-col-reqno { width: 22%; }
+.spare-req-hist-popover .spare-req-list-table col.rl-col-daterange { width: 16%; }
+.spare-req-hist-popover .spare-req-list-table col.rl-col-port { width: 14%; }
+.spare-req-hist-popover .spare-req-list-table col.rl-col-reported { width: 12%; }
+.spare-req-hist-popover .spare-req-list-table col.rl-col-status { width: 12%; }
+.spare-req-hist-popover .spare-req-list-table col.rl-col-total { width: 56px; }
+.spare-req-hist-popover .spare-req-list-head-table thead th,
+.spare-req-hist-popover .spare-req-list-body-table tbody td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.spare-req-hist-popover .spare-req-list-head-table thead th {
+    white-space: normal;
+    line-height: 1.25;
+}
+.spare-req-hist-popover .spare-req-list-empty,
+.spare-req-hist-popover .spare-req-list-empty-sub {
+    white-space: normal;
 }
 .spare-req-hist-popover-head {
     display: flex;
@@ -4239,6 +4284,7 @@ label.spare-file-pick input[type=file] { display: none; }
     padding: 12px 14px 0;
     flex-shrink: 0;
     min-height: 0;
+    background: #fff;
 }
 .spare-req-hist-list-panel.panel {
     min-height: 0;
@@ -4250,15 +4296,25 @@ label.spare-file-pick input[type=file] { display: none; }
     flex-direction: column;
     overflow: hidden;
     flex: 1;
+    background: #fff;
 }
 .spare-req-hist-list-scroll {
-    flex: 0 0 auto;
-    min-height: 360px;
-    height: 360px;
-    overflow-x: auto;
+    flex: 1 1 auto;
+    min-height: 220px;
+    height: min(300px, 38vh);
+    overflow-x: hidden;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
     scrollbar-gutter: stable;
+    background: #fff;
+}
+#spareReqWorkModal .wr-spare-toolbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+}
+#spareReqWorkModal .wr-spare-toolbar-actions {
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 .spare-req-hist-hint {
     margin: 0;
@@ -4815,10 +4871,10 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 @media (max-width: 1100px) { .spics-layout { grid-template-columns: 1fr; } }
 
-/* SPARE workflow menu — 4-column function panel */
+/* SPARE workflow menu — 3-column function panel (Consumed / Requisition / If Necessary) */
 .spare-flow-panel {
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 12px;
     padding: 0 20px 14px;
 }
@@ -4946,9 +5002,11 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 @media (max-width: 1100px) {
     .spare-flow-panel { grid-template-columns: 1fr 1fr; }
+    .menu-flow-panel.spare-flow-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
     .spare-flow-panel { grid-template-columns: 1fr; padding: 0 12px 12px; }
+    .menu-flow-panel.spare-flow-panel { grid-template-columns: 1fr; }
 }
 
 /* legacy SPICS menu (unused) */

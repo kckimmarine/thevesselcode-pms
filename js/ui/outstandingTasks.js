@@ -19,9 +19,17 @@ const TVC_OutstandingTasks = (function () {
         return TVC_DefectCase.listWorkflowStatus(dc) === 'Submitted';
     }
 
+    function isDefectOutstanding(dc, state) {
+        if (!dc || dc.visible_in_list === false) return false;
+        if (state?.user && TVC_RBAC.isHqAccount(state.user)) {
+            return dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY;
+        }
+        return isDefectSubmittedExport(dc);
+    }
+
     function defectRows(state) {
         return (state.defectCases || []).filter(dc => {
-            if (!isDefectSubmittedExport(dc)) return false;
+            if (!isDefectOutstanding(dc, state)) return false;
             if (state.department && !TVC_DefectCase.belongsToDepartment(dc, state.department)) return false;
             return true;
         });
@@ -42,7 +50,10 @@ const TVC_OutstandingTasks = (function () {
     }
 
     async function requisitionRows(state) {
-        const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || 'SHIP';
+        const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
+        const vesselId = isHq
+            ? (state.selectedVesselId || (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || 'SHIP')
+            : ((await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || 'SHIP');
         let rows = await TVC_Inventory.listRequisitions(vesselId);
         rows = rows.filter(TVC_Inventory.isRequisitionSubmittedExport);
         if (state.department) {
@@ -51,14 +62,16 @@ const TVC_OutstandingTasks = (function () {
         return rows;
     }
 
-    function defectItemHtml(dc) {
+    function defectItemHtml(dc, state) {
         const code = dc.pms_job_code || dc.job_code || dc.case_no || '—';
         const title = dc.job_detail || dc.outline_maintenance_request || dc.job_name || dc.machinery_name || '';
         const dt = (dc.report_date || dc.work_date || dc.submitted_at || '').slice(0, 10);
+        const isHq = state?.user && TVC_RBAC.isHqAccount(state.user);
+        const meta = isHq ? `HQ Review · ${dt || '—'}` : `Submitted · ${dt || '—'}`;
         return `<button type="button" class="ot-card" onclick="TVC_OutstandingTasks.openItem('defect')">
             <span class="ot-card-title">${esc(code)}</span>
             <span class="ot-card-sub">${esc(title)}</span>
-            <span class="ot-card-meta">Submitted · ${esc(dt || '—')}</span>
+            <span class="ot-card-meta">${esc(meta)}</span>
         </button>`;
     }
 
@@ -133,7 +146,7 @@ const TVC_OutstandingTasks = (function () {
                 cls: 'ot-defect',
                 count: defect.length,
                 items: defect,
-                renderItem: defectItemHtml,
+                renderItem: dc => defectItemHtml(dc, state),
                 navigate: () => ctx.menuNavigate('defect'),
             },
             overdue: {
@@ -247,12 +260,18 @@ const TVC_OutstandingTasks = (function () {
         const host = document.getElementById('outstandingTasksPanel');
         if (!host || !ctx) return;
         const state = ctx.getState();
-        if (!state.user || TVC_RBAC.isHqAccount(state.user)) {
+        if (!state.user) {
             host.innerHTML = '';
             host.classList.add('hidden');
             return;
         }
         host.classList.remove('hidden');
+
+        const isHq = TVC_RBAC.isHqAccount(state.user);
+        if (isHq && !state.selectedVesselId) {
+            host.innerHTML = renderPanel(bucketDefs(state, []), false);
+            return;
+        }
 
         const syncBuckets = bucketDefs(state, state._outstandingReqCache || []);
         host.innerHTML = renderPanel(syncBuckets, !state._outstandingReqLoaded);

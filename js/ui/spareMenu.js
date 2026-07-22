@@ -31,6 +31,8 @@ const TVC_SpareMenu = (function () {
     let _receiveLineBySpareId = null;
     let _wrSpareCachedList = [];
     let _spareXfer = { step: 'mode' };
+    /** HQ requisition import mode: vendor-quote | hq-adjustment */
+    let _reqImportMode = null;
     let _consumeDraft = null;
     let _consumeLineBySpareId = null;
     let _wrSpareLineBySpareId = null;
@@ -1621,12 +1623,12 @@ const TVC_SpareMenu = (function () {
         return !!(typeof TVC_RBAC !== 'undefined' && user && TVC_RBAC.can(user, TVC_RBAC.Action.SUPPLY_PARTS));
     }
 
-    /** New Requisition Complete — Chief Engineer(SHIP_CHIEF)만 사용 가능 */
+    /** New Requisition Complete — Chief Engineer or HQ Superintendent */
     function canCompleteRequisition(st) {
         const user = spareInventoryUser(st);
         if (!user || !window.TVC_RBAC) return false;
         const role = TVC_RBAC.resolveUserRole(user);
-        return role === TVC_RBAC.Role.SHIP_CHIEF;
+        return role === TVC_RBAC.Role.SHIP_CHIEF || role === TVC_RBAC.Role.HQ_SUPERVISOR;
     }
 
     function getFocusedSpareId(st) {
@@ -2049,7 +2051,7 @@ const TVC_SpareMenu = (function () {
                 : 'Import using Chief Engineer / Captain account.'}
             ${st._spareImportMsg ? `<span class="muted">${esc(st._spareImportMsg)}</span>` : ''}
           </div>` : (st._spareImportMsg ? `<div class="spare-import-banner ok">${esc(st._spareImportMsg)}</div>` : '')}
-          ${renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport, canModify, user: st.user })}
+          ${renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport, canModify, user: st.user, isHq })}
           <div class="plan-layout spare-layout${panelOpen ? ' panel-open' : ''}">
             <aside class="panel tree-panel">
               <div class="panel-head spare-tree-head">
@@ -2069,6 +2071,8 @@ const TVC_SpareMenu = (function () {
                 <button type="button" id="spareModifyBtn" class="btn btn-sm" onclick="TVC_App.openSpareModify()"${tb.modifyEnabled ? '' : ' disabled'} title="${esc(tb.modifyTitle)}">✏️ Modify</button>
                 <button type="button" id="spareAppendBtn" class="btn btn-sm" onclick="TVC_App.openSpareAppend()"${tb.appendEnabled ? '' : ' disabled'} title="${esc(tb.appendTitle)}">➕ Append</button>
                 <button type="button" id="spareDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteSpareItem()"${tb.deleteEnabled ? '' : ' disabled'} title="${esc(tb.deleteTitle)}">🗑 Delete</button>
+                <span class="orig-toolbar-sep"></span>
+                ${spareItemHistoryBtnHtml()}
                 <span class="orig-toolbar-sep"></span>
                 <button type="button" class="btn btn-sm btn-excel" onclick="TVC_SpareMenu.exportPartsListXlsx()" title="Export Excel (.xlsx)">
                     <span class="btn-excel-icon" aria-hidden="true">X</span> Export XLS
@@ -2112,6 +2116,7 @@ const TVC_SpareMenu = (function () {
         bindSpareListEvents();
         bindFileInputs();
         renderSpareFilterDashboard();
+        syncSpareItemHistoryBtns();
 
         if (st._spareEdit && !st._spareEdit.id) renderEditor(st._spareEdit);
         if (panelOpen) await renderDetailPanel(getFocusedSpareId(st), canRequisition, canModify);
@@ -2127,6 +2132,7 @@ const TVC_SpareMenu = (function () {
         if (vl) vl.refresh();
         refreshSpareEditBlock();
         syncSpareToolbarUi();
+        syncSpareItemHistoryBtns();
         updateSpareHeadCheckAll();
         if (modState(getState()).reqWorkOpen) refreshReqWorkListRows();
         requestAnimationFrame(syncSpareHeadLayout);
@@ -2351,11 +2357,8 @@ const TVC_SpareMenu = (function () {
             : ctx === 'consume' ? 'TVC_SpareMenu.consumeToggleRow'
                 : ctx === 'receive' ? 'TVC_SpareMenu.receiveToggleRow'
                 : ctx === 'wrSpare' ? 'TVC_SpareMenu.wrSpareToggleRow' : 'TVC_App.toggleSpareRow';
-        const dblFn = ctx === 'reqWork' ? `TVC_SpareMenu.reqWorkAddSpare('${sid}')`
-            : ctx === 'consume' ? `TVC_SpareMenu.consumeToggleRow('${sid}', true)`
-                : ctx === 'receive' ? `TVC_SpareMenu.receiveToggleRow('${sid}', true)`
-                : ctx === 'wrSpare' ? `TVC_SpareMenu.wrSpareToggleRow('${sid}', true)` : '';
-        const dblAttr = dblFn ? ` ondblclick="event.preventDefault();${dblFn}"` : '';
+        const dblFn = `TVC_SpareMenu.openSpareItemHistory('${sid}')`;
+        const dblAttr = ` ondblclick="event.preventDefault();${dblFn}"`;
         const colgroup = ctx === 'reqWork' ? SPARE_REQ_COLGROUP
             : ctx === 'consume' ? SPARE_CONSUME_COLGROUP
                 : ctx === 'receive' ? SPARE_RECEIVE_COLGROUP
@@ -3923,6 +3926,7 @@ const TVC_SpareMenu = (function () {
     async function openReqListModal(opts = {}) {
         const m = modState(getState());
         clearReqListUiState(m);
+        if (opts.phase) m.reqListPhaseTab = opts.phase;
         if (opts.selectId) applyReqListSelection(m, opts.selectId);
         await renderReqListModal();
         showSpicsModal('spareReqListModal');
@@ -5327,9 +5331,14 @@ const TVC_SpareMenu = (function () {
             req = candidates.sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''))[0];
         }
         if (!req) throw new Error('No matching requisition found. Create and complete a requisition first.');
-        const res = isHq
-            ? await TVC_Inventory.applyHqAdjustment(req.id, rows)
-            : await TVC_Inventory.applyVendorQuote(req.id, rows);
+        const importAsVendor = _reqImportMode === 'vendor-quote';
+        const importAsHq = _reqImportMode === 'hq-adjustment' || (_reqImportMode !== 'vendor-quote' && isHq);
+        const res = importAsVendor
+            ? await TVC_Inventory.applyVendorQuote(req.id, rows)
+            : importAsHq
+                ? await TVC_Inventory.applyHqAdjustment(req.id, rows)
+                : await TVC_Inventory.applyVendorQuote(req.id, rows);
+        _reqImportMode = null;
         const dbRes = await TVC_Inventory.applyExcelImport(rows, req.req_no);
         await logSpareDataXfer({
             direction: 'IMPORT', category: SPARE_XFER_EXPORT.REQUISITION,
@@ -5388,6 +5397,7 @@ const TVC_SpareMenu = (function () {
         } catch (e) {
             alert('Import failed: ' + (e.message || e.code));
         } finally {
+            _reqImportMode = null;
             const fi = document.getElementById('spareXferImportFile');
             if (fi) fi.value = '';
         }
@@ -5405,14 +5415,60 @@ const TVC_SpareMenu = (function () {
             <div class="spare-flow-items">${buttons}</div>
           </section>`;
         return col('necessary', 'If Necessary', [
-            item('Data Backup & Restore', "TVC_App.menuAction('backup')", true),
+            item('Database Backup & Restore', "TVC_App.menuAction('backup')", true),
             item('Data Export & Import', 'TVC_SpareMenu.openSpareSyncMenu()', true),
             item('View Data History', 'TVC_SpareMenu.openHistoryModal()', true),
             item('Update Spare Parts Inventory', 'TVC_SpareMenu.triggerInventoryImport()', canModify),
         ].join(''));
     }
 
-    function renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport, canModify, user }) {
+    async function hqRequestQuotation() {
+        const { vesselId } = await vesselScope();
+        const all = await TVC_Inventory.listRequisitions(vesselId);
+        const exportable = all.filter(r => reqListCanExport(r));
+        if (!exportable.length) return alert('No requisitions ready for quotation request.');
+        if (!window.confirm(`Export ${exportable.length} requisition(s) for vendor quotation?`)) return;
+        try {
+            for (const req of exportable) {
+                await TVC_Excel.exportRequisition(req, { vendorOnly: true });
+            }
+            alert(`Exported ${exportable.length} requisition(s) for vendor quotation.`);
+        } catch (e) { alert(e.message || e.code); }
+    }
+
+    function hqCheckQuotation() {
+        _reqImportMode = 'vendor-quote';
+        document.getElementById('spareXferImportFile')?.click();
+    }
+
+    function hqReplyCompanyAssessment() {
+        _reqImportMode = 'hq-adjustment';
+        document.getElementById('spareXferImportFile')?.click();
+    }
+
+    async function hqPurchaseOrder() {
+        const { vesselId } = await vesselScope();
+        const all = await TVC_Inventory.listRequisitions(vesselId);
+        const RS = TVC_Inventory.REQ_STATUS;
+        const ready = all.filter(r => reqListCanExport(r) && (
+            r.status === RS.QUOTED || r.status === RS.HQ_REVIEW || r.status === RS.APPROVED
+            || spareListStatus(r) === SPARE_LIST_STATUS.CONFIRMED
+        ));
+        if (!ready.length) return alert('No requisitions ready for purchase order export.');
+        if (!window.confirm(`Export ${ready.length} purchase order(s)?`)) return;
+        try {
+            for (const req of ready) {
+                await TVC_Excel.exportRequisition(req, { vendorOnly: false });
+            }
+            alert(`Exported ${ready.length} purchase order(s).`);
+        } catch (e) { alert(e.message || e.code); }
+    }
+
+    async function hqReviewReceivedParts() {
+        await openReqListModal({ phase: REQ_LIST_PHASE.RECEIVED });
+    }
+
+    function renderSpicsMenuHtml({ canConsume, canDeliver, canRequisition, canHqImport, canModify, user, isHq }) {
         const item = (label, onclick, enabled = true, primary = false) =>
             enabled
                 ? `<button type="button" class="spare-flow-item${primary ? ' primary' : ''}" onclick="${onclick}">${esc(label)}</button>`
@@ -5423,41 +5479,38 @@ const TVC_SpareMenu = (function () {
             <div class="spare-flow-items">${buttons}</div>
           </section>`;
 
-        const isStation = user && typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user);
-        if (isStation) {
-            const hasAssessment = !!_hqAssessment;
+        const consumedItems = [
+            item('View Consumed Log', 'TVC_SpareMenu.viewConsumedLog()', canConsume),
+            item('Input Consumed Spare Parts', 'TVC_SpareMenu.openConsumeModal()', canConsume, true),
+        ].join('');
+
+        if (isHq) {
             return `
         <nav class="spare-flow-panel" aria-label="SPARE workflow">
-          ${col('consume', 'Consumed', [
-                item('View Consumed Log', 'TVC_SpareMenu.viewConsumedLog()', canConsume),
-                item('Input Consumed Spare Parts', 'TVC_SpareMenu.openConsumeModal()', canConsume, true),
-            ].join(''))}
+          ${col('consume', 'Consumed', consumedItems)}
           ${col('req', 'Requisition', [
                 item('View Requisition List', 'TVC_SpareMenu.viewRequisitionList()', canRequisition),
                 item('Make New Requisition', 'TVC_SpareMenu.openNewRequisition()', canRequisition, true),
-                item('Review Company Assessment', 'TVC_SpareMenu.openAssessmentModal()', canHqImport && hasAssessment),
-            ].join(''))}
-          ${col('deliver', 'Received', [
-                item('Input Received Spare Parts', 'TVC_SpareMenu.openDeliverModal()', canDeliver, true),
+                item('Request Quotation', 'TVC_SpareMenu.hqRequestQuotation()', canRequisition),
+                item('Check Quotation', 'TVC_SpareMenu.hqCheckQuotation()', canRequisition),
+                item('Reply Company Assessment', 'TVC_SpareMenu.hqReplyCompanyAssessment()', canRequisition),
+                item('Purchase Order', 'TVC_SpareMenu.hqPurchaseOrder()', canRequisition),
+                item('Review Received Spare Parts', 'TVC_SpareMenu.hqReviewReceivedParts()', canDeliver),
             ].join(''))}
           ${renderSpareNecessaryCol({ canModify })}
         </nav>`;
         }
 
+        const hasAssessment = !!_hqAssessment;
         return `
         <nav class="spare-flow-panel" aria-label="SPARE workflow">
-          ${col('consume', 'Consumed', [
-            item('View Consumed Log', 'TVC_SpareMenu.viewConsumedLog()', canConsume),
-            item('Input Consumed Spare Parts / Qty', 'TVC_SpareMenu.openConsumeModal()', canConsume, true),
-          ].join(''))}
+          ${col('consume', 'Consumed', consumedItems)}
           ${col('req', 'Requisition', [
             item('View Requisition List', 'TVC_SpareMenu.viewRequisitionList()', canRequisition),
             item('Make New Requisition', 'TVC_SpareMenu.openNewRequisition()', canRequisition, true),
-            item('Review Assessment (from HQ)', 'TVC_SpareMenu.openAssessmentModal()', canHqImport && !!_hqAssessment),
-        ].join(''))}
-          ${col('deliver', 'Received', [
+            item('Review Company Assessment', 'TVC_SpareMenu.openAssessmentModal()', canHqImport && hasAssessment),
             item('Input Received Spare Parts', 'TVC_SpareMenu.openDeliverModal()', canDeliver, true),
-        ].join(''))}
+          ].join(''))}
           ${renderSpareNecessaryCol({ canModify })}
         </nav>`;
     }
@@ -5824,8 +5877,10 @@ const TVC_SpareMenu = (function () {
         const reqNoField = preview
             ? `<input type="text" id="reqWorkReqNo" class="spare-req-meta-input" value="${esc(req.req_no || '')}" disabled>`
             : `<input type="text" id="reqWorkReqNo" class="spare-req-meta-input" value="${esc(req.req_no || '')}" placeholder="Requisition No." oninput="TVC_SpareMenu.captureReqWorkMeta()" onchange="TVC_SpareMenu.captureReqWorkMeta()">
-                            <button type="button" id="reqWorkHistBtn" class="btn btn-sm spare-req-hist-btn" onclick="TVC_SpareMenu.toggleReqWorkHistList()">Requisition List</button>
-                            <div id="reqWorkHistPanel" class="spare-req-hist-popover hidden" aria-hidden="true"></div>`;
+                            <span class="spare-req-hist-anchor">
+                                <button type="button" id="reqWorkHistBtn" class="btn btn-sm spare-req-hist-btn" onclick="TVC_SpareMenu.toggleReqWorkHistList()">Requisition List</button>
+                            </span>`;
+        const histPanel = preview ? '' : `<div id="reqWorkHistPanel" class="spare-req-hist-popover hidden" aria-hidden="true"></div>`;
         return `<section class="spare-req-work-meta" aria-label="Requisition information">
             ${renderSpareApprovalSection(req, { prefix: 'reqWork', department: req.department || opts.department })}
             <div class="spare-req-meta-grid">
@@ -5879,7 +5934,17 @@ const TVC_SpareMenu = (function () {
                     </div>
                 </div>
             </div>
+            ${histPanel}
         </section>`;
+    }
+
+    function positionReqWorkHistPopover() {
+        const btn = document.getElementById('reqWorkHistBtn');
+        const panel = document.getElementById('reqWorkHistPanel');
+        const meta = document.querySelector('#spareReqWorkBody .spare-req-work-meta');
+        if (!btn || !panel || !meta || panel.classList.contains('hidden')) return;
+        const top = btn.getBoundingClientRect().bottom - meta.getBoundingClientRect().top + 6;
+        panel.style.top = `${Math.max(top, 0)}px`;
     }
 
     function setReqWorkHistOpen(open, opts = {}) {
@@ -5887,11 +5952,19 @@ const TVC_SpareMenu = (function () {
         if (!open || opts.reset) clearReqListUiState(modState(getState()));
         const panel = document.getElementById('reqWorkHistPanel');
         const btn = document.getElementById('reqWorkHistBtn');
+        const meta = document.querySelector('#spareReqWorkBody .spare-req-work-meta');
         if (panel) {
             panel.classList.toggle('hidden', !open);
             panel.setAttribute('aria-hidden', open ? 'false' : 'true');
         }
         if (btn) btn.classList.toggle('is-open', open);
+        if (meta) meta.classList.toggle('is-req-hist-open', open);
+        if (open) {
+            requestAnimationFrame(() => {
+                positionReqWorkHistPopover();
+                syncReqWorkHistHeadPad();
+            });
+        }
     }
 
     async function refreshReqWorkHistList() {
@@ -5915,7 +5988,11 @@ const TVC_SpareMenu = (function () {
             </div>
             <p class="spare-req-list-hint spare-req-hist-hint muted">Click a row to fill Requisition No.</p>`;
         updateReqListHeadCheckAll(reqs);
-        requestAnimationFrame(syncReqWorkHistHeadPad);
+        positionReqWorkHistPopover();
+        requestAnimationFrame(() => {
+            positionReqWorkHistPopover();
+            syncReqWorkHistHeadPad();
+        });
     }
 
     async function toggleReqWorkHistList() {
@@ -5972,6 +6049,7 @@ const TVC_SpareMenu = (function () {
         syncSpareToolbarUi();
         updateReqWorkHeadStats();
         updateReqWorkHeadCheckAll();
+        syncSpareItemHistoryBtns();
     }
 
     function refreshReqWorkListUi() {
@@ -6057,6 +6135,7 @@ const TVC_SpareMenu = (function () {
             <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReqWorkModal()">×</button>`;
         const itemToolbar = preview ? '' : `<div class="filter-bar orig-toolbar spare-item-toolbar wr-spare-toolbar">
                 ${spareGroupTreeToggleHtml('reqWork', st)}
+                ${spareItemHistoryBtnHtml()}
                 <span class="wr-spare-toolbar-spacer" aria-hidden="true"></span>
                 <div class="wr-spare-toolbar-actions">
                 <button type="button" id="reqWorkModifyBtn" class="btn btn-sm" onclick="TVC_App.openSpareModify()"${tb.modifyEnabled ? '' : ' disabled'} title="${esc(tb.modifyTitle)}">✏️ Modify</button>
@@ -6112,6 +6191,7 @@ const TVC_SpareMenu = (function () {
         if (!preview) {
             bindSpareModalTreePopovers();
             updateSpareModalTreeToggleUi('reqWork');
+            syncSpareItemHistoryBtns();
         }
         if (preview) {
             body.querySelectorAll('.spare-req-work-meta input, .spare-req-work-meta select').forEach(el => {
@@ -7703,6 +7783,7 @@ const TVC_SpareMenu = (function () {
         }
         updateConsumeSelectedBtn();
         updateSpareModalTreeToggleUi('consume');
+        syncSpareItemHistoryBtns();
     }
 
     function updateConsumeSelectedBtn() {
@@ -7998,10 +8079,13 @@ const TVC_SpareMenu = (function () {
         const listToolbar = isPreview ? '' : `
     <div class="filter-bar orig-toolbar spare-item-toolbar wr-spare-toolbar">
       ${spareGroupTreeToggleHtml('wrSpare', st, { readonly: ro })}
+      ${spareItemHistoryBtnHtml()}
+      <span class="wr-spare-toolbar-spacer" aria-hidden="true"></span>
+      <div class="wr-spare-toolbar-actions">
       <button type="button" id="wrSpareSelectedBtn" class="btn btn-sm spare-req-selected-btn${selectedBtnCls}"
         onclick="TVC_SpareMenu.wrSpareToggleSelectedOnly()" aria-pressed="${selBtn.active ? 'true' : 'false'}"
         title="${esc(selBtn.title)}"${selBtn.disabled || ro ? ' disabled' : ''}>${esc(selBtn.label)}</button>
-      <span style="flex:1"></span>
+      </div>
     </div>
     <div class="filter-bar spare-list-search-bar">
       <input type="search" class="search-input spare-list-search-input" id="wrSpareSearch" placeholder="Search Code / Item / Part No / Working"
@@ -8230,6 +8314,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
         updateWrSpareHeadStats();
         updateWrSpareHeadCheckAll();
+        syncSpareItemHistoryBtns();
     }
 
     function updateWrSpareHeadCheckAll() {
@@ -8368,6 +8453,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         bindWrSpareTreePopover();
         updateWrSpareTreeToggleUi();
         updateWrSpareHeadStats();
+        syncSpareItemHistoryBtns();
         requestAnimationFrame(() => {
             syncWrSpareHeadLayout();
             requestAnimationFrame(syncWrSpareHeadLayout);
@@ -8430,9 +8516,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             const selectedBtnCls = selBtn.active ? ' plan-selected-filter-active' : '';
             return `
               <div class="filter-bar orig-toolbar spare-item-toolbar wr-spare-toolbar">
+                ${spareGroupTreeToggleHtml('consume', st)}
+                ${spareItemHistoryBtnHtml()}
                 <span class="wr-spare-toolbar-spacer" aria-hidden="true"></span>
                 <div class="wr-spare-toolbar-actions">
-                ${spareGroupTreeToggleHtml('consume', st)}
                 <button type="button" id="consumeSelectedBtn" class="btn btn-sm spare-req-selected-btn${selectedBtnCls}"
                     onclick="TVC_SpareMenu.consumeToggleSelectedOnly()" aria-pressed="${selBtn.active ? 'true' : 'false'}"
                     title="${escAttr(selBtn.title)}"${selBtn.disabled ? ' disabled' : ''}>${esc(selBtn.label)}</button>
@@ -8488,6 +8575,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             updateConsumeSelectedBtn();
             bindSpareModalTreePopovers();
             updateSpareModalTreeToggleUi('consume');
+            syncSpareItemHistoryBtns();
         }
         requestAnimationFrame(() => {
             syncConsumeHeadLayout();
@@ -9292,6 +9380,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         updateSpareModalTreeToggleUi('receive');
         const linesEl = document.querySelector('.spare-receive-lines');
         if (linesEl && _receiveDraft) linesEl.textContent = `${(_receiveDraft.lines || []).length} line(s)`;
+        syncSpareItemHistoryBtns();
     }
 
     function updateReceiveSelectedBtn() {
@@ -9333,6 +9422,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             <main class="panel spare-main">
               <div class="filter-bar orig-toolbar spare-item-toolbar wr-spare-toolbar">
                 ${spareGroupTreeToggleHtml('receive', st)}
+                ${spareItemHistoryBtnHtml()}
                 <span class="wr-spare-toolbar-spacer" aria-hidden="true"></span>
                 <div class="wr-spare-toolbar-actions">
                 <button type="button" id="receiveSelectedBtn" class="btn btn-sm spare-req-selected-btn${selectedBtnCls}"
@@ -9723,6 +9813,261 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             await refresh(); await render(); closeAssessmentModal();
             alert(`Assessment applied — ${res.updated} item(s)`);
         } catch (e) { alert(e.message || e.code); }
+    }
+
+    // ── Spare Item History (Consumed / Received / Requisition) ─────────
+    let _shSpareId = null;
+    let _shTab = 'consumed';
+
+    function spareItemHistoryBtnHtml() {
+        return `<button type="button" class="btn btn-sm spare-item-hist-btn" onclick="TVC_SpareMenu.openSpareItemHistoryForFocus()" title="View consumed / received / requisition history (double-click row)" disabled>📋 Spare History</button>`;
+    }
+
+    function syncSpareItemHistoryBtns() {
+        const id = getFocusedSpareId(getState());
+        document.querySelectorAll('.spare-item-hist-btn').forEach(btn => {
+            btn.disabled = !id;
+            btn.title = id
+                ? 'View consumed / received / requisition history (double-click row)'
+                : 'Select a spare part row first';
+        });
+    }
+
+    function openSpareItemHistoryForFocus() {
+        const id = getFocusedSpareId(getState());
+        if (!id) return alert('Select a spare part row first.');
+        openSpareItemHistory(id);
+    }
+
+    async function loadSpareItemHistoryData(spareId, vesselId) {
+        const sid = String(spareId);
+        const consumed = [];
+        const seenConsumeLog = new Set();
+
+        try {
+            const logs = await TVC_Inventory.listConsumeLogs(vesselId);
+            logs.forEach(log => {
+                (log.lines || []).forEach(line => {
+                    if (String(line.spare_part_id) !== sid) return;
+                    const jobs = consumeLogJobItems(log);
+                    consumed.push({
+                        date: log.consumed_date || log.made_on || (log.created_at || '').slice(0, 10),
+                        qty: Number(line.qty ?? line.qty_consumed) || 0,
+                        logId: log.id,
+                        pmsGroup: safeTreeLabel(log.pms_group_no || '') || '—',
+                        jobCode: log.job_code || jobs[0]?.job_code || '—',
+                        madeBy: log.made_by || '—',
+                        status: log.list_status || '—',
+                        source: log.work_report_id ? 'Work Report' : (log.source === 'defect' ? 'Defect Report' : 'Consumed Log'),
+                        openLog: true,
+                    });
+                    seenConsumeLog.add(log.id);
+                });
+            });
+        } catch (_) { /* noop */ }
+
+        const received = [];
+        try {
+            const invRows = await TVC_InventoryService.getHistory({ spare_part_id: spareId, limit: 300 });
+            invRows.forEach(h => {
+                if (h.tx_type === TVC_INVENTORY_TX.DELIVERY) {
+                    received.push({
+                        date: h.date || (h.at || '').slice(0, 10),
+                        qty: Number(h.qty_delta) || 0,
+                        ref: h.ref || '—',
+                        operator: h.operator_name || '—',
+                        note: h.note || '—',
+                        qtyAfter: h.qty_after,
+                    });
+                    return;
+                }
+                if (h.tx_type === TVC_INVENTORY_TX.CONSUMPTION && h.source_id && seenConsumeLog.has(h.source_id)) return;
+                if (h.tx_type === TVC_INVENTORY_TX.CONSUMPTION) {
+                    consumed.push({
+                        date: h.date || (h.at || '').slice(0, 10),
+                        qty: Math.abs(Number(h.qty_delta) || 0),
+                        logId: h.source_id || '',
+                        pmsGroup: '—',
+                        jobCode: h.ref || '—',
+                        madeBy: h.operator_name || '—',
+                        status: h.tx_type,
+                        source: h.source_type || 'Stock',
+                        openLog: !!(h.source_id && h.source_type === 'consume_log'),
+                    });
+                }
+            });
+        } catch (_) { /* noop */ }
+
+        const requisitions = [];
+        try {
+            const reqs = await TVC_Inventory.listRequisitions(vesselId);
+            reqs.forEach(req => {
+                (req.lines || []).forEach(line => {
+                    if (String(line.spare_part_id) !== sid) return;
+                    requisitions.push({
+                        reqId: req.id,
+                        reqNo: req.req_no || '—',
+                        date: reqListReportedDate(req) || (req.created_at || '').slice(0, 10),
+                        status: reqListStatusLabel(req),
+                        qtyRequested: Number(line.qty_requested) || 0,
+                        qtyReceived: Number(line.qty_received) || 0,
+                        deliverPort: req.deliver_port || '—',
+                        priority: req.priority || 'ROUTINE',
+                    });
+                });
+            });
+        } catch (_) { /* noop */ }
+
+        const sortDesc = (a, b) => String(b.date || '').localeCompare(String(a.date || ''));
+        consumed.sort(sortDesc);
+        received.sort(sortDesc);
+        requisitions.sort(sortDesc);
+        return { consumed, received, requisitions };
+    }
+
+    async function openSpareItemHistory(spareId, tab) {
+        const st = getState();
+        const spare = (st.spares || []).map(canon).find(s => String(s.id) === String(spareId));
+        if (!spare) return alert('Spare part not found.');
+        setFocusedSpareId(st, spareId);
+        syncSpareItemHistoryBtns();
+        if (_shSpareId !== spareId) _shTab = 'consumed';
+        _shSpareId = spareId;
+        if (tab) _shTab = tab;
+        await renderSpareItemHistoryModal();
+        showSpicsModal('spareItemHistoryModal');
+    }
+
+    function setSpareItemHistoryTab(tab) {
+        _shTab = tab;
+        renderSpareItemHistoryModal();
+    }
+
+    function closeSpareItemHistoryModal() {
+        closeSpicsModal('spareItemHistoryModal');
+    }
+
+    async function spareHistOpenConsumeLog(logId) {
+        if (!logId) return;
+        closeSpareItemHistoryModal();
+        if (window.TVC_App?.switchTab && getState().currentTab !== 'spare') {
+            TVC_App.switchTab('spare');
+        }
+        await startConsumePreviewSession(logId);
+    }
+
+    async function spareHistOpenRequisition(reqId) {
+        if (!reqId) return;
+        closeSpareItemHistoryModal();
+        if (window.TVC_App?.switchTab && getState().currentTab !== 'spare') {
+            TVC_App.switchTab('spare');
+        }
+        await startReqWorkPreviewSession(reqId);
+    }
+
+    async function renderSpareItemHistoryModal() {
+        const host = document.getElementById('spareItemHistoryBody');
+        if (!host || !_shSpareId) return;
+        const st = getState();
+        const spare = (st.spares || []).map(canon).find(s => String(s.id) === String(_shSpareId));
+        if (!spare) {
+            host.innerHTML = '<p class="muted">Spare part not found.</p>';
+            return;
+        }
+        host.innerHTML = '<p class="muted">Loading history…</p>';
+        const { vesselId } = await vesselScope();
+        const data = await loadSpareItemHistoryData(_shSpareId, vesselId);
+        const consumedActive = _shTab === 'consumed' ? ' active' : '';
+        const receivedActive = _shTab === 'received' ? ' active' : '';
+        const reqActive = _shTab === 'requisition' ? ' active' : '';
+
+        let tabContent = '';
+        if (_shTab === 'consumed') {
+            const rows = data.consumed.length ? data.consumed.map(c => {
+                const dbl = c.openLog && c.logId
+                    ? ` ondblclick="TVC_SpareMenu.spareHistOpenConsumeLog('${escAttr(c.logId)}')" title="Double-click to open Consumed Log"`
+                    : '';
+                const rowCls = c.openLog && c.logId ? ' wp-hist-row' : '';
+                return `<tr class="${rowCls.trim()}"${dbl}>
+                    <td>${esc(c.date || '—')}</td>
+                    <td style="text-align:right">${c.qty ?? '—'}</td>
+                    <td>${esc(c.pmsGroup)}</td>
+                    <td>${esc(c.jobCode)}</td>
+                    <td>${esc(c.madeBy)}</td>
+                    <td>${esc(c.source)}</td>
+                    <td>${esc(c.status)}</td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="7" class="muted" style="text-align:center">No consumed history</td></tr>';
+            tabContent = `
+                <div class="wp-section">
+                    <div class="wp-section-head">Consumed History <span class="muted wp-hist-hint">(double-click row to open Consumed Log)</span></div>
+                    <div class="wp-table-wrap">
+                        <table class="wp-table">
+                            <thead><tr><th>Date</th><th>Qty</th><th>PMS Group</th><th>Job Code</th><th>By</th><th>Source</th><th>Status</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+        } else if (_shTab === 'received') {
+            const rows = data.received.length ? data.received.map(r => `<tr>
+                    <td>${esc(r.date || '—')}</td>
+                    <td style="text-align:right">${r.qty ?? '—'}</td>
+                    <td style="text-align:right">${r.qtyAfter ?? '—'}</td>
+                    <td>${esc(r.ref)}</td>
+                    <td>${esc(r.operator)}</td>
+                    <td>${esc(r.note || '—')}</td>
+                </tr>`).join('') : '<tr><td colspan="6" class="muted" style="text-align:center">No received history</td></tr>';
+            tabContent = `
+                <div class="wp-section">
+                    <div class="wp-section-head">Received History <span class="muted wp-hist-hint">(from stock delivery records)</span></div>
+                    <div class="wp-table-wrap">
+                        <table class="wp-table">
+                            <thead><tr><th>Date</th><th>Qty</th><th>Stock After</th><th>Ref</th><th>Operator</th><th>Note</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+        } else {
+            const rows = data.requisitions.length ? data.requisitions.map(r => {
+                const pri = r.priority === 'URGENT' ? ' <span class="pill warn">URGENT</span>' : '';
+                return `<tr class="wp-hist-row" ondblclick="TVC_SpareMenu.spareHistOpenRequisition('${escAttr(r.reqId)}')" title="Double-click to open Requisition">
+                    <td>${esc(r.date || '—')}</td>
+                    <td>${esc(r.reqNo)}</td>
+                    <td>${esc(r.status)}${pri}</td>
+                    <td style="text-align:right">${r.qtyRequested ?? '—'}</td>
+                    <td style="text-align:right">${r.qtyReceived ?? '—'}</td>
+                    <td>${esc(r.deliverPort)}</td>
+                </tr>`;
+            }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center">No requisition history</td></tr>';
+            tabContent = `
+                <div class="wp-section">
+                    <div class="wp-section-head">Requisition History <span class="muted wp-hist-hint">(double-click row to open Requisition)</span></div>
+                    <div class="wp-table-wrap">
+                        <table class="wp-table">
+                            <thead><tr><th>Date</th><th>Req No.</th><th>Status</th><th>Requested</th><th>Received</th><th>Port</th></tr></thead>
+                            <tbody>${rows}</tbody>
+                        </table>
+                    </div>
+                </div>`;
+        }
+
+        host.innerHTML = `
+            <h3 class="wp-title">Spare History</h3>
+            <div class="wp-job-head">
+                <span><b>Code</b> ${esc(partNo(spare))}</span>
+                <span><b>Item</b> ${esc(spare.name || '—')}</span>
+                <span><b>Stock</b> ${spare.currentStock ?? 0}</span>
+            </div>
+            <p class="wp-job-detail">${esc(spare.universalItemCode || spare.universalCode || spare.working || '')}</p>
+            <div class="wp-tabs">
+                <button type="button" class="wp-tab${consumedActive}" onclick="TVC_SpareMenu.setSpareItemHistoryTab('consumed')">Consumed (${data.consumed.length})</button>
+                <button type="button" class="wp-tab${receivedActive}" onclick="TVC_SpareMenu.setSpareItemHistoryTab('received')">Received (${data.received.length})</button>
+                <button type="button" class="wp-tab${reqActive}" onclick="TVC_SpareMenu.setSpareItemHistoryTab('requisition')">Requisition (${data.requisitions.length})</button>
+            </div>
+            <div class="wp-tab-pane">${tabContent}</div>
+            <div class="modal-actions">
+                <button type="button" class="btn" onclick="TVC_SpareMenu.closeSpareItemHistoryModal()">Close</button>
+            </div>`;
     }
 
     async function openHistoryModal() {
@@ -10311,6 +10656,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         openSpareSyncMenu, closeSpareSyncMenu, spareXferPickMode, spareXferBack, spareXferTriggerImport,
         spareXferExportRequisitions, spareXferExportReceived, spareXferExportInventory,
         openHistoryModal, closeHistoryModal,
+        openSpareItemHistory, openSpareItemHistoryForFocus, closeSpareItemHistoryModal, setSpareItemHistoryTab,
+        spareHistOpenConsumeLog, spareHistOpenRequisition,
         openReqListModal, closeReqListModal, reqListNew, reqListModify, reqListDelete,
         reqListPreview, reqListDetailReport, reqListReportConfirm, reqListExportToMaster, reqListDocPreview, reqListPrint,
         reqListSelectRow, reqListToggleRow, reqListToggleAll, reqListPickRow, reqListPickToggleRow,
@@ -10321,6 +10668,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         reqSheetExport, reqSheetPrint, onReqSheetSearchInput,
         exportRequisitionData, exportDeliveryData, exportPartsList, exportPartsListXlsx, buildPrintBody,
         viewRequisitionList, openNewRequisition,
+        hqRequestQuotation, hqCheckQuotation, hqReplyCompanyAssessment, hqPurchaseOrder, hqReviewReceivedParts,
         viewConsumedLog, openConsumeLogModal, closeConsumeLogModal,
         consumeLogNew, consumeLogModify, consumePreviewModify, consumePreviewOpenWorkReport, cleanupConsumeWorkReportOverlay,
         consumeLogDelete, consumeLogPreview, consumeLogDetailReport, consumeLogReportConfirm, consumeLogDocPreview, consumeLogPrint,

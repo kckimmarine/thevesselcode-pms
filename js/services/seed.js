@@ -24,7 +24,7 @@ const TVC_Seed = (function () {
         await TVC_DB.bulkPut('ship_components', components);
         await TVC_DB.bulkPut('maintenance_jobs', jobs);
         await TVC_DB.bulkPut('spare_parts', spares);
-        await TVC_DB.setMeta(TVC_META_KEYS.VESSEL_ID, data.meta?.vessel_id || 'TEST_V01');
+        await TVC_DB.setMeta(TVC_META_KEYS.VESSEL_ID, data.meta?.vessel_id || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'INCHEON CHEMI'));
         await TVC_DB.setMeta(TVC_META_KEYS.SEED_LOADED, ts);
         await TVC_DB.setMeta(TVC_META_KEYS.DB_INIT, ts);
         return { jobs: jobs.length, components: components.length };

@@ -255,7 +255,7 @@ const TVC_Sync = (function () {
         let status = 'SUCCESS';
         const mergeDept = (isHubMerge && dept === 'ALL') ? null : dept;
         try {
-            await mergePayload(payload, mergeDept, isHq, importVesselId);
+            await mergePayload(payload, mergeDept, isHq, importVesselId, { importAuthoritative: true });
         } catch (err) {
             status = 'FAILED';
             await recordSyncHistory({
@@ -302,7 +302,8 @@ const TVC_Sync = (function () {
         return payload;
     }
 
-    async function mergePayload(payload, dept, isHq, vesselId) {
+    async function mergePayload(payload, dept, isHq, vesselId, opts = {}) {
+        const importAuthoritative = !!opts.importAuthoritative;
         const jobDeptByCode = new Map((payload.maintenance_jobs || []).map(j => [j.job_code, j.department]));
         const deptOk = (row, kind) => {
             if (!dept) return true;
@@ -328,6 +329,14 @@ const TVC_Sync = (function () {
                 }
             }
         };
+        /** Import ZIP은 선박 Export가 단일 진실원 — 타임스탬프가 없거나 HQ 쪽이 더 오래됐으면 반영 */
+        const shouldApplyIncoming = (existing, incoming) => {
+            const inTs = incoming.updated_at || incoming.last_synced_at || '';
+            const exTs = existing.updated_at || existing.last_synced_at || '';
+            if (!exTs || !inTs) return true;
+            return inTs >= exTs;
+        };
+
         const mergeStore = async (storeName, rows, kind, keyField = 'id') => {
             if (!rows?.length) return;
             for (const incoming of rows) {
@@ -339,9 +348,7 @@ const TVC_Sync = (function () {
                     await TVC_DB.put(storeName, incoming);
                     continue;
                 }
-                const inTs = incoming.updated_at || '';
-                const exTs = existing.updated_at || '';
-                if (inTs >= exTs) {
+                if (importAuthoritative || shouldApplyIncoming(existing, incoming)) {
                     Object.assign(existing, incoming);
                     stampImported(existing, kind);
                     await TVC_DB.put(storeName, existing);

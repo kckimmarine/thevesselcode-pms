@@ -4,17 +4,18 @@ const TVC_Fleet = (function () {
     const SELECTED_KEY = 'tvc_fleet_selected';
     const LEGACY_VESSEL_ID = 'DM_CHEMICAL_01';
 
-    /** No1 Test Vessel — Export/Sync ZIP 파일명·DB vessel_id 공통 키 */
-    const PILOT_VESSEL_ID = 'TEST_V01';
+    /** INCHEON CHEMI — Export/Sync ZIP 파일명·DB vessel_id·Fleet 표시명 공통 */
+    const PILOT_VESSEL_ID = 'INCHEON CHEMI';
 
+    /** 초기 Fleet — 파일럿 선박 1척 */
     const DEFAULT_FLEET = [
-        { id: 'TEST_V01', name: 'No1 Test Vessel', code: '01', delivery: '2024-01-15' },
-        { id: 'TEST_V02', name: 'No2 Test Vessel', code: '02', delivery: '2020-06-15' },
-        { id: 'TEST_V03', name: 'No3 Test Vessel', code: '03', delivery: '2021-01-20' },
-        { id: 'TEST_V04', name: 'No4 Test Vessel', code: '04', delivery: '2021-08-05' },
-        { id: 'TEST_V05', name: 'No5 Test Vessel', code: '05', delivery: '2022-02-28' },
-        { id: 'TEST_V06', name: 'No6 Test Vessel', code: '06', delivery: '2022-11-12' },
+        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '01', delivery: '2024-01-15' },
     ];
+
+    /** 예전 테스트 Fleet — HQ 목록에서 제거 */
+    const DEPRECATED_VESSEL_IDS = new Set([
+        'TEST_V01', 'TEST_V02', 'TEST_V03', 'TEST_V04', 'TEST_V05', 'TEST_V06',
+    ]);
 
     const FLEET_ORDER = DEFAULT_FLEET.map(v => v.id);
 
@@ -40,13 +41,14 @@ const TVC_Fleet = (function () {
         });
     }
 
-    /** DEFAULT_FLEET 기준 병합 + 구 ID(DM_CHEMICAL_01) 제거 + 순번 정렬 */
+    /** DEFAULT_FLEET 기준 병합 + 구/폐기 ID 제거 + 순번 정렬 */
     function normalizeFleet(fleet) {
         const byId = new Map((fleet || []).map(v => [v.id, v]));
         byId.delete(LEGACY_VESSEL_ID);
+        for (const id of DEPRECATED_VESSEL_IDS) byId.delete(id);
         for (const def of DEFAULT_FLEET) {
             const prev = byId.get(def.id);
-            byId.set(def.id, prev ? { ...prev, ...def } : { ...def });
+            byId.set(def.id, { ...def, ...(prev || {}) });
         }
         return sortFleet([...byId.values()]);
     }
@@ -61,6 +63,13 @@ const TVC_Fleet = (function () {
     }
 
     async function ensureFleet() {
+        try {
+            const meta = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID);
+            if (meta === 'TEST_V01') {
+                await TVC_DB.setMeta(TVC_META_KEYS.VESSEL_ID, PILOT_VESSEL_ID);
+            }
+        } catch (_) {}
+
         let fleet = normalizeFleet(readFleetRaw()?.length ? readFleetRaw() : [...DEFAULT_FLEET]);
         const seedVessel = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null);
         if (seedVessel && !fleet.some(v => v.id === seedVessel)) {
@@ -74,7 +83,7 @@ const TVC_Fleet = (function () {
         }
         writeFleet(fleet);
         const sel = localStorage.getItem(SELECTED_KEY);
-        if (!sel || sel === LEGACY_VESSEL_ID) select(PILOT_VESSEL_ID);
+        if (!sel || sel === LEGACY_VESSEL_ID || sel === 'TEST_V01') select(PILOT_VESSEL_ID);
         return fleet;
     }
 
@@ -97,16 +106,32 @@ const TVC_Fleet = (function () {
     }
 
     function upsert(vessel) {
-        const fleet = getAll();
-        const i = fleet.findIndex(v => v.id === vessel.id);
-        if (i >= 0) fleet[i] = { ...fleet[i], ...vessel };
-        else fleet.push(vessel);
-        writeFleet(sortFleet(fleet));
+        const id = String(vessel?.id || '').trim();
+        if (!id) return getAll();
+        const raw = readFleetRaw()?.length ? readFleetRaw() : [];
+        const byId = new Map(raw.map(v => [v.id, v]));
+        byId.delete(LEGACY_VESSEL_ID);
+        for (const dep of DEPRECATED_VESSEL_IDS) byId.delete(dep);
+        const prev = byId.get(id) || DEFAULT_FLEET.find(v => v.id === id) || {};
+        byId.set(id, { ...prev, ...vessel, id });
+        writeFleet(sortFleet([...byId.values()]));
+        return getAll();
+    }
+
+    /** HQ Fleet에서 선박 삭제 (마지막 1척은 삭제 불가) */
+    function remove(id) {
+        const target = String(id || '').trim();
+        if (!target) return getAll();
+        const raw = readFleetRaw()?.length ? readFleetRaw() : [...DEFAULT_FLEET];
+        const next = raw.filter(v => v.id !== target && !DEPRECATED_VESSEL_IDS.has(v.id) && v.id !== LEGACY_VESSEL_ID);
+        if (!next.length) return getAll();
+        writeFleet(sortFleet(normalizeFleet(next)));
+        if (getSelectedId() === target) select(next[0]?.id || PILOT_VESSEL_ID);
         return getAll();
     }
 
     return {
-        ensureFleet, getAll, getSelected, getSelectedId, select, upsert, resolveById,
-        PILOT_VESSEL_ID, LEGACY_VESSEL_ID,
+        ensureFleet, getAll, getSelected, getSelectedId, select, upsert, remove, resolveById,
+        PILOT_VESSEL_ID, LEGACY_VESSEL_ID, DEFAULT_FLEET,
     };
 })();

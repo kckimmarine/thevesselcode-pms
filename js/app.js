@@ -1403,18 +1403,13 @@ const TVC_App = (function () {
 
         if (isHq) {
             return [
-                { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: [
-                    { label: 'Approve Work Report', tag: 'B', action: "TVC_App.menuAction('hqConfirm')", badge: c.approved, badgeTone: 'green', feature: 'showHqConfirmPanel' },
+                { key: 'defect', tone: 'defect', title: 'Defect Report', items: [
+                    { label: 'View Defect List', tag: 'D', action: "TVC_App.menuAction('defectInbox')", badge: c.defectPending, badgeTone: 'amber' },
                 ] },
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
-                    { label: 'Approve Original Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
-                    { label: "Input Company's Comment", tag: 'C', action: "TVC_App.menuAction('companyComment')" },
+                    { label: 'Approve Work Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
                 ] },
-                { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: [
-                    { label: 'Password Change', tag: 'A', action: "TVC_App.menuAction('password')" },
-                    { label: 'Control Change', tag: 'B', action: "TVC_App.menuAction('control')" },
-                    ...necessaryItems,
-                ] },
+                { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
         }
 
@@ -5619,6 +5614,23 @@ const TVC_App = (function () {
         rerenderCurrentTab();
     }
 
+    /** HQ Import 후 — 선택 선박·Run-hour scope·헤더·Outstanding Tasks까지 Import 결과 반영 */
+    async function refreshAfterImport(payload) {
+        const importVesselId = payload?.export_meta?.vessel_id;
+        const user = state.user;
+        if (user && TVC_RBAC.isHqAccount(user) && importVesselId) {
+            state.selectedVesselId = importVesselId;
+            TVC_Fleet.select(importVesselId);
+            TVC_PMS.setSpace('HQ', importVesselId);
+            await populateShipHeader(user);
+        }
+        await loadData();
+        renderFleetList();
+        rerenderCurrentTab();
+        if (state.currentTab === 'menu') renderSyncHistory();
+        if (state.currentTab === 'defect') TVC_DefectReport.renderTab();
+    }
+
     function jobActualStatusText(j) {
         const kind = jobActualStatusKind(j);
         if (kind === 'postponed') return 'P POSTPONED';
@@ -5888,13 +5900,9 @@ const TVC_App = (function () {
         const user = TVC_Auth.getCurrentUser();
         if (!user || !file) return;
         try {
-            await TVC_DefectSync.importPackage(user, file);
-            await refreshAll();
-            if (state.currentTab === 'menu') {
-                renderSyncHistory();
-                TVC_DefectReport.renderInbox();
-            }
-            if (state.currentTab === 'defect') TVC_DefectReport.renderTab();
+            const payload = await TVC_DefectSync.importPackage(user, file);
+            await refreshAfterImport(payload);
+            if (state.currentTab === 'menu') TVC_DefectReport.renderInbox();
             alert('Defect package imported successfully.');
         } catch (e) { alert(e.message); }
     }
@@ -5964,12 +5972,14 @@ const TVC_App = (function () {
             if (!TVC_RBAC.isHqAccount(user) && payload?.export_meta?.direction === 'HQ_TO_SHIP') {
                 await unlockOriginalPlanForDept(dept);
             }
-            await refreshAll();
-            if (state.currentTab === 'menu') renderSyncHistory();
+            await refreshAfterImport(payload);
             const unlockNote = (!TVC_RBAC.isHqAccount(user) && payload?.export_meta?.direction === 'HQ_TO_SHIP')
                 ? `\nOriginal Plan Update 기능이 다시 활성화되었습니다.`
                 : '';
-            alert(`${TVC_RBAC.getDeptLabel(dept)} 데이터 Import 완료${unlockNote}`);
+            const vesselNote = (TVC_RBAC.isHqAccount(user) && payload?.export_meta?.vessel_id)
+                ? `\n선박: ${TVC_Fleet.resolveById(payload.export_meta.vessel_id)?.name || payload.export_meta.vessel_id}`
+                : '';
+            alert(`${TVC_RBAC.getDeptLabel(dept)} 데이터 Import 완료${vesselNote}${unlockNote}`);
         } catch (e) { alert(e.message); }
     }
 
