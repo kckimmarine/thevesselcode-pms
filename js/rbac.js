@@ -345,6 +345,25 @@ const TVC_RBAC = (function () {
         return user.display_name || '';
     }
 
+    /** Legacy reporter_name / made_by abbreviations → full Reported by title */
+    function normalizeReportedByLabel(name) {
+        const s = String(name ?? '').trim();
+        if (!s) return '';
+        if (s === 'C/E') return 'Chief Engineer';
+        const lower = s.toLowerCase();
+        if (lower === 'chief engineer') return 'Chief Engineer';
+        if (lower === 'captain') return 'Captain';
+        if (lower === 'engineer') return 'Engineer';
+        if (lower === 'officer') return 'Officer';
+        if (lower === 'superintendent') return 'Superintendent';
+        if (/^C\/E\b/i.test(s) || (/\bChief Engineer\b/i.test(s) && !/Captain/i.test(s))) return 'Chief Engineer';
+        if (/^Captain\b/i.test(s) || /선장/.test(s)) return 'Captain';
+        if (/^Engineer\b/i.test(s) || /기관/.test(s)) return 'Engineer';
+        if (/^Officer\b/i.test(s)) return 'Officer';
+        if (/Superintendent|본사|\bHQ\b/i.test(s)) return 'Superintendent';
+        return s;
+    }
+
     /** Confirmed by 표시 — ENGINE: Chief Engineer, DECK: Captain */
     function getDepartmentConfirmLabel(dept) {
         const d = String(dept || '').toUpperCase();
@@ -373,7 +392,7 @@ const TVC_RBAC = (function () {
 
     return {
         AccountType, Role, Department, ReportStatus, Action,
-        can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel,
+        can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, normalizeReportedByLabel,
         getDepartmentConfirmLabel, canModifyDeleteListReport,
         isShipAccount, isHqAccount, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan,

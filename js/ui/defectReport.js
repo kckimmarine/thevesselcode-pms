@@ -643,10 +643,14 @@ const TVC_DefectReport = (function () {
     }
 
     function reportedByLabel(row) {
-        if (!row?.reported_by) return TVC_RBAC.getRankLabel?.(getState().user) || '';
         const u = getState().user;
-        if (u?.username === row.reported_by) return TVC_RBAC.getRankLabel(u);
-        return row.reported_by;
+        if (!row?.reported_by) return TVC_RBAC.getReportedByLabel?.(u) || '';
+        if (u?.username === row.reported_by) return TVC_RBAC.getReportedByLabel(u);
+        const title = TVC_RBAC.getAccountTitle?.(row.reported_by);
+        if (title && title !== 'User') {
+            return title.toLowerCase() === 'chief engineer' ? 'Chief Engineer' : title;
+        }
+        return TVC_RBAC.normalizeReportedByLabel?.(row.reported_by) || row.reported_by;
     }
 
     function ensureDfDraft(row) {

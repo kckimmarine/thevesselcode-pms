@@ -5008,7 +5008,7 @@ const TVC_App = (function () {
         if (!job) return '';
         const today = new Date().toISOString().slice(0, 10);
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
-        const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getRankLabel(state.user);
+        const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getReportedByLabel(state.user);
         return TVC_SpareMenu.renderWrSparePage2Html(job, ro, buildWrPage2Meta(job, reportedByName, today));
     }
 
@@ -5124,7 +5124,7 @@ const TVC_App = (function () {
         const today = new Date().toISOString().slice(0, 10);
         const ro = false;
         const tab = WR_TABS[state._wrTab] ? state._wrTab : 'repair';
-        const reportedByName = TVC_RBAC.getRankLabel(state.user);
+        const reportedByName = TVC_RBAC.getReportedByLabel(state.user);
         const showPages = tab === 'repair';
         const canEditShipAttach = true;
 
@@ -5198,7 +5198,7 @@ const TVC_App = (function () {
         const isRepApproved = !!rep && reportIsApproved(rep);
         const canConfirmNow = !!rep && TVC_RBAC.isReportedStatus(rep.status, rep.is_locked) && TVC_RBAC.canConfirmDepartment(state.user, job.department);
         const canApproveNow = !!rep && isRepConfirmed && !isRepApproved && TVC_RBAC.canApproveHqReport(state.user);
-        const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getRankLabel(state.user);
+        const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getReportedByLabel(state.user);
         const confirmedByVal = isRepConfirmed
             ? (TVC_RBAC.getDepartmentConfirmLabel(job.department) || rep?.confirmed_by || '')
             : '';
@@ -6063,16 +6063,9 @@ const TVC_App = (function () {
     }
     function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
 
-    /** Reporter 표시 정규화: 이름/직급이 섞인 값에서 역할만 추출 (Engineer/C-E/Officer/Captain/Superintendent) */
+    /** Reporter 표시 — full titles; legacy C/E etc. mapped via RBAC helper */
     function reporterLabel(name) {
-        const s = String(name ?? '').trim();
-        if (!s) return '';
-        if (/C\/E|Chief/i.test(s)) return 'C/E';
-        if (/Captain|선장/i.test(s)) return 'Captain';
-        if (/Engineer|기관|\/E/i.test(s)) return 'Engineer';
-        if (/Officer|\/O|Deck/i.test(s)) return 'Officer';
-        if (/Superintendent|본사|\bHQ\b/i.test(s)) return 'Superintendent';
-        return s;
+        return TVC_RBAC.normalizeReportedByLabel(name);
     }
     function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 

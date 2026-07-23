@@ -169,10 +169,10 @@ const TVC_Excel = (function () {
         { header: 'Item', key: 'item', width: 32 },
         { header: 'Part No.', key: 'partNo', width: 18 },
         { header: 'Unit', key: 'unit', width: 8 },
-        { header: 'Working', key: 'working', width: 10 },
-        { header: 'Standard', key: 'standard', width: 10 },
-        { header: 'Stock', key: 'stock', width: 10 },
-        { header: 'Awaiting', key: 'awaiting', width: 10 },
+        { header: 'Work', key: 'working', width: 10 },
+        { header: 'Std', key: 'standard', width: 10 },
+        { header: 'Rob', key: 'stock', width: 10 },
+        { header: 'Wait', key: 'awaiting', width: 10 },
         { header: 'Need', key: 'need', width: 10 },
     ];
 
