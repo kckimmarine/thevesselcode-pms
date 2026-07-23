@@ -34,6 +34,7 @@ const Action = {
     DEDUCT_INVENTORY: 'DEDUCT_INVENTORY',
     MODIFY_INVENTORY: 'MODIFY_INVENTORY',
     CREATE_REQUISITION: 'CREATE_REQUISITION',
+    SUPPLY_PARTS: 'SUPPLY_PARTS',
 
     // 가동시간
     UPDATE_RUN_HOURS: 'UPDATE_RUN_HOURS',
@@ -64,6 +65,8 @@ const ROLE_PERMISSIONS = {
         Action.VIEW_PMS_SCHEDULE,
         Action.UPDATE_RUN_HOURS,
         Action.CREATE_REQUISITION,
+        Action.DEDUCT_INVENTORY,
+        Action.SUPPLY_PARTS,
     ]),
     [Role.SHIP_CHIEF]: new Set([
         Action.CREATE_DAILY_REPORT,
@@ -77,6 +80,7 @@ const ROLE_PERMISSIONS = {
         Action.EXPORT_SHIP_SYNC,
         Action.IMPORT_SHIP_SYNC,
         Action.CREATE_REQUISITION,
+        Action.SUPPLY_PARTS,
         Action.VIEW_AUDIT_LOG,
     ]),
     [Role.HQ_SUPERVISOR]: new Set([
@@ -92,6 +96,7 @@ const ROLE_PERMISSIONS = {
         Action.DEDUCT_INVENTORY,
         Action.MODIFY_INVENTORY,
         Action.CREATE_REQUISITION,
+        Action.SUPPLY_PARTS,
     ]),
 };
 

@@ -95,6 +95,7 @@ const TVC_RBAC = (function () {
             Action.CREATE_DAILY_REPORT, Action.EDIT_OWN_PENDING_REPORT,
             Action.VIEW_INVENTORY, Action.VIEW_PMS_SCHEDULE,
             Action.UPDATE_RUN_HOURS, Action.CREATE_REQUISITION,
+            Action.DEDUCT_INVENTORY, Action.SUPPLY_PARTS,
             Action.SUBMIT_DEFECT_REPORT,
         ]),
         SHIP_CHIEF: new Set([
@@ -325,6 +326,25 @@ const TVC_RBAC = (function () {
         return ACCOUNT_TITLES[username] || (username || 'User');
     }
 
+    /** Reported by — 접속자 직책 (Engineer / Officer / Chief Engineer / Captain / Superintendent) */
+    function getReportedByLabel(user) {
+        if (!user) return '';
+        const uname = String(user.username || '').toLowerCase();
+        const title = getAccountTitle(uname);
+        if (title && title !== 'User') {
+            if (title.toLowerCase() === 'chief engineer') return 'Chief Engineer';
+            return title;
+        }
+        const role = resolveUserRole(user);
+        if (role === Role.SHIP_CAPTAIN) return 'Captain';
+        if (role === Role.SHIP_CHIEF) return 'Chief Engineer';
+        if (role === Role.HQ_SUPERVISOR) return 'Superintendent';
+        if (role === Role.SHIP_OFFICER) {
+            return user.department === 'ENGINE' ? 'Engineer' : 'Officer';
+        }
+        return user.display_name || '';
+    }
+
     /** Confirmed by 표시 — ENGINE: Chief Engineer, DECK: Captain */
     function getDepartmentConfirmLabel(dept) {
         const d = String(dept || '').toUpperCase();
@@ -353,7 +373,7 @@ const TVC_RBAC = (function () {
 
     return {
         AccountType, Role, Department, ReportStatus, Action,
-        can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle,
+        can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel,
         getDepartmentConfirmLabel, canModifyDeleteListReport,
         isShipAccount, isHqAccount, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan,

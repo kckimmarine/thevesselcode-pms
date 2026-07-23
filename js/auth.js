@@ -49,6 +49,15 @@ const TVC_Auth = (function () {
     }
 
     async function initUsers() {
+        const seedVer = await TVC_DB.getMeta('users_seed_version').catch(() => null);
+        if (seedVer === USERS_SEED_VERSION) {
+            const existing = await TVC_DB.getAll('users');
+            const allPresent = DEFAULT_USERS.every(tpl =>
+                existing.some(u => u.id === tpl.id && u.is_active && u.username === tpl.username && u.role === tpl.role)
+            );
+            if (allPresent) return { skipped: true };
+        }
+
         const existing = await TVC_DB.getAll('users');
         const hash = await hashPassword(DEMO_PASSWORD);
         // 데모 계정은 항상 최신 role/username 으로 동기화 (IndexedDB 캐시 불일치 방지)
@@ -106,7 +115,6 @@ const TVC_Auth = (function () {
     }
 
     async function login(username, password, loginMode) {
-        await initUsers();
         const users = await TVC_DB.getAll('users');
         const uname = username.trim();
         const template = DEFAULT_USERS.find(u => u.username === uname);

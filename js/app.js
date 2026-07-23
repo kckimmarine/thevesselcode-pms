@@ -70,79 +70,127 @@ const TVC_App = (function () {
         _histChecked: {},         // Work History 승인용 체크박스 { rowKey: true }
     };
 
+    let bootReady = false;
+    let bootReadyPromise = null;
+    let bootReadyResolve = null;
+    let loginBusy = false;
+
+    function setLoginBusy(busy, message) {
+        loginBusy = busy;
+        const btn = document.querySelector('#loginScreen .login-submit');
+        const errEl = document.getElementById('loginErr');
+        if (btn) {
+            if (!btn.dataset.defaultLabel) btn.dataset.defaultLabel = btn.textContent.trim() || 'Sign In';
+            btn.disabled = busy;
+            btn.classList.toggle('is-busy', busy);
+            btn.textContent = busy && message ? message : btn.dataset.defaultLabel;
+        }
+        document.querySelectorAll('#loginScreen input, #loginScreen select').forEach(el => {
+            el.disabled = busy;
+        });
+        if (busy && message && errEl && !errEl.textContent) errEl.textContent = '';
+    }
+
+    async function runDeferredBoot() {
+        if (state._deferredBootRunning || state._deferredBootDone) return;
+        state._deferredBootRunning = true;
+        try {
+            try {
+                const sync = await TVC_DB.SparePart.syncOnBoot();
+                if (sync.migrated) console.info('[SPICS] syncOnBoot migrated', sync.migrated, '/', sync.total);
+            } catch (e) { console.warn('[SPICS] syncOnBoot', e); }
+            try { await TVC_DataPurge.run(); } catch (e) { console.warn('[TVC_DataPurge]', e); }
+            try {
+                const reqPurge = await TVC_DataPurge.purgeAllRequisitionsOnce();
+                if (reqPurge?.requisitions) {
+                    state.spareModule = state.spareModule || {};
+                    state.spareModule.selectedReqId = null;
+                    state.spareModule.showReqPanel = false;
+                }
+            } catch (e) { console.warn('[TVC_DataPurge] requisitions', e); }
+            try {
+                const repPurge = await TVC_DataPurge.purgeAllReportsForTestingOnce();
+                if (repPurge?.workReports || repPurge?.defectCases) {
+                    state._histSelReportId = null;
+                    state._histChecked = {};
+                    state._wrReportId = null;
+                }
+            } catch (e) { console.warn('[TVC_DataPurge] reports', e); }
+            try { await TVC_Fleet.ensureFleet(); } catch (e) { console.warn('[TVC_Fleet]', e); }
+
+            const seed = await TVC_Seed.ensureSeed();
+            if (seed.needFile) document.getElementById('seedBanner')?.classList.remove('hidden');
+            try { await TVC_Seed.ensureInventoryDefaults(); } catch (e) { console.warn('inventory defaults', e); }
+            try {
+                const xls = await TVC_Seed.ensureSpareInventoryXls();
+                if (xls.loaded) console.info('[SPARE] Engine inventory:', xls.stats?.spares, 'parts');
+                else if (xls.fileProtocol) console.info('[SPARE] file:// — use npm run serve or file picker');
+            } catch (e) { console.warn('spare inventory xls', e); }
+
+            if (TVC_Env.isFileProtocol()) {
+                document.getElementById('fileProtocolBanner')?.classList.remove('hidden');
+                document.getElementById('loginFileBanner')?.classList.remove('hidden');
+                document.getElementById('fileProtocolModal')?.classList.remove('hidden');
+            }
+            state._deferredBootDone = true;
+        } finally {
+            state._deferredBootRunning = false;
+        }
+    }
+
     // ── Boot ─────────────────────────────────────────────────────────
     async function boot() {
-        await TVC_DB.open();
+        bootReadyPromise = new Promise(resolve => { bootReadyResolve = resolve; });
+        setLoginBusy(true, '시스템 준비 중…');
         try {
-            const sync = await TVC_DB.SparePart.syncOnBoot();
-            if (sync.migrated) console.info('[SPICS] syncOnBoot migrated', sync.migrated, '/', sync.total);
-        } catch (e) { console.warn('[SPICS] syncOnBoot', e); }
-        await TVC_Auth.initUsers();
-        try { await TVC_DataPurge.run(); } catch (e) { console.warn('[TVC_DataPurge]', e); }
-        try {
-            const reqPurge = await TVC_DataPurge.purgeAllRequisitionsOnce();
-            if (reqPurge?.requisitions) {
-                state.spareModule = state.spareModule || {};
-                state.spareModule.selectedReqId = null;
-                state.spareModule.showReqPanel = false;
-            }
-        } catch (e) { console.warn('[TVC_DataPurge] requisitions', e); }
-        try {
-            const repPurge = await TVC_DataPurge.purgeAllReportsForTestingOnce();
-            if (repPurge?.workReports || repPurge?.defectCases) {
-                state._histSelReportId = null;
-                state._histChecked = {};
-                state._wrReportId = null;
-            }
-        } catch (e) { console.warn('[TVC_DataPurge] reports', e); }
-        try { await TVC_Fleet.ensureFleet(); } catch (e) { console.warn('[TVC_Fleet]', e); }
-        const sessionUser = await TVC_Auth.refreshSessionFromDb();
-        TVC_RunHours.init({ getState: () => state, refresh: refreshAll });
-        TVC_SpareMenu.init({ getState: () => state, refresh: refreshAll });
-        TVC_DefectReport.init({ getState: () => state, refresh: refreshAll });
-        TVC_OutstandingTasks.init({
-            getState: () => state,
-            deptJobs,
-            jobMatchesActualFilter,
-            jobActualStatusKind,
-            menuNavigate,
-        });
-        window.addEventListener('tvc:spics-requisition-suggest', (e) => {
-            state.spicsAlerts = e.detail?.alerts || [];
-            renderSpicsAlertBanner();
-            TVC_SpareMenu.suggestRequisition(e.detail?.alerts || []);
-            if (state.currentTab === 'actual') renderActualPlan();
-        });
-        window.addEventListener('tvc:spics-low-stock', (e) => {
-            state.spicsAlerts = e.detail?.alerts || [];
-            renderSpicsAlertBanner();
-            if (state.currentTab === 'actual') renderActualPlan();
-        });
-        const seed = await TVC_Seed.ensureSeed();
-        if (seed.needFile) document.getElementById('seedBanner')?.classList.remove('hidden');
-        // Inventory 관계 데이터(BOM/공통코드/기준재고) 기본값 보강 — idempotent
-        try { await TVC_Seed.ensureInventoryDefaults(); } catch (e) { console.warn('inventory defaults', e); }
-        try {
-            const xls = await TVC_Seed.ensureSpareInventoryXls();
-            if (xls.loaded) console.info('[SPARE] Engine inventory:', xls.stats?.spares, 'parts');
-            else if (xls.fileProtocol) console.info('[SPARE] file:// — use npm run serve or file picker');
-        } catch (e) { console.warn('spare inventory xls', e); }
-        if (TVC_Env.isFileProtocol()) {
-            document.getElementById('fileProtocolBanner')?.classList.remove('hidden');
-            document.getElementById('loginFileBanner')?.classList.remove('hidden');
-            document.getElementById('fileProtocolModal')?.classList.remove('hidden');
-        }
+            await TVC_DB.open();
+            await TVC_Auth.initUsers();
 
-        ['loginUser', 'loginPass', 'loginDept'].forEach(id => {
-            document.getElementById(id)?.addEventListener('keydown', e => {
-                if (e.key === 'Enter') handleLogin();
+            ['loginUser', 'loginPass', 'loginDept'].forEach(id => {
+                document.getElementById(id)?.addEventListener('keydown', e => {
+                    if (e.key === 'Enter') handleLogin();
+                });
             });
-        });
+            bindTabSearchClearInputs();
 
-        const user = sessionUser || TVC_Auth.getCurrentUser();
-        if (user) await onLogin(user);
-        else showLogin();
-        bindTabSearchClearInputs();
+            const sessionUser = await TVC_Auth.refreshSessionFromDb();
+            TVC_RunHours.init({ getState: () => state, refresh: refreshAll });
+            TVC_SpareMenu.init({ getState: () => state, refresh: refreshAll });
+            TVC_DefectReport.init({ getState: () => state, refresh: refreshAll });
+            TVC_OutstandingTasks.init({
+                getState: () => state,
+                deptJobs,
+                jobMatchesActualFilter,
+                jobActualStatusKind,
+                menuNavigate,
+            });
+            window.addEventListener('tvc:spics-requisition-suggest', (e) => {
+                state.spicsAlerts = e.detail?.alerts || [];
+                renderSpicsAlertBanner();
+                TVC_SpareMenu.suggestRequisition(e.detail?.alerts || []);
+                if (state.currentTab === 'actual') renderActualPlan();
+            });
+            window.addEventListener('tvc:spics-low-stock', (e) => {
+                state.spicsAlerts = e.detail?.alerts || [];
+                renderSpicsAlertBanner();
+                if (state.currentTab === 'actual') renderActualPlan();
+            });
+
+            runDeferredBoot().catch(e => console.warn('[TVC] deferred boot', e));
+
+            const user = sessionUser || TVC_Auth.getCurrentUser();
+            if (user) await onLogin(user);
+            else showLogin();
+        } catch (e) {
+            console.error('[TVC] boot failed', e);
+            const errEl = document.getElementById('loginErr');
+            if (errEl) errEl.textContent = e.message || '시스템 초기화 중 오류가 발생했습니다.';
+            showLogin();
+        } finally {
+            bootReady = true;
+            bootReadyResolve?.();
+            setLoginBusy(false);
+        }
     }
 
     /** 부서별 데이터 독립성(영구 분리): 선박 계정은 로드 단계에서부터 자기 부서 데이터만 취득한다. */
@@ -447,8 +495,8 @@ const TVC_App = (function () {
         if (TVC_RBAC.isHqAccount(user)) {
             vessel = state.fleet.find(v => v.id === state.selectedVesselId) || TVC_Fleet.getSelected();
         } else {
-            let vesselId = user.vessel_id;
-            if (!vesselId) { try { vesselId = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID); } catch (_) {} }
+        let vesselId = user.vessel_id;
+        if (!vesselId) { try { vesselId = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID); } catch (_) {} }
             if (vesselId) {
                 vessel = TVC_Fleet.resolveById(vesselId);
                 try { const init = await TVC_DB.getMeta(TVC_META_KEYS.DB_INIT); if (init) vessel.delivery = String(init).slice(0, 10); } catch (_) {}
@@ -536,11 +584,11 @@ const TVC_App = (function () {
         document.querySelectorAll('.dept-toggle').forEach(group => {
             if (canSwitch) {
                 const opts = [{ v: null, l: 'All' }, { v: 'ENGINE', l: 'Engine' }, { v: 'DECK', l: 'Deck' }];
-                const btns = opts.map(o => {
-                    const active = state.department === o.v ? ' active' : '';
-                    const arg = o.v ? `'${o.v}'` : 'null';
-                    return `<button class="dept-btn${active}" data-dept="${o.v || ''}" onclick="TVC_App.setDepartment(${arg})">${o.l}</button>`;
-                }).join('');
+            const btns = opts.map(o => {
+                const active = state.department === o.v ? ' active' : '';
+                const arg = o.v ? `'${o.v}'` : 'null';
+                return `<button class="dept-btn${active}" data-dept="${o.v || ''}" onclick="TVC_App.setDepartment(${arg})">${o.l}</button>`;
+            }).join('');
                 group.innerHTML = '<span class="dept-label">Department</span>' + btns;
             } else {
                 const modeLbl = user.login_mode && typeof TVC_Space !== 'undefined'
@@ -1350,12 +1398,12 @@ const TVC_App = (function () {
                     <input type="checkbox" ${allBatch ? 'checked' : ''} onchange="TVC_App.toggleBatchSelectAll(this.checked)">
                 </span>
                 <span class="c-crit" title="Critical Equipment">⚠</span>
-                <span class="c-code sortable" onclick="TVC_App.sortJobs('job_code')">JOB CODE${arrow('job_code')}</span>
+            <span class="c-code sortable" onclick="TVC_App.sortJobs('job_code')">JOB CODE${arrow('job_code')}</span>
                 <span class="c-s1">SORT-1</span><span class="c-d1">SORT-2</span><span class="c-d2">JOB DETAIL</span>
                 <span class="c-per">PERIOD</span><span class="c-pic">P.I.C</span>
-                <span class="c-next sortable" onclick="TVC_App.sortJobs('next_date')">NEXT DATE${arrow('next_date')}</span>
+            <span class="c-next sortable" onclick="TVC_App.sortJobs('next_date')">NEXT DATE${arrow('next_date')}</span>
                 <span class="c-last">LAST DONE</span><span class="c-st">STATUS</span>
-            </div>`;
+        </div>`;
         }
         container.classList.add('sheet-scroll-actual');
         container.classList.remove('sheet-scroll-original');
@@ -1402,7 +1450,7 @@ const TVC_App = (function () {
         const necessaryItems = menuNecessaryItems();
 
         if (isHq) {
-            return [
+        return [
                 { key: 'defect', tone: 'defect', title: 'Defect Report', items: [
                     { label: 'View Defect List', tag: 'D', action: "TVC_App.menuAction('defectInbox')", badge: c.defectPending, badgeTone: 'amber' },
                 ] },
@@ -1445,7 +1493,7 @@ const TVC_App = (function () {
 
     function menuNecessaryItems() {
         return [
-            { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
+                    { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
             { label: 'Data Export & Import', tag: 'C', action: 'TVC_App.openMenuXferMenu()' },
             { label: 'View Data History', tag: 'C', action: 'TVC_App.openMenuHistoryModal()' },
         ];
@@ -1741,8 +1789,8 @@ const TVC_App = (function () {
 
     function renderMenuFlowItem(it, f, opts = {}) {
         if (it.feature && !f[it.feature]) return '';
-        const badge = (it.badge != null && it.badge > 0)
-            ? `<span class="mi-badge mi-${it.badgeTone || 'blue'}">${it.badge}</span>` : '';
+                    const badge = (it.badge != null && it.badge > 0)
+                        ? `<span class="mi-badge mi-${it.badgeTone || 'blue'}">${it.badge}</span>` : '';
         const label = `<span class="mi-label">${esc(it.label)}</span>`;
         if (opts.locked) {
             const tip = esc(opts.disabledTitle || 'Original Plan Update는 현재 사용할 수 없습니다.');
@@ -1764,7 +1812,7 @@ const TVC_App = (function () {
                 <header class="spare-flow-head">${esc(col.title)}</header>
                 <div class="spare-flow-items">${empty}</div>
             </section>`;
-        }).join('');
+            }).join('');
         return `<nav class="spare-flow-panel menu-flow-panel" aria-label="Maintenance workflow">${colHtml}</nav>`;
     }
 
@@ -4783,7 +4831,7 @@ const TVC_App = (function () {
                 ${fld('Working Hours', `<input type="number" data-wf="handHours" value="${esc(wf('handHours', '0'))}"${dis}>`)}
                 ${fld('Working Member', `<input type="number" data-wf="handMembers" value="${esc(wf('handMembers', '0'))}"${dis}>`)}
                 <div class="wr-maint-field wr-maint-chk-field">${flagChk('shoreSupport', 'Conducted by Shore Support')}</div>
-            </div>
+                </div>
             ${showShipComment ? `
                 ${fld("Ship's Comments (If any)", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3"${roAttr}${dis}>${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
                 ${fld("Ship's Attachment", renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach && !ro }), 'wr-maint-span-all wr-maint-grid-gap')}
@@ -4861,7 +4909,7 @@ const TVC_App = (function () {
                     canEditCompanyAttach,
                 })}
             </section>
-        </div>`;
+            </div>`;
     }
 
     function renderWrPostponeBody(job, opts = {}) {
@@ -5839,7 +5887,14 @@ const TVC_App = (function () {
     // ── Auth / sync handlers ─────────────────────────────────────────
     async function handleLogin() {
         const errEl = document.getElementById('loginErr');
+        if (loginBusy) return;
         try {
+            if (!bootReady) {
+                setLoginBusy(true, '시스템 준비 중…');
+                await bootReadyPromise;
+                setLoginBusy(false);
+            }
+            setLoginBusy(true, '로그인 중…');
             const loginMode = document.getElementById('loginDept')?.value || '';
             const r = await TVC_Auth.login(
                 document.getElementById('loginUser').value,
@@ -5854,6 +5909,8 @@ const TVC_App = (function () {
         } catch (e) {
             console.error('[TVC] login failed', e);
             if (errEl) errEl.textContent = e.message || '로그인 중 오류가 발생했습니다.';
+        } finally {
+            if (!state.user) setLoginBusy(false);
         }
     }
 

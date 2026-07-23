@@ -13,6 +13,42 @@ const TVC_DefectReport = (function () {
     const DF_PICK_Z = 10100;
     let _dfGroupPickSearch = '';
     let _dfJobPickSearch = '';
+    let _dfJobRowPickUnbind = null;
+
+    function unbindDfJobRowPickListeners() {
+        if (_dfJobRowPickUnbind) {
+            _dfJobRowPickUnbind();
+            _dfJobRowPickUnbind = null;
+        }
+    }
+
+    function isDfJobRowPickOpen() {
+        const menu = document.getElementById('dfJobRowPickMenu');
+        return !!(menu && menu.style.display !== 'none' && menu.classList.contains('spare-consume-pick-menu-portal'));
+    }
+
+    function bindDfJobRowPickListeners(rowIdx) {
+        unbindDfJobRowPickListeners();
+        const menu = document.getElementById('dfJobRowPickMenu');
+        const close = (e) => {
+            if (menu?.contains(e.target) || document.getElementById(`dfJobPickTrigger-${rowIdx}`)?.contains(e.target)) return;
+            closeDfJobRowPickMenu();
+        };
+        const onReposition = () => {
+            if (!isDfJobRowPickOpen()) return;
+            positionDfJobRowPickMenu(rowIdx);
+        };
+        setTimeout(() => {
+            document.addEventListener('click', close);
+            window.addEventListener('scroll', onReposition, true);
+            window.addEventListener('resize', onReposition);
+        }, 0);
+        _dfJobRowPickUnbind = () => {
+            document.removeEventListener('click', close);
+            window.removeEventListener('scroll', onReposition, true);
+            window.removeEventListener('resize', onReposition);
+        };
+    }
     let _dfActiveJobRowIndex = 0;
     let _dfListSearch = '';
     let _dfListSelId = null;
@@ -64,13 +100,15 @@ const TVC_DefectReport = (function () {
     }
 
     function closeDfJobRowPickMenu() {
+        unbindDfJobRowPickListeners();
         const host = document.getElementById('dfJobRowPickHost');
         const menu = document.getElementById('dfJobRowPickMenu');
         if (menu) {
             menu.classList.remove('spare-consume-pick-menu-portal');
             menu.style.cssText = 'display:none';
-            if (menu._portalAttached && menu.parentNode === document.body && host) {
-                host.appendChild(menu);
+            if (menu.parentNode === document.body) {
+                if (host) host.appendChild(menu);
+                else menu.remove();
             }
         }
         if (host) host.classList.add('hidden');
@@ -230,11 +268,13 @@ const TVC_DefectReport = (function () {
         const wrap = document.getElementById('dfJobPick');
         if (wrap?.classList.contains('open')) positionDfPickMenu(wrap, 420);
         const menu = document.getElementById('dfJobRowPickMenu');
-        if (menu?.style.display !== 'none') positionDfJobRowPickMenu(_dfActiveJobRowIndex);
+        if (isDfJobRowPickOpen()) positionDfJobRowPickMenu(_dfActiveJobRowIndex);
     }
 
     function dfJobRowPickSearch(v) {
         dfJobPickSearch(v);
+        if (!isDfJobRowPickOpen()) return;
+        positionDfJobRowPickMenu(_dfActiveJobRowIndex || 0);
     }
 
     function toggleDfGroupPick(ev) {
@@ -398,27 +438,15 @@ const TVC_DefectReport = (function () {
             closeDfJobRowPickMenu();
             return;
         }
-        host.classList.remove('hidden');
         refreshDfJobRowPickList();
         positionDfJobRowPickMenu(idx);
-        const close = (e) => {
-            if (menu.contains(e.target) || document.getElementById(`dfJobPickTrigger-${idx}`)?.contains(e.target)) return;
-            closeDfJobRowPickMenu();
-            document.removeEventListener('click', close);
-            window.removeEventListener('scroll', onReposition, true);
-            window.removeEventListener('resize', onReposition);
-        };
-        const onReposition = () => positionDfJobRowPickMenu(idx);
-        setTimeout(() => {
-            document.addEventListener('click', close);
-            window.addEventListener('scroll', onReposition, true);
-            window.addEventListener('resize', onReposition);
-        }, 0);
+        bindDfJobRowPickListeners(idx);
     }
 
     function addDfJobRow() {
         captureDfFormFields();
         captureDfJobItems();
+        closeAllDfPicks();
         const draft = getState()._dfDraft;
         if (!draft) return;
         ensureDfJobItems(draft);
@@ -429,6 +457,7 @@ const TVC_DefectReport = (function () {
     function removeDfJobRow(idx) {
         captureDfFormFields();
         captureDfJobItems();
+        closeAllDfPicks();
         const draft = getState()._dfDraft;
         if (!draft) return;
         ensureDfJobItems(draft);
@@ -1633,6 +1662,7 @@ const TVC_DefectReport = (function () {
     }
 
     function refreshDefectModal() {
+        closeAllDfPicks();
         const s = getState();
         if ((s._dfPage || '1') === '2') {
             captureDfUsedParts();
@@ -1656,6 +1686,7 @@ const TVC_DefectReport = (function () {
     function setDefectReportPage(page) {
         captureDfFormFields();
         if ((getState()._dfPage || '1') === '1') captureDfJobItems();
+        closeAllDfPicks();
         if ((getState()._dfPage || '1') === '2') {
             captureDfUsedParts();
             TVC_SpareMenu.teardownWrSparePage2();
