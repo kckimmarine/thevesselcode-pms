@@ -38,9 +38,30 @@ const TVC_RunHours = (function () {
         el.value = readLastUpdatedDate(store);
     }
 
+    function hasPendingRevert() {
+        return !!revertSnapshot;
+    }
+
     function updateRevertButtonState() {
         const btn = document.getElementById('rhRevertBtn');
         if (btn) btn.disabled = !revertSnapshot;
+    }
+
+    function syncRhToolbarUi() {
+        const canUpdate = ctx?.canUpdateRunningHours ? ctx.canUpdateRunningHours() : !revertSnapshot;
+        const updateBtn = document.getElementById('rhUpdateBtn');
+        if (updateBtn) {
+            updateBtn.disabled = !canUpdate;
+            if (revertSnapshot) {
+                updateBtn.title = 'Running Hours Update가 완료되었습니다. Revert 후 다시 Update할 수 있습니다.';
+            } else if (ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
+                updateBtn.title = 'Work History의 모든 항목이 Confirm된 후 Update할 수 있습니다.';
+            } else {
+                updateBtn.title = '';
+            }
+        }
+        updateRevertButtonState();
+        if (ctx?.onRhToolbarChange) ctx.onRhToolbarChange();
     }
 
     /** 시간 기반 관리 대상 장비 그룹만 추출 (부서 필터 반영) */
@@ -61,7 +82,7 @@ const TVC_RunHours = (function () {
         state._rhNodes = nodes;
 
         syncLastUpdatedField(store);
-        updateRevertButtonState();
+        syncRhToolbarUi();
 
         if (!nodes.length) {
             body.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center">No run-hour tracked equipment for this view. (Only M/E and No.1~3 G/E are time-based.)</td></tr>';
@@ -126,12 +147,29 @@ const TVC_RunHours = (function () {
         const nodes = state._rhNodes || trackedNodes(state);
         if (!nodes.length) return;
 
+        if (revertSnapshot) {
+            alert('Running Hours Update가 이미 완료되었습니다.\nRevert 후 다시 Update할 수 있습니다.');
+            return;
+        }
+
+        if (ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
+            const entries = ctx.workHistoryEntriesRaw ? ctx.workHistoryEntriesRaw() : [];
+            const isConfirmed = ctx.isWorkHistoryEntryConfirmed;
+            const unconfirmed = isConfirmed
+                ? entries.filter(e => !isConfirmed(e)).length
+                : entries.length;
+            alert(
+                `Work History에 Confirm되지 않은 항목이 ${unconfirmed}건 있습니다.\n` +
+                '모든 Work History 항목이 Confirm(또는 Approved/Submitted)된 후 Running Hours Update를 진행하세요.'
+            );
+            return;
+        }
+
         const storeBefore = TVC_PMS.readStore();
         revertSnapshot = {
             store: JSON.parse(JSON.stringify(storeBefore)),
             lastUpdatedDate: readLastUpdatedDate(storeBefore),
         };
-        updateRevertButtonState();
 
         const store = TVC_PMS.readStore();
         const updatedYmd = todayYmd();
@@ -162,6 +200,7 @@ const TVC_RunHours = (function () {
         const res = await TVC_PMS.updateMaintenanceSchedule(state, { persist: true });
         if (ctx.refresh) await ctx.refresh();
         render();
+        syncRhToolbarUi();
 
         const resetNote = summaries.some(s => s.includes(': 0 h'))
             ? '\n↺ Total Run Hours = 0 인 장비는 Work Plan Due Date가 원복됩니다.'
@@ -186,17 +225,17 @@ const TVC_RunHours = (function () {
 
         TVC_PMS.writeStore(JSON.parse(JSON.stringify(revertSnapshot.store)));
         revertSnapshot = null;
-        updateRevertButtonState();
 
         const state = ctx.getState();
         await TVC_PMS.updateMaintenanceSchedule(state, { persist: true });
         if (ctx.refresh) await ctx.refresh();
         render();
+        syncRhToolbarUi();
         alert('Running Hours Update가 되돌려졌습니다.');
     }
 
     /** @deprecated per-row save — use updateAll */
     async function save(i) { return updateAll(); }
 
-    return { init, render, preview, totalEdit, updateAll, revert, save };
+    return { init, render, preview, totalEdit, updateAll, revert, save, hasPendingRevert, syncRhToolbarUi };
 })();

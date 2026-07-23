@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260723-req-list-narrow';
+const CACHE_VERSION = 'tvc-pms-20260724-req-list-stable';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -9,6 +9,7 @@ const PRECACHE_ASSETS = [
     '/index.html',
     '/manifest.json',
     '/css/app.css',
+    '/css/responsive-scale.css',
     '/js/pwa.js',
     '/icons/icon.svg',
     '/icons/icon-maskable.svg',
@@ -20,6 +21,7 @@ const PRECACHE_ASSETS = [
     '/js/core/db.js',
     '/js/core/indexes.js',
     '/js/pms.js',
+    '/js/ui/viewportScale.js',
     '/js/ui/virtualList.js',
     '/js/ui/modalDrag.js',
     '/js/ui/runHours.js',

@@ -1,6 +1,6 @@
 /* Virtual List — renders visible rows only */
 const TVC_VirtualList = (function () {
-    const ROW_H = 36;
+    const ROW_H = 40;
 
     function mount(container, options) {
         const { rowHeight = ROW_H, renderRow, getCount, overflowX, overflowY } = options;

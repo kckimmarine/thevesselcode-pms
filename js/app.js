@@ -154,7 +154,18 @@ const TVC_App = (function () {
             bindTabSearchClearInputs();
 
             const sessionUser = await TVC_Auth.refreshSessionFromDb();
-            TVC_RunHours.init({ getState: () => state, refresh: refreshAll });
+            TVC_RunHours.init({
+                getState: () => state,
+                refresh: refreshAll,
+                allWorkHistoryConfirmed,
+                isWorkHistoryEntryConfirmed,
+                workHistoryEntriesRaw,
+                canUpdateRunningHours,
+                onRhToolbarChange: () => {
+                    syncPlanUpdateUi();
+                    if (state.currentTab === 'menu') renderMainMenu();
+                },
+            });
             TVC_SpareMenu.init({ getState: () => state, refresh: refreshAll });
             TVC_DefectReport.init({ getState: () => state, refresh: refreshAll });
             TVC_OutstandingTasks.init({
@@ -1800,8 +1811,8 @@ const TVC_App = (function () {
     }
 
     function renderMenuFlowPanel(cols, f) {
-        const planLocked = isOriginalPlanUpdateLocked(getPlanLockDept());
-        const lockTip = getOriginalPlanLockMessage(getPlanLockDept());
+        const planLocked = !canUpdateWorkPlanFromRh();
+        const lockTip = planLocked ? getPlanMenuLockMessage() : '';
         const colHtml = cols.map(col => {
             const items = col.items
                 .map(it => renderMenuFlowItem(it, f, it.planLock ? { locked: planLocked, disabledTitle: lockTip } : {}))
@@ -2012,6 +2023,10 @@ const TVC_App = (function () {
             case 'runHour': menuNavigate('runhrs'); break;
             case 'originalPlan':
             case 'approveOriginalPlan':
+                if (!isRhUpdateCommitted()) {
+                    alert('Running Hours Update를 먼저 완료하세요.');
+                    return;
+                }
                 if (!canPerformOriginalPlanUpdate()) {
                     alert(getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.');
                     return;
@@ -2129,18 +2144,35 @@ const TVC_App = (function () {
         await TVC_DB.setMeta(TVC_META_KEYS.ORIGINAL_PLAN_LOCK, JSON.stringify(locks));
     }
 
+    function getPlanMenuLockMessage() {
+        if (!isRhUpdateCommitted()) {
+            return 'Running Hours Update를 먼저 완료하세요.';
+        }
+        return getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.';
+    }
+
     function syncPlanUpdateUi() {
         const dept = getPlanLockDept();
-        const locked = isOriginalPlanUpdateLocked(dept);
+        const planLocked = isOriginalPlanUpdateLocked(dept);
+        const rhLocked = !isRhUpdateCommitted();
+        const locked = planLocked || rhLocked;
         const btn = document.getElementById('actUpdatePlanBtn');
         if (btn) {
             btn.disabled = locked;
-            btn.title = locked ? getOriginalPlanLockMessage(dept) : '';
+            if (planLocked) {
+                btn.title = getOriginalPlanLockMessage(dept);
+            } else if (rhLocked) {
+                btn.title = 'Running Hours Update를 먼저 완료하세요.';
+            } else {
+                btn.title = '';
+            }
         }
         syncPlanItemUi();
         const msgEl = document.getElementById('actPlanCalcMsg');
         if (msgEl && locked && !state._planCalcMsg) {
-            msgEl.textContent = getOriginalPlanLockMessage(dept);
+            msgEl.textContent = rhLocked
+                ? 'Running Hours Update를 먼저 완료하세요.'
+                : getOriginalPlanLockMessage(dept);
             msgEl.classList.remove('hidden');
         }
     }
@@ -2847,6 +2879,10 @@ const TVC_App = (function () {
 
     /** Menu → Update Original Plan: Run-hour 입력값으로 H 주기 Due Date 재계산 (CMAXS Calculation) */
     async function updateOriginalPlanFromRunHours() {
+        if (!isRhUpdateCommitted()) {
+            alert('Running Hours Update를 먼저 완료하세요.');
+            return;
+        }
         if (!canPerformOriginalPlanUpdate()) {
             alert(getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.');
             return;
@@ -3503,6 +3539,35 @@ const TVC_App = (function () {
         return entries;
     }
 
+    const WORK_HISTORY_CONFIRMED_LABELS = new Set(['Confirmed', 'Approved', 'Submitted']);
+
+    function isWorkHistoryEntryConfirmed(entry) {
+        if (isHistDefectEntry(entry)) {
+            const st = TVC_DefectCase.listWorkflowStatus(entry.defect);
+            return st !== 'Reported' && st !== 'Draft';
+        }
+        const label = reportWorkflowStatusLabel(entry.report, entry.item);
+        return WORK_HISTORY_CONFIRMED_LABELS.has(label);
+    }
+
+    function allWorkHistoryConfirmed() {
+        const entries = workHistoryEntriesRaw();
+        if (!entries.length) return true;
+        return entries.every(isWorkHistoryEntryConfirmed);
+    }
+
+    function isRhUpdateCommitted() {
+        return TVC_RunHours.hasPendingRevert();
+    }
+
+    function canUpdateRunningHours() {
+        return allWorkHistoryConfirmed() && !isRhUpdateCommitted();
+    }
+
+    function canUpdateWorkPlanFromRh() {
+        return isRhUpdateCommitted() && canPerformOriginalPlanUpdate();
+    }
+
     function workHistoryEntries() {
         return workHistoryEntriesRaw().filter(entry =>
             matchHistSearch(entry) && matchReportPeriodDate(histEntrySortDate(entry))
@@ -3932,6 +3997,7 @@ const TVC_App = (function () {
         if (!all.length) {
             body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No work reports or defect cases yet.</td></tr>`;
             updateHistToolbarState();
+            TVC_RunHours.syncRhToolbarUi();
             return;
         }
         if (!entries.length) {
@@ -3940,6 +4006,7 @@ const TVC_App = (function () {
                 : `No matches for "${esc(state.search)}".`;
             body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">${noMatchMsg}</td></tr>`;
             updateHistToolbarState();
+            TVC_RunHours.syncRhToolbarUi();
             return;
         }
         body.innerHTML = entries.map(entry => {
@@ -3992,6 +4059,7 @@ const TVC_App = (function () {
             </tr>`;
         }).join('');
         updateHistToolbarState();
+        TVC_RunHours.syncRhToolbarUi();
     }
 
     /** Work History: 단일 클릭 — 행 선택 하이라이트(Work Plan과 동일 UX) */
@@ -5660,6 +5728,8 @@ const TVC_App = (function () {
     async function refreshAll() {
         await loadData();
         rerenderCurrentTab();
+        TVC_RunHours.syncRhToolbarUi();
+        syncPlanUpdateUi();
     }
 
     /** HQ Import 후 — 선택 선박·Run-hour scope·헤더·Outstanding Tasks까지 Import 결과 반영 */

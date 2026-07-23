@@ -75,6 +75,8 @@ const TVC_SpareMenu = (function () {
 
     let _reqLineBySpareId = null;
     let _reqLineMapReqId = null;
+    let _reportedWaitBySpareId = new Map();
+    let _reportedWaitByPartNo = new Map();
 
     const SPARE_MAIN_ITEM_WIDTH = 288;
     const SPARE_MAIN_PART_NO_WIDTH = 150;
@@ -83,11 +85,11 @@ const TVC_SpareMenu = (function () {
     const SPARE_REQ_METRIC_WIDTH = 36;
     const SPARE_REQ_ROB_WIDTH = 36;
     const SPARE_REQ_REQ_INPUT_WIDTH = 40;
-    const SPARE_REQ_ITEM_WIDTH = 248;
-    const SPARE_REQ_PART_NO_WIDTH = 128;
-    const SPARE_REQ_EXTRA_COL_WIDTHS = [SPARE_REQ_METRIC_WIDTH, SPARE_REQ_METRIC_WIDTH, SPARE_REQ_REQ_INPUT_WIDTH, SPARE_REQ_METRIC_WIDTH, SPARE_REQ_METRIC_WIDTH];
+    const SPARE_REQ_ITEM_WIDTH = 280;
+    const SPARE_REQ_PART_NO_WIDTH = 140;
+    const SPARE_REQ_EXTRA_COL_WIDTHS = [SPARE_REQ_METRIC_WIDTH, SPARE_REQ_METRIC_WIDTH, SPARE_REQ_REQ_INPUT_WIDTH, SPARE_REQ_METRIC_WIDTH, SPARE_REQ_METRIC_WIDTH, SPARE_REQ_METRIC_WIDTH];
     const SPARE_REQ_BASE_COL_WIDTHS = [30, 82, 36, SPARE_REQ_ITEM_WIDTH, SPARE_REQ_PART_NO_WIDTH, 32, SPARE_REQ_METRIC_WIDTH, SPARE_REQ_METRIC_WIDTH, SPARE_REQ_ROB_WIDTH];
-    const SPARE_REQ_COL_MINS = [28, 72, 32, 120, 88, 28, 34, 34, 34, 34, 34, 38, 34, 42];
+    const SPARE_REQ_COL_MINS = [28, 72, 32, 120, 88, 28, 34, 34, 34, 34, 34, 38, 34, 34, 42];
     const SPARE_REQ_MIN_WIDTH = SPARE_REQ_BASE_COL_WIDTHS.concat(SPARE_REQ_EXTRA_COL_WIDTHS).reduce((a, b) => a + b, 0);
     const SPARE_MAIN_COLGROUP = `<colgroup>${SPARE_MAIN_COL_WIDTHS.map(w => `<col style="width:${w}px">`).join('')}</colgroup>`;
     const SPARE_REQ_BASE_COLGROUP = `<colgroup>${SPARE_REQ_BASE_COL_WIDTHS.map(w => `<col style="width:${w}px">`).join('')}</colgroup>`;
@@ -95,7 +97,7 @@ const TVC_SpareMenu = (function () {
     const SPARE_REQ_COLGROUP = SPARE_REQ_BASE_COLGROUP.replace('</colgroup>', SPARE_REQ_EXTRA_COLS + '</colgroup>');
     const REQ_LIST_COLGROUP = `<colgroup>
         <col class="rl-col-chk"><col class="rl-col-type"><col class="rl-col-reqno"><col class="rl-col-req-date"><col class="rl-col-req-port">
-        <col class="rl-col-submitted"><col class="rl-col-status"><col class="rl-col-recv-date"><col class="rl-col-recv-port"><col class="rl-col-total">
+        <col class="rl-col-submitted"><col class="rl-col-status"><col class="rl-col-recv-date"><col class="rl-col-recv-port"><col class="rl-col-os"><col class="rl-col-total">
     </colgroup>`;
     const REQ_LIST_PHASE = {
         ALL: 'all', DRAFT: 'draft', REPORTED: 'reported',
@@ -134,6 +136,7 @@ const TVC_SpareMenu = (function () {
         <th class="spare-req-list-th-submitted" rowspan="2">Submitted Date</th>
         <th class="spare-req-list-th-status" rowspan="2">Status</th>
         <th class="spare-req-list-th-group" colspan="2">Received</th>
+        <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2" title="Outstanding">O/S</th>
         <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2">Total<span class="spare-head-sub">Data</span></th>
         </tr>
         <tr>
@@ -162,6 +165,8 @@ const TVC_SpareMenu = (function () {
     const SPARE_COL_EVAL_TITLE = 'Evaluated';
     const SPARE_COL_RCVD = 'Rcvd';
     const SPARE_COL_RCVD_TITLE = 'Received';
+    const SPARE_COL_OS = 'O/S';
+    const SPARE_COL_OS_TITLE = 'Outstanding';
     const SPARE_MAIN_TABLE_HEAD = `<thead><tr>
                     <th class="c-chk"><input type="checkbox" id="spareHeadChkAll" class="spare-head-chk" aria-label="Select all"
                         onclick="event.stopPropagation()" onchange="TVC_SpareMenu.toggleSpareAll(this.checked)"></th>
@@ -192,6 +197,7 @@ const TVC_SpareMenu = (function () {
                     <th class="c-req" title="${SPARE_COL_REQ_TITLE}">${SPARE_COL_REQ}</th>
                     <th class="c-assess" title="${SPARE_COL_EVAL_TITLE}">${SPARE_COL_EVAL}</th>
                     <th class="c-rcvd" title="${SPARE_COL_RCVD_TITLE}">${SPARE_COL_RCVD}</th>
+                    <th class="c-os" title="${SPARE_COL_OS_TITLE}">${SPARE_COL_OS}</th>
                 </tr></thead>`;
     const SPARE_REQ_TABLE_HEAD_GROUP = `<thead><tr>
                     <th class="c-chk"></th>
@@ -208,6 +214,7 @@ const TVC_SpareMenu = (function () {
                     <th class="c-req" title="${SPARE_COL_REQ_TITLE}">${SPARE_COL_REQ}</th>
                     <th class="c-assess" title="${SPARE_COL_EVAL_TITLE}">${SPARE_COL_EVAL}</th>
                     <th class="c-rcvd" title="${SPARE_COL_RCVD_TITLE}">${SPARE_COL_RCVD}</th>
+                    <th class="c-os" title="${SPARE_COL_OS_TITLE}">${SPARE_COL_OS}</th>
                 </tr></thead>`;
     const SPARE_CONSUME_EXTRA_COL_WIDTH = 62;
     const SPARE_CONSUME_MIN_WIDTH = 836 + SPARE_CONSUME_EXTRA_COL_WIDTH;
@@ -1303,6 +1310,76 @@ const TVC_SpareMenu = (function () {
         return u || 'EA';
     }
 
+    async function syncReportedWaitMap(vesselId) {
+        const st = getState();
+        if (!vesselId) {
+            try { vesselId = (await vesselScope()).vesselId; } catch { _reportedWaitBySpareId = new Map(); return; }
+        }
+        try {
+            const allReqs = await TVC_Inventory.listRequisitions(null);
+            const dept = String(st?.department || '').trim().toUpperCase();
+            const scoped = allReqs.filter(r => {
+                if (!vesselId) return true;
+                if (r.vessel_id === vesselId) return true;
+                if (!r.vessel_id && String(r.department || '').trim().toUpperCase() === dept) return true;
+                return false;
+            });
+            const map = new Map();
+            const partMap = new Map();
+            scoped
+                .filter(requisitionContributesToSpareWait)
+                .forEach(req => {
+                    (req.lines || []).forEach(l => {
+                        const pending = Math.max(0, (Number(l.qty_requested) || 0) - (Number(l.qty_received) || 0));
+                        if (pending <= 0) return;
+                        const sid = spareIdForReqLine(l, st);
+                        if (sid) map.set(sid, (map.get(sid) || 0) + pending);
+                        const pno = String(l.part_no || '').trim().toLowerCase();
+                        if (pno) partMap.set(pno, (partMap.get(pno) || 0) + pending);
+                    });
+                });
+            _reportedWaitBySpareId = map;
+            _reportedWaitByPartNo = partMap;
+        } catch (_) {
+            _reportedWaitBySpareId = new Map();
+            _reportedWaitByPartNo = new Map();
+        }
+    }
+
+    function spareIdForReqLine(line, st) {
+        const id = reqWorkSpareIdKey(line?.spare_part_id);
+        if (id && (st?.spares || []).some(s => reqWorkSameSpareId(s.id, id))) return id;
+        const pno = String(line?.part_no || '').trim().toLowerCase();
+        if (!pno) return id || '';
+        const spare = (st?.spares || []).find(s => {
+            const c = canon(s);
+            return [spareNumbering(c), c.makerPartNo, s.part_no].some(v => String(v || '').trim().toLowerCase() === pno);
+        });
+        return spare ? reqWorkSpareIdKey(spare.id) : (id || '');
+    }
+
+    function requisitionContributesToSpareWait(req) {
+        if (!req?.id) return false;
+        if (reqWorkflowPhase(req) === REQ_LIST_PHASE.RECEIVED) return false;
+        return (req.lines || []).some(l =>
+            Math.max(0, (Number(l.qty_requested) || 0) - (Number(l.qty_received) || 0)) > 0
+        );
+    }
+
+    function reportedWaitQty(s) {
+        const c = canon(s);
+        const id = reqWorkSpareIdKey(c?.id ?? s?.id);
+        if (id && _reportedWaitBySpareId.has(id)) return _reportedWaitBySpareId.get(id) || 0;
+        const pno = String(spareNumbering(c) || c.makerPartNo || s?.part_no || '').trim().toLowerCase();
+        if (pno && _reportedWaitByPartNo?.has(pno)) return _reportedWaitByPartNo.get(pno) || 0;
+        return 0;
+    }
+
+    async function syncReportedWaitAndRefreshList() {
+        await syncReportedWaitMap();
+        refreshList();
+    }
+
     async function syncReqLineMap() {
         _reqLineBySpareId = new Map();
         if (_reqWorkDraft && modState(getState()).reqWorkOpen) {
@@ -1767,13 +1844,14 @@ const TVC_SpareMenu = (function () {
 
     function sparePipelineCols(s, line = null) {
         const stock = TVC_Inventory.currentStock(s);
-        const awaiting = Number(canon(s).on_order ?? s.on_order ?? 0) || 0;
+        const awaiting = reportedWaitQty(s);
         const baseline = spareBaselineQty(s);
         const need = baseline != null ? Math.max(0, baseline - stock - awaiting) : null;
         const request = line ? (Number(line.qty_requested) || 0) : 0;
         const assess = line?.qty_approved != null ? String(line.qty_approved) : '—';
         const rcvd = line ? String(Number(line.qty_received) || 0) : '—';
-        return { stock, awaiting, need, request, assess, rcvd };
+        const os = line ? (reqLineIsOutstanding(line) ? '1' : '0') : '—';
+        return { stock, awaiting, need, request, assess, rcvd, os };
     }
 
     /** @deprecated alias */
@@ -2212,8 +2290,9 @@ const TVC_SpareMenu = (function () {
         const root = document.getElementById('spareMenuBody');
         if (!root) return;
         if (await ensureInventoryLoaded()) return render();
-        await syncReqLineMap();
         const { st, isHq, vesselId } = await vesselScope();
+        await syncReqLineMap();
+        await syncReportedWaitMap(vesselId);
         spareInventoryUser(st);
         const m = modState(st);
         const allCanon = (st.spares || []).map(canon);
@@ -2323,13 +2402,15 @@ const TVC_SpareMenu = (function () {
     }
 
     function refreshList() {
-        if (vl) vl.refresh();
-        refreshSpareEditBlock();
-        syncSpareToolbarUi();
-        syncSpareItemHistoryBtns();
-        updateSpareHeadCheckAll();
-        if (modState(getState()).reqWorkOpen) refreshReqWorkListRows();
-        requestAnimationFrame(syncSpareHeadLayout);
+        syncReportedWaitMap().finally(() => {
+            if (vl) vl.refresh();
+            refreshSpareEditBlock();
+            syncSpareToolbarUi();
+            syncSpareItemHistoryBtns();
+            updateSpareHeadCheckAll();
+            if (modState(getState()).reqWorkOpen) refreshReqWorkListRows();
+            requestAnimationFrame(syncSpareHeadLayout);
+        });
     }
 
     function spareActionIds(kind) {
@@ -2585,7 +2666,7 @@ const TVC_SpareMenu = (function () {
             ? `<td class="c-await">${pipe.awaiting}</td><td class="c-need">${formatNeedHtml(pipe.need)}</td>`
             : '';
         const reqCells = ctx === 'reqWork'
-            ? `${pipelineCells}<td class="c-req">${reqWorkRequestCellHtml(s, sid, locked)}</td><td class="c-assess">${esc(pipe.assess)}</td><td class="c-rcvd">${esc(pipe.rcvd)}</td>`
+            ? `${pipelineCells}<td class="c-req">${reqWorkRequestCellHtml(s, sid, locked)}</td><td class="c-assess">${esc(pipe.assess)}</td><td class="c-rcvd">${esc(pipe.rcvd)}</td><td class="c-os">${esc(pipe.os)}</td>`
             : (ctx === 'main' ? pipelineCells : '');
         const consumeCell = ctx === 'consume'
             ? `<td class="c-cons">${consumeQtyCellHtml(s, sid)}</td>`
@@ -2672,11 +2753,12 @@ const TVC_SpareMenu = (function () {
         if (!scroll) return;
         const headId = obsKey === 'reqWork' ? 'reqWorkListHead'
             : obsKey === 'consume' ? 'consumeListHead'
+                : obsKey === 'receive' ? 'receiveListHead'
                 : obsKey === 'wrSpare' ? 'wrSpareListHead'
                     : 'spareListHead';
         const run = () => {
             syncFn();
-            if (obsKey !== 'reqWork' && obsKey !== 'consume') bindHeadTrackScroll(scroll, headId);
+            if (obsKey !== 'reqWork' && obsKey !== 'consume' && obsKey !== 'receive') bindHeadTrackScroll(scroll, headId);
         };
         const prevScroll = scroll.onscroll;
         scroll.onscroll = () => {
@@ -2717,6 +2799,16 @@ const TVC_SpareMenu = (function () {
                 if (hscroll) _consumeResizeObs.observe(hscroll);
                 const head = document.getElementById('consumeListHead');
                 if (head) _consumeResizeObs.observe(head);
+            }
+        } else if (obsKey === 'receive') {
+            if (_receiveResizeObs) _receiveResizeObs.disconnect();
+            if (typeof ResizeObserver !== 'undefined') {
+                _receiveResizeObs = new ResizeObserver(run);
+                _receiveResizeObs.observe(scroll);
+                const head = document.getElementById('receiveListHead');
+                if (head) _receiveResizeObs.observe(head);
+                const modalBox = scroll.closest('.modal-box');
+                if (modalBox) _receiveResizeObs.observe(modalBox);
             }
         } else if (obsKey === 'wrSpare') {
             if (_wrSpareResizeObs) _wrSpareResizeObs.disconnect();
@@ -2855,6 +2947,22 @@ const TVC_SpareMenu = (function () {
 
     function reqListTotalData(req) {
         return (req.lines || []).length;
+    }
+
+    function reqLineTargetQty(line) {
+        if (!line) return 0;
+        return line.qty_approved != null ? (Number(line.qty_approved) || 0) : (Number(line.qty_requested) || 0);
+    }
+
+    /** Line counts toward O/S when unreceived or received below target (Eval ?? Req). */
+    function reqLineIsOutstanding(line) {
+        const target = reqLineTargetQty(line);
+        if (target <= 0) return false;
+        return (Number(line.qty_received) || 0) < target;
+    }
+
+    function reqListOutstandingData(req) {
+        return (req.lines || []).filter(l => reqLineIsOutstanding(l)).length;
     }
 
     function reqListDateCell(val) {
@@ -3158,6 +3266,7 @@ const TVC_SpareMenu = (function () {
             <th rowspan="2">Submitted Date</th>
             <th rowspan="2">Status</th>
             <th colspan="2">Received</th>
+            <th rowspan="2">O/S</th>
             <th rowspan="2">Total Data</th>
         </tr>
         <tr><th>Date</th><th>Port</th><th>Date</th><th>Port</th></tr>`;
@@ -3174,6 +3283,7 @@ const TVC_SpareMenu = (function () {
                 <td>${esc(reqListWorkflowLabel(r))}</td>
                 <td class="num">${reqListDateCell(received)}</td>
                 <td>${esc(recvPort || '—')}</td>
+                <td class="num">${reqListOutstandingData(r)}</td>
                 <td class="num">${reqListTotalData(r)}</td>
             </tr>`;
         }).join('');
@@ -3181,7 +3291,7 @@ const TVC_SpareMenu = (function () {
         return `${meta}
             ${spareListPrintFilterNote(filterParts)}
             <p class="meta">${reqs.length} item(s)</p>
-            <table>${head}${rows || `<tr><td colspan="9">No requisitions to print.</td></tr>`}</table>`;
+            <table>${head}${rows || `<tr><td colspan="10">No requisitions to print.</td></tr>`}</table>`;
     }
 
     function clearReqListUiState(m) {
@@ -3224,11 +3334,104 @@ const TVC_SpareMenu = (function () {
         if (_reqWorkHistOpen) await refreshReqWorkHistList();
     }
 
+    function syncReqListRowSelection(root) {
+        const scope = root || document;
+        const selId = modState(getState()).selectedReqId;
+        scope.querySelectorAll('.spare-req-list-body-table tbody tr[data-req-id]').forEach(tr => {
+            tr.classList.toggle('sr-req-sel', tr.getAttribute('data-req-id') === selId);
+        });
+    }
+
+    function setSpareListToolbarBtnDisabled(scope, onclickNeedle, disabled) {
+        if (!scope) return;
+        scope.querySelectorAll(`button[onclick*="${onclickNeedle}"]`).forEach(btn => {
+            btn.disabled = !!disabled;
+        });
+    }
+
+    async function syncReqListModalToolbar() {
+        const body = document.getElementById('spareReqListBody');
+        if (!body) return;
+        const { st, vesselId } = await vesselScope();
+        const m = modState(st);
+        const allReqs = await TVC_Inventory.listRequisitions(vesselId);
+        const selReq = m.selectedReqId ? allReqs.find(r => r.id === m.selectedReqId) : null;
+        const hasSel = !!selReq;
+        const canRequisition = canCreateRequisition(st);
+        const canConfirm = reqListAnyCheckedCanConfirm(m, allReqs, st);
+        setSpareListToolbarBtnDisabled(body, 'reqListDetailReport', !hasSel);
+        setSpareListToolbarBtnDisabled(body, 'reqListReportConfirm', !canConfirm);
+        setSpareListToolbarBtnDisabled(body, 'reqListModify', !canRequisition || !hasSel);
+        setSpareListToolbarBtnDisabled(body, 'reqListDelete', !canRequisition || !hasSel);
+    }
+
+    async function syncReqHistPopoverToolbar() {
+        const panel = document.getElementById('reqWorkHistPanel');
+        if (!panel || panel.classList.contains('hidden')) return;
+        const m = modState(getState());
+        if (!isRequisitionListWindow(m)) return;
+        const { st, vesselId } = await vesselScope();
+        const reqs = await TVC_Inventory.listRequisitions(vesselId);
+        const selReq = m.selectedReqId ? reqs.find(r => r.id === m.selectedReqId) : null;
+        const hasSel = !!selReq;
+        const canRequisition = canCreateRequisition(st);
+        const canConfirm = reqListAnyCheckedCanConfirm(m, reqs, st);
+        setSpareListToolbarBtnDisabled(panel, 'reqListReportConfirm', !canConfirm);
+        setSpareListToolbarBtnDisabled(panel, 'reqListDelete', !canRequisition || !hasSel);
+    }
+
+    function applyReqWorkMetaFromSession(req) {
+        if (!req) return;
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val ?? '';
+        };
+        setVal('reqWorkReqNo', req.req_no || '');
+        setVal('reqWorkDelFrom', fmtSpareDate(req.deliver_date_from || ''));
+        setVal('reqWorkDelTo', fmtSpareDate(req.deliver_date_to || ''));
+        setVal('reqWorkDelPort', req.deliver_port || '');
+        setVal('reqWorkMadeOn', fmtSpareDate(req.made_on || ''));
+        setVal('reqWorkAssessedOn', fmtSpareDate(req.assessed_on || ''));
+        setVal('reqWorkAssessedBy', req.assessed_by || '');
+        const reqType = reqListTypeKind(req);
+        document.querySelectorAll('input[name="reqWorkPriority"]').forEach(radio => {
+            radio.checked = radio.value === reqType;
+        });
+    }
+
+    function syncReqWorkApprovalSection(req) {
+        const meta = document.querySelector('#spareReqWorkBody .spare-req-work-meta');
+        if (!meta || !req || !isRequisitionListWindow(modState(getState()))) return;
+        const st = getState();
+        const html = renderSpareApprovalSection(req, { prefix: 'reqWork', department: req.department || st.department });
+        const existing = meta.querySelector('.wr-maint-approval')?.closest('section');
+        if (existing) existing.outerHTML = html;
+        else meta.insertAdjacentHTML('afterbegin', html);
+    }
+
+    function syncReqWorkListWindowHeadButtons() {
+        const m = modState(getState());
+        if (!isRequisitionListWindow(m)) return;
+        const head = document.querySelector('#spareReqWorkBody .spare-req-work-head');
+        if (!head) return;
+        const hasLoadedReq = !!(_reqSheet.reqId || _reqWorkDraft?.id);
+        const listViewLocked = !m.reqWorkListEditing;
+        const completeDone = !!m.reqWorkCompleted;
+        const saveDisabled = completeDone || listViewLocked;
+        const modifyBtn = document.getElementById('reqWorkHeadModifyBtn');
+        const saveBtn = document.getElementById('reqWorkSaveBtn');
+        if (modifyBtn) modifyBtn.disabled = !hasLoadedReq || m.reqWorkListEditing;
+        if (saveBtn) saveBtn.disabled = saveDisabled;
+        setSpareListToolbarBtnDisabled(head, 'reqWorkPrint', !hasLoadedReq);
+        setSpareListToolbarBtnDisabled(head, 'reqWorkDocPreview', !hasLoadedReq);
+    }
+
     async function reqListSelectRow(id) {
         const m = modState(getState());
         // 행 클릭은 하이라이트(선택)만 — 체크는 ㅁ를 직접 눌러야 함
         m.selectedReqId = id;
-        await refreshReqListUi();
+        syncReqListRowSelection(document.getElementById('spareReqListBody'));
+        await syncReqListModalToolbar();
     }
 
     async function reqListToggleRow(id, checked) {
@@ -3260,7 +3463,7 @@ const TVC_SpareMenu = (function () {
         await refreshReqListUi();
     }
 
-    async function loadRequisitionIntoListWindow(reqId) {
+    async function loadRequisitionIntoListWindow(reqId, opts = {}) {
         const req = await TVC_Inventory.getRequisition(reqId);
         if (!req) {
             alert('Requisition not found.');
@@ -3283,6 +3486,23 @@ const TVC_SpareMenu = (function () {
         await syncReqLineMap();
         syncRequisitionDraftFromLines();
         syncReqWorkHeaderFocusFromLines(st);
+        const preserveHist = opts.preserveHistPopover !== false
+            && _reqWorkHistOpen
+            && isRequisitionListWindow(m);
+        if (preserveHist) {
+            const histScroll = document.getElementById('reqWorkHistListScroll');
+            const histScrollTop = histScroll?.scrollTop ?? 0;
+            applyReqWorkMetaFromSession(req);
+            syncReqWorkApprovalSection(req);
+            updateReqWorkHeadStats();
+            syncReqWorkListWindowHeadButtons();
+            refreshReqWorkListUi();
+            syncReqListRowSelection(document.getElementById('reqWorkHistPanel'));
+            await syncReqHistPopoverToolbar();
+            applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
+            if (histScroll) histScroll.scrollTop = histScrollTop;
+            return true;
+        }
         await renderReqWorkModal();
         return true;
     }
@@ -3307,12 +3527,14 @@ const TVC_SpareMenu = (function () {
         const m = modState(getState());
         m.selectedReqId = id;
         if (isRequisitionListWindow(m)) {
-            await loadRequisitionIntoListWindow(id);
-            setReqWorkHistOpen(false);
+            await loadRequisitionIntoListWindow(id, { preserveHistPopover: true });
             return;
         }
+        const histScroll = document.getElementById('reqWorkHistListScroll');
+        const histScrollTop = histScroll?.scrollTop ?? 0;
         reqWorkSetReqNoInput(reqNo);
-        await refreshReqWorkHistList();
+        syncReqListRowSelection(document.getElementById('reqWorkHistPanel'));
+        if (histScroll) histScroll.scrollTop = histScrollTop;
     }
 
     function syncReqListHeadPad() {
@@ -3325,7 +3547,7 @@ const TVC_SpareMenu = (function () {
 
     function buildReqListRowsHtml(reqs, mode = 'modal') {
         if (!reqs.length) {
-            return `<tr><td colspan="10" class="spare-req-list-empty">
+            return `<tr><td colspan="11" class="spare-req-list-empty">
                 <span class="spare-req-list-empty-icon" aria-hidden="true">🧾</span>
                 <p class="spare-req-list-empty-title">No requisitions yet</p>
                 <p class="spare-req-list-empty-sub muted">${mode === 'pick'
@@ -3350,7 +3572,7 @@ const TVC_SpareMenu = (function () {
             const reqDate = reqListRequiredDateCell(r);
             const reqType = reqListTypeLabel(r);
             const reqTypeCls = reqListTypeCellClass(r);
-            return `<tr class="${sel ? 'sr-req-sel' : ''}" ${rowClick}>
+            return `<tr class="${sel ? 'sr-req-sel' : ''}" data-req-id="${rid}" ${rowClick}>
                 <td class="spare-req-list-chk" onclick="event.stopPropagation()">
                     <input type="checkbox" aria-label="Select requisition ${no}"
                         ${checked ? 'checked' : ''} onchange="TVC_SpareMenu.${toggleFn}('${rid}', this.checked)">
@@ -3363,6 +3585,7 @@ const TVC_SpareMenu = (function () {
                 <td class="spare-req-list-status">${reqListStatusCell(r)}</td>
                 <td class="spare-req-list-date spare-req-list-received"${cellTitleAttr(received)}>${reqListDateCell(received)}</td>
                 <td class="spare-req-list-port spare-req-list-recv-port"${cellTitleAttr(recvPort)}>${esc(recvPort || '—')}</td>
+                <td class="spare-req-list-os">${reqListOutstandingData(r)}</td>
                 <td class="spare-req-list-total">${reqListTotalData(r)}</td>
             </tr>`;
         }).join('');
@@ -4330,6 +4553,7 @@ const TVC_SpareMenu = (function () {
         m.selectedReqId = null;
         if (wasLoadedInListWindow) await clearRequisitionListWindowSelection();
         await refreshReqListUi();
+        await syncReportedWaitAndRefreshList();
     }
 
     function reqPreviewGroups(st, req) {
@@ -4563,6 +4787,7 @@ const TVC_SpareMenu = (function () {
             await loadRequisitionIntoListWindow(loadedId);
         }
         await refreshReqListUi();
+        await syncReportedWaitAndRefreshList();
         const skipped = checkedIds.length - confirmed;
         if (skipped > 0) {
             alert(`Confirmed ${confirmed} requisition(s). Skipped ${skipped} (not Reported or no permission).`);
@@ -6148,6 +6373,7 @@ const TVC_SpareMenu = (function () {
             requestAnimationFrame(syncReqWorkHeadLayout);
         });
         updateReqWorkHeadCheckAll();
+        syncReqWorkSaveBtn();
     }
 
     function captureReqWorkLineQtys() {
@@ -6173,8 +6399,10 @@ const TVC_SpareMenu = (function () {
         const user = spareInventoryUser(st);
         if (!String(req.made_by || '').trim()) req.made_by = spareReportedByForUser(user);
         if (!String(req.made_on || '').trim()) req.made_on = reqListReportedDateToday();
-        if (req.req_no?.trim() && req.made_on && req.list_status === SPARE_LIST_STATUS.DRAFT) {
-            req.list_status = SPARE_LIST_STATUS.REPORTED;
+        if (req.req_no?.trim()) {
+            if (!req.list_status || req.list_status === SPARE_LIST_STATUS.DRAFT) {
+                req.list_status = SPARE_LIST_STATUS.REPORTED;
+            }
         }
 
         const byId = new Map();
@@ -6188,6 +6416,37 @@ const TVC_SpareMenu = (function () {
 
     function reqWorkLinesMissingRequestQty(lines) {
         return (lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id) && (Number(l.qty_requested) || 0) <= 0);
+    }
+
+    function reqWorkSaveQtyValid(m) {
+        if (!isNewRequisitionWindow(m)) return true;
+        const req = getReqWorkSession();
+        const lines = (req?.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
+        if (!lines.length) return false;
+        return reqWorkLinesMissingRequestQty(lines).length === 0;
+    }
+
+    function reqWorkMissingRequestQtyAlert(lines) {
+        const missingQty = reqWorkLinesMissingRequestQty(lines);
+        if (!missingQty.length) return false;
+        const names = missingQty.slice(0, 5).map(l => l.part_no || l.name || '—').join(', ');
+        const more = missingQty.length > 5 ? ` and ${missingQty.length - 5} more` : '';
+        alert(`Some selected parts have no Request quantity.\n\n${names}${more}\n\nEnter Request quantity for each selected part, then save.`);
+        return true;
+    }
+
+    function syncReqWorkSaveBtn() {
+        const btn = document.getElementById('reqWorkSaveBtn');
+        if (!btn) return;
+        const m = modState(getState());
+        const completeDone = !!m.reqWorkCompleted;
+        const listViewLocked = isRequisitionListWindow(m) && !m.reqWorkListEditing;
+        const qtyBlocked = isNewRequisitionWindow(m) && !reqWorkSaveQtyValid(m);
+        const disabled = completeDone || listViewLocked || qtyBlocked;
+        btn.disabled = disabled;
+        btn.title = qtyBlocked
+            ? 'Enter Request quantity for each selected part before Save.'
+            : '';
     }
 
     /** Complete 시 Made on / by — 갑판부(DECK): Captain, 기관부(ENGINE): Chief Engineer */
@@ -6761,7 +7020,7 @@ const TVC_SpareMenu = (function () {
         const listMode = isRequisitionListWindow(m);
         const hasLoadedReq = !!(_reqSheet.reqId || _reqWorkDraft?.id);
         const listViewLocked = listMode && !m.reqWorkListEditing;
-        const saveDisabled = completeDone || listViewLocked;
+        const saveDisabled = completeDone || listViewLocked || (isNewRequisitionWindow(m) && !reqWorkSaveQtyValid(m));
         const printPreviewDisabled = listMode && !hasLoadedReq;
         const headModifyBtn = listMode
             ? `<button type="button" id="reqWorkHeadModifyBtn" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkEnterListEdit()"${!hasLoadedReq || m.reqWorkListEditing ? ' disabled' : ''} title="${hasLoadedReq ? 'Enable editing' : 'Load a requisition first'}">Modify</button>`
@@ -6775,7 +7034,7 @@ const TVC_SpareMenu = (function () {
             <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeReqWorkModal()">Close</button>
             <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReqWorkModal()">×</button>`
             : `${headModifyBtn}
-            <button type="button" id="reqWorkSaveBtn" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkSave()"${saveDisabled ? ' disabled' : ''}>Save</button>
+            <button type="button" id="reqWorkSaveBtn" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkSave()"${saveDisabled ? ' disabled' : ''}${saveDisabled && isNewRequisitionWindow(m) && !completeDone && !listViewLocked ? ' title="Enter Request quantity for each selected part before Save."' : ''}>Save</button>
             ${headPrintPreviewBtns}
             <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeReqWorkModal()">Close</button>
             <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReqWorkModal()">×</button>`;
@@ -7031,6 +7290,7 @@ const TVC_SpareMenu = (function () {
         m.reqWorkCompleted = true;
         m.reqWorkLastSavedId = savedId;
         st.requisitionDraft = [];
+        await syncReportedWaitAndRefreshList();
         // 폼 데이터를 유지한 채 전체를 잠금 상태로 다시 렌더링 (입력 필드·버튼 disabled)
         await renderReqWorkModal();
         const doneMsg = m.reqWorkEditMode
@@ -7064,13 +7324,17 @@ const TVC_SpareMenu = (function () {
         if (!_reqWorkDraft) return alert('Requisition not found.');
         if (!_reqWorkDraft.req_no?.trim()) return alert('Enter Requisition No.');
 
+        _reqWorkDraft.lines = (_reqWorkDraft.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
+        if (!_reqWorkDraft.lines.length) return alert('Select part(s).');
+        if (isNewRequisitionWindow(m) && reqWorkMissingRequestQtyAlert(_reqWorkDraft.lines)) return;
+
         const isNewReqSave = m.reqWorkOpen && !m.reqWorkListMode && !m.reqWorkPreview && !m.reqWorkEditMode;
         if (isNewReqSave && !window.confirm('저장하시겠습니까?')) return;
 
-        _reqWorkDraft.lines = (_reqWorkDraft.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
         await TVC_Inventory.saveRequisition(_reqWorkDraft);
         m.reqWorkLastSavedId = _reqWorkDraft.id;
         _reqSheet.reqId = _reqWorkDraft.id;
+        await syncReportedWaitAndRefreshList();
 
         if (isNewReqSave) {
             const savedId = _reqWorkDraft.id;
@@ -7083,6 +7347,7 @@ const TVC_SpareMenu = (function () {
             clearReqListUiState(m);
             applyReqListSelection(m, savedId);
             await loadRequisitionIntoListWindow(savedId);
+            await syncReportedWaitAndRefreshList();
             return;
         }
 
@@ -7405,6 +7670,7 @@ const TVC_SpareMenu = (function () {
         syncRequisitionDraftFromLines();
         syncReqLineMap();
         refreshReqWorkListUi();
+        syncReqWorkSaveBtn();
     }
 
     async function reqWorkAddSpare(spareId, silent = false) {
@@ -8775,6 +9041,10 @@ const TVC_SpareMenu = (function () {
         if (vlConsume) {
             vlConsume.refresh();
             updateConsumeHeadCheckAll();
+            requestAnimationFrame(() => {
+                syncConsumeHeadLayout();
+                requestAnimationFrame(syncConsumeHeadLayout);
+            });
         } else {
             refreshConsumeListRows();
         }
@@ -10157,10 +10427,36 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const draft = getReceiveSession();
         if (!draft) return;
         const g = (id) => document.getElementById(id)?.value ?? '';
+        const reqId = g('receiveReqNo').trim();
+        draft.requisition_id = reqId || null;
         draft.received_date = g('receiveDate');
         draft.deliver_port = g('receiveDeliverPort');
         draft.made_by = resolveSpareReportedBy(draft, spareInventoryUser(getState()));
         draft.ships_comments = g('receiveShipComments');
+    }
+
+    function validateReceiveSave(draft) {
+        if (!draft.requisition_id) return 'Requisition No.를 선택하세요.';
+        if (!String(draft.received_date || '').trim()) return 'Received Date를 입력하세요.';
+        if (!String(draft.deliver_port || '').trim()) return 'Received Port를 입력하세요.';
+        const lines = (draft.lines || [])
+            .filter(l => receiveSpareIdKey(l.spare_part_id) && (Number(l.qty_received) || 0) > 0);
+        if (!lines.length) return 'Select parts and enter Received quantity.';
+        return null;
+    }
+
+    function showReceiveSaveConfirm() {
+        document.getElementById('spareReceiveConfirmModal')?.classList.remove('hidden');
+    }
+
+    function dismissReceiveSaveConfirm() {
+        document.getElementById('spareReceiveConfirmModal')?.classList.add('hidden');
+    }
+
+    async function confirmSaveReceive(yes) {
+        dismissReceiveSaveConfirm();
+        if (!yes) return;
+        await saveReceiveProceed();
     }
 
     async function receiveEligibleRequisitions(vesselId) {
@@ -10294,25 +10590,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     function syncReceiveHeadLayout() {
-        const scroll = document.getElementById('receiveListScroll');
-        const head = document.getElementById('receiveListHead');
-        const track = document.getElementById('receiveListHeadTrack');
-        const table = head?.querySelector('.spare-data-table');
-        const inner = scroll?.querySelector('.vl-inner');
-        if (!scroll || !head || !track || !table) return;
-        const tableW = scroll.clientWidth > 0 ? scroll.clientWidth : SPARE_RECEIVE_MIN_WIDTH;
-        const sb = scroll.offsetWidth - scroll.clientWidth;
-        if (inner) {
-            inner.style.setProperty('width', `${tableW}px`, 'important');
-            inner.style.setProperty('min-width', `${tableW}px`, 'important');
-        }
-        scroll.style.setProperty('--spare-table-w', `${tableW}px`);
-        head.style.paddingRight = sb > 0 ? `${sb}px` : '';
-        track.style.width = `${scroll.clientWidth}px`;
-        table.style.width = `${tableW}px`;
-        table.style.minWidth = `${tableW}px`;
-        table.style.maxWidth = `${tableW}px`;
-        track.scrollLeft = scroll.scrollLeft;
+        syncHeadLayout('receiveListScroll', 'receiveListHead', 'receiveListHeadTrack', SPARE_RECEIVE_MIN_WIDTH);
     }
 
     function updateReceiveHeadCheckAll() {
@@ -10492,6 +10770,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     function closeReceiveModal() {
+        dismissReceiveSaveConfirm();
         const st = getState();
         const m = modState(st);
         m.receiveOpen = false;
@@ -10599,6 +10878,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (vlReceive) {
             vlReceive.refresh();
             updateReceiveHeadCheckAll();
+            requestAnimationFrame(() => {
+                syncReceiveHeadLayout();
+                requestAnimationFrame(syncReceiveHeadLayout);
+            });
         }
         syncSpareItemHistoryBtns();
         if (focusQty && spareId) {
@@ -10717,11 +11000,22 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
     async function saveReceive() {
         captureReceiveMeta();
+        const draft = getReceiveSession();
+        if (!draft) return;
+        const err = validateReceiveSave(draft);
+        if (err) return alert(err);
+        showReceiveSaveConfirm();
+    }
+
+    async function saveReceiveProceed() {
+        captureReceiveMeta();
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
         if (!user) return alert('Login required.');
         const draft = getReceiveSession();
         if (!draft) return;
+        const err = validateReceiveSave(draft);
+        if (err) return alert(err);
         const lines = (draft.lines || [])
             .filter(l => receiveSpareIdKey(l.spare_part_id) && (Number(l.qty_received) || 0) > 0)
             .map(l => ({ spare_part_id: l.spare_part_id, qty: Number(l.qty_received), note: draft.ships_comments || '' }));
@@ -11330,6 +11624,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             if (_reqSheet.lineOrders && _reqSheet.lineOrders[i] != null) l.qty_requested = _reqSheet.lineOrders[i];
         });
         await TVC_Inventory.saveRequisition(req);
+        await syncReportedWaitAndRefreshList();
         alert('Requisition saved.');
         await renderReqSheetModal();
         render();
@@ -11435,7 +11730,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             standard_stock: TVC_Inventory.standardStock(c),
             qty_required: q,
             qty_requested: q,
-            on_order: spare.on_order || 0,
+            on_order: reportedWaitQty(c),
             price: spare.price != null ? spare.price : null,
             currency: spare.currency || 'USD',
             vendor_comment: '',
@@ -11753,7 +12048,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         append, startInlineAppend, edit, cancelEdit, cancelInlineEdit, saveEdit, saveInlineEdit, startInlineEdit, pickEditGroup, toggleEditGroupPick, pickSpareClass, toggleSpareClassPick,
         startGroupHeaderEdit, appendGroupFromTree, deleteGroupFromTree, saveGroupHeaderEdit, cancelGroupHeaderEdit, savePlanCriticalEquipment,
         loadBundledXls, loadSpareInventory, ensureInventoryLoaded,
-        openConsumeModal, openDeliverModal, closeReceiveModal, saveReceive, closeTxModal, saveTx, closeConsumeModal, saveConsume, captureConsumeMeta,
+        openConsumeModal, openDeliverModal, closeReceiveModal, saveReceive, confirmSaveReceive, dismissReceiveSaveConfirm, closeTxModal, saveTx, closeConsumeModal, saveConsume, captureConsumeMeta,
         receiveSelectGroup, receiveSetTreeSearch, receiveToggleGroupTree, receiveSetSearch, receiveToggleSelectedOnly,
         receiveFocusRow, receiveToggleRow, receiveToggleAll, receiveSetQty, captureReceiveMeta, receiveSelectRequisition,
         syncConsumeLogFromWorkReport, syncConsumeLogFromDefectReport, reverseConsumeLogStockForLog, reloadSparesCache,

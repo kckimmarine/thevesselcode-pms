@@ -15,10 +15,12 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260723-req-list-narrow">
+    <link rel="stylesheet" href="css/app.css?v=20260724-req-list-stable">
+    <link rel="stylesheet" href="css/responsive-scale.css?v=20260724-req-list-stable">
 </head>
 <body>
 
+<div id="tvcAppRoot" class="tvc-app-root">
 <!-- 1. Login -->
 <div id="loginScreen" class="login-screen">
     <div id="loginFileBanner" class="login-file-banner hidden">
@@ -233,7 +235,7 @@
                 <span class="sheet-sub">Maintenance plan · filters · report input · Modify / Append / Delete</span>
                 <span id="actPlanCalcMsg" class="plan-calc-msg hidden"></span>
                 <span style="flex:1"></span>
-                <button type="button" id="actUpdatePlanBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateOriginalPlanFromRunHours()">↻ Update Plan</button>
+                <button type="button" id="actUpdatePlanBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateOriginalPlanFromRunHours()" disabled title="Running Hours Update를 먼저 완료하세요.">↻ Update Plan</button>
             </div>
             <div id="actPlanActionBar" class="plan-action-bar"></div>
             <div id="spicsAlertBanner" class="spics-alert-banner hidden" style="margin:0 20px 8px"></div>
@@ -389,6 +391,7 @@
     <input type="file" id="menuXferImportFile" accept=".zip,.json,.csv" hidden onchange="TVC_App.onMenuXferImportFile(this.files[0]);this.value=''">
     <input type="file" id="importDefectUrgent" accept=".zip" hidden onchange="TVC_App.handleDefectImport(this.files[0]);this.value=''">
 </div>
+</div><!-- /#tvcAppRoot -->
 
 <!-- Modals -->
 <div id="jobDetailModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('jobDetailModal')">
@@ -478,6 +481,15 @@
 <div id="spareReceiveModal" class="modal hidden spare-req-work-modal-wrap">
     <div class="modal-box spare-req-work-modal" onclick="event.stopPropagation()"><div id="spareReceiveBody"></div></div>
 </div>
+<div id="spareReceiveConfirmModal" class="modal hidden df-cancel-confirm-modal" onclick="if(event.target===this)TVC_SpareMenu.dismissReceiveSaveConfirm()">
+    <div class="modal-box df-cancel-confirm-box" onclick="event.stopPropagation()">
+        <p class="df-cancel-confirm-msg">완료하시겠습니까?</p>
+        <div class="modal-actions df-cancel-confirm-actions">
+            <button type="button" class="btn btn-green" onclick="TVC_SpareMenu.confirmSaveReceive(true)">Yes</button>
+            <button type="button" class="btn" onclick="TVC_SpareMenu.confirmSaveReceive(false)">No</button>
+        </div>
+    </div>
+</div>
 <div id="spareReqSheetModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeReqSheetModal()">
     <div class="modal-box req-sheet-modal" onclick="event.stopPropagation()"><div id="spareReqSheetBody"></div></div>
 </div>
@@ -563,10 +575,11 @@
 <script src="js/core/db.js?v=20260721-spare-class"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260721-stock-ledger"></script>
-<script src="js/ui/virtualList.js?v=20260709-scroll"></script>
+<script src="js/ui/viewportScale.js?v=20260723-readability"></script>
+<script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js"></script>
-<script src="js/ui/runHours.js?v=20260718-rh"></script>
-<script src="js/ui/spareMenu.js?v=20260723-req-list-type"></script>
+<script src="js/ui/runHours.js?v=20260723-rh-gate"></script>
+<script src="js/ui/spareMenu.js?v=20260724-req-list-stable"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -586,7 +599,7 @@
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/defectReport.js?v=20260723-reported-by"></script>
 <script src="js/ui/outstandingTasks.js?v=20260722-hq-ot"></script>
-<script src="js/app.js?v=20260723-reported-by"></script>
+<script src="js/app.js?v=20260723-rh-gate"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

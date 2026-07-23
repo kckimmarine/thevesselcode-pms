@@ -1,0 +1,288 @@
+/* TVC-PMS — 1920×1080 baseline responsive scale (uses --ui-scale from viewportScale.js) */
+
+body {
+    font-size: var(--ui-base-font);
+}
+
+.tvc-app-root {
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+    width: 100%;
+    max-width: 100%;
+}
+
+#appShell {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    min-height: 0;
+}
+
+#tabContent {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.tab-pane:not(.hidden) {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.cmaxs-body,
+.plan-layout,
+.orig-layout,
+.actual-layout,
+.main-layout {
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+}
+
+/* Buttons — scale padding & type */
+.btn {
+    padding: calc(7px * var(--ui-scale)) calc(14px * var(--ui-scale));
+    font-size: calc(13px * var(--ui-scale));
+}
+
+.btn-sm {
+    padding: calc(5px * var(--ui-scale)) calc(10px * var(--ui-scale));
+    font-size: calc(12px * var(--ui-scale));
+}
+
+.tab-btn {
+    padding: calc(12px * var(--ui-scale)) calc(18px * var(--ui-scale));
+    font-size: calc(13px * var(--ui-scale));
+}
+
+.dept-btn {
+    padding: calc(6px * var(--ui-scale)) calc(16px * var(--ui-scale));
+    font-size: calc(13px * var(--ui-scale));
+}
+
+.sheet-head {
+    padding: calc(16px * var(--ui-scale)) calc(20px * var(--ui-scale)) calc(4px * var(--ui-scale));
+}
+
+.sheet-head h2 {
+    font-size: calc(20px * var(--ui-scale));
+}
+
+.cmaxs-header,
+.cmaxs-header.cmaxs-header {
+    padding: calc(10px * var(--ui-scale)) calc(16px * var(--ui-scale));
+}
+
+/* Data tables — flexible width, readable numbers (exclude SPARE virtual-list row tables) */
+.sheet-table,
+.hist-table,
+.fleet-table,
+.spare-req-list-table,
+.spare-consume-log-table,
+.req-preview-items,
+.batch-report-modal table {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+    font-size: var(--table-font);
+}
+
+.sheet-table th,
+.sheet-table td,
+.hist-table th,
+.hist-table td,
+.fleet-table th,
+.fleet-table td,
+.spare-req-list-table th,
+.spare-req-list-table td,
+.spare-consume-log-table th,
+.spare-consume-log-table td {
+    padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+/* SPARE virtual-list — keep header/body column sync; do not apply global table overrides */
+#spareListScroll .spare-data-table,
+#spareListHead .spare-data-table,
+#reqWorkListScroll .spare-data-table,
+#reqWorkListHead .spare-data-table,
+#consumeListScroll .spare-data-table,
+#consumeListHead .spare-data-table,
+#receiveListScroll .spare-data-table,
+#receiveListHead .spare-data-table,
+#wrSpareListScroll .spare-data-table,
+#wrSpareListHead .spare-data-table {
+    table-layout: fixed;
+    width: var(--spare-table-w, 100%) !important;
+    min-width: var(--spare-table-w, 100%) !important;
+    max-width: var(--spare-table-w, 100%) !important;
+    font-size: calc(13px * var(--ui-scale));
+}
+
+#spareListScroll .spare-data-table td,
+#spareListHead .spare-data-table th,
+#reqWorkListScroll .spare-data-table td,
+#reqWorkListHead .spare-data-table th,
+#consumeListScroll .spare-data-table td,
+#consumeListHead .spare-data-table th,
+#receiveListScroll .spare-data-table td,
+#receiveListHead .spare-data-table th,
+#wrSpareListScroll .spare-data-table td,
+#wrSpareListHead .spare-data-table th {
+    padding: 0 5px !important;
+    height: var(--list-row-h, 40px);
+    font-size: calc(13px * var(--ui-scale));
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.sheet-table .num,
+.hist-table .num,
+.fleet-table .num,
+.spare-req-list-total,
+.spare-req-list-date,
+.vl-cell-num,
+[class*="rpv-n"] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+.list-table-scroll-wrap,
+.sheet-table-wrap,
+.fleet-table-wrap,
+.spare-req-list-scroll,
+.spare-req-list-panel-wrap {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+}
+
+/* Scale fixed table floors */
+.sheet-scroll-actual .vl-inner,
+.sheet-scroll-original .vl-inner,
+.vl-head-wrap.sheet-scroll-actual .vl-head,
+.vl-head-wrap.sheet-scroll-original .vl-head,
+.sheet-scroll-actual .vl-cells,
+.sheet-scroll-original .vl-cells,
+.sheet-scroll-original #spareListHead .spare-data-table,
+.spics-vl-head-row,
+.spics-row,
+.vl-cells.spics-row.spare-row {
+    min-width: min(100%, calc(948px * var(--ui-scale)));
+}
+
+.spare-req-list-table,
+.spare-req-list-panel .spare-data-table.spare-req-list-table,
+.spare-req-hist-list-panel .spare-data-table.spare-req-list-table {
+    min-width: min(100%, calc(980px * var(--ui-scale)));
+}
+
+.spare-req-hist-popover .spare-req-list-table,
+.spare-req-hist-list-panel .spare-data-table.spare-req-list-table {
+    width: min(100%, calc(980px * var(--ui-scale)));
+}
+
+/* Modals — fit viewport at 100% browser zoom; do not shrink with ui-scale */
+.modal-box.wr-modal,
+.modal-box.wr-modal.spare-req-work-modal,
+#spareReqWorkModal .modal-box.spare-req-work-modal,
+#spareConsumeModal .modal-box.spare-req-work-modal,
+#spareReceiveModal .modal-box.spare-req-work-modal {
+    width: min(98vw, 1400px) !important;
+    max-width: min(98vw, 1400px) !important;
+    min-width: 0 !important;
+}
+
+#spareReqListModal .modal-box.spare-req-list-modal,
+.spare-req-list-modal {
+    width: min(98vw, 1360px) !important;
+    max-width: min(98vw, 1360px) !important;
+}
+
+.modal-box.req-sheet-modal {
+    max-width: min(98vw, 1080px) !important;
+}
+
+.modal-box.wp-modal {
+    max-width: min(96vw, 860px) !important;
+}
+
+.modal-box.wide {
+    max-width: min(96vw, 680px) !important;
+}
+
+.modal-box {
+    padding: calc(20px * var(--ui-scale));
+}
+
+/* SPARE requisition meta — readable labels at 100% zoom */
+.spare-req-meta-label,
+.spare-req-meta-input,
+.spare-req-priority-opt,
+.spare-consume-meta-inline-label {
+    font-size: calc(13px * var(--ui-scale));
+}
+
+.spare-req-meta-input,
+.spare-req-meta-date,
+.spare-req-meta-by-name {
+    font-size: calc(14px * var(--ui-scale));
+}
+
+#reqWorkListHead .spare-data-head th,
+#consumeListHead .spare-data-head th,
+#receiveListHead .spare-data-head th {
+    font-size: calc(12px * var(--ui-scale));
+}
+
+.spare-req-work-title {
+    font-size: calc(16px * var(--ui-scale));
+}
+
+.tab-btn {
+    font-size: calc(14px * var(--ui-scale));
+}
+
+.btn-sm {
+    font-size: calc(13px * var(--ui-scale));
+}
+
+.search-input,
+.count-label {
+    font-size: calc(13px * var(--ui-scale));
+}
+
+/* Login — proportional on smaller laptops */
+.login-screen {
+    padding: calc(32px * var(--ui-scale)) calc(20px * var(--ui-scale)) calc(24px * var(--ui-scale));
+}
+
+.login-brand-name {
+    font-size: calc(22px * var(--ui-scale));
+}
+
+.login-card-title {
+    font-size: calc(22px * var(--ui-scale));
+}
+
+.login-field input,
+.login-field select {
+    font-size: calc(14px * var(--ui-scale));
+    padding: calc(10px * var(--ui-scale)) calc(12px * var(--ui-scale));
+}
+
+@media (max-width: 960px) {
+    #appShell { max-width: none; }
+}
