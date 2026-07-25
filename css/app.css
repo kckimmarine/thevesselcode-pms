@@ -355,6 +355,51 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .fleet-row.selected { background: #bee3f8; font-weight: 600; }
 
 .cmaxs-cards { min-width: 0; }
+
+/* Shared section card — Menu / SPARE visual grouping */
+.tvc-section-card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    overflow: hidden;
+    min-width: 0;
+}
+.tvc-section-head {
+    padding: 12px 16px;
+    border-bottom: 1px solid #edf2f7;
+    background: #f7fafc;
+}
+.tvc-section-title {
+    margin: 0;
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--navy);
+    letter-spacing: 0.01em;
+}
+.tvc-section-sub {
+    margin: 4px 0 0;
+    font-size: 11px;
+}
+.tvc-section-body {
+    padding: 14px 16px 16px;
+    min-width: 0;
+}
+.tvc-section-body > .spare-flow-panel,
+.tvc-section-body > .menu-flow-panel.spare-flow-panel {
+    padding: 0;
+}
+.tvc-section-inventory .tvc-section-body {
+    padding: 0;
+}
+.tvc-section-inventory .spare-import-banner {
+    margin: 12px 16px 0;
+}
+.tvc-section-inventory .spare-layout {
+    padding: 12px 16px 16px;
+    min-height: calc(100vh - 320px);
+}
+
 .menu-flow-panel { padding: 0; }
 /* Vessel Menu — 4 columns in one row (Daily / Defect / Monthly / If Necessary) */
 .menu-flow-panel.spare-flow-panel {
@@ -1121,6 +1166,48 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .wr-spare-meta-form .wr-maint-field textarea.wr-ro {
     min-height: 68px;
     resize: none;
+}
+.wr-page2-job-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.wr-page2-job-rows .wr-page2-job-row {
+    margin-top: 0;
+}
+.wr-spare-meta-form .wr-maint-job-pick,
+#defectReportBody .wr-maint-job-pick {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e0;
+    border-radius: 5px;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 400;
+    background: #fff;
+    color: #2d3748;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    min-height: unset;
+    cursor: pointer;
+}
+.wr-page2-job-rows,
+#defectReportBody .df-page1-job-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+.wr-spare-meta-form .wr-page2-job-grid-batch,
+#defectReportBody .df-maint-job-grid-batch {
+    grid-template-columns: repeat(4, minmax(0, 1fr)) 36px;
+}
+.wr-spare-meta-form .wr-page2-job-row-act,
+#defectReportBody .df-maint-job-row-act {
+    justify-content: flex-end;
 }
 .wr-spare-work-layout {
     flex: 1;
@@ -2012,7 +2099,6 @@ input.tvc-date-input::placeholder {
     padding-top: 6px;
     padding-bottom: 8px;
 }
-#tab-history .hist-toolbar-stack { margin: 0 20px 8px; }
 .hist-legend {
     margin: 0 20px 8px;
     font-size: 11px;
@@ -2057,8 +2143,53 @@ input.tvc-date-input::placeholder {
     width: 16px; height: 16px; border-radius: 3px;
     font-size: 10px; font-weight: 800; line-height: 1; color: #fff;
 }
+.hist-table .hist-type-mark::after { content: none !important; display: none !important; }
 .hist-table .hist-type-defect .hist-type-mark { background: #c05621; }
 .hist-table .hist-type-postpone .hist-type-mark { background: #805ad5; }
+.hist-table .hist-type-maint .hist-type-mark { background: #2b6cb0; }
+.list-filter-wrap { position: relative; flex-shrink: 0; }
+.list-filter-btn { min-width: 64px; background: #edf2f7; color: #4a5568; border: 1px solid #cbd5e0; }
+.list-filter-btn:hover { background: #e2e8f0; }
+.list-filter-btn-active { background: #ebf8ff; border-color: var(--navy); color: var(--navy); font-weight: 600; }
+.list-filter-pop {
+    min-width: 260px;
+    max-width: 320px;
+    max-height: 380px;
+    overflow: auto;
+    background: #fff;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
+    padding: 10px 12px;
+}
+.list-filter-pop-float {
+    position: fixed;
+    z-index: 9500;
+    top: 0;
+    left: 0;
+}
+.list-filter-section { margin-bottom: 10px; }
+.list-filter-section-title { font-size: 11px; font-weight: 700; color: #4a5568; margin-bottom: 6px; }
+.list-filter-check { display: flex; align-items: center; gap: 6px; font-size: 12px; padding: 3px 0; cursor: pointer; }
+.list-filter-check .muted { font-size: 10px; }
+.list-filter-open-only { margin: 8px 0; padding-top: 8px; border-top: 1px solid #edf2f7; }
+.list-filter-group-search { width: 100%; box-sizing: border-box; margin-bottom: 6px; font-size: 12px; padding: 5px 8px; }
+.list-filter-group-list { max-height: 160px; overflow-y: auto; border: 1px solid #edf2f7; border-radius: 6px; padding: 4px 8px; margin-bottom: 4px; }
+.list-filter-empty { font-size: 11px; margin: 6px 0; }
+.list-filter-type-seg { display: flex; gap: 4px; margin-bottom: 4px; }
+.list-filter-type-btn {
+    flex: 1;
+    padding: 5px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    background: #fff;
+    cursor: pointer;
+}
+.list-filter-type-btn.active { background: var(--navy); color: #fff; border-color: var(--navy); }
+.list-filter-actions { display: flex; justify-content: flex-end; gap: 6px; margin-top: 8px; padding-top: 8px; border-top: 1px solid #edf2f7; }
+.list-filter-period-row .list-filter-wrap { margin-left: 4px; }
 .hist-table .hist-chk input[type="checkbox"] { width: 14px; height: 14px; cursor: pointer; accent-color: var(--navy); pointer-events: auto; }
 .hist-table .hist-chk input[type="checkbox"]:disabled { cursor: not-allowed; opacity: 0.4; }
 .hist-toolbar .btn:disabled { opacity: .45; cursor: not-allowed; }
@@ -2105,6 +2236,14 @@ input.tvc-date-input::placeholder {
 .hist-table .hist-flag-h, .hist-table .hist-flag { text-align: center; width: 32px; padding-left: 4px; padding-right: 4px; }
 .hist-table .hist-at-h, .hist-table .hist-at { text-align: center; min-width: 72px; font-size: 10px; }
 .hist-table .hist-at-kb { color: #718096; font-size: 10px; }
+.hist-th-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.1;
+    gap: 1px;
+}
 .hist-table tbody tr.row-selected { background: #bee3f8 !important; }
 .hist-table tbody tr { cursor: pointer; }
 .sheet-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -2404,7 +2543,18 @@ label.spare-file-pick input[type=file] { display: none; }
     border-radius: 50%; animation: spare-spin .8s linear infinite;
 }
 @keyframes spare-spin { to { transform: rotate(360deg); } }
-.spare-unified { padding: 0; }
+.spare-unified {
+    padding: 20px 0 0;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+.spare-unified > .tvc-section-card {
+    margin: 0 20px;
+}
+.spare-unified > .tvc-section-card:last-child {
+    margin-bottom: 20px;
+}
 .spare-layout {
     display: grid;
     grid-template-columns: 240px 1fr;
@@ -2441,6 +2591,46 @@ label.spare-file-pick input[type=file] { display: none; }
     background: #fff;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
+}
+.list-filter-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    padding: 0;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    overflow: visible;
+}
+.list-filter-stack .list-filter-period-row,
+.list-filter-stack .list-filter-search-row {
+    border-bottom: none;
+    flex-wrap: nowrap;
+    align-items: center;
+}
+.list-filter-stack .list-filter-period-row {
+    padding-bottom: 4px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.list-filter-stack .list-filter-period-row .count-label {
+    margin-left: auto;
+}
+.list-filter-stack .list-filter-search-row {
+    padding-top: 6px;
+}
+.list-filter-stack .list-filter-search-row .search-field-wrap {
+    flex: 1;
+    min-width: 0;
+    max-width: none;
+}
+.hist-toolbar-filters.list-filter-stack {
+    padding: 0;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.hist-toolbar-stack .hist-toolbar-filters.list-filter-stack {
+    padding-top: 0;
+    padding-bottom: 0;
 }
 .spare-list-search-input { flex: 1; min-width: 220px; }
 .req-work-groups {
@@ -2501,7 +2691,6 @@ label.spare-file-pick input[type=file] { display: none; }
     line-height: 1.2;
 }
 .req-work-group-section .req-work-group-head .spare-data-head .c-rcvd,
-.req-work-group-section .req-work-group-head .spare-data-head .c-os,
 .req-work-group-section .req-work-group-head .spare-data-head .c-assess,
 .req-work-group-section .req-work-group-head .spare-data-head .c-req,
 .req-work-group-section .req-work-group-head .spare-data-head .c-await,
@@ -3117,7 +3306,6 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-data-table .c-req,
 .spare-data-table .c-assess,
 .spare-data-table .c-rcvd,
-.spare-data-table .c-os,
 .spare-data-table .c-recv,
 .spare-data-head .c-pno,
 .spare-data-head .c-unit,
@@ -3131,7 +3319,6 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-data-head .c-req,
 .spare-data-head .c-assess,
 .spare-data-head .c-rcvd,
-.spare-data-head .c-os,
 .spare-data-head .c-recv {
     text-align: center !important;
     padding-left: 4px;
@@ -3153,7 +3340,6 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-data-head .c-req,
 .spare-data-head .c-assess,
 .spare-data-head .c-rcvd,
-.spare-data-head .c-os,
 .spare-data-head .c-recv {
     padding-top: 8px;
     padding-bottom: 8px;
@@ -3172,12 +3358,10 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-data-head .c-req,
 .spare-data-head .c-assess,
 .spare-data-head .c-rcvd,
-.spare-data-head .c-os,
 .spare-data-head .c-recv { text-align: center; }
 .spare-data-table .c-req,
 .spare-data-table .c-assess,
 .spare-data-table .c-rcvd,
-.spare-data-table .c-os,
 .spare-data-table .c-cons,
 .spare-data-table .c-recv { color: #2b6cb0; font-weight: 600; }
 .spare-data-table .c-cons { color: #276749; }
@@ -4955,6 +5139,114 @@ label.spare-file-pick input[type=file] { display: none; }
     pointer-events: none;
     opacity: .45;
 }
+
+/* Requisition List — in-modal document preview (same layout as screen, print-ready) */
+.spare-req-work-wrap.is-doc-preview {
+    background: #fff;
+}
+.spare-req-doc-preview-head {
+    justify-content: center;
+    position: relative;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #003366;
+    margin-bottom: 4px;
+}
+.spare-req-doc-preview-head .spare-req-work-head-spacer {
+    display: none;
+}
+.spare-req-doc-preview-head .spare-req-work-title,
+.spare-req-doc-preview-title {
+    flex: 1;
+    text-align: center;
+    font-size: 20px;
+    font-weight: 800;
+    color: #003366;
+    letter-spacing: 2px;
+    margin: 0;
+}
+.spare-req-doc-preview-head .btn,
+.spare-req-doc-preview-head .modal-x {
+    position: absolute;
+    right: 0;
+    top: 0;
+}
+.spare-req-doc-preview-head .modal-x {
+    right: 0;
+}
+.spare-req-doc-preview-head .btn.btn-green {
+    right: 72px;
+}
+.spare-req-work-wrap.is-doc-preview .spare-item-toolbar,
+.spare-req-work-wrap.is-doc-preview .spare-list-search-bar,
+.spare-req-work-wrap.is-doc-preview .spare-req-work-modify-hint,
+.spare-req-work-wrap.is-doc-preview .spare-req-hist-anchor,
+.spare-req-work-wrap.is-doc-preview .spare-req-hist-popover {
+    display: none !important;
+}
+.spare-req-work-wrap.is-doc-preview .c-chk,
+.spare-req-work-wrap.is-doc-preview #reqWorkListHead .c-chk,
+.spare-req-work-wrap.is-doc-preview #reqWorkListScroll .c-chk,
+.spare-req-work-wrap.is-doc-preview .spare-head-chk {
+    display: none !important;
+}
+.spare-req-work-wrap.is-doc-preview .spare-req-work-scroll {
+    overflow: visible;
+    max-height: none;
+}
+.spare-req-work-wrap.is-doc-preview .spare-req-qty-input,
+.spare-req-work-wrap.is-doc-preview .spare-req-work-meta input,
+.spare-req-work-wrap.is-doc-preview .spare-req-work-meta select {
+    border: none !important;
+    background: transparent !important;
+    box-shadow: none !important;
+    pointer-events: none;
+    color: inherit;
+    -webkit-appearance: none;
+    appearance: none;
+}
+.spare-req-work-wrap.is-doc-preview .wr-maint-chk input {
+    pointer-events: none;
+}
+#spareReqWorkModal.is-req-doc-preview .modal-box {
+    max-width: 100%;
+    width: min(1400px, 96vw);
+}
+@media print {
+    body > *:not(#spareReqWorkModal) {
+        display: none !important;
+    }
+    #spareReqWorkModal {
+        position: static !important;
+        display: block !important;
+        background: #fff !important;
+        padding: 0 !important;
+        overflow: visible !important;
+    }
+    #spareReqWorkModal .modal-box {
+        box-shadow: none !important;
+        border: none !important;
+        max-width: none !important;
+        width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    #spareReqWorkModal .spare-req-doc-preview-head .btn,
+    #spareReqWorkModal .spare-req-doc-preview-head .modal-x {
+        display: none !important;
+    }
+    #spareReqWorkModal .spare-req-work-scroll {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    #spareReqWorkModal .spare-req-table-hscroll {
+        overflow: visible !important;
+    }
+    #spareReqWorkModal .spare-vl-scroll {
+        max-height: none !important;
+        overflow: visible !important;
+    }
+}
+
 .spare-req-work-layout .tree-panel {
     min-height: 0;
     min-width: 0;
@@ -5290,7 +5582,9 @@ label.spare-file-pick input[type=file] { display: none; }
     .menu-flow-panel.spare-flow-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
-    .spare-flow-panel { grid-template-columns: 1fr; padding: 0 12px 12px; }
+    .spare-flow-panel { grid-template-columns: 1fr; }
+    .spare-unified > .tvc-section-card { margin: 0 12px; }
+    .spare-unified > .tvc-section-card:last-child { margin-bottom: 12px; }
     .menu-flow-panel.spare-flow-panel { grid-template-columns: 1fr; }
 }
 
@@ -5670,8 +5964,156 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 .defect-status.tone-blue { background: #bee3f8; color: #2c5282; }
 .defect-status.tone-gray { background: #edf2f7; color: #4a5568; }
 
-#tab-defect .hist-toolbar-stack { margin: 0 20px 8px; }
-#tab-defect .sheet-table-wrap { margin: 0 20px 16px; }
+#tab-defect .list-tab-frame,
+#tab-history .list-tab-frame {
+    margin: 0 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+#tab-defect .list-tab-frame .hist-toolbar-stack,
+#tab-history .list-tab-frame .hist-toolbar-stack {
+    margin: 0;
+    width: 100%;
+}
+#tab-defect .list-tab-frame .hist-legend,
+#tab-history .list-tab-frame .hist-legend {
+    margin: 0;
+}
+#tab-defect .list-tab-frame .sheet-table-wrap,
+#tab-history .list-tab-frame .sheet-table-wrap {
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 8px;
+    scrollbar-gutter: auto;
+}
+#tab-defect .list-tab-frame .hist-toolbar-filters.list-filter-stack,
+#tab-history .list-tab-frame .hist-toolbar-filters.list-filter-stack {
+    width: 100%;
+    box-sizing: border-box;
+}
+#tab-defect .list-tab-frame .hist-table-defect-list,
+#tab-history .list-tab-frame .hist-table-history-list {
+    width: 100%;
+    max-width: 100%;
+    table-layout: fixed;
+}
+/* Work History — Type column (between ㅁ and JOB CODE) */
+#tab-history .hist-table-history-list th.hist-type-h,
+#tab-history .hist-table-history-list td.hist-type {
+    width: calc(4ch + 2ch);
+    min-width: calc(4ch + 2ch);
+    max-width: calc(4ch + 2ch);
+    padding-left: 1ch;
+    padding-right: 1ch;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+#tab-history .hist-table-history-list th.hist-type-h {
+    font-size: inherit;
+    font-weight: 600;
+}
+#tab-history .hist-table-history-list td.hist-type::after { content: none !important; display: none !important; }
+#tab-history .hist-table-history-list td.hist-type .hist-type-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+    font-size: 10px;
+}
+/* Shared compact list columns — Defect Report & Work History */
+.list-tab-frame .hist-table-defect-list,
+.list-tab-frame .hist-table-history-list {
+    min-width: 0;
+}
+.list-tab-frame .hist-table-defect-list th.hist-code-h,
+.list-tab-frame .hist-table-defect-list td.hist-code,
+.list-tab-frame .hist-table-history-list th.hist-code-h,
+.list-tab-frame .hist-table-history-list td.hist-code {
+    width: max-content;
+    padding-left: 1ch;
+    padding-right: 1ch;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-status-h,
+.list-tab-frame .hist-table-defect-list td.hist-status,
+.list-tab-frame .hist-table-history-list th.hist-status-h,
+.list-tab-frame .hist-table-history-list td.hist-status {
+    width: max-content;
+    min-width: calc(9ch + 2ch);
+    padding-left: 1ch;
+    padding-right: 1ch;
+    white-space: nowrap;
+    text-align: center;
+}
+.list-tab-frame .hist-table-defect-list th.hist-flag-h,
+.list-tab-frame .hist-table-defect-list td.hist-flag,
+.list-tab-frame .hist-table-history-list th.hist-flag-h,
+.list-tab-frame .hist-table-history-list td.hist-flag {
+    width: calc(2ch + 2ch);
+    min-width: calc(2ch + 2ch);
+    max-width: calc(2ch + 2ch);
+    padding-left: 1ch;
+    padding-right: 1ch;
+    text-align: center;
+    overflow: visible;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-at-ship-h,
+.list-tab-frame .hist-table-defect-list td.hist-at-ship,
+.list-tab-frame .hist-table-history-list th.hist-at-ship-h,
+.list-tab-frame .hist-table-history-list td.hist-at-ship {
+    width: max-content;
+    min-width: calc(6ch + 2ch);
+    padding-left: 1ch;
+    padding-right: 1ch;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-at-company-h,
+.list-tab-frame .hist-table-defect-list td.hist-at-company,
+.list-tab-frame .hist-table-history-list th.hist-at-company-h,
+.list-tab-frame .hist-table-history-list td.hist-at-company {
+    width: max-content;
+    min-width: calc(9ch + 2ch);
+    padding-left: 1ch;
+    padding-right: 1ch;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-date-h,
+.list-tab-frame .hist-table-defect-list td.hist-date,
+.list-tab-frame .hist-table-history-list th.hist-date-h,
+.list-tab-frame .hist-table-history-list td.hist-date {
+    width: max-content;
+    min-width: calc(8ch + 2ch);
+    padding-left: 1ch;
+    padding-right: 1ch;
+    text-align: center;
+}
+.list-tab-frame .hist-table-defect-list th.hist-date-h,
+.list-tab-frame .hist-table-defect-list th.hist-at-ship-h,
+.list-tab-frame .hist-table-defect-list th.hist-at-company-h,
+.list-tab-frame .hist-table-history-list th.hist-date-h,
+.list-tab-frame .hist-table-history-list th.hist-at-ship-h,
+.list-tab-frame .hist-table-history-list th.hist-at-company-h {
+    white-space: normal;
+}
+.list-tab-frame .hist-table-defect-list th.hist-sort1-h,
+.list-tab-frame .hist-table-defect-list td.hist-sort1,
+.list-tab-frame .hist-table-defect-list th.hist-sort2-h,
+.list-tab-frame .hist-table-defect-list td.hist-sort2,
+.list-tab-frame .hist-table-history-list th.hist-sort1-h,
+.list-tab-frame .hist-table-history-list td.hist-sort1,
+.list-tab-frame .hist-table-history-list th.hist-sort2-h,
+.list-tab-frame .hist-table-history-list td.hist-sort2 {
+    width: auto;
+    max-width: none;
+    min-width: 5ch;
+}
 
 .df-cancel-confirm-modal { z-index: 10200; }
 .df-cancel-confirm-box {

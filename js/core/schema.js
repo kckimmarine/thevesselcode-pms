@@ -844,7 +844,7 @@ const TVC_DefectCase = (function () {
         return !row.department || row.department === dept;
     }
 
-    /** Defect Report 목록·Work History 공통 표시 Status */
+    /** Defect Report 목록·Work History 공통 표시 Status (4단계 — Closed out는 DC 열) */
     function listWorkflowStatus(row) {
         if (!row) return 'Draft';
         if (row.approved_at || row.approved_by) return 'Approved';
@@ -880,6 +880,7 @@ const TVC_DefectCase = (function () {
     /** Approved · Submitted 제외 — 목록 Delete 허용 */
     function canDeleteListWorkflow(row) {
         if (!row) return false;
+        if (row.status === Status.CLOSED) return false;
         if (row.approved_at || row.approved_by) return false;
         if ((row.confirmed_at || row.confirmed_by) && row.sync_status === 'SYNCED') return false;
         const st = listWorkflowStatus(row);

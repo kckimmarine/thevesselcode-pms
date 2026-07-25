@@ -344,7 +344,7 @@ const TVC_DefectCaseService = (function () {
                 : 'Delete permission denied.';
             throw Object.assign(new Error(msg), { code: 'FORBIDDEN' });
         }
-        await TVC_DB.delete('defect_cases', id);
+        await TVC_DB.del('defect_cases', id);
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
             log: `🗑 [Defect/DELETE] ${row.case_no}`,
