@@ -520,6 +520,11 @@
         </div>
     </div>
 </div>
+<div id="spareCloseOsModal" class="modal hidden df-cancel-confirm-modal spare-close-os-modal" onclick="if(event.target===this)TVC_SpareMenu.closeCloseOsModal()">
+    <div class="modal-box df-cancel-confirm-box spare-close-os-box" onclick="event.stopPropagation()">
+        <div id="spareCloseOsBody"></div>
+    </div>
+</div>
 <div id="spareReqSheetModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeReqSheetModal()">
     <div class="modal-box req-sheet-modal" onclick="event.stopPropagation()"><div id="spareReqSheetBody"></div></div>
 </div>
@@ -611,12 +616,12 @@
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js?v=20260723-rh-gate"></script>
-<script src="js/ui/spareMenu.js?v=20260725-wr-page2-job"></script>
+<script src="js/ui/spareMenu.js?v=20260725-close-os"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
 <script src="js/services/inventoryService.js?v=20260721-stock-reported"></script>
-<script src="js/services/excel.js?v=20260721-export-xls"></script>
+<script src="js/services/excel.js?v=20260725-wait-to-os"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
 <script src="js/space.js?v=20260716-menu-flow"></script>
 <script src="js/auth.js?v=20260723-login-fast"></script>
@@ -632,7 +637,7 @@
 <script src="js/ui/listFilters.js?v=20260725-hist-type-letter"></script>
 <script src="js/ui/defectReport.js?v=20260725-df-wr-style"></script>
 <script src="js/ui/outstandingTasks.js?v=20260722-hq-ot"></script>
-<script src="js/app.js?v=20260725-df-list-fix"></script>
+<script src="js/app.js?v=20260725-menu-xfer-no-dest"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

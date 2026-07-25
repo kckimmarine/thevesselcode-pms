@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260725-df-wr-style';
+const CACHE_VERSION = 'tvc-pms-20260725-close-os';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 

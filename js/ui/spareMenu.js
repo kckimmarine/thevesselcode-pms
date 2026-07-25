@@ -8,6 +8,7 @@ const TVC_SpareMenu = (function () {
     let vl = null;
     let vlReqWork = null;
     let _reqWorkHistOpen = false;
+    let _closeOsReqId = null;
     let _reqListReturnAfterSave = false;
     let _consumeListReturnAfterSave = false;
     let _consumeWorkReportOverlay = false;
@@ -31,6 +32,7 @@ const TVC_SpareMenu = (function () {
     let _receiveLineBySpareId = null;
     let _wrSpareCachedList = [];
     let _spareXfer = { step: 'mode' };
+    let _reqListXferExportKind = null; // null | 'requisition' | 'received'
     /** HQ requisition import mode: vendor-quote | hq-adjustment */
     let _reqImportMode = null;
     let _consumeDraft = null;
@@ -133,10 +135,10 @@ const TVC_SpareMenu = (function () {
         <th class="spare-req-list-th-type" rowspan="2">Type</th>
         <th class="spare-req-list-th-reqno" rowspan="2">Requisition No.</th>
         <th class="spare-req-list-th-group" colspan="2">Required</th>
-        <th class="spare-req-list-th-submitted" rowspan="2">Submitted Date</th>
+        <th class="spare-req-list-th-submitted" rowspan="2">Reported Date</th>
         <th class="spare-req-list-th-status" rowspan="2">Status</th>
         <th class="spare-req-list-th-group" colspan="2">Received</th>
-        <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2" title="Outstanding">O/S</th>
+        <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2" title="${SPARE_COL_WAIT_TITLE}">O/S</th>
         <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2">Total<span class="spare-head-sub">Data</span></th>
         </tr>
         <tr>
@@ -155,8 +157,8 @@ const TVC_SpareMenu = (function () {
     const SPARE_COL_ROB_TITLE = 'Remaining onboard';
     const SPARE_COL_COS = 'Cos';
     const SPARE_COL_COS_TITLE = 'Consumed';
-    const SPARE_COL_WAIT = 'Wait';
-    const SPARE_COL_WAIT_TITLE = 'Waiting';
+    const SPARE_COL_WAIT = 'O/S';
+    const SPARE_COL_WAIT_TITLE = 'Outstanding (Req − Rcvd)';
     const SPARE_COL_NEED = 'Need';
     const SPARE_COL_NEED_TITLE = 'Need';
     const SPARE_COL_REQ = 'Req';
@@ -1323,24 +1325,41 @@ const TVC_SpareMenu = (function () {
             });
             const map = new Map();
             const partMap = new Map();
-            scoped
-                .filter(requisitionContributesToSpareWait)
-                .forEach(req => {
-                    (req.lines || []).forEach(l => {
-                        const pending = Math.max(0, (Number(l.qty_requested) || 0) - (Number(l.qty_received) || 0));
-                        if (pending <= 0) return;
-                        const sid = spareIdForReqLine(l, st);
-                        if (sid) map.set(sid, (map.get(sid) || 0) + pending);
-                        const pno = String(l.part_no || '').trim().toLowerCase();
-                        if (pno) partMap.set(pno, (partMap.get(pno) || 0) + pending);
-                    });
+            scoped.forEach(req => {
+                if (reqOsWaived(req)) return;
+                const effective = reqEffectiveForWait(req);
+                (effective.lines || []).forEach(l => {
+                    const pending = reqLinePendingQty(l);
+                    if (pending <= 0) return;
+                    const sid = spareIdForReqLine(l, st);
+                    if (sid) map.set(sid, (map.get(sid) || 0) + pending);
+                    const pno = String(l.part_no || '').trim().toLowerCase();
+                    if (pno) partMap.set(pno, (partMap.get(pno) || 0) + pending);
                 });
+            });
             _reportedWaitBySpareId = map;
             _reportedWaitByPartNo = partMap;
         } catch (_) {
             _reportedWaitBySpareId = new Map();
             _reportedWaitByPartNo = new Map();
         }
+    }
+
+    /** 미수급 수량 — Wait · Requisition List O/S 공통 (Req − Rcvd) */
+    function reqLinePendingQty(line) {
+        if (!line) return 0;
+        return Math.max(0, (Number(line.qty_requested) || 0) - (Number(line.qty_received) || 0));
+    }
+
+    function reqEffectiveForWait(req) {
+        if (!_reqWorkDraft || _reqWorkDraft.id !== req?.id) return req;
+        if (reqListWorkflowLabel(_reqWorkDraft) !== 'Received') return req;
+        const m = modState(getState());
+        if ((isRequisitionListWindow(m) && m.reqWorkListEditing)
+            || (m.reqWorkEditMode && !m.reqWorkPreview)) {
+            return _reqWorkDraft;
+        }
+        return req;
     }
 
     function spareIdForReqLine(line, st) {
@@ -1356,11 +1375,9 @@ const TVC_SpareMenu = (function () {
     }
 
     function requisitionContributesToSpareWait(req) {
-        if (!req?.id) return false;
-        if (reqWorkflowPhase(req) === REQ_LIST_PHASE.RECEIVED) return false;
-        return (req.lines || []).some(l =>
-            Math.max(0, (Number(l.qty_requested) || 0) - (Number(l.qty_received) || 0)) > 0
-        );
+        if (!req?.id || reqOsWaived(req)) return false;
+        const effective = reqEffectiveForWait(req);
+        return (effective.lines || []).some(l => reqLinePendingQty(l) > 0);
     }
 
     function reportedWaitQty(s) {
@@ -1583,6 +1600,25 @@ const TVC_SpareMenu = (function () {
             onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
             onfocus="event.stopPropagation();this.select()"
             onchange="TVC_SpareMenu.reqWorkSetRequestQty('${sid}', this.value)">`;
+    }
+
+    function reqWorkReceivedQtyEditable() {
+        const req = getReqWorkSession();
+        if (!req || reqListWorkflowLabel(req) !== 'Received') return false;
+        const m = modState(getState());
+        if (isRequisitionListWindow(m) && m.reqWorkListEditing) return true;
+        if (m.reqWorkEditMode && !m.reqWorkPreview) return true;
+        return false;
+    }
+
+    function reqWorkReceivedCellHtml(s, sid) {
+        const line = _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id));
+        if (!line) return '0';
+        const qty = Number(line.qty_received) || 0;
+        return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-req-qty-input spare-req-rcvd-qty-input" value="${qty}"
+            onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
+            onfocus="event.stopPropagation();this.select()"
+            onchange="TVC_SpareMenu.reqWorkSetReceivedQty('${sid}', this.value)">`;
     }
 
     function consumeQtyCellHtml(s, sid) {
@@ -2669,13 +2705,14 @@ const TVC_SpareMenu = (function () {
         const pipe = sparePipelineCols(s, reqLine);
         const stockCell = pipe.stock;
         const locked = ctx === 'reqWork' && reqWorkFormLocked();
+        const rcvdEdit = ctx === 'reqWork' && reqWorkReceivedQtyEditable() && !locked;
         const wrRo = ctx === 'wrSpare' && modState(getState()).wrSpareReadonly;
         const consumeRo = ctx === 'consume' && modState(getState()).consumePreview;
         const pipelineCells = (ctx === 'main' || ctx === 'reqWork')
             ? `<td class="c-await">${pipe.awaiting}</td><td class="c-need">${formatNeedHtml(pipe.need)}</td>`
             : '';
         const reqCells = ctx === 'reqWork'
-            ? `${pipelineCells}<td class="c-req">${reqWorkRequestCellHtml(s, sid, locked)}</td><td class="c-assess">${esc(pipe.assess)}</td><td class="c-rcvd">${esc(pipe.rcvd)}</td>`
+            ? `${pipelineCells}<td class="c-req">${rcvdEdit ? esc(String(pipe.request)) : reqWorkRequestCellHtml(s, sid, locked)}</td><td class="c-assess">${esc(pipe.assess)}</td><td class="c-rcvd">${rcvdEdit ? reqWorkReceivedCellHtml(s, sid) : esc(pipe.rcvd)}</td>`
             : (ctx === 'main' ? pipelineCells : '');
         const consumeCell = ctx === 'consume'
             ? `<td class="c-cons">${consumeQtyCellHtml(s, sid)}</td>`
@@ -2955,7 +2992,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqListTotalData(req) {
-        return (req.lines || []).length;
+        return (req.lines || []).reduce((sum, l) => sum + (Number(l.qty_requested) || 0), 0);
     }
 
     function reqLineTargetQty(line) {
@@ -2963,15 +3000,92 @@ const TVC_SpareMenu = (function () {
         return line.qty_approved != null ? (Number(line.qty_approved) || 0) : (Number(line.qty_requested) || 0);
     }
 
-    /** Line counts toward O/S when unreceived or received below target (Eval ?? Req). */
+    /** Line has outstanding qty (Req − Rcvd) — same basis as Wait. */
     function reqLineIsOutstanding(line) {
-        const target = reqLineTargetQty(line);
-        if (target <= 0) return false;
-        return (Number(line.qty_received) || 0) < target;
+        return reqLinePendingQty(line) > 0;
     }
 
+    /** Raw O/S before waive — Req − Rcvd sum. */
+    function reqRawOutstandingData(req) {
+        const effective = reqEffectiveForWait(req);
+        return (effective.lines || []).reduce((sum, l) => sum + reqLinePendingQty(l), 0);
+    }
+
+    function reqOsWaived(req) {
+        return !!(req?.os_waived_approved_at);
+    }
+
+    function reqOsWaiveInitiated(req) {
+        return !!(String(req?.os_waive_reason || '').trim());
+    }
+
+    function reqCanCloseOs(req) {
+        if (!req || reqOsWaived(req)) return false;
+        if (reqWorkflowPhase(req) !== REQ_LIST_PHASE.RECEIVED) return false;
+        return reqRawOutstandingData(req) > 0;
+    }
+
+    function closeOsApprovalState(req, st) {
+        st = st || getState();
+        const user = spareInventoryUser(st);
+        const dept = req?.department || st?.department;
+        const isConfirmed = !!(req?.os_waived_confirmed_at || req?.os_waived_confirmed_by);
+        const isApproved = reqOsWaived(req);
+        const initiated = reqOsWaiveInitiated(req);
+        const canConfirmNow = initiated && !isConfirmed && !isApproved
+            && !!user && TVC_RBAC.canConfirmDepartment(user, dept);
+        const canApproveNow = isConfirmed && !isApproved
+            && !!user && TVC_RBAC.canApproveHqReport(user);
+        return {
+            isConfirmed,
+            isApproved,
+            canConfirmNow,
+            canApproveNow,
+            confirmedByVal: isConfirmed ? (req.os_waived_confirmed_by || requisitionConfirmByLabel(st, req)) : '',
+            approvedByVal: isApproved ? 'Company' : '',
+        };
+    }
+
+    function reqCloseOsButtonEnabled(req, st) {
+        if (!req || reqOsWaived(req)) return false;
+        if (reqCanCloseOs(req)) return true;
+        if (reqOsWaiveInitiated(req)) {
+            const approval = closeOsApprovalState(req, st);
+            return approval.canConfirmNow || approval.canApproveNow;
+        }
+        return false;
+    }
+
+    function resolveCloseOsTargetReq(allReqs, m, st) {
+        st = st || getState();
+        if (isRequisitionListWindow(m) && _reqWorkDraft?.id && reqWorkListHasDisplayedReq(m)
+            && reqCloseOsButtonEnabled(_reqWorkDraft, st)) {
+            return allReqs.find(r => r.id === _reqWorkDraft.id) || _reqWorkDraft;
+        }
+        if (m.selectedReqId) {
+            const req = allReqs.find(r => r.id === m.selectedReqId);
+            if (reqCloseOsButtonEnabled(req, st)) return req;
+        }
+        const checkedIds = Object.keys(m.reqListCheckedIds || {}).filter(k => m.reqListCheckedIds[k]);
+        const eligible = checkedIds
+            .map(id => allReqs.find(r => r.id === id))
+            .filter(r => reqCloseOsButtonEnabled(r, st));
+        if (eligible.length === 1) return eligible[0];
+        if (eligible.length > 1 && m.selectedReqId) {
+            const sel = eligible.find(r => r.id === m.selectedReqId);
+            if (sel) return sel;
+        }
+        return eligible[0] || null;
+    }
+
+    function reqListAnyCloseOsEnabled(m, allReqs, st) {
+        return !!resolveCloseOsTargetReq(allReqs, m, st);
+    }
+
+    /** Requisition List O/S — total unreceived qty (sum of Wait per line); 0 when O/S waived. */
     function reqListOutstandingData(req) {
-        return (req.lines || []).filter(l => reqLineIsOutstanding(l)).length;
+        if (reqOsWaived(req)) return 0;
+        return reqRawOutstandingData(req);
     }
 
     function reqListDateCell(val) {
@@ -3296,7 +3410,7 @@ const TVC_SpareMenu = (function () {
             <th rowspan="2">Type</th>
             <th rowspan="2">Requisition No.</th>
             <th colspan="2">Required</th>
-            <th rowspan="2">Submitted Date</th>
+            <th rowspan="2">Reported Date</th>
             <th rowspan="2">Status</th>
             <th colspan="2">Received</th>
             <th rowspan="2">O/S</th>
@@ -3347,17 +3461,20 @@ const TVC_SpareMenu = (function () {
     }
 
     function updateReqListHeadCheckAll(reqs) {
+        const scopeReqs = _reqListXferExportKind
+            ? (reqs || []).filter(r => reqListCanXferExport(r))
+            : (reqs || []);
         document.querySelectorAll('.spare-req-list-head-chk').forEach(el => {
-            if (!reqs.length) {
+            if (!scopeReqs.length) {
                 el.checked = false;
                 el.indeterminate = false;
                 return;
             }
             const m = modState(getState());
             let n = 0;
-            reqs.forEach(r => { if (reqListIsRowChecked(m, r.id)) n++; });
-            el.checked = n === reqs.length;
-            el.indeterminate = n > 0 && n < reqs.length;
+            scopeReqs.forEach(r => { if (reqListIsRowChecked(m, r.id)) n++; });
+            el.checked = n === scopeReqs.length;
+            el.indeterminate = n > 0 && n < scopeReqs.length;
         });
     }
 
@@ -3388,13 +3505,20 @@ const TVC_SpareMenu = (function () {
         const { st, vesselId } = await vesselScope();
         const m = modState(st);
         const allReqs = await TVC_Inventory.listRequisitions(vesselId);
+        if (_reqListXferExportKind) {
+            const ids = reqListCheckedExportableIds(m, allReqs);
+            setSpareListToolbarBtnDisabled(body, 'reqListExportToMaster', !ids.length);
+            return;
+        }
         const selReq = m.selectedReqId ? allReqs.find(r => r.id === m.selectedReqId) : null;
         const hasSel = !!selReq;
         const canRequisition = canCreateRequisition(st);
         const canConfirm = reqListAnyCheckedCanConfirm(m, allReqs, st);
         const canDelete = reqListCanDeleteSelection(m, st);
+        const canCloseOs = reqListAnyCloseOsEnabled(m, allReqs, st);
         setSpareListToolbarBtnDisabled(body, 'reqListDetailReport', !hasSel);
         setSpareListToolbarBtnDisabled(body, 'reqListReportConfirm', !canConfirm);
+        setSpareListToolbarBtnDisabled(body, 'openCloseOsModal', !canCloseOs);
         setSpareListToolbarBtnDisabled(body, 'reqListModify', !canRequisition || !hasSel);
         setSpareListToolbarBtnDisabled(body, 'reqListDelete', !canDelete);
     }
@@ -3411,7 +3535,9 @@ const TVC_SpareMenu = (function () {
         const canRequisition = canCreateRequisition(st);
         const canConfirm = reqListAnyCheckedCanConfirm(m, reqs, st);
         const canDelete = reqListCanDeleteSelection(m, st);
+        const canCloseOs = reqListAnyCloseOsEnabled(m, reqs, st);
         setSpareListToolbarBtnDisabled(panel, 'reqListReportConfirm', !canConfirm);
+        setSpareListToolbarBtnDisabled(panel, 'openCloseOsModal', !canCloseOs);
         setSpareListToolbarBtnDisabled(panel, 'reqListDelete', !canDelete);
     }
 
@@ -3467,6 +3593,11 @@ const TVC_SpareMenu = (function () {
         if (saveBtn) saveBtn.disabled = saveDisabled;
         setSpareListToolbarBtnDisabled(head, 'reqWorkPrint', !hasDisplayedReq);
         setSpareListToolbarBtnDisabled(head, 'reqWorkDocPreview', !hasDisplayedReq);
+        const closeOsBtn = document.getElementById('reqWorkHeadCloseOsBtn');
+        if (closeOsBtn) {
+            const req = _reqWorkDraft;
+            closeOsBtn.disabled = !(hasDisplayedReq && reqCloseOsButtonEnabled(req, getState()));
+        }
     }
 
     async function reqListSelectRow(id) {
@@ -3505,7 +3636,9 @@ const TVC_SpareMenu = (function () {
         const reqs = filterReqList(allReqs, getState());
         if (checked) {
             const map = ensureReqListChecked(m);
-            reqs.forEach(r => { map[r.id] = true; });
+            reqs.forEach(r => {
+                if (!_reqListXferExportKind || reqListCanXferExport(r)) map[r.id] = true;
+            });
             if (!m.selectedReqId && reqs.length) m.selectedReqId = reqs[0].id;
         } else {
             m.reqListCheckedIds = {};
@@ -3623,10 +3756,12 @@ const TVC_SpareMenu = (function () {
             const reqDate = reqListRequiredDateCell(r);
             const reqType = reqListTypeLabel(r);
             const reqTypeCls = reqListTypeCellClass(r);
-            return `<tr class="${sel ? 'sr-req-sel' : ''}" data-req-id="${rid}" ${rowClick}>
+            const canSelect = !_reqListXferExportKind || reqListCanXferExport(r);
+            const chkDisabled = canSelect ? '' : ` disabled title="${escAttr(reqListXferExportSelectDisabledTitle(r))}"`;
+            return `<tr class="${sel ? 'sr-req-sel' : ''}${canSelect ? '' : ' menu-xfer-defect-row-disabled'}" data-req-id="${rid}" ${rowClick}>
                 <td class="spare-req-list-chk" onclick="event.stopPropagation()">
                     <input type="checkbox" aria-label="Select requisition ${no}"
-                        ${checked ? 'checked' : ''} onchange="TVC_SpareMenu.${toggleFn}('${rid}', this.checked)">
+                        ${checked ? 'checked' : ''}${chkDisabled} onchange="TVC_SpareMenu.${toggleFn}('${rid}', this.checked)">
                 </td>
                 <td class="spare-req-list-type ${reqTypeCls}"${cellTitleAttr(reqType)}>${esc(reqType)}</td>
                 <td class="spare-req-list-reqno"${cellTitleAttr(r.req_no)}>${esc(r.req_no || '—')}</td>
@@ -3690,16 +3825,24 @@ const TVC_SpareMenu = (function () {
         const hasSel = !!selReq;
         const canConfirm = reqListAnyCheckedCanConfirm(m, allReqs, st);
         const canDelete = reqListCanDeleteSelection(m, st);
+        const canCloseOs = reqListAnyCloseOsEnabled(m, allReqs, st);
+        const exportXfer = _reqListXferExportKind;
+        const exportableCount = exportXfer ? reqListCheckedExportableIds(m, allReqs).length : 0;
+        const exportXferTitle = exportXfer === 'received' ? ' — Received Export' : exportXfer ? ' — Export' : '';
+        const exportXferHint = exportXfer === 'received'
+            ? 'Select <strong>Received</strong> requisition(s) to export. Other statuses cannot be selected.'
+            : exportXfer
+                ? 'Select <strong>Confirmed</strong> requisition(s) to export. Reported, Draft, Submitted, and other rows cannot be selected.'
+                : '';
 
-        body.innerHTML = `
-        <div class="spare-req-list-wrap spare-req-list-main-wrap">
-          <div class="spare-req-list-head">
-            <h3 class="spare-req-work-title">📋 Requisition List
-              <span class="muted spare-req-list-count">${reqs.length}${reqs.length !== allReqs.length ? ` / ${allReqs.length}` : ''} item(s)</span>
-            </h3>
-            <span class="spare-req-work-head-spacer"></span>
-            ${spareListToolbarBtn('Detail Report', 'TVC_SpareMenu.reqListDetailReport()', !hasSel)}
+        const headToolbar = exportXfer
+            ? `${spareListToolbarBtn('Export', 'TVC_SpareMenu.reqListExportToMaster()', !exportableCount, 'btn-green')}
+            ${spareListToolbarBtn('← Back', 'TVC_SpareMenu.reqListXferExportBack()')}
+            ${spareListToolbarBtn('Close', 'TVC_SpareMenu.closeReqListModal()')}
+            <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReqListModal()" title="Close">×</button>`
+            : `${spareListToolbarBtn('Detail Report', 'TVC_SpareMenu.reqListDetailReport()', !hasSel)}
             ${spareListToolbarBtn('Report Confirm', 'TVC_SpareMenu.reqListReportConfirm()', !canConfirm, 'btn-green')}
+            ${spareListToolbarBtn('Close O/S', 'TVC_SpareMenu.openCloseOsModal()', !canCloseOs)}
             <span class="orig-toolbar-sep" aria-hidden="true"></span>
             ${spareListToolbarBtn('New', 'TVC_SpareMenu.reqListNew()', !canRequisition, 'btn-green')}
             ${spareListToolbarBtn('Modify', 'TVC_SpareMenu.reqListModify()', !canRequisition || !hasSel)}
@@ -3708,9 +3851,19 @@ const TVC_SpareMenu = (function () {
             ${spareListToolbarBtn('Print', 'TVC_SpareMenu.reqListPrint()')}
             ${spareListToolbarBtn('Preview', 'TVC_SpareMenu.reqListDocPreview()')}
             ${spareListToolbarBtn('Close', 'TVC_SpareMenu.closeReqListModal()')}
-            <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReqListModal()" title="Close">×</button>
+            <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReqListModal()" title="Close">×</button>`;
+
+        body.innerHTML = `
+        <div class="spare-req-list-wrap spare-req-list-main-wrap${exportXfer ? ' spare-req-list-xfer-export' : ''}">
+          <div class="spare-req-list-head">
+            <h3 class="spare-req-work-title">📋 Requisition List${exportXferTitle}
+              <span class="muted spare-req-list-count">${reqs.length}${reqs.length !== allReqs.length ? ` / ${allReqs.length}` : ''} item(s)</span>
+            </h3>
+            <span class="spare-req-work-head-spacer"></span>
+            ${headToolbar}
           </div>
-          ${reqListPhaseTabsHtml(m, phaseCounts)}
+          ${exportXfer ? `<p class="spare-sync-note muted spare-req-list-xfer-hint">${exportXferHint}</p>` : ''}
+          ${exportXfer ? '' : reqListPhaseTabsHtml(m, phaseCounts)}
           <div class="hist-toolbar hist-toolbar-filters filter-bar spare-list-search-bar spare-req-list-filters">
             <div id="reqListPeriodFilter" class="act-period-filter" title="Filter by Reported Date">
                 <span class="act-period-label">Period</span>
@@ -4545,6 +4698,8 @@ const TVC_SpareMenu = (function () {
     async function openReqListModal(opts = {}) {
         const m = modState(getState());
         clearReqListUiState(m);
+        if (opts.xferExport === 'received') _reqListXferExportKind = 'received';
+        else if (opts.xferExport) _reqListXferExportKind = 'requisition';
         if (opts.phase) m.reqListPhaseTab = opts.phase;
         if (opts.selectId) applyReqListSelection(m, opts.selectId);
         await renderReqListModal();
@@ -4553,7 +4708,16 @@ const TVC_SpareMenu = (function () {
 
     function closeReqListModal() {
         clearReqListUiState(modState(getState()));
+        _reqListXferExportKind = null;
         closeSpicsModal('spareReqListModal');
+    }
+
+    function reqListXferExportBack() {
+        _reqListXferExportKind = null;
+        closeReqListModal();
+        _spareXfer = { step: 'export-type', mode: 'export' };
+        renderSpareXferModal();
+        showSpicsModal('spareSyncModal');
     }
 
     async function reqListNew() {
@@ -4866,32 +5030,58 @@ const TVC_SpareMenu = (function () {
     async function reqListExportToMaster() {
         const st = getState();
         const m = modState(st);
-        if (!canCreateRequisition(st)) return alert('No permission to export requisitions.');
+        const xferKind = _reqListXferExportKind;
+        if (xferKind === 'received') {
+            if (!canCreateDeliver(st)) return alert('No permission to export received data.');
+        } else if (xferKind === 'requisition') {
+            if (!canCreateRequisition(st)) return alert('No permission to export requisitions.');
+        } else if (!canCreateRequisition(st)) {
+            return alert('No permission to export requisitions.');
+        }
         const { vesselId } = await vesselScope();
         const allReqs = await TVC_Inventory.listRequisitions(vesselId);
         const ids = reqListCheckedExportableIds(m, allReqs);
+        const statusLabel = xferKind === 'received' ? 'Received' : 'Confirmed';
         if (!ids.length) {
             const anyChecked = Object.keys(m.reqListCheckedIds || {}).some(k => m.reqListCheckedIds[k]);
-            if (anyChecked) return alert('Draft requisitions cannot be exported. Complete the requisition first.');
+            if (anyChecked) return alert(`Only ${statusLabel} requisitions can be exported.`);
             return alert('Select one or more requisitions to export.');
         }
         const skipped = Object.keys(m.reqListCheckedIds || {}).filter(k => m.reqListCheckedIds[k] && !ids.includes(k));
+        const confirmTarget = xferKind === 'received' ? 'received requisition(s)' : 'requisition(s)';
         if (skipped.length) {
             const skipNos = skipped.map(id => allReqs.find(r => r.id === id)?.req_no || id).join(', ');
-            if (!window.confirm(`${skipped.length} draft item(s) will be skipped (${skipNos}).\n\nExport ${ids.length} requisition(s) to Master?`)) return;
-        } else if (!window.confirm(`Export ${ids.length} requisition(s) to Master?`)) {
+            if (!window.confirm(`${skipped.length} non-${statusLabel} item(s) will be skipped (${skipNos}).\n\nExport ${ids.length} ${confirmTarget} to Master?`)) return;
+        } else if (!window.confirm(`Export ${ids.length} ${confirmTarget} to Master?`)) {
             return;
         }
         let ok = 0;
         for (const id of ids) {
             try {
-                await exportReq(id);
+                if (xferKind === 'received') await exportReceivedReq(id);
+                else await exportReq(id);
                 ok++;
             } catch (e) {
                 alert(`Export failed: ${e.message || e.code || id}`);
             }
         }
-        if (ok) alert(`Exported ${ok} requisition(s) to Master.`);
+        if (ok) {
+            if (xferKind) {
+                await logSpareDataXfer({
+                    direction: 'EXPORT',
+                    category: xferKind === 'received' ? SPARE_XFER_EXPORT.RECEIVED : SPARE_XFER_EXPORT.REQUISITION,
+                    summary: xferKind === 'received'
+                        ? `${ok} received requisition(s) exported`
+                        : `${ok} requisition(s) exported`,
+                    count: ok,
+                });
+                _reqListXferExportKind = null;
+                closeReqListModal();
+            }
+            alert(xferKind === 'received'
+                ? `Exported ${ok} received requisition(s) to Master.`
+                : `Exported ${ok} requisition(s) to Master.`);
+        }
     }
 
     async function reqListPrint() {
@@ -5783,12 +5973,22 @@ const TVC_SpareMenu = (function () {
         finally { document.getElementById('srImportFile').value = ''; _importReqId = null; }
     }
 
+    async function exportReceivedReq(id) {
+        const { isHq } = await vesselScope();
+        const req = await TVC_Inventory.getRequisition(id);
+        if (!req) throw new Error('REQ_NOT_FOUND');
+        if (!reqListCanReceivedExport(req)) throw new Error('Only Received requisitions can be exported.');
+        await TVC_Excel.exportRequisition(req, { vendorOnly: !isHq });
+        await refreshReqListModalIfOpen();
+        render();
+    }
+
     async function exportReq(id) {
         const { isHq } = await vesselScope();
         try {
             const req = await TVC_Inventory.getRequisition(id);
             if (!req) throw new Error('REQ_NOT_FOUND');
-            if (!reqListCanExport(req)) throw new Error('Draft requisitions cannot be exported.');
+            if (!reqListCanMasterExport(req)) throw new Error('Only Confirmed requisitions can be exported.');
             await TVC_Excel.exportRequisition(req, { vendorOnly: !isHq });
             const listSt = spareListStatus(req);
             if (listSt !== SPARE_LIST_STATUS.DRAFT) {
@@ -5864,8 +6064,8 @@ const TVC_SpareMenu = (function () {
             content = `
                 <p class="spare-sync-hint">Select the data type to export to Master PC.</p>
                 <div class="spare-sync-actions">
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportRequisitions()">Requisition</button>
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportReceived()">Received</button>
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReqExportList()">Requisition</button>
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReceivedExportList()">Received</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Spare Parts Inventory</button>
                 </div>`;
         } else if (step === 'import') {
@@ -5920,11 +6120,31 @@ const TVC_SpareMenu = (function () {
         document.getElementById('spareXferImportFile')?.click();
     }
 
+    async function spareXferOpenReqExportList() {
+        const st = getState();
+        if (!canCreateRequisition(st)) return alert('No permission to export requisitions.');
+        const m = modState(st);
+        m.reqListPhaseTab = REQ_LIST_PHASE.ALL;
+        _reqListXferExportKind = 'requisition';
+        closeSpareSyncMenu();
+        await openReqListModal({ xferExport: 'requisition' });
+    }
+
+    async function spareXferOpenReceivedExportList() {
+        const st = getState();
+        if (!canCreateDeliver(st)) return alert('No permission to export received data.');
+        const m = modState(st);
+        m.reqListPhaseTab = REQ_LIST_PHASE.ALL;
+        _reqListXferExportKind = 'received';
+        closeSpareSyncMenu();
+        await openReqListModal({ xferExport: 'received' });
+    }
+
     async function spareXferExportRequisitions() {
         const { vesselId, isHq } = await vesselScope();
         const all = await TVC_Inventory.listRequisitions(vesselId);
-        const exportable = all.filter(r => reqListCanExport(r));
-        if (!exportable.length) return alert('No requisitions ready to export (Draft excluded).');
+        const exportable = all.filter(r => reqListCanMasterExport(r));
+        if (!exportable.length) return alert('No Confirmed requisitions ready to export.');
         if (!window.confirm(`Export ${exportable.length} requisition(s) to Master PC?`)) return;
         try {
             let ok = 0;
@@ -6460,11 +6680,18 @@ const TVC_SpareMenu = (function () {
         if (!req) return;
         document.querySelectorAll('#reqWorkListScroll [data-spare-id]').forEach(table => {
             const spareId = reqWorkSpareIdKey(table.dataset.spareId);
-            const input = table.querySelector('.spare-req-qty-input');
-            if (!input || !spareId) return;
-            const qty = Math.max(0, Math.floor(Number(input.value) || 0));
-            const line = (req.lines || []).find(l => reqWorkSameSpareId(l.spare_part_id, spareId));
-            if (line) line.qty_requested = qty;
+            const reqInput = table.querySelector('.spare-req-qty-input');
+            if (reqInput && spareId) {
+                const qty = Math.max(0, Math.floor(Number(reqInput.value) || 0));
+                const line = (req.lines || []).find(l => reqWorkSameSpareId(l.spare_part_id, spareId));
+                if (line) line.qty_requested = qty;
+            }
+            const rcvdInput = table.querySelector('.spare-req-rcvd-qty-input');
+            if (rcvdInput && spareId) {
+                const qty = Math.max(0, Math.floor(Number(rcvdInput.value) || 0));
+                const line = (req.lines || []).find(l => reqWorkSameSpareId(l.spare_part_id, spareId));
+                if (line) line.qty_received = qty;
+            }
         });
     }
 
@@ -6651,9 +6878,45 @@ const TVC_SpareMenu = (function () {
         return spareListStatus(req) !== SPARE_LIST_STATUS.DRAFT;
     }
 
+    function reqListCanMasterExport(req) {
+        if (!req) return false;
+        return reqWorkflowPhase(req) === REQ_LIST_PHASE.CONFIRMED;
+    }
+
+    function reqListCanReceivedExport(req) {
+        if (!req) return false;
+        return reqListWorkflowLabel(req) === 'Received';
+    }
+
+    function reqListCanXferExport(req) {
+        if (_reqListXferExportKind === 'received') return reqListCanReceivedExport(req);
+        if (_reqListXferExportKind === 'requisition') return reqListCanMasterExport(req);
+        return reqListCanMasterExport(req);
+    }
+
+    function reqListExportSelectDisabledTitle(req) {
+        const phase = reqWorkflowPhase(req);
+        if (phase === REQ_LIST_PHASE.DRAFT) return 'Draft — complete requisition first';
+        if (phase === REQ_LIST_PHASE.REPORTED) return 'Reported — confirm first';
+        if (phase === REQ_LIST_PHASE.SUBMITTED) return 'Already exported (Submitted)';
+        if (phase === REQ_LIST_PHASE.ASSESSED) return 'Evaluated — not exportable here';
+        if (phase === REQ_LIST_PHASE.RECEIVED) return 'Received — not exportable here';
+        return 'Not exportable';
+    }
+
+    function reqListXferExportSelectDisabledTitle(req) {
+        if (_reqListXferExportKind === 'received') {
+            const label = reqListWorkflowLabel(req);
+            if (label === 'Received') return 'Not exportable';
+            if (label === 'Partial Recv') return 'Partial Recv — complete received date first';
+            return `${label} — only Received status can be exported`;
+        }
+        return reqListExportSelectDisabledTitle(req);
+    }
+
     function reqListCheckedExportableIds(m, allReqs) {
         const map = m.reqListCheckedIds || {};
-        return Object.keys(map).filter(id => map[id] && reqListCanExport(allReqs.find(r => r.id === id)));
+        return Object.keys(map).filter(id => map[id] && reqListCanXferExport(allReqs.find(r => r.id === id)));
     }
 
     function spareApprovalState(record, department, opts = {}) {
@@ -6728,7 +6991,15 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const record = prefix === 'reqWork' ? _reqWorkDraft : null;
         if (cb.checked) {
-            input.value = requisitionConfirmByLabel(st, record);
+            if (prefix === 'closeOs') {
+                input.value = requisitionConfirmByLabel(st, { department: st.department });
+            } else if (record) {
+                input.value = requisitionConfirmByLabel(st, record);
+            } else {
+                input.value = requisitionConfirmByLabel(st, { department: st.department });
+            }
+        } else if (prefix === 'closeOs') {
+            if (!document.getElementById('closeOsConfirmedBy')?.checked) input.value = '';
         } else if (!record?.confirmed_by && !record?.confirmed_at) {
             input.value = '';
         }
@@ -6932,12 +7203,14 @@ const TVC_SpareMenu = (function () {
         if (listMode) {
             const canConfirm = reqListAnyCheckedCanConfirm(m, reqs, st);
             const canDelete = reqListCanDeleteSelection(m, st);
+            const canCloseOs = reqListAnyCloseOsEnabled(m, reqs, st);
             headHtml = `<div class="spare-req-list-head spare-req-hist-popover-head">
                 <h3 class="spare-req-work-title">📋 Requisition List
                     <span class="muted spare-req-list-count">${countLabel}</span>
                 </h3>
                 <span class="spare-req-work-head-spacer"></span>
                 ${spareListToolbarBtn('Confirm', 'TVC_SpareMenu.reqListReportConfirm()', !canConfirm, 'btn-green')}
+                ${spareListToolbarBtn('Close O/S', 'TVC_SpareMenu.openCloseOsModal()', !canCloseOs)}
                 ${spareListToolbarBtn('Delete', 'TVC_SpareMenu.reqListDelete()', !canDelete, 'btn-red')}
                 <span class="orig-toolbar-sep" aria-hidden="true"></span>
                 ${spareListToolbarBtn('Print', 'TVC_SpareMenu.reqListPrint()')}
@@ -7136,6 +7409,9 @@ const TVC_SpareMenu = (function () {
         const headModifyBtn = listMode && !docPreview
             ? `<button type="button" id="reqWorkHeadModifyBtn" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkEnterListEdit()"${!hasDisplayedReq || m.reqWorkListEditing ? ' disabled' : ''} title="${hasDisplayedReq ? 'Enable editing' : 'Select a requisition from the list first'}">Modify</button>`
             : '';
+        const headCloseOsBtn = listMode && !docPreview
+            ? `<button type="button" id="reqWorkHeadCloseOsBtn" class="btn btn-sm" onclick="TVC_SpareMenu.openCloseOsModal()" disabled title="Close outstanding for Received requisition with O/S &gt; 0">Close O/S</button>`
+            : '';
         const headPrintPreviewBtns = listMode && !docPreview
             ? `<button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkPrint()"${printPreviewDisabled ? ' disabled' : ''} title="${hasDisplayedReq ? 'Print requisition' : 'Select a requisition from the list first'}">Print</button>
             <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkDocPreview()"${printPreviewDisabled ? ' disabled' : ''} title="${hasDisplayedReq ? 'Preview requisition' : 'Select a requisition from the list first'}">Preview</button>`
@@ -7148,7 +7424,7 @@ const TVC_SpareMenu = (function () {
             ? `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.reqWorkDocPreviewPrint()">Print</button>
             <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkExitDocPreview()">Close</button>
             <button type="button" class="modal-x" onclick="TVC_SpareMenu.reqWorkExitDocPreview()">×</button>`
-            : `${headNewBtn}${headModifyBtn}
+            : `${headNewBtn}${headModifyBtn}${headCloseOsBtn}
             <button type="button" id="reqWorkSaveBtn" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkSave()"${saveDisabled ? ' disabled' : ''}${saveDisabled && isNewRequisitionWindow(m) && !completeDone && !listViewLocked ? ' title="Enter Request quantity for each selected part before Save."' : ''}>Save</button>
             ${headPrintPreviewBtns}
             <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeReqWorkModal()">Close</button>
@@ -7233,6 +7509,7 @@ const TVC_SpareMenu = (function () {
             requestAnimationFrame(syncReqWorkHeadLayout);
         });
         syncSpareDateInputs(body);
+        syncReqWorkListWindowHeadButtons();
     }
 
     async function startReqWorkSession(createNew = true, opts = {}) {
@@ -7853,6 +8130,22 @@ const TVC_SpareMenu = (function () {
         syncReqLineMap();
         refreshReqWorkListUi();
         syncReqWorkSaveBtn();
+    }
+
+    function reqWorkSetReceivedQty(spareId, rawQty) {
+        if (reqWorkFormLocked() || !reqWorkReceivedQtyEditable()) return;
+        const req = getReqWorkSession();
+        if (!req) return;
+        const sid = reqWorkSpareIdKey(spareId);
+        const qty = Math.max(0, Math.floor(Number(rawQty) || 0));
+        const line = (req.lines || []).find(l => reqWorkSameSpareId(l.spare_part_id, sid));
+        if (!line) return;
+        line.qty_received = qty;
+        syncReqLineMap();
+        syncReportedWaitMap().then(() => {
+            refreshReqWorkListUi();
+            refreshReqListUi();
+        });
     }
 
     async function reqWorkAddSpare(spareId, silent = false) {
@@ -10679,6 +10972,116 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         document.getElementById('spareReceiveConfirmModal')?.classList.add('hidden');
     }
 
+    async function openCloseOsModal() {
+        const st = getState();
+        const m = modState(st);
+        const { vesselId } = await vesselScope();
+        const allReqs = await TVC_Inventory.listRequisitions(vesselId);
+        const target = resolveCloseOsTargetReq(allReqs, m, st);
+        if (!target) {
+            return alert('Select a Received requisition with O/S > 0, or one with a pending O/S close awaiting your approval.');
+        }
+        const req = await TVC_Inventory.getRequisition(target.id);
+        if (!req) return alert('Requisition not found.');
+        _closeOsReqId = req.id;
+        renderCloseOsModal(req);
+        document.getElementById('spareCloseOsModal')?.classList.remove('hidden');
+    }
+
+    function closeCloseOsModal() {
+        _closeOsReqId = null;
+        document.getElementById('spareCloseOsModal')?.classList.add('hidden');
+    }
+
+    function renderCloseOsModal(req) {
+        const st = getState();
+        const approval = closeOsApprovalState(req, st);
+        const osQty = reqRawOutstandingData(req);
+        const reason = String(req.os_waive_reason || '');
+        const reasonLocked = approval.isConfirmed;
+        const body = document.getElementById('spareCloseOsBody');
+        if (!body) return;
+        body.innerHTML = `
+            <h3 class="spare-close-os-title">Close O/S</h3>
+            <p class="muted spare-close-os-meta">Requisition: <strong>${esc(req.req_no || '—')}</strong></p>
+            <p class="spare-close-os-os">Remaining O/S: <strong>${osQty}</strong></p>
+            <div class="spare-close-os-reason">
+                <label class="spare-close-os-reason-label" for="closeOsReason">Reason <span class="muted">(required)</span></label>
+                <textarea id="closeOsReason" class="spare-req-meta-input spare-close-os-reason-input" rows="3" placeholder="Enter reason for closing outstanding quantity"${reasonLocked ? ' readonly' : ''}>${esc(reason)}</textarea>
+            </div>
+            ${renderSpareApprovalHtml({
+                prefix: 'closeOs',
+                canApproveNow: approval.canApproveNow,
+                canConfirmNow: approval.canConfirmNow,
+                isRepApproved: approval.isApproved,
+                isRepConfirmed: approval.isConfirmed,
+                approvedByVal: approval.approvedByVal,
+                confirmedByVal: approval.confirmedByVal,
+            })}
+            <div class="modal-actions spare-close-os-actions">
+                <button type="button" class="btn btn-green" onclick="TVC_SpareMenu.saveCloseOsWaive()">Save</button>
+                <button type="button" class="btn" onclick="TVC_SpareMenu.closeCloseOsModal()">Cancel</button>
+            </div>`;
+    }
+
+    async function saveCloseOsWaive() {
+        if (!_closeOsReqId) return;
+        const req = await TVC_Inventory.getRequisition(_closeOsReqId);
+        if (!req) return alert('Requisition not found.');
+        const st = getState();
+        const reason = String(document.getElementById('closeOsReason')?.value || '').trim();
+        const initiated = reqOsWaiveInitiated(req);
+        if (!initiated && !reason) return alert('Reason is required.');
+        if (!initiated && !reqCanCloseOs(req)) return alert('This requisition cannot close O/S.');
+        if (req.os_waived_confirmed_at && reason !== String(req.os_waive_reason || '').trim()) {
+            return alert('Reason cannot be changed after confirmation.');
+        }
+        let changed = false;
+        const now = new Date().toISOString();
+        if (!req.os_waived_confirmed_at && reason && reason !== String(req.os_waive_reason || '').trim()) {
+            req.os_waive_reason = reason;
+            req.os_closure = 'WAIVED';
+            changed = true;
+        }
+        const approval = closeOsApprovalState(req, st);
+        const cfCb = document.getElementById('closeOsConfirmedBy');
+        const apCb = document.getElementById('closeOsApprovedBy');
+        if (cfCb?.checked && !cfCb.disabled && approval.canConfirmNow) {
+            if (!String(req.os_waive_reason || '').trim() && reason) {
+                req.os_waive_reason = reason;
+                req.os_closure = 'WAIVED';
+            }
+            if (!String(req.os_waive_reason || '').trim()) return alert('Enter reason before confirming.');
+            req.os_waived_confirmed_by = requisitionConfirmByLabel(st, req);
+            req.os_waived_confirmed_at = now;
+            changed = true;
+        }
+        if (apCb?.checked && !apCb.disabled && approval.canApproveNow) {
+            req.os_waived_approved_by = 'Company';
+            req.os_waived_approved_at = now;
+            req.os_closure = 'WAIVED';
+            changed = true;
+        }
+        if (!changed) return alert('No changes to save.');
+        await TVC_Inventory.saveRequisition(req);
+        const loadedId = _reqSheet.reqId || _reqWorkDraft?.id;
+        const m = modState(st);
+        if (loadedId === req.id && isRequisitionListWindow(m)) {
+            await loadRequisitionIntoListWindow(req.id);
+        }
+        await refreshReqListUi();
+        await syncReportedWaitAndRefreshList();
+        syncReqWorkListWindowHeadButtons();
+        if (reqOsWaived(req)) {
+            alert('O/S closed — approved by Company.');
+            closeCloseOsModal();
+            return;
+        }
+        if (req.os_waived_confirmed_at) alert('O/S close request confirmed.');
+        else alert('O/S close request saved.');
+        renderCloseOsModal(req);
+    }
+
     async function confirmSaveReceive(yes) {
         dismissReceiveSaveConfirm();
         if (!yes) return;
@@ -12296,12 +12699,14 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         onTxSearchInput, addTxLine, removeTxLine,
         openHqImportModal, onHqImportFile, openAssessmentModal, closeAssessmentModal, applyHqAssessment,
         openSpareSyncMenu, closeSpareSyncMenu, spareXferPickMode, spareXferBack, spareXferTriggerImport,
-        spareXferExportRequisitions, spareXferExportReceived, spareXferExportInventory,
+        spareXferOpenReqExportList, spareXferOpenReceivedExportList, spareXferExportRequisitions, spareXferExportReceived, spareXferExportInventory,
+        reqListXferExportBack,
         openHistoryModal, closeHistoryModal,
         openSpareItemHistory, openSpareItemHistoryForFocus, closeSpareItemHistoryModal, setSpareItemHistoryTab,
         spareHistOpenConsumeLog, spareHistOpenRequisition,
         openReqListModal, closeReqListModal, reqListNew, reqListModify, reqListDelete,
         reqListPreview, reqListDetailReport, reqListReportConfirm, reqListExportToMaster, reqListDocPreview, reqListPrint,
+        openCloseOsModal, closeCloseOsModal, saveCloseOsWaive,
         reqListSelectRow, reqListToggleRow, reqListToggleAll, reqListPickRow, reqListPickToggleRow,
         reqListSetPeriod, reqListClearPeriod, reqListSetSearch, reqListClearSearch, reqListSetPhase,
         openReqSheetModal, closeReqSheetModal, saveReqSheetModal,
@@ -12319,7 +12724,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         consumeLogSetPeriod, consumeLogClearPeriod, consumeLogSetSearch, consumeLogClearSearch,
         closeReqWorkModal, reqWorkComplete, reqWorkSave, reqWorkSwitchToNew, reqWorkEnterListEdit, reqWorkOpenList, reqWorkPrint, reqWorkDocPreview, reqWorkDocPreviewPrint, reqWorkExitDocPreview, reqWorkPrintPreview, reqWorkAddSpare, addToRequisition, reqWorkAddChecked, captureReqWorkMeta,
         toggleReqWorkHistList, reqWorkPickReqNo,
-        reqWorkSetRequestQty,
+        reqWorkSetRequestQty, reqWorkSetReceivedQty,
         reqWorkSelectGroup, reqWorkSetTreeSearch, reqWorkToggleGroupTree, reqWorkSetSearch, reqWorkToggleLowOnly,
         reqWorkToggleSelectedOnly,
         reqWorkFocusRow, reqWorkToggleRow, reqWorkToggleAll, toggleSpareAll,

@@ -172,7 +172,7 @@ const TVC_Excel = (function () {
         { header: 'Work', key: 'working', width: 10 },
         { header: 'Std', key: 'standard', width: 10 },
         { header: 'Rob', key: 'stock', width: 10 },
-        { header: 'Wait', key: 'awaiting', width: 10 },
+        { header: 'O/S', key: 'awaiting', width: 10 },
         { header: 'Need', key: 'need', width: 10 },
     ];
 

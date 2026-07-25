@@ -1611,7 +1611,7 @@ const TVC_App = (function () {
     }
 
     function menuXferCanExportTarget(user, target) {
-        if (!user) return false;
+        if (!user || !target) return false;
         if (target === 'COMPANY') {
             return typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
         }
@@ -1626,26 +1626,170 @@ const TVC_App = (function () {
         return TVC_RBAC.canAccessDepartment(user, dept);
     }
 
-    function menuXferExportTargetButtonsHtml() {
-        const user = state.user;
-        const targets = [
-            ['COMPANY', 'Company'],
-            ['ENGINE', 'Engine'],
-            ['DECK', 'Deck'],
-        ];
-        return targets.map(([id, label]) => {
-            const ok = menuXferCanExportTarget(user, id);
-            if (ok) {
-                return `<button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickExportTarget('${id}')">${esc(label)}</button>`;
+    function menuXferResolveExportTarget(user, exportType) {
+        if (!user) return null;
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) {
+            return 'COMPANY';
+        }
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user)) {
+            return user.department || (TVC_Space.getStation(user) === TVC_Space.Station.CCR ? 'DECK' : 'ENGINE');
+        }
+        if (TVC_RBAC.isHqAccount(user)) {
+            return state.department || user.department || null;
+        }
+        return user.department || state.department || null;
+    }
+
+    function menuXferExportTargetLabel(target) {
+        if (target === 'COMPANY') return 'Company';
+        return target ? TVC_RBAC.getDeptLabel(target) : '—';
+    }
+
+    function menuXferDefectExportRows() {
+        const target = menuXferResolveExportTarget(state.user, 'defect');
+        const cases = defectCasesForExportTarget(state.defectCases || [], target || 'COMPANY');
+        return cases
+            .filter(c => c.visible_in_list !== false)
+            .sort((a, b) => String(b.report_date || b.created_at || '').localeCompare(String(a.report_date || a.created_at || '')));
+    }
+
+    function menuXferDefectRowSelectable(row) {
+        return TVC_DefectCase.listWorkflowStatus(row) === 'Confirmed';
+    }
+
+    function menuXferDefectSelectDisabledTitle(row) {
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (st === 'Submitted') return 'Already exported (Submitted)';
+        if (st === 'Approved') return 'Approved — not exportable here';
+        if (st === 'Draft') return 'Draft — not in list workflow';
+        if (st === 'Reported') return 'Reported — confirm first';
+        return 'Not exportable';
+    }
+
+    function menuXferDefectSelectHtml() {
+        const rows = menuXferDefectExportRows();
+        const sel = _menuXfer.selectedDefectIds || {};
+        const selectable = rows.filter(menuXferDefectRowSelectable);
+        const selectedCount = selectable.filter(r => sel[r.id]).length;
+        const allChecked = selectable.length > 0 && selectable.every(r => sel[r.id]);
+        let tableBody = '';
+        if (!rows.length) {
+            tableBody = `<tr><td colspan="6" class="muted menu-xfer-empty">No defect reports in scope.</td></tr>`;
+        } else {
+            tableBody = rows.map(row => {
+                const cols = defectHistoryColumns(row);
+                const st = TVC_DefectCase.listWorkflowStatus(row);
+                const dt = formatCmaxsHistDate(row.report_date || row.created_at);
+                const canSelect = menuXferDefectRowSelectable(row);
+                const checked = canSelect && !!sel[row.id];
+                const chk = canSelect
+                    ? `<input type="checkbox" class="menu-xfer-defect-chk" data-defect-id="${escAttr(row.id)}"${checked ? ' checked' : ''}>`
+                    : `<input type="checkbox" disabled title="${escAttr(menuXferDefectSelectDisabledTitle(row))}">`;
+                return `<tr class="menu-xfer-defect-row${canSelect ? '' : ' menu-xfer-defect-row-disabled'}">
+                    <td class="menu-xfer-chk">${chk}</td>
+                    <td>${esc(String(row.file_no || '').trim())}</td>
+                    <td>${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
+                    <td>${histCellHtml(cols.sort1)}</td>
+                    <td class="hist-status">${esc(st)}</td>
+                    <td>${esc(dt || '—')}</td>
+                </tr>`;
+            }).join('');
+        }
+        return `
+            <p class="spare-sync-hint">Select <strong>Confirmed</strong> defect reports to export.</p>
+            <p class="spare-sync-note muted">Only Confirmed (not yet Submitted) rows can be selected. Reported, Draft, Submitted, and Approved rows are shown for reference.</p>
+            <div class="menu-xfer-table-wrap">
+                <table class="menu-xfer-table">
+                    <thead><tr>
+                        <th class="menu-xfer-chk"><input type="checkbox" id="menuXferDefectSelectAll"${allChecked ? ' checked' : ''}${selectable.length ? '' : ' disabled'}></th>
+                        <th>File No</th><th>Job Code</th><th>SORT-1</th><th>Status</th><th>Reported Date</th>
+                    </tr></thead>
+                    <tbody>${tableBody}</tbody>
+                </table>
+            </div>
+            <div class="spare-sync-actions">
+                <button type="button" id="menuXferDefectExportBtn" class="btn btn-green spare-sync-btn"${selectedCount ? '' : ' disabled'} onclick="TVC_App.menuXferConfirmDefectExport()">${selectedCount ? `Export (${selectedCount})` : 'Export'}</button>
+            </div>`;
+    }
+
+    function menuXferMonthlyReadyHtml() {
+        const dept = getPlanLockDept();
+        const locked = isOriginalPlanUpdateLocked(dept);
+        const dest = menuXferExportTargetLabel(menuXferResolveExportTarget(state.user, 'monthly'));
+        if (!locked && !TVC_RBAC.isHqAccount(state.user)) {
+            return `
+                <p class="spare-sync-hint">Export <strong>Monthly Report</strong></p>
+                <p class="menu-xfer-block-msg">Update Work Plan must be completed first.</p>
+                <p class="spare-sync-note muted">Complete Work Plan → Update Plan before exporting the Monthly Report.</p>`;
+        }
+        const lock = state._originalPlanLock?.[dept];
+        const month = lock?.month || '—';
+        const stats = lock?.stats;
+        let summary = `<p class="muted">Destination: <strong>${esc(dest)}</strong></p>`;
+        if (lock) {
+            summary += `<ul class="menu-xfer-summary">
+                <li>Department: ${esc(TVC_RBAC.getDeptLabel(dept) || dept || '—')}</li>
+                <li>Plan month: ${esc(month)}</li>`;
+            if (stats?.statusDate) summary += `<li>Status date: ${esc(stats.statusDate)}</li>`;
+            if (stats?.nonCritical || stats?.critical) {
+                summary += `<li>Outstanding — Non-critical: ${esc(String(stats.nonCritical?.outstanding ?? '—'))}, Critical: ${esc(String(stats.critical?.outstanding ?? '—'))}</li>`;
             }
-            return `<button type="button" class="btn spare-sync-btn" disabled title="No permission">${esc(label)}</button>`;
-        }).join('');
+            summary += '</ul>';
+        } else if (TVC_RBAC.isHqAccount(state.user)) {
+            summary += `<p class="muted">HQ export for ${esc(TVC_RBAC.getDeptLabel(dept) || dept || 'selected department')}.</p>`;
+        }
+        return `
+            <p class="spare-sync-hint">Export <strong>Monthly Report</strong></p>
+            ${summary}
+            <div class="spare-sync-actions">
+                <button type="button" id="menuXferMonthlyExportBtn" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferConfirmMonthlyExport()">Export</button>
+            </div>`;
+    }
+
+    function menuXferUpdateDefectExportBtn() {
+        const btn = document.getElementById('menuXferDefectExportBtn');
+        if (!btn) return;
+        const count = Object.keys(_menuXfer.selectedDefectIds || {}).filter(id => _menuXfer.selectedDefectIds[id]).length;
+        btn.disabled = count === 0;
+        btn.textContent = count ? `Export (${count})` : 'Export';
+    }
+
+    function bindMenuXferDefectTableEvents() {
+        const body = document.getElementById('menuXferBody');
+        if (!body || body._menuXferDefectBound) return;
+        body._menuXferDefectBound = true;
+        body.addEventListener('change', (ev) => {
+            const all = ev.target.closest('#menuXferDefectSelectAll');
+            if (all) {
+                const checked = all.checked;
+                if (!_menuXfer.selectedDefectIds) _menuXfer.selectedDefectIds = {};
+                menuXferDefectExportRows().filter(menuXferDefectRowSelectable).forEach(row => {
+                    if (checked) _menuXfer.selectedDefectIds[row.id] = true;
+                    else delete _menuXfer.selectedDefectIds[row.id];
+                });
+                renderMenuXferModal();
+                return;
+            }
+            const cb = ev.target.closest('.menu-xfer-defect-chk');
+            if (!cb || !cb.dataset.defectId) return;
+            if (!_menuXfer.selectedDefectIds) _menuXfer.selectedDefectIds = {};
+            if (cb.checked) _menuXfer.selectedDefectIds[cb.dataset.defectId] = true;
+            else delete _menuXfer.selectedDefectIds[cb.dataset.defectId];
+            menuXferUpdateDefectExportBtn();
+            const selectable = menuXferDefectExportRows().filter(menuXferDefectRowSelectable);
+            const selectAll = document.getElementById('menuXferDefectSelectAll');
+            if (selectAll) {
+                selectAll.checked = selectable.length > 0 && selectable.every(r => _menuXfer.selectedDefectIds[r.id]);
+            }
+        });
     }
 
     function renderMenuXferModal() {
         const body = document.getElementById('menuXferBody');
         if (!body) return;
         const step = _menuXfer.step || 'mode';
+        const modalBox = document.querySelector('#menuXferModal .modal-box');
+        if (modalBox) modalBox.classList.toggle('menu-xfer-wide', step === 'export-defect-select');
         let content = '';
         if (step === 'mode') {
             content = `
@@ -1661,11 +1805,10 @@ const TVC_App = (function () {
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickExportType('defect')">Defect Report</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickExportType('monthly')">Monthly Report</button>
                 </div>`;
-        } else if (step === 'export-target') {
-            const typeLabel = _menuXfer.exportType === 'defect' ? 'Defect Report' : 'Monthly Report';
-            content = `
-                <p class="spare-sync-hint">Export <strong>${esc(typeLabel)}</strong> — select destination.</p>
-                <div class="spare-sync-actions">${menuXferExportTargetButtonsHtml()}</div>`;
+        } else if (step === 'export-defect-select') {
+            content = menuXferDefectSelectHtml();
+        } else if (step === 'export-monthly-ready') {
+            content = menuXferMonthlyReadyHtml();
         } else if (step === 'import') {
             content = `
                 <p class="spare-sync-hint">Select a file from Master PC or Company.</p>
@@ -1679,8 +1822,9 @@ const TVC_App = (function () {
             : '';
         const stepLabel = step === 'mode' ? '1. Export or Import'
             : step === 'export-type' ? '2. Export — report type'
-                : step === 'export-target' ? '3. Export — destination'
-                    : '2. Import — select file';
+                : step === 'export-defect-select' ? '3. Export — select defects'
+                    : step === 'export-monthly-ready' ? '3. Export — monthly report'
+                        : '2. Import — select file';
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeMenuXferMenu()">×</button>
             <h3 class="spare-sync-title">Data Export &amp; Import</h3>
@@ -1689,6 +1833,7 @@ const TVC_App = (function () {
             <div class="modal-actions spare-sync-footer">${backBtn}
                 <button type="button" class="btn" onclick="TVC_App.closeMenuXferMenu()">Close</button>
             </div>`;
+        if (step === 'export-defect-select') bindMenuXferDefectTableEvents();
     }
 
     function openMenuXferMenu() {
@@ -1709,8 +1854,9 @@ const TVC_App = (function () {
     }
 
     function menuXferBack() {
-        if (_menuXfer.step === 'export-target') {
+        if (_menuXfer.step === 'export-defect-select' || _menuXfer.step === 'export-monthly-ready') {
             _menuXfer.step = 'export-type';
+            delete _menuXfer.selectedDefectIds;
         } else if (_menuXfer.step === 'export-type' || _menuXfer.step === 'import') {
             _menuXfer.step = 'mode';
         }
@@ -1719,18 +1865,44 @@ const TVC_App = (function () {
 
     function menuXferPickExportType(type) {
         _menuXfer.exportType = type;
-        _menuXfer.step = 'export-target';
+        if (type === 'defect') {
+            _menuXfer.step = 'export-defect-select';
+            _menuXfer.selectedDefectIds = {};
+        } else {
+            _menuXfer.step = 'export-monthly-ready';
+        }
         renderMenuXferModal();
     }
 
-    async function menuXferPickExportTarget(target) {
-        if (!menuXferCanExportTarget(state.user, target)) {
-            return alert('No permission to export to this destination.');
+    async function menuXferConfirmDefectExport() {
+        const ids = Object.keys(_menuXfer.selectedDefectIds || {}).filter(id => _menuXfer.selectedDefectIds[id]);
+        if (!ids.length) return alert('Select at least one Confirmed defect to export.');
+        const target = menuXferResolveExportTarget(state.user, 'defect');
+        if (!target || !menuXferCanExportTarget(state.user, target)) {
+            return alert('No permission to export defect reports.');
         }
+        const destLabel = menuXferExportTargetLabel(target);
+        if (!confirm(`Export ${ids.length} defect report(s) to ${destLabel}?`)) return;
         closeMenuXferMenu();
         try {
-            if (_menuXfer.exportType === 'defect') await menuXferExportDefect(target);
-            else await menuXferExportMonthly(target);
+            await menuXferExportDefect(target, ids);
+        } catch (e) { alert(e.message || e); }
+    }
+
+    async function menuXferConfirmMonthlyExport() {
+        const dept = getPlanLockDept();
+        if (!TVC_RBAC.isHqAccount(state.user) && !isOriginalPlanUpdateLocked(dept)) {
+            return alert('Update Work Plan must be completed first.');
+        }
+        const target = menuXferResolveExportTarget(state.user, 'monthly');
+        if (!target || !menuXferCanExportTarget(state.user, target)) {
+            return alert('No permission to export monthly report.');
+        }
+        const destLabel = menuXferExportTargetLabel(target);
+        if (!confirm(`Export Monthly Report to ${destLabel}?`)) return;
+        closeMenuXferMenu();
+        try {
+            await menuXferExportMonthly(target);
         } catch (e) { alert(e.message || e); }
     }
 
@@ -1764,50 +1936,56 @@ const TVC_App = (function () {
         alert(`${TVC_RBAC.getDeptLabel(dept)} Monthly Report exported.`);
     }
 
-    async function menuXferExportDefect(target) {
+    async function exportSelectedDefectCase(user, caseRow) {
+        if (TVC_DefectCase.listWorkflowStatus(caseRow) !== 'Confirmed') {
+            throw new Error(`${caseRow.case_no}: only Confirmed cases can be exported.`);
+        }
+        if (TVC_RBAC.isHqAccount(user)) {
+            if (caseRow.status === TVC_DefectCase.Status.COMPANY_REVIEWED) {
+                await TVC_DefectSync.exportHqReplyZip(user, caseRow.id);
+                return;
+            }
+            throw new Error(`${caseRow.case_no}: not ready for HQ export.`);
+        }
+        if (caseRow.status === TVC_DefectCase.Status.AWAITING_COMPLETION) {
+            await TVC_DefectSync.exportCompletionZip(user, caseRow.id);
+            return;
+        }
+        if (caseRow.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) {
+            throw new Error(`${caseRow.case_no}: complete Phase 3 before export.`);
+        }
+        if (caseRow.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) {
+            await TVC_DefectCaseService.submitToCompany(user, caseRow.id);
+        }
+        await TVC_DefectSync.exportUrgentZip(user, caseRow.id);
+    }
+
+    async function menuXferExportDefect(target, selectedIds) {
         const user = TVC_Auth.getCurrentUser();
         if (!user) return;
-        const isHq = TVC_RBAC.isHqAccount(user);
-        const allCases = state.defectCases || [];
-        let exported = 0;
+        const ids = (selectedIds || []).filter(Boolean);
+        if (!ids.length) throw new Error('No defect reports selected.');
 
-        if (isHq) {
-            const targets = defectCasesForExportTarget(
-                allCases.filter(c => c.status === TVC_DefectCase.Status.COMPANY_REVIEWED),
-                target,
-            );
-            if (!targets.length) throw new Error('No HQ reply packages ready to export for this destination.');
-            for (const c of targets) {
-                await TVC_DefectSync.exportHqReplyZip(user, c.id);
-                exported++;
-            }
-        } else {
-            const urgent = defectCasesForExportTarget(
-                allCases.filter(c => c.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY),
-                target,
-            );
-            const completion = defectCasesForExportTarget(
-                allCases.filter(c =>
-                    c.status === TVC_DefectCase.Status.AWAITING_COMPLETION
-                    || c.status === TVC_DefectCase.Status.WORK_IN_PROGRESS),
-                target,
-            );
-            if (!urgent.length && !completion.length) {
-                throw new Error('No defect reports ready to export for this destination.');
-            }
-            for (const c of urgent) {
-                await TVC_DefectSync.exportUrgentZip(user, c.id);
-                exported++;
-            }
-            for (const c of completion) {
-                await exportDefectCompletion(c.id);
-                exported++;
-            }
+        const allCases = state.defectCases || [];
+        const selected = ids.map(id => allCases.find(c => c.id === id)).filter(Boolean);
+        const scoped = defectCasesForExportTarget(selected, target);
+        if (!scoped.length) throw new Error('No selected defect reports match this destination.');
+
+        let exported = 0;
+        for (const c of scoped) {
+            await exportSelectedDefectCase(user, c);
+            exported++;
         }
-        if (exported) {
-            const dest = target === 'COMPANY' ? 'Company' : TVC_RBAC.getDeptLabel(target);
-            alert(`Exported ${exported} defect package(s) → ${dest}.`);
+        if (!exported) throw new Error('No Confirmed defect reports ready to export.');
+
+        await refreshAll();
+        if (state.currentTab === 'menu') {
+            renderSyncHistory();
+            TVC_DefectReport?.renderInbox?.();
         }
+        if (state.currentTab === 'defect') TVC_DefectReport?.renderTab?.();
+        const dest = target === 'COMPANY' ? 'Company' : TVC_RBAC.getDeptLabel(target);
+        alert(`Exported ${exported} defect package(s) → ${dest}.`);
     }
 
     function menuXferTriggerImport() {
@@ -6325,7 +6503,8 @@ const TVC_App = (function () {
         handleLogin, handleLogout, handleExport, handleImport, handleHubImport, handleDefectImport,
         urgentExportDefect, exportDefectCompletion, loadSeedFile,
         openMenuXferMenu, closeMenuXferMenu, menuXferPickMode, menuXferBack, menuXferTriggerImport,
-        menuXferPickExportType, menuXferPickExportTarget,
+        menuXferPickExportType,
+        menuXferConfirmDefectExport, menuXferConfirmMonthlyExport,
         menuXferExportDefect, menuXferExportMonthly, onMenuXferImportFile,
         openMenuHistoryModal, closeMenuHistoryModal,
         uploadAttachment, saveDetailReport, closeModal, showModal, dismissSpicsAlerts, openSpicsRequisition,

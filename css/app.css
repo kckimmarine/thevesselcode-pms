@@ -5500,6 +5500,56 @@ label.spare-file-pick input[type=file] { display: none; }
     justify-content: flex-end;
 }
 .spare-sync-back { margin-right: auto; }
+
+.menu-xfer-wide { max-width: 760px; }
+.menu-xfer-block-msg {
+    margin: 0 0 10px;
+    padding: 10px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #9b2c2c;
+    background: #fff5f5;
+    border: 1px solid #feb2b2;
+    border-radius: 8px;
+}
+.menu-xfer-summary {
+    margin: 0 0 14px;
+    padding: 10px 12px 10px 28px;
+    font-size: 13px;
+    line-height: 1.5;
+    background: #f7fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.menu-xfer-table-wrap {
+    max-height: 280px;
+    overflow: auto;
+    margin: 0 0 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.menu-xfer-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.menu-xfer-table th,
+.menu-xfer-table td {
+    padding: 6px 8px;
+    border-bottom: 1px solid #edf2f7;
+    text-align: left;
+    vertical-align: middle;
+}
+.menu-xfer-table thead th {
+    position: sticky;
+    top: 0;
+    background: #f7fafc;
+    font-weight: 600;
+    z-index: 1;
+}
+.menu-xfer-chk { width: 32px; text-align: center; }
+.menu-xfer-defect-row-disabled { opacity: 0.55; }
+.menu-xfer-empty { text-align: center; padding: 16px 8px; }
 .spare-hist-sub {
     margin: -4px 0 12px;
     font-size: 12px;
@@ -6133,6 +6183,38 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     gap: 12px;
 }
 .df-cancel-confirm-actions .btn { min-width: 72px; }
+
+.spare-close-os-modal { z-index: 10200; }
+.spare-close-os-box {
+    width: min(96vw, 480px);
+    max-width: 96vw;
+    padding: 20px 22px 18px;
+}
+.spare-close-os-title {
+    margin: 0 0 8px;
+    font-size: 1.05rem;
+    color: #1a365d;
+}
+.spare-close-os-meta { margin: 0 0 6px; font-size: 0.92rem; }
+.spare-close-os-os { margin: 0 0 12px; font-size: 0.95rem; }
+.spare-close-os-reason { margin-bottom: 12px; }
+.spare-close-os-reason-label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+.spare-close-os-reason-input {
+    width: 100%;
+    min-height: 72px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+.spare-close-os-box .wr-maint-approval { margin: 0 0 14px; }
+.spare-close-os-actions {
+    justify-content: flex-end;
+    gap: 8px;
+}
 
 .modal-box.df-modal {
     width: min(98vw, 1200px);
