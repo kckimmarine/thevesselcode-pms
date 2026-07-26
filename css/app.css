@@ -798,9 +798,16 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     accent-color: #cbd5e0;
 }
 .c-code { width: 72px; flex-shrink: 0; }
-.c-s1 { width: 130px; flex-shrink: 0; position: relative; overflow: visible; color: #2c5282; font-weight: 600; }
-.c-d1 { width: 120px; flex-shrink: 0; position: relative; overflow: visible; color: #553c9a; font-weight: 600; }
-.c-d2 { flex: 1; min-width: 100px; position: relative; overflow: visible; }
+.c-s1,
+.c-d1,
+.c-d2 {
+    flex: 1 1 0;
+    min-width: 100px;
+    position: relative;
+    overflow: visible;
+}
+.c-s1 { color: #2c5282; font-weight: 600; }
+.c-d1 { color: #553c9a; font-weight: 600; }
 .vl-cell-tip-text {
     display: block;
     overflow: hidden;
@@ -1073,6 +1080,26 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .wp-meta-row { display: flex; flex-wrap: wrap; gap: 16px; font-size: 12px; margin-bottom: 10px; color: #4a5568; }
 .wp-label { font-size: 12px; font-weight: 700; color: var(--navy); display: block; margin-bottom: 6px; }
 .wp-proc-box { min-height: 160px; max-height: 320px; }
+.wp-proc-input {
+    width: 100%;
+    min-height: 160px;
+    max-height: 320px;
+    box-sizing: border-box;
+    font-size: 13px;
+    line-height: 1.45;
+    padding: 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #f7fafc;
+    resize: vertical;
+    font-family: inherit;
+}
+.wp-modal-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+}
 .wp-section { margin-bottom: 14px; }
 .wp-section-head { font-weight: 700; font-size: 13px; color: var(--navy); margin-bottom: 6px; }
 .wp-table-wrap { max-height: 200px; overflow: auto; border: 1px solid #e2e8f0; border-radius: 8px; }
@@ -1926,16 +1953,8 @@ input.tvc-date-input::placeholder {
     min-width: 72px;
     max-width: 72px;
 }
-.orig-job-inline-table .c-s1 {
-    width: 130px;
-    min-width: 130px;
-    max-width: 130px;
-}
-.orig-job-inline-table .c-d1 {
-    width: 120px;
-    min-width: 120px;
-    max-width: 120px;
-}
+.orig-job-inline-table .c-s1,
+.orig-job-inline-table .c-d1,
 .orig-job-inline-table .c-d2 {
     width: auto;
     min-width: 100px;
@@ -6050,18 +6069,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     max-width: 100%;
     table-layout: fixed;
 }
-/* Work History — Type column (between ㅁ and JOB CODE) */
-#tab-history .hist-table-history-list th.hist-type-h,
-#tab-history .hist-table-history-list td.hist-type {
-    width: calc(4ch + 2ch);
-    min-width: calc(4ch + 2ch);
-    max-width: calc(4ch + 2ch);
-    padding-left: 1ch;
-    padding-right: 1ch;
-    text-align: center;
-    vertical-align: middle;
-    white-space: nowrap;
-}
+/* Work History — Type column styling */
 #tab-history .hist-table-history-list th.hist-type-h {
     font-size: inherit;
     font-weight: 600;
@@ -6079,71 +6087,6 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 .list-tab-frame .hist-table-history-list {
     min-width: 0;
 }
-.list-tab-frame .hist-table-defect-list th.hist-code-h,
-.list-tab-frame .hist-table-defect-list td.hist-code,
-.list-tab-frame .hist-table-history-list th.hist-code-h,
-.list-tab-frame .hist-table-history-list td.hist-code {
-    width: max-content;
-    padding-left: 1ch;
-    padding-right: 1ch;
-    white-space: nowrap;
-}
-.list-tab-frame .hist-table-defect-list th.hist-status-h,
-.list-tab-frame .hist-table-defect-list td.hist-status,
-.list-tab-frame .hist-table-history-list th.hist-status-h,
-.list-tab-frame .hist-table-history-list td.hist-status {
-    width: max-content;
-    min-width: calc(9ch + 2ch);
-    padding-left: 1ch;
-    padding-right: 1ch;
-    white-space: nowrap;
-    text-align: center;
-}
-.list-tab-frame .hist-table-defect-list th.hist-flag-h,
-.list-tab-frame .hist-table-defect-list td.hist-flag,
-.list-tab-frame .hist-table-history-list th.hist-flag-h,
-.list-tab-frame .hist-table-history-list td.hist-flag {
-    width: calc(2ch + 2ch);
-    min-width: calc(2ch + 2ch);
-    max-width: calc(2ch + 2ch);
-    padding-left: 1ch;
-    padding-right: 1ch;
-    text-align: center;
-    overflow: visible;
-    white-space: nowrap;
-}
-.list-tab-frame .hist-table-defect-list th.hist-at-ship-h,
-.list-tab-frame .hist-table-defect-list td.hist-at-ship,
-.list-tab-frame .hist-table-history-list th.hist-at-ship-h,
-.list-tab-frame .hist-table-history-list td.hist-at-ship {
-    width: max-content;
-    min-width: calc(6ch + 2ch);
-    padding-left: 1ch;
-    padding-right: 1ch;
-    text-align: center;
-    white-space: nowrap;
-}
-.list-tab-frame .hist-table-defect-list th.hist-at-company-h,
-.list-tab-frame .hist-table-defect-list td.hist-at-company,
-.list-tab-frame .hist-table-history-list th.hist-at-company-h,
-.list-tab-frame .hist-table-history-list td.hist-at-company {
-    width: max-content;
-    min-width: calc(9ch + 2ch);
-    padding-left: 1ch;
-    padding-right: 1ch;
-    text-align: center;
-    white-space: nowrap;
-}
-.list-tab-frame .hist-table-defect-list th.hist-date-h,
-.list-tab-frame .hist-table-defect-list td.hist-date,
-.list-tab-frame .hist-table-history-list th.hist-date-h,
-.list-tab-frame .hist-table-history-list td.hist-date {
-    width: max-content;
-    min-width: calc(8ch + 2ch);
-    padding-left: 1ch;
-    padding-right: 1ch;
-    text-align: center;
-}
 .list-tab-frame .hist-table-defect-list th.hist-date-h,
 .list-tab-frame .hist-table-defect-list th.hist-at-ship-h,
 .list-tab-frame .hist-table-defect-list th.hist-at-company-h,
@@ -6152,17 +6095,149 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 .list-tab-frame .hist-table-history-list th.hist-at-company-h {
     white-space: normal;
 }
+/* Defect Report list — fixed columns; SORT-1 / SORT-2 min 130px, grow together */
+.list-tab-frame .hist-table-defect-list th.hist-file-h,
+.list-tab-frame .hist-table-defect-list td.hist-file {
+    width: 115px;
+    min-width: 115px;
+    max-width: 115px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.list-tab-frame .hist-table-defect-list th.hist-code-h,
+.list-tab-frame .hist-table-defect-list td.hist-code {
+    width: 72px;
+    min-width: 72px;
+    max-width: 72px;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-date-h,
+.list-tab-frame .hist-table-defect-list td.hist-date {
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-status-h,
+.list-tab-frame .hist-table-defect-list td.hist-status {
+    width: 96px;
+    min-width: 96px;
+    max-width: 96px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-flag-h,
+.list-tab-frame .hist-table-defect-list td.hist-flag {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    padding-left: 4px;
+    padding-right: 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-at-ship-h,
+.list-tab-frame .hist-table-defect-list td.hist-at-ship {
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-defect-list th.hist-at-company-h,
+.list-tab-frame .hist-table-defect-list td.hist-at-company {
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
+    text-align: center;
+    white-space: nowrap;
+}
 .list-tab-frame .hist-table-defect-list th.hist-sort1-h,
 .list-tab-frame .hist-table-defect-list td.hist-sort1,
 .list-tab-frame .hist-table-defect-list th.hist-sort2-h,
-.list-tab-frame .hist-table-defect-list td.hist-sort2,
+.list-tab-frame .hist-table-defect-list td.hist-sort2 {
+    width: auto;
+    min-width: 130px;
+    max-width: none;
+}
+/* Work History list — fixed columns + Type; SORT-1 / SORT-2 min 130px, grow together */
+.list-tab-frame .hist-table-history-list th.hist-type-h,
+.list-tab-frame .hist-table-history-list td.hist-type {
+    width: 52px;
+    min-width: 52px;
+    max-width: 52px;
+    padding-left: 4px;
+    padding-right: 4px;
+    text-align: center;
+    vertical-align: middle;
+    white-space: nowrap;
+    overflow: visible;
+    text-overflow: clip;
+}
+#tab-history .list-table-scroll-wrap .hist-table-history-list th.hist-type-h {
+    padding: 8px 4px;
+    overflow: visible;
+    text-overflow: clip;
+}
+.list-tab-frame .hist-table-history-list th.hist-code-h,
+.list-tab-frame .hist-table-history-list td.hist-code {
+    width: 72px;
+    min-width: 72px;
+    max-width: 72px;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-history-list th.hist-date-h,
+.list-tab-frame .hist-table-history-list td.hist-date {
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-history-list th.hist-status-h,
+.list-tab-frame .hist-table-history-list td.hist-status {
+    width: 96px;
+    min-width: 96px;
+    max-width: 96px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-history-list th.hist-flag-h,
+.list-tab-frame .hist-table-history-list td.hist-flag {
+    width: 40px;
+    min-width: 40px;
+    max-width: 40px;
+    padding-left: 4px;
+    padding-right: 4px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-history-list th.hist-at-ship-h,
+.list-tab-frame .hist-table-history-list td.hist-at-ship {
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-history-list th.hist-at-company-h,
+.list-tab-frame .hist-table-history-list td.hist-at-company {
+    width: 88px;
+    min-width: 88px;
+    max-width: 88px;
+    text-align: center;
+    white-space: nowrap;
+}
 .list-tab-frame .hist-table-history-list th.hist-sort1-h,
 .list-tab-frame .hist-table-history-list td.hist-sort1,
 .list-tab-frame .hist-table-history-list th.hist-sort2-h,
 .list-tab-frame .hist-table-history-list td.hist-sort2 {
     width: auto;
+    min-width: 130px;
     max-width: none;
-    min-width: 5ch;
 }
 
 .df-cancel-confirm-modal { z-index: 10200; }

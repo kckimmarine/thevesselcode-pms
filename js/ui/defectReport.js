@@ -1155,7 +1155,13 @@ const TVC_DefectReport = (function () {
             const el = document.getElementById(id);
             if (el) { if (dis) el.setAttribute('disabled', ''); else el.removeAttribute('disabled'); }
         };
+        const setVis = (id, show) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', !show);
+        };
         setDis('dfBtnDetail', !row);
+        const modifiableStatus = !!(row && TVC_DefectCase.canModifyListWorkflow(row));
+        setVis('dfBtnModify', modifiableStatus);
         setDis('dfBtnModify', !row || !canModifyDfListRow(row));
         setDis('dfBtnDelete', !(row && canDeleteDfListRow(row)) && !checkedRows.some(canDeleteDfListRow));
         setDis('dfBtnConfirm', !canConfirm && !(row && isDfListRowConfirmable(row)));
@@ -1305,20 +1311,24 @@ const TVC_DefectReport = (function () {
         return 'edit';
     }
 
-    function openCaseFromNav(id, navSource) {
+    function openCaseFromNav(id, navSource, modeOverride) {
         const row = (getState().defectCases || []).find(c => c.id === id);
         getState()._dfNavSource = navSource;
         if (navSource === 'history') {
             openCase(id, 'view');
             return;
         }
-        openCase(id, row ? resolveDfOpenMode(row) : 'edit');
+        if (modeOverride) {
+            openCase(id, modeOverride);
+            return;
+        }
+        openCase(id, 'view');
     }
 
     function dfDetailReport() {
         const row = getSelectedDfRow();
         if (!row) return alert('Defect Report 목록에서 항목을 선택하세요.');
-        openCaseFromNav(row.id, 'list');
+        openCaseFromNav(row.id, 'list', 'view');
     }
 
     function dfModifyReport() {
@@ -1329,7 +1339,7 @@ const TVC_DefectReport = (function () {
             if (st === 'Confirmed') return alert('Confirmed 상태는 Captain / Chief Engineer만 수정할 수 있습니다.');
             return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
         }
-        openCaseFromNav(row.id, 'list');
+        openCaseFromNav(row.id, 'list', row ? resolveDfOpenMode(row) : 'edit');
     }
 
     async function dfReportConfirm() {
@@ -1404,7 +1414,7 @@ const TVC_DefectReport = (function () {
         pruneDfListChecked();
         const all = defectListRowsRaw();
         const rows = defectListRows();
-        const colSpan = 14;
+        const colSpan = 15;
         const countEl = document.getElementById('dfListCount');
         if (countEl) countEl.textContent = `${rows.length} / ${all.length} entries`;
         const searchEl = document.getElementById('dfListSearch');
@@ -1435,6 +1445,7 @@ const TVC_DefectReport = (function () {
             return TVC_App.buildDefectHistRowHtml(r, {
                 selected: _dfListSelId === r.id,
                 checkboxHtml: chk,
+                fileNoColumn: true,
                 criticalColumn: true,
                 omitDetailColumn: true,
                 onclick: `TVC_DefectReport.selectDfListRow('${escAttr(r.id)}', event)`,
@@ -1878,7 +1889,7 @@ const TVC_DefectReport = (function () {
     }
 
     function openCaseFromList(id) {
-        openCaseFromNav(id, 'list');
+        openCaseFromNav(id, 'list', 'view');
     }
 
     async function openNewFromJob(jobId) {

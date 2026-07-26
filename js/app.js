@@ -35,6 +35,7 @@ const TVC_App = (function () {
         selectedJobId: null,
         _wpJobId: null,
         _wpTab: 'procedure',
+        _wpEditing: false,
         _wrJobId: null,
         _wrTab: 'repair',
         _wrPage: '1',
@@ -2494,6 +2495,19 @@ const TVC_App = (function () {
         return !isOriginalPlanUpdateLocked(getPlanLockDept());
     }
 
+    /** Work Procedure text — CE/Captain/HQ; not blocked by Original Plan lock */
+    function canEditWorkProcedure() {
+        if (!state.user) return false;
+        return TVC_RBAC.canModifyOriginalPlan(state.user);
+    }
+
+    function workProcedureEditDeniedMessage() {
+        if (state.user && TVC_RBAC.isShipAccount(state.user) && !TVC_RBAC.isApprover(state.user)) {
+            return 'Captain / Chief Engineer만 Work Procedure를 수정할 수 있습니다.';
+        }
+        return 'Work Procedure를 편집할 수 없습니다.';
+    }
+
     /** HQ MODE — Original Plan GROUP Tree 그룹명 수정·추가 */
     function canEditOriginalPlanGroups() {
         return canEditOriginalPlanItems() && TVC_RBAC.isHqAccount(state.user);
@@ -2729,7 +2743,7 @@ const TVC_App = (function () {
         const unitSelect = `<select class="spare-inline-input orig-inline-unit" id="oie_unit" onclick="event.stopPropagation()">${units.map(u => `<option ${(r.unit || 'M') === u ? 'selected' : ''}>${u}</option>`).join('')}</select>`;
         const groupSelect = `<select class="spare-inline-input spare-inline-input-wide" id="oie_group" onclick="event.stopPropagation()">${origGroupOptions(dept, r.group)}</select>`;
         const codeCell = origJobCellInput('oie_code', r.job_code);
-        const colgroup = '<colgroup><col style="width:32px"><col style="width:56px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
+        const colgroup = '<colgroup><col style="width:32px"><col style="width:56px"><col style="width:72px"><col><col><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
         return `<section class="spare-item-edit-panel orig-job-inline-panel" aria-label="Maintenance job edit">
             <div class="spare-item-edit-head">${panelHead}</div>
             <div class="orig-job-inline-meta">
@@ -4054,6 +4068,9 @@ const TVC_App = (function () {
         const chk = opts.checkboxHtml ?? '<input type="checkbox" disabled>';
         const onclick = opts.onclick ? ` onclick="${opts.onclick}"` : '';
         const ondblclick = opts.ondblclick ? ` ondblclick="${opts.ondblclick}"` : '';
+        const fileNoCell = opts.fileNoColumn
+            ? `<td class="hist-file">${esc(String(dc.file_no || '').trim() || '—')}</td>`
+            : '';
         const typeCell = opts.criticalColumn ? defectCriticalTypeCell(dc) : defectReportTypeCell();
         const critCell = opts.includeCriticalColumn ? defectCriticalTypeCell(dc) : '';
         const detailCell = opts.omitDetailColumn ? '' : `<td class="hist-detail">${histCellHtml(cols.jobDetail)}</td>`;
@@ -4062,6 +4079,7 @@ const TVC_App = (function () {
         const atCompanyClass = useListColStyle ? 'hist-at-company' : '';
         return `<tr class="hist-row hist-row-defect${sel}" data-df-id="${escAttr(dc.id)}" data-hist-key="${escAttr(rowKey)}"${onclick}${ondblclick}>
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
+                ${fileNoCell}
                 ${typeCell}
                 ${critCell}
                 <td class="hist-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
@@ -4582,7 +4600,10 @@ const TVC_App = (function () {
         if (!job) return alert('작업을 찾을 수 없습니다.');
         clearPlanRowRefreshTimer();
         _planRowLastTap = { id: null, t: 0 };
-        if (state._wpJobId !== job.id) state._wpTab = 'procedure';
+        if (state._wpJobId !== job.id) {
+            state._wpTab = 'procedure';
+            state._wpEditing = false;
+        }
         state._wpJobId = job.id;
         state.selectedJobId = job.id;
         updatePlanRowSelectionHighlight(job.id);
@@ -4603,12 +4624,41 @@ const TVC_App = (function () {
 
     function setWorkProcedureTab(tab) {
         state._wpTab = tab;
+        if (tab !== 'procedure') state._wpEditing = false;
         try {
             renderWorkProcedureModal();
         } catch (err) {
             console.error('[WorkProcedure tab]', err);
             alert('Work History 화면을 불러오지 못했습니다.');
         }
+    }
+
+    function enterWorkProcedureEdit() {
+        if (!canEditWorkProcedure()) return alert(workProcedureEditDeniedMessage());
+        state._wpEditing = true;
+        renderWorkProcedureModal();
+        requestAnimationFrame(() => document.getElementById('wpProcedureInput')?.focus());
+    }
+
+    function cancelWorkProcedureEdit() {
+        state._wpEditing = false;
+        renderWorkProcedureModal();
+    }
+
+    function saveWorkProcedure() {
+        const job = resolveJobById(state._wpJobId);
+        if (!job) return;
+        if (!canEditWorkProcedure()) return alert(workProcedureEditDeniedMessage());
+        const text = String(document.getElementById('wpProcedureInput')?.value ?? '').trim();
+        TVC_JobMeta.setProcedure(job.job_code, text);
+        TVC_JobMeta.addHistory(job.job_code, {
+            action: 'PROCEDURE_SAVED',
+            user: state.user?.display_name || '',
+            notes: text.slice(0, 100),
+        });
+        state._wpEditing = false;
+        renderWorkProcedureModal();
+        alert('Work Procedure saved.');
     }
 
     function renderWorkProcedureModal() {
@@ -4622,6 +4672,11 @@ const TVC_App = (function () {
 
         let tabContent = '';
         if (state._wpTab === 'procedure') {
+            const procText = meta.procedure || job.job_detail || '';
+            const editing = !!state._wpEditing;
+            const procField = editing
+                ? `<textarea id="wpProcedureInput" class="wp-proc-input" rows="12" aria-label="Work Procedure">${esc(procText)}</textarea>`
+                : `<div class="proc-box wp-proc-box">${esc(procText || 'No procedure registered.')}</div>`;
             tabContent = `
                 <div class="wp-meta-row">
                     <span><b>Interval</b> ${job.period ?? '—'} ${esc(job.unit || '')}</span>
@@ -4629,7 +4684,7 @@ const TVC_App = (function () {
                     <span><b>P.I.C</b> ${esc(job.pic || '—')}</span>
                 </div>
                 <label class="wp-label">Work Procedure</label>
-                <div class="proc-box wp-proc-box">${esc(meta.procedure || job.job_detail || 'No procedure registered.')}</div>`;
+                ${procField}`;
         } else {
             const histRows = histEntries.length ? histEntries.map(({ report: r, item }) => {
                 const f = item.form || wrReportForm(r);
@@ -4671,6 +4726,17 @@ const TVC_App = (function () {
                 </div>`;
         }
 
+        const canEditProc = canEditWorkProcedure();
+        const editingProc = state._wpTab === 'procedure' && !!state._wpEditing;
+        const procEditTip = escAttr(workProcedureEditDeniedMessage());
+        let procEditBtns = '';
+        if (state._wpTab === 'procedure') {
+            procEditBtns = editingProc
+                ? `<button type="button" class="btn btn-green" onclick="TVC_App.saveWorkProcedure()">Save</button>
+                <button type="button" class="btn" onclick="TVC_App.cancelWorkProcedureEdit()">Cancel</button>`
+                : `<button type="button" class="btn" onclick="TVC_App.enterWorkProcedureEdit()"${canEditProc ? '' : ` disabled title="${procEditTip}"`}>Modify</button>`;
+        }
+
         host.innerHTML = `
             <h3 class="wp-title">Work Procedure</h3>
             <div class="wp-job-head">
@@ -4684,9 +4750,10 @@ const TVC_App = (function () {
                 <button type="button" class="wp-tab${histActive}" onclick="TVC_App.setWorkProcedureTab('history')">Work History &amp; Consumed Spare Parts</button>
             </div>
             <div class="wp-tab-pane">${tabContent}</div>
-            <div class="modal-actions">
-                <button class="btn btn-green" onclick="TVC_App.closeModal('workProcedureModal');TVC_App.openWorkReportInput('${job.id}')">Report Input</button>
-                <button class="btn" onclick="TVC_App.closeModal('workProcedureModal')">Close</button>
+            <div class="modal-actions wp-modal-actions">
+                ${procEditBtns}
+                <button type="button" class="btn btn-green" onclick="TVC_App.closeModal('workProcedureModal');TVC_App.openWorkReportInput('${job.id}')"${editingProc ? ' disabled' : ''}>Report Input</button>
+                <button type="button" class="btn" onclick="TVC_App.closeModal('workProcedureModal')">Close</button>
             </div>`;
     }
 
@@ -6142,7 +6209,10 @@ const TVC_App = (function () {
         const detailCell = opts.omitDetail
             ? ''
             : `<td>${esc(cols.jobDetail || '')}</td>`;
-        return `<td>${esc(cols.jobCode || '—')}</td>
+        const fileNoCell = opts.includeFileNo
+            ? `<td>${esc(String(dc.file_no || '').trim() || '—')}</td>`
+            : '';
+        return `${fileNoCell}<td>${esc(cols.jobCode || '—')}</td>
             <td>${esc(cols.sort1 || '')}</td>
             <td>${esc(cols.sort2 || '')}</td>
             ${detailCell}
@@ -6161,7 +6231,7 @@ const TVC_App = (function () {
         </tr>`;
 
     const PRINT_DEFECT_LIST_HEAD = `<tr>
-            <th>JOB CODE</th><th>SORT-1</th><th>SORT-2</th>
+            <th>File No</th><th>JOB CODE</th><th>SORT-1</th><th>SORT-2</th>
             <th>Reported Date</th><th>Status</th>
             <th>RR</th><th>SS</th><th>DC</th><th>SC</th><th>CC</th>
             <th>Ship's AT</th><th>Company's AT</th>
@@ -6217,11 +6287,11 @@ const TVC_App = (function () {
             filterParts.push(`Period: ${state.reportPeriodFrom || '…'} ~ ${state.reportPeriodTo || '…'}`);
         }
         filterParts.push(...(TVC_ListFilters?.describeFilters('defect', state) || []));
-        const bodyRows = rows.map(dc => `<tr>${printDefectRowCells(dc, { omitDetail: true })}</tr>`).join('');
+        const bodyRows = rows.map(dc => `<tr>${printDefectRowCells(dc, { omitDetail: true, includeFileNo: true })}</tr>`).join('');
         return `${printListMeta('Defect Report')}
             ${printFilterNote(filterParts)}
             <p class="meta">${rows.length} entr${rows.length === 1 ? 'y' : 'ies'}</p>
-            <table>${PRINT_DEFECT_LIST_HEAD}${bodyRows || `<tr><td colspan="12">No defect reports to print.</td></tr>`}</table>`;
+            <table>${PRINT_DEFECT_LIST_HEAD}${bodyRows || `<tr><td colspan="13">No defect reports to print.</td></tr>`}</table>`;
     }
 
     function buildWorkHistoryPrintBody() {
@@ -6503,7 +6573,9 @@ const TVC_App = (function () {
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
         getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs,
         renderSectionCard,
-        openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab, openProcedureHistory, openProcedureHistoryByCode,
+        openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab,
+        enterWorkProcedureEdit, cancelWorkProcedureEdit, saveWorkProcedure,
+        openProcedureHistory, openProcedureHistoryByCode,
         openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport,
         uploadWrAttachment, removeWrAttachment,
         toggleWrGroupPick, toggleWrJobPick, pickWrGroup, pickWrJob, wrGroupPickSearch, wrJobPickSearch,

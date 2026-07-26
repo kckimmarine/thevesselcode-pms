@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260725-df-wr-style">
+    <link rel="stylesheet" href="css/app.css?v=20260726-df-file-w115">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260724-req-multi-action">
 </head>
 <body>
@@ -187,7 +187,7 @@
                     <button type="button" id="dfBtnDetail" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfDetailReport()">Detail Defect Report</button>
                     <button type="button" id="dfBtnConfirm" class="btn btn-sm btn-green" disabled onclick="TVC_DefectReport.dfReportConfirm()">Report Confirm</button>
                     <span class="orig-toolbar-sep"></span>
-                    <button type="button" id="dfBtnModify" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfModifyReport()">Modify</button>
+                    <button type="button" id="dfBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_DefectReport.dfModifyReport()">Modify</button>
                     <button type="button" id="dfBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_DefectReport.dfDeleteReport()">Delete</button>
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', false)">🖨 Print</button>
@@ -220,6 +220,7 @@
                 <table class="sheet-table hist-table hist-table-defect-list">
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="dfSelectAll" title="Select all confirmable" onclick="TVC_DefectReport.toggleDfListSelectAll(this.checked)"></th>
+                        <th class="hist-file-h">File No</th>
                         <th class="hist-crit-h" title="Critical Equipment" aria-label="Critical Equipment">⚠</th>
                         <th class="hist-code-h">JOB CODE</th>
                         <th class="hist-sort1-h">SORT-1</th>
@@ -429,7 +430,7 @@
         <div id="jobDetailBody"></div>
     </div>
 </div>
-<div id="workProcedureModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('workProcedureModal')">
+<div id="workProcedureModal" class="modal hidden">
     <div class="modal-box wp-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_App.closeModal('workProcedureModal')">×</button>
         <div id="workProcedureBody"></div>
     </div>
@@ -635,9 +636,9 @@
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260725-hist-type-letter"></script>
-<script src="js/ui/defectReport.js?v=20260725-df-wr-style"></script>
+<script src="js/ui/defectReport.js?v=20260726-df-modify"></script>
 <script src="js/ui/outstandingTasks.js?v=20260722-hq-ot"></script>
-<script src="js/app.js?v=20260726-act-scroll-keep"></script>
+<script src="js/app.js?v=20260726-wp-modify-fix"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>
