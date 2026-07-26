@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260727-hist-nav-smooth">
+    <link rel="stylesheet" href="css/app.css?v=20260727-rh-cols">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260724-req-multi-action">
 </head>
 <body>
@@ -189,9 +189,10 @@
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" id="dfBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_DefectReport.dfModifyReport()">Modify</button>
                     <button type="button" id="dfBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_DefectReport.dfDeleteReport()">Delete</button>
-                    <span class="orig-toolbar-sep"></span>
-                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', false)">🖨 Print</button>
-                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', true)">👁 Preview</button>
+                    <div class="tab-toolbar-end">
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', false)">🖨 Print</button>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', true)">👁 Preview</button>
+                    </div>
                 </div>
                 <div class="hist-toolbar hist-toolbar-filters list-filter-stack">
                     <div class="filter-bar list-filter-period-row">
@@ -285,9 +286,10 @@
                         <button type="button" id="actModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">✏️ Modify</button>
                         <button type="button" id="actAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">➕ Append</button>
                         <button type="button" id="actDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">🗑 Delete</button>
-                        <span class="orig-toolbar-sep"></span>
-                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', false)">🖨 Print</button>
-                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', true)">👁 Preview</button>
+                        <div class="tab-toolbar-end">
+                            <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', false)">🖨 Print</button>
+                            <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', true)">👁 Preview</button>
+                        </div>
                     </div>
                     <div id="actFilterDashboard" class="act-filter-dashboard"></div>
                     <div class="list-filter-stack">
@@ -332,9 +334,10 @@
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" id="histBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_App.histModifyReport()">Modify</button>
                     <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
-                    <span class="orig-toolbar-sep"></span>
-                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', false)">🖨 Print</button>
-                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', true)">👁 Preview</button>
+                    <div class="tab-toolbar-end">
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', false)">🖨 Print</button>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', true)">👁 Preview</button>
+                    </div>
                 </div>
                 <div class="hist-toolbar hist-toolbar-filters list-filter-stack">
                     <div class="filter-bar list-filter-period-row">
@@ -390,24 +393,33 @@
                 <h2>⏱ Running Hours</h2>
                 <span class="sheet-sub">Run-hour based predictive scheduling · M/E &amp; No.1~3 G/E</span>
             </div>
-            <div class="rh-toolbar filter-bar">
-                <button type="button" id="rhUpdateBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateRunHrs()">↻ Update</button>
-                <button type="button" id="rhRevertBtn" class="btn btn-sm" onclick="TVC_App.revertRunHrs()" disabled>↩ Revert</button>
-                <span class="rh-toolbar-sep" aria-hidden="true"></span>
-                <label class="rh-last-label" for="rhLastUpdated">Last Updated Date</label>
-                <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="—" aria-label="Last Updated Date">
-            </div>
-            <div class="sheet-table-wrap list-table-scroll-wrap">
-                <table class="sheet-table runhrs-table">
-                    <thead><tr>
-                        <th>Group / Equipment</th>
-                        <th>Run hour Jobs</th>
-                        <th>Actual Run Hours<br>Previous Month</th>
-                        <th>Total Run Hours</th>
-                        <th>Estimated Run Hours<br>Next month</th>
-                    </tr></thead>
-                    <tbody id="runHrsBody"></tbody>
-                </table>
+            <div class="rh-content-frame">
+                <div class="rh-toolbar filter-bar">
+                    <button type="button" id="rhUpdateBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateRunHrs()">↻ Update</button>
+                    <button type="button" id="rhRevertBtn" class="btn btn-sm" onclick="TVC_App.revertRunHrs()" disabled>↩ Revert</button>
+                    <span class="rh-toolbar-sep" aria-hidden="true"></span>
+                    <label class="rh-last-label" for="rhLastUpdated">Last Updated Date</label>
+                    <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="—" aria-label="Last Updated Date">
+                </div>
+                <div class="sheet-table-wrap list-table-scroll-wrap">
+                    <table class="sheet-table runhrs-table">
+                        <colgroup>
+                            <col class="rh-col-equip">
+                            <col class="rh-col-jobs">
+                            <col class="rh-col-hours">
+                            <col class="rh-col-hours">
+                            <col class="rh-col-hours">
+                        </colgroup>
+                        <thead><tr>
+                            <th class="rh-equip-h">Group / Equipment</th>
+                            <th class="rh-jobs-h">Run hour Jobs</th>
+                            <th class="rh-hours-h">Actual Run Hours<br>Previous Month</th>
+                            <th class="rh-hours-h">Total Run Hours</th>
+                            <th class="rh-hours-h">Estimated Run Hours<br>Next month</th>
+                        </tr></thead>
+                        <tbody id="runHrsBody"></tbody>
+                    </table>
+                </div>
             </div>
         </section>
 
@@ -617,7 +629,7 @@
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js?v=20260723-rh-gate"></script>
-<script src="js/ui/spareMenu.js?v=20260725-close-os"></script>
+<script src="js/ui/spareMenu.js?v=20260727-tab-print-end"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -636,9 +648,9 @@
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260725-hist-type-letter"></script>
-<script src="js/ui/defectReport.js?v=20260727-hist-nav-smooth"></script>
+<script src="js/ui/defectReport.js?v=20260727-df-draft-title"></script>
 <script src="js/ui/outstandingTasks.js?v=20260722-hq-ot"></script>
-<script src="js/app.js?v=20260727-hist-nav-smooth"></script>
+<script src="js/app.js?v=20260727-wr-draft-title"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

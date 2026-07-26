@@ -5886,7 +5886,9 @@ const TVC_App = (function () {
             const closeBtn = `<button class="btn" onclick="TVC_App.requestCloseWorkReport()">${ro ? 'Close' : 'Cancel'}</button>`;
             actionsHtml = `${navBtns}${primaryBtn}${closeBtn}`;
         }
-        const titleText = isHist ? 'Work Report' : (ro ? 'Work Report (View)' : 'Work Report');
+        const titleText = isHist
+            ? 'Work Report'
+            : (isNewUnsavedWorkReportSession() ? 'Work Report (Draft)' : (ro ? 'Work Report (View)' : 'Work Report'));
 
         host.innerHTML = `
             <div class="wr-titlebar">${titleText}</div>

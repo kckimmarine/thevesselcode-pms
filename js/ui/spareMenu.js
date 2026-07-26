@@ -2388,8 +2388,10 @@ const TVC_SpareMenu = (function () {
                 <button type="button" class="btn btn-sm btn-excel" onclick="TVC_SpareMenu.exportPartsListXlsx()" title="Export Excel (.xlsx)">
                     <span class="btn-excel-icon" aria-hidden="true">X</span> Export XLS
                 </button>
-                <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('spare', false)">🖨 Print</button>
-                <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('spare', true)">👁 Preview</button>
+                <div class="tab-toolbar-end">
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('spare', false)">🖨 Print</button>
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('spare', true)">👁 Preview</button>
+                </div>
               </div>
               <div id="spareFilterDashboard" class="act-filter-dashboard"></div>
               <div class="filter-bar spare-list-search-bar">

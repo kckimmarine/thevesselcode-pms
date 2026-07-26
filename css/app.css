@@ -740,6 +740,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .orig-toolbar .btn-red { background: #c53030; color: #fff; border: none; }
 .orig-toolbar .btn-red:disabled { opacity: .45; cursor: not-allowed; }
 .orig-toolbar-sep { width: 1px; height: 22px; background: #cbd5e0; margin: 0 4px; }
+.tab-toolbar-end { margin-left: auto; display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
 .orig-toolbar .btn:disabled { opacity: .45; cursor: not-allowed; }
 .orig-job-editor { max-width: 640px; width: 96%; }
 .orig-job-editor h3 { margin: 0 0 12px; color: var(--navy); font-size: 16px; }
@@ -2309,13 +2310,29 @@ input.tvc-date-input::placeholder {
 .hist-row.row-selected,
 .sheet-table tbody tr.hist-row.row-selected { background: rgba(66, 153, 225, 0.35) !important; }
 .hist-row.row-selected:hover { background: rgba(66, 153, 225, 0.45) !important; }
-.rh-input { width: 120px; padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 13px; }
+.rh-input { width: min(120px, 92%); max-width: 100%; padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+.runhrs-table { table-layout: fixed; width: 100%; }
+.runhrs-table col.rh-col-equip { width: 30%; }
+.runhrs-table col.rh-col-jobs { width: 10%; }
+.runhrs-table col.rh-col-hours { width: 20%; }
 .runhrs-table th { vertical-align: middle; line-height: 1.25; }
-.runhrs-table .rh-equip { min-width: 220px; }
-.runhrs-table .rh-jobs { width: 100px; text-align: center; font-variant-numeric: tabular-nums; }
-.runhrs-table .rh-prev,
-.runhrs-table .rh-total-cell,
-.runhrs-table .rh-exp { width: 160px; }
+.runhrs-table th:first-child,
+.runhrs-table td:first-child {
+    text-align: left;
+    padding-left: calc(16px * var(--ui-scale, 1));
+}
+.runhrs-table th:nth-child(n+2),
+.runhrs-table td:nth-child(n+2) {
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+}
+.runhrs-table td.rh-prev .rh-input,
+.runhrs-table td.rh-total-cell .rh-input,
+.runhrs-table td.rh-exp .rh-input {
+    display: block;
+    margin-left: auto;
+    margin-right: auto;
+}
 .rh-total { font-weight: 700; color: #1a365d; font-variant-numeric: tabular-nums; }
 .rh-total.rh-total-live { color: #276749; background: #f0fff4; }
 .rh-toolbar {
@@ -2328,6 +2345,26 @@ input.tvc-date-input::placeholder {
     background: #f7fafc;
     border: 1px solid #e2e8f0;
     border-radius: 10px;
+}
+#tab-runhrs .rh-content-frame {
+    margin: 0 20px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    min-width: 0;
+    flex: 1;
+}
+#tab-runhrs .rh-content-frame .rh-toolbar {
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+#tab-runhrs .rh-content-frame .sheet-table-wrap {
+    margin: 0;
+    width: 100%;
+    box-sizing: border-box;
+    border-radius: 10px;
+    scrollbar-gutter: auto;
 }
 .rh-toolbar-sep {
     width: 1px;

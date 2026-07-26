@@ -1808,7 +1808,9 @@ const TVC_DefectReport = (function () {
         const canSave = !forceView && (
             canEditP1 || canEditCompanyReply || canEditShipVerify || canEditP4 || canEditCompanyFinal || canHqApproveOnly
         );
-        const titleText = fromListNav ? 'Defect Report' : (forceView ? 'Defect Report (View)' : 'Defect Report');
+        const titleText = fromListNav || fromHistoryNav
+            ? 'Defect Report'
+            : (isDraftDefectSession() ? 'Defect Report (Draft)' : (forceView ? 'Defect Report (View)' : 'Defect Report'));
 
         const pageTabs = `
             <div class="wr-pagetabs">
@@ -2020,9 +2022,10 @@ const TVC_DefectReport = (function () {
         let row = await TVC_DefectCaseService.saveDraft(s.user, data, id);
         row = await syncDefectConsumeStock(row, data.used_parts);
         s._dfSavedToList = true;
+        promoteNewDefectToListView(id);
         await refresh();
         await reopenDefectCaseAfterSave(id);
-        alert('Defect Report draft saved.');
+        alert('Defect Report saved.');
     }
 
     async function submitCase() {
@@ -2124,6 +2127,19 @@ const TVC_DefectReport = (function () {
     function isNewUnsavedDefectSession() {
         const s = getState();
         return !!(s._dfNewSession && !s._dfSavedToList && s._defectCaseId && !s._dfNavSource);
+    }
+
+    function isDraftDefectSession() {
+        const s = getState();
+        return !!(s._dfNewSession && !s._dfSavedToList && !s._dfNavSource);
+    }
+
+    function promoteNewDefectToListView(id) {
+        const s = getState();
+        if (!s._dfNewSession || s._dfNavSource) return;
+        s._dfNavSource = 'list';
+        s._dfNewSession = false;
+        _dfListSelId = id;
     }
 
     function showCancelConfirm() {
