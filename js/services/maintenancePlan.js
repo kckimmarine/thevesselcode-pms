@@ -62,9 +62,10 @@ const TVC_MaintenancePlan = (function () {
         const fields = ['group', 'job_code', 'sort', 'item_sort1', 'item_sort2', 'job_detail',
             'period', 'unit', 'pic', 'next_date', 'last_done', 'is_critical_equipment'];
         const p = normalizePatch(patch);
+        const prevJobCode = job.job_code;
         fields.forEach(f => { if (p[f] !== undefined) job[f] = p[f]; });
 
-        if (p.job_code && p.job_code !== job.job_code) {
+        if (p.job_code && p.job_code !== prevJobCode) {
             const dup = await TVC_DB.indexGetAll('maintenance_jobs', 'by_job_code', p.job_code);
             if (dup.some(j => j.id !== jobId)) {
                 throw Object.assign(new Error('JOB_CODE_EXISTS'), { code: 'DUPLICATE' });

@@ -1399,13 +1399,13 @@ const TVC_App = (function () {
         return `<span class="c-crit" title="Critical Equipment">${planCriticalMarkHtml()}</span>`;
     }
 
-    function origJobCriticalReadonlyHtml(draft) {
-        const pseudo = {
-            group: draft?.group || '',
-            department: draft?.department || state.department || '',
-            is_critical_equipment: null,
-        };
-        return planCriticalCellHtml(pseudo);
+    function origJobCriticalSelect(id, value) {
+        const v = value || '';
+        return `<select class="spare-inline-input orig-inline-critical" id="${escAttr(id)}" onclick="event.stopPropagation()" aria-label="Critical Equipment">
+            <option value=""${v === '' ? ' selected' : ''}>—</option>
+            <option value="Yes"${v === 'Yes' ? ' selected' : ''}>Yes</option>
+            <option value="No"${v === 'No' ? ' selected' : ''}>No</option>
+        </select>`;
     }
 
     function renderJobRowHtml(j) {
@@ -1458,6 +1458,25 @@ const TVC_App = (function () {
         head.scrollLeft = scroll.scrollLeft;
     }
 
+    function captureActListScroll() {
+        const scroll = document.getElementById('actScroll');
+        return scroll ? scroll.scrollTop : 0;
+    }
+
+    function restoreActListScroll(scrollTop) {
+        if (scrollTop == null || scrollTop < 0) return;
+        const container = document.getElementById('actScroll');
+        if (!container) return;
+        const apply = () => {
+            container.scrollTop = scrollTop;
+            state.vlActual?.refresh();
+        };
+        requestAnimationFrame(() => {
+            apply();
+            requestAnimationFrame(apply);
+        });
+    }
+
     function bindPlanSheetLayoutSync(scrollId, headId) {
         const scroll = document.getElementById(scrollId);
         if (!scroll) return;
@@ -1485,6 +1504,8 @@ const TVC_App = (function () {
         if (headId === 'actHead') renderPlanGroupHeader(headId);
         const container = document.getElementById(scrollId);
         if (!container) return;
+        const restoreScrollTop = scrollId === 'actScroll' ? state._actScrollRestore : null;
+        if (scrollId === 'actScroll') state._actScrollRestore = null;
         const arrow = f => state.jobSort.field === f ? (state.jobSort.asc ? ' ▲' : ' ▼') : '';
         setText(countId, `${ids.length} jobs`);
         const head = document.getElementById(headId);
@@ -1517,6 +1538,7 @@ const TVC_App = (function () {
             },
         });
         state[vlKey].refresh();
+        if (restoreScrollTop != null) restoreActListScroll(restoreScrollTop);
         if (scrollId === 'actScroll') initPlanCellTips(scrollId);
         bindPlanSheetLayoutSync(scrollId, headId);
     }
@@ -2706,9 +2728,7 @@ const TVC_App = (function () {
         const units = ['M', 'W', 'D', 'H', 'Y'];
         const unitSelect = `<select class="spare-inline-input orig-inline-unit" id="oie_unit" onclick="event.stopPropagation()">${units.map(u => `<option ${(r.unit || 'M') === u ? 'selected' : ''}>${u}</option>`).join('')}</select>`;
         const groupSelect = `<select class="spare-inline-input spare-inline-input-wide" id="oie_group" onclick="event.stopPropagation()">${origGroupOptions(dept, r.group)}</select>`;
-        const codeCell = isNew
-            ? origJobCellInput('oie_code', r.job_code)
-            : `<span class="orig-inline-ro">${esc(r.job_code || '')}</span>`;
+        const codeCell = origJobCellInput('oie_code', r.job_code);
         const colgroup = '<colgroup><col style="width:32px"><col style="width:56px"><col style="width:72px"><col style="width:130px"><col style="width:120px"><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
         return `<section class="spare-item-edit-panel orig-job-inline-panel" aria-label="Maintenance job edit">
             <div class="spare-item-edit-head">${panelHead}</div>
@@ -2733,7 +2753,7 @@ const TVC_App = (function () {
                     </tr></thead>
                     <tbody><tr class="spare-row-editing">
                         <td class="c-chk"></td>
-                        <td class="c-crit">${origJobCriticalReadonlyHtml(r)}</td>
+                        <td class="c-crit">${origJobCriticalSelect('oie_critical', r.is_critical_equipment)}</td>
                         <td class="c-code">${codeCell}</td>
                         <td class="c-s1">${origJobCellInput('oie_sort1', r.item_sort1)}</td>
                         <td class="c-d1">${origJobCellInput('oie_sort2', r.item_sort2)}</td>
@@ -2803,21 +2823,22 @@ const TVC_App = (function () {
         syncPlanItemUi();
     }
 
-    function cancelOrigJobInlineEdit() {
+    function cancelOrigJobInlineEdit(opts = {}) {
+        const scrollTop = captureActListScroll();
         const m = origJobInlineState();
         m.editId = null;
         m.mode = null;
         m.draft = null;
         refreshActJobEditBlock();
         syncPlanItemUi();
+        if (opts.restoreScroll !== false) restoreActListScroll(scrollTop);
     }
 
     function readOrigJobInlineForm() {
         const g = (id) => { const el = document.getElementById(id); return el ? String(el.value).trim() : ''; };
         const m = origJobInlineState();
-        const isNew = m.editId === NEW_ORIG_JOB_EDIT_ID;
         return {
-            job_code: isNew ? g('oie_code') : (m.draft?.job_code || ''),
+            job_code: g('oie_code'),
             group: g('oie_group'),
             sort: m.draft?.sort || '',
             item_sort1: g('oie_sort1'),
@@ -2828,6 +2849,7 @@ const TVC_App = (function () {
             pic: g('oie_pic'),
             next_date: g('oie_next'),
             last_done: g('oie_last'),
+            is_critical_equipment: g('oie_critical'),
         };
     }
 
@@ -2844,24 +2866,26 @@ const TVC_App = (function () {
         if (!data.job_code) return alert('Job Code를 입력하세요.');
         if (!data.group) return alert('GROUP을 선택하세요.');
         try {
+            state._actScrollRestore = captureActListScroll();
             if (m.mode === 'append') {
                 const ctx = defaultAppendContext();
                 await TVC_MaintenancePlan.createJob(user, {
                     ...data,
                     department: ctx.dept,
-                    is_critical_equipment: null,
+                    is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
                 });
                 alert(`${data.job_code} 항목이 추가되었습니다.`);
             } else {
                 await TVC_MaintenancePlan.updateJob(user, m.editId, {
                     ...data,
-                    is_critical_equipment: null,
+                    is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
                 });
                 alert(`${data.job_code} 항목이 수정되었습니다.`);
             }
-            cancelOrigJobInlineEdit();
+            cancelOrigJobInlineEdit({ restoreScroll: false });
             await refreshAll();
         } catch (e) {
+            state._actScrollRestore = null;
             const msg = e.code === 'DUPLICATE' ? '동일한 Job Code가 이미 존재합니다.'
                 : e.code === 'FORBIDDEN' ? '타 부서 항목은 편집할 수 없습니다.'
                 : (e.message || e.code);
@@ -2906,7 +2930,7 @@ const TVC_App = (function () {
             <h3>${title}</h3>
             <form class="orig-job-form" id="origJobForm" onsubmit="event.preventDefault();TVC_App.saveOrigJobEditor()">
                 <label>Department<input value="${esc(dept)}" readonly class="wr-ro"></label>
-                <label>Job Code<input name="job_code" required value="${esc(job?.job_code || '')}" ${isNew ? '' : 'readonly class="wr-ro"'}></label>
+                <label>Job Code<input name="job_code" required value="${esc(job?.job_code || '')}"></label>
                 <label class="span2">GROUP
                     <select name="group">${origGroupOptions(dept, (job?.group || '').trim())}</select>
                 </label>
