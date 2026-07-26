@@ -1242,7 +1242,34 @@ const TVC_DefectReport = (function () {
     function modifyDefectModal() {
         const id = getState()._defectCaseId;
         if (!id) return;
-        openCase(id, 'edit');
+        const row = (getState().defectCases || []).find(c => c.id === id);
+        const mode = row && getState()._dfNavSource === 'list'
+            ? resolveDfOpenMode(row)
+            : 'edit';
+        openCase(id, mode);
+    }
+
+    async function cancelDefectModalEdit() {
+        const s = getState();
+        const id = s._defectCaseId;
+        if (!id) return;
+        if (s._dfNavSource !== 'list') return requestCloseModal();
+        closeAllDfPicks();
+        if ((s._dfPage || '1') === '2') {
+            TVC_SpareMenu.teardownWrSparePage2();
+            dfSpareContextLeave();
+        }
+        s._dfDraft = null;
+        s._dfCaseId = null;
+        s._dfUsedPartsCaseId = null;
+        s._dfUsedParts = [];
+        await openCase(id, 'view');
+    }
+
+    async function reopenDefectCaseAfterSave(id) {
+        const nav = getState()._dfNavSource;
+        if (nav === 'list') await openCase(id, 'view');
+        else await openCase(id);
     }
 
     async function syncDefectConsumeStock(row, usedParts) {
@@ -1809,28 +1836,31 @@ const TVC_DefectReport = (function () {
                 </div>`;
         }
 
+        let actionsClass = 'modal-actions wr-actions df-modal-actions';
         let actionsHtml;
         if (fromListNav || fromHistoryNav) {
+            actionsClass += ' df-modal-actions-split';
             const canModifyRow = canModifyDfListRow(row);
-            const canDeleteRow = canDeleteDfListRow(row);
             const navBtns = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>`;
             const printBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.printDefectModal()">Print</button>`;
             const closeBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button>`;
-            if (!canModifyRow) {
-                actionsHtml = `${navBtns}${printBtn}${closeBtn}`;
-            } else {
-                const modifyBtn = forceView
+            let centerBtns = '';
+            if (canModifyRow && fromListNav) {
+                centerBtns = forceView
                     ? `<button type="button" class="btn" onclick="TVC_DefectReport.modifyDefectModal()">Modify</button>`
-                    : '';
-                const deleteBtn = canDeleteRow
-                    ? `<button type="button" class="btn btn-red" onclick="TVC_DefectReport.deleteDefectModal()">Delete</button>`
-                    : '';
-                const saveBtn = canSave
-                    ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>`
-                    : '';
-                actionsHtml = `${navBtns}${modifyBtn}${deleteBtn}${saveBtn}${printBtn}${closeBtn}`;
+                    : `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>
+                <button type="button" class="btn" onclick="TVC_DefectReport.cancelDefectModalEdit()">Cancel</button>`;
+            } else if (canModifyRow) {
+                if (forceView) {
+                    centerBtns = `<button type="button" class="btn" onclick="TVC_DefectReport.modifyDefectModal()">Modify</button>`;
+                } else if (canSave) {
+                    centerBtns = `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>`;
+                }
             }
+            actionsHtml = `<div class="df-modal-actions-left">${navBtns}</div>
+                <div class="df-modal-actions-center">${centerBtns}</div>
+                <div class="df-modal-actions-right">${printBtn}${closeBtn}</div>`;
         } else {
             actionsHtml = `${canSave ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">💾 Save</button>` : ''}
                 <button type="button" class="btn" onclick="TVC_DefectReport.requestCloseModal()">Cancel</button>`;
@@ -1843,7 +1873,7 @@ const TVC_DefectReport = (function () {
                 ${headHtml}
                 ${body}
             </div>
-            <div class="modal-actions wr-actions df-modal-actions">
+            <div class="${actionsClass}">
                 ${actionsHtml}
             </div>
         </div>`;
@@ -1958,7 +1988,7 @@ const TVC_DefectReport = (function () {
         if (isHq() && TVC_DefectCase.isPhase2Editable(row)) return saveHqReply();
         if (isHq() && dfApprovalState(row).canApproveNow) {
             await refresh();
-            await openCase(id);
+            await reopenDefectCaseAfterSave(id);
             alert('Report approved.');
             return;
         }
@@ -1975,7 +2005,7 @@ const TVC_DefectReport = (function () {
             await TVC_DefectCaseService.saveShipVerification(s.user, id, captureForm());
             s._dfSavedToList = true;
             await refresh();
-            await openCase(id);
+            await reopenDefectCaseAfterSave(id);
             alert('Ship verification saved.');
         } catch (e) {
             alert(e.message || e.code || 'Save failed');
@@ -1991,7 +2021,7 @@ const TVC_DefectReport = (function () {
         row = await syncDefectConsumeStock(row, data.used_parts);
         s._dfSavedToList = true;
         await refresh();
-        await openCase(id);
+        await reopenDefectCaseAfterSave(id);
         alert('Defect Report draft saved.');
     }
 
@@ -2003,7 +2033,7 @@ const TVC_DefectReport = (function () {
         try {
             await TVC_DefectCaseService.submitToCompany(s.user, id);
             await refresh();
-            await openCase(id);
+            await reopenDefectCaseAfterSave(id);
             const go = confirm('Submitted to Company (URGENT).\n\nCreate Urgent Export package now? (ZIP + printable HTML for email)');
             if (go) await TVC_App.urgentExportDefect(id);
         } catch (e) {
@@ -2028,7 +2058,7 @@ const TVC_DefectReport = (function () {
                 });
             }
             await refresh();
-            await openCase(id);
+            await reopenDefectCaseAfterSave(id);
             alert('Company reply saved.');
             if (andExport) await TVC_DefectSync.exportHqReplyZip(s.user, id);
         } catch (e) {
@@ -2043,7 +2073,7 @@ const TVC_DefectReport = (function () {
         try {
             await TVC_DefectCaseService.startWork(s.user, id);
             await refresh();
-            await openCase(id);
+            await reopenDefectCaseAfterSave(id);
         } catch (e) {
             alert(e.message || e.code || 'Start work failed');
         }
@@ -2056,7 +2086,7 @@ const TVC_DefectReport = (function () {
         try {
             await TVC_DefectCaseService.saveShipPhase3(s.user, id, captureForm());
             await refresh();
-            await openCase(id);
+            await reopenDefectCaseAfterSave(id);
             alert('Phase 3 — Completion reported to Company.');
             if (andExport) await TVC_App.exportDefectCompletion(id);
         } catch (e) {
@@ -2071,7 +2101,7 @@ const TVC_DefectReport = (function () {
         try {
             await TVC_DefectCaseService.saveHqPhase4(s.user, id, captureForm());
             await refresh();
-            await openCase(id);
+            await reopenDefectCaseAfterSave(id);
             alert('Phase 4 — Case closed by Company D.P.');
             if (andExport) await TVC_DefectSync.exportCloseZip(s.user, id);
         } catch (e) {
@@ -2176,7 +2206,7 @@ const TVC_DefectReport = (function () {
         filteredCases, statusLabel, defectListRows,
         dfDetailReport, dfReportConfirm, dfModifyReport, dfDeleteReport,
         dfListSearch, clearDfListSearch, selectDfListRow, toggleDfListCheck, toggleDfListSelectAll,
-        navDefectModal, modifyDefectModal, deleteDefectModal, setDefectReportPage,
+        navDefectModal, modifyDefectModal, cancelDefectModalEdit, deleteDefectModal, setDefectReportPage,
     };
 })();
 

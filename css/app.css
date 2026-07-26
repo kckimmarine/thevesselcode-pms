@@ -6482,6 +6482,24 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     padding: 10px 16px;
     background: #f7fafc;
 }
+.df-modal-actions.df-modal-actions-split {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+    justify-content: stretch;
+}
+.df-modal-actions-left,
+.df-modal-actions-center,
+.df-modal-actions-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.df-modal-actions-left { justify-content: flex-start; }
+.df-modal-actions-center { justify-content: center; }
+.df-modal-actions-right { justify-content: flex-end; }
 .df-hq-done {
     margin: 0;
     font-size: 12px;
