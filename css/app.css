@@ -1130,6 +1130,15 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     justify-content: center;
     -webkit-overflow-scrolling: touch;
 }
+#workReportModal.modal-hist-swapping,
+#defectReportModal.modal-hist-swapping {
+    background: transparent;
+    pointer-events: none;
+}
+#workReportModal.modal-hist-swapping .modal-box,
+#defectReportModal.modal-hist-swapping .modal-box {
+    visibility: hidden;
+}
 #workReportModal .modal-box.wr-modal,
 #defectReportModal .modal-box.wr-modal {
     margin: auto;

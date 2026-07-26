@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260726-wr-post-save">
+    <link rel="stylesheet" href="css/app.css?v=20260727-hist-nav-smooth">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260724-req-multi-action">
 </head>
 <body>
@@ -330,7 +330,7 @@
                     <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Work Report</button>
                     <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Report Confirm</button>
                     <span class="orig-toolbar-sep"></span>
-                    <button type="button" id="histBtnModify" class="btn btn-sm" disabled onclick="TVC_App.histModifyReport()">Modify</button>
+                    <button type="button" id="histBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_App.histModifyReport()">Modify</button>
                     <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', false)">🖨 Print</button>
@@ -636,9 +636,9 @@
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260725-hist-type-letter"></script>
-<script src="js/ui/defectReport.js?v=20260726-df-modal-actions"></script>
+<script src="js/ui/defectReport.js?v=20260727-hist-nav-smooth"></script>
 <script src="js/ui/outstandingTasks.js?v=20260722-hq-ot"></script>
-<script src="js/app.js?v=20260726-wr-post-save"></script>
+<script src="js/app.js?v=20260727-hist-nav-smooth"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

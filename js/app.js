@@ -43,6 +43,7 @@ const TVC_App = (function () {
         _wrSpareSearch: '',
         _wrForm: {},
         _wrPostSaveView: false,
+        _wrFromHistory: false,
         department: 'ENGINE',
         station: null,                     // CCR | ECR | CAPTAIN
         captainView: 'all',                // all | deck | engine (Captain Hub dashboard)
@@ -4142,6 +4143,16 @@ const TVC_App = (function () {
         }) || null;
     }
 
+    function isHistWorkReportModifiableStatus(entry) {
+        if (!entry || isHistDefectEntry(entry)) return false;
+        const r = entry?.report;
+        if (!r) return false;
+        if (TVC_RBAC.isApprovedStatus(r.status, r.is_locked)) return false;
+        if (TVC_RBAC.isConfirmedStatus(r.status, r.is_locked) && r.sync_status === 'SYNCED') return false;
+        const st = workReportListWorkflowStatus(r);
+        return st !== 'Approved' && st !== 'Submitted';
+    }
+
     function canModifyHistEntry(entry) {
         if (!entry || !state.user) return false;
         if (isHistDefectEntry(entry)) return false;
@@ -4203,7 +4214,13 @@ const TVC_App = (function () {
             const el = document.getElementById(id);
             if (el) { if (dis) el.setAttribute('disabled', ''); else el.removeAttribute('disabled'); }
         };
+        const setVis = (id, show) => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', !show);
+        };
         setDis('histBtnDetail', !entry);
+        const modifiableStatus = isHistWorkReportModifiableStatus(entry);
+        setVis('histBtnModify', modifiableStatus);
         setDis('histBtnModify', !entry || !canModifyHistEntry(entry));
         setDis('histBtnDelete', !entry || !canDeleteHistEntry(entry));
         setDis('histBtnApprove', !canConfirm);
@@ -4249,13 +4266,57 @@ const TVC_App = (function () {
 
     function openDefectFromHistory(defectId) {
         if (!defectId) return;
-        TVC_DefectReport.openCaseFromNav(defectId, 'history');
+        state._histSelReportId = histDefectRowKey(defectId);
+        TVC_DefectReport.openCaseFromNav(defectId, 'history', 'view', { swapHide: 'workReportModal' });
     }
 
-    function getWorkHistoryDefectNavList() {
-        return workHistoryEntries()
-            .filter(isHistDefectEntry)
-            .map(e => e.defect);
+    function findCurrentWorkHistoryNavIndex(list) {
+        if (state._histSelReportId) {
+            const i = list.findIndex(e => histEntryRowKey(e) === state._histSelReportId);
+            if (i >= 0) return i;
+        }
+        if (state._defectCaseId) {
+            const i = list.findIndex(e => isHistDefectEntry(e) && e.defect.id === state._defectCaseId);
+            if (i >= 0) return i;
+        }
+        if (state._wrReportId) {
+            const i = list.findIndex(e => !isHistDefectEntry(e) && e.report.id === state._wrReportId
+                && (!state._wrBatchItemId || e.item.maintenance_job_id === state._wrBatchItemId));
+            if (i >= 0) return i;
+        }
+        return -1;
+    }
+
+    function openWorkHistoryEntry(entry, opts = {}) {
+        state._histSelReportId = histEntryRowKey(entry);
+        if (isHistDefectEntry(entry)) {
+            TVC_DefectReport.openCaseFromNav(entry.defect.id, 'history', 'view', { swapHide: 'workReportModal' });
+            return;
+        }
+        const wrOpts = {
+            fromHistory: true,
+            keepTab: opts.keepTab || state._wrTab,
+            swapHide: 'defectReportModal',
+        };
+        if (opts.preserveWrMode && state._wrFromHistory) {
+            wrOpts.view = !!(state._wrReadonly || state._wrPostSaveView);
+            wrOpts.edit = !state._wrReadonly && !state._wrPostSaveView;
+        } else {
+            wrOpts.view = true;
+        }
+        openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id, wrOpts);
+    }
+
+    /** Work History 목록 전체(Work Report + Defect) 순서로 Previous / Next */
+    function navWorkHistoryEntry(dir) {
+        const list = workHistoryEntries();
+        if (!list.length) return;
+        let i = findCurrentWorkHistoryNavIndex(list);
+        if (i < 0) i = 0;
+        else i += dir;
+        if (i < 0) { alert('첫 번째 항목입니다.'); return; }
+        if (i >= list.length) { alert('마지막 항목입니다.'); return; }
+        openWorkHistoryEntry(list[i], { preserveWrMode: true, keepTab: state._wrTab });
     }
 
     function histDetailWorkReport() {
@@ -4265,7 +4326,7 @@ const TVC_App = (function () {
             openDefectFromHistory(entry.defect.id);
             return;
         }
-        openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id);
+        openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id, { fromHistory: true, view: true });
     }
 
     function histModifyReport() {
@@ -4279,7 +4340,7 @@ const TVC_App = (function () {
             if (st === 'Confirmed') return alert('Confirmed 상태는 Captain / Chief Engineer만 수정할 수 있습니다.');
             return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
         }
-        openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id);
+        openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id, { fromHistory: true, edit: true });
     }
 
     async function histReportApproval() {
@@ -4402,7 +4463,7 @@ const TVC_App = (function () {
             const chk = canCheck
                 ? `<input type="checkbox" class="hist-chk-input"${checked ? ' checked' : ''}>`
                 : `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(wrEntry))}">`;
-            return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(item.maintenance_job_id)}')">
+            return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(item.maintenance_job_id)}',{fromHistory:true,view:true})">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 ${histTypeCell(wrEntry)}
                 ${histCriticalCell(wrEntry)}
@@ -4795,6 +4856,7 @@ const TVC_App = (function () {
         state._wrBatchItemId = null;
         state._wrReadonly = false;
         state._wrPostSaveView = false;
+        state._wrFromHistory = false;
         state._wrJobId = jobId;
         state._wrUsedParts = [];
         state.selectedJobId = jobId;
@@ -4821,21 +4883,64 @@ const TVC_App = (function () {
         state._wrReportId = reportId;
         state._wrBatchItemId = item?.maintenance_job_id || null;
         state._wrPostSaveView = false;
+        state._wrFromHistory = !!opts.fromHistory;
+        if (opts.fromHistory) {
+            const histEntry = workHistoryEntries().find(e =>
+                !isHistDefectEntry(e)
+                && e.report.id === reportId
+                && e.item.maintenance_job_id === (item?.maintenance_job_id || job.id)
+            );
+            if (histEntry) state._histSelReportId = histEntryRowKey(histEntry);
+        }
         const histEntry = { source: 'report', report: rep, item };
-        state._wrReadonly = !canModifyHistEntry(histEntry);
+        if (opts.edit) {
+            state._wrReadonly = false;
+        } else if (opts.fromHistory || opts.view) {
+            state._wrReadonly = true;
+        } else {
+            state._wrReadonly = !canModifyHistEntry(histEntry);
+        }
         state._wrForm = { ...(item?.form || rep.report_form || {}) };
         state._wrUsedParts = enrichUsedParts(item?.used_parts || rep.used_parts || []);
         state._wrPage = '1';
         state._wrSpareSearch = '';
         state._wrTab = opts.keepTab || (rep.work_type === 'POSTPONE' ? 'postpone' : 'repair');
         if (!opts.skipRender) renderWorkReportModal();
-        showModal('workReportModal');
+        if (opts.swapHide) swapHistoryModals('workReportModal', opts.swapHide);
+        else showModal('workReportModal');
     }
 
     /** 히스토리 읽기 뷰 → 편집 모드 전환 */
     function modifyWorkReport() {
         state._wrReadonly = false;
         state._wrPostSaveView = false;
+        renderWorkReportModal();
+    }
+
+    function reloadWorkReportViewFromDb(report, job) {
+        TVC_WorkReport.fromLegacy(report);
+        const item = TVC_WorkReport.findItem(report, job.id)
+            || TVC_WorkReport.getJobItems(report)[0];
+        state._wrReportId = report.id;
+        state._wrBatchItemId = item?.maintenance_job_id || null;
+        state._wrForm = { ...(item?.form || report.report_form || {}) };
+        state._wrUsedParts = enrichUsedParts(item?.used_parts || report.used_parts || []);
+        state._wrTab = report.work_type === 'POSTPONE' ? 'postpone' : 'repair';
+        state._wrPage = '1';
+        state._wrSpareSearch = '';
+        state._wrReadonly = true;
+        state._wrPostSaveView = false;
+    }
+
+    async function cancelWorkReportEdit() {
+        const id = state._wrReportId;
+        const job = state.idx?.jobById.get(state._wrJobId);
+        if (!id || !job) return requestCloseWorkReport();
+        if (!state._wrFromHistory) return requestCloseWorkReport();
+        TVC_SpareMenu.teardownWrSparePage2();
+        const rep = state.reports.find(r => r.id === id);
+        if (!rep) return;
+        reloadWorkReportViewFromDb(rep, job);
         renderWorkReportModal();
     }
 
@@ -4854,27 +4959,9 @@ const TVC_App = (function () {
         state._wrPostSaveView = true;
     }
 
-    /** Work Report 창에서 이전/다음 리포트로 이동 (Work History 목록 순서 기준) */
+    /** Work Report 창에서 이전/다음 — Work History 통합 목록 기준 */
     function navReport(dir) {
-        const list = workHistoryEntries();
-        if (!list.length) return;
-        const curKey = state._histSelReportId
-            || (state._wrBatchItemId ? `${state._wrReportId}|${state._wrBatchItemId}` : state._wrReportId);
-        let i = list.findIndex(e => histEntryRowKey(e) === curKey || (!isHistDefectEntry(e) && e.report.id === state._wrReportId));
-        if (i < 0) i = 0; else i += dir;
-        if (i < 0) { alert('첫 번째 항목입니다.'); return; }
-        if (i >= list.length) { alert('마지막 항목입니다.'); return; }
-        const entry = list[i];
-        state._histSelReportId = histEntryRowKey(entry);
-        const keepTab = state._wrTab;
-        if (isHistDefectEntry(entry)) {
-            closeModal('workReportModal');
-            openDefectFromHistory(entry.defect.id);
-        } else {
-            openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id, {
-                keepTab: keepTab || state._wrTab,
-            });
-        }
+        navWorkHistoryEntry(dir);
     }
 
     /** Work Report 삭제 (승인 완료 리포트는 재고/일자 자동 원상복구) */
@@ -5758,11 +5845,24 @@ const TVC_App = (function () {
             : '';
         let actionsClass = 'modal-actions wr-actions';
         let actionsHtml;
-        if (state._wrPostSaveView) {
+        if (state._wrPostSaveView && !state._wrFromHistory) {
             actionsClass += ' wr-actions-split';
             actionsHtml = `<div class="wr-modal-actions-left"></div>
                 <div class="wr-modal-actions-center"></div>
                 <div class="wr-modal-actions-right"><button class="btn" onclick="TVC_App.requestCloseWorkReport()">Close</button></div>`;
+        } else if (isHist && state._wrFromHistory) {
+            actionsClass += ' wr-actions-split';
+            const closeBtn = `<button class="btn" onclick="TVC_App.requestCloseWorkReport()">Close</button>`;
+            let centerBtns = '';
+            if (canModifyRow) {
+                centerBtns = ro
+                    ? `<button class="btn" onclick="TVC_App.modifyWorkReport()">Modify</button>`
+                    : `<button class="btn btn-green" onclick="TVC_App.saveWorkReport()">Save</button>
+                <button class="btn" onclick="TVC_App.cancelWorkReportEdit()">Cancel</button>`;
+            }
+            actionsHtml = `<div class="wr-modal-actions-left">${navBtns}</div>
+                <div class="wr-modal-actions-center">${centerBtns}</div>
+                <div class="wr-modal-actions-right">${printBtn}${closeBtn}</div>`;
         } else if (isHist) {
             const closeBtn = `<button class="btn" onclick="TVC_App.requestCloseWorkReport()">Close</button>`;
             if (!canModifyRow) {
@@ -5875,6 +5975,7 @@ const TVC_App = (function () {
         state._wrBatchItemId = null;
         state._wrReadonly = false;
         state._wrPostSaveView = false;
+        state._wrFromHistory = false;
         state._wrForm = {};
         state._wrUsedParts = [];
         state._wrPage = '1';
@@ -6000,9 +6101,11 @@ const TVC_App = (function () {
             }
 
             const wasModify = !!state._wrReportId;
+            const fromHistory = state._wrFromHistory;
             await refreshAll();
             const saved = state.reports.find(r => r.id === report.id) || report;
-            reloadWorkReportStateFromSaved(saved, job);
+            if (fromHistory) reloadWorkReportViewFromDb(saved, job);
+            else reloadWorkReportStateFromSaved(saved, job);
             renderWorkReportModal();
             alert(wasModify
                 ? `${WR_TABS[tab]} 보고가 수정되었습니다.`
@@ -6567,10 +6670,10 @@ const TVC_App = (function () {
     }
 
     // ── Utils ────────────────────────────────────────────────────────
-    function showModal(id) {
+    function showModal(id, opts = {}) {
         const el = document.getElementById(id);
         if (!el) return;
-        window.TVC_ModalDrag?.resetModal?.(el);
+        if (!opts.skipDragReset) window.TVC_ModalDrag?.resetModal?.(el);
         el.classList.remove('hidden');
     }
     function closeModal(id) {
@@ -6578,6 +6681,32 @@ const TVC_App = (function () {
         if (!el) return;
         el.classList.add('hidden');
         window.TVC_ModalDrag?.resetModal?.(el);
+    }
+
+    /** Work History — Work Report ↔ Defect 전환 시 backdrop 깜빡임 방지 */
+    function swapHistoryModals(showId, hideId) {
+        const showEl = document.getElementById(showId);
+        const hideEl = hideId ? document.getElementById(hideId) : null;
+        if (!showEl) return;
+        showEl.classList.remove('modal-hist-swapping');
+        if (hideEl && !hideEl.classList.contains('hidden')) {
+            hideEl.classList.add('modal-hist-swapping');
+        }
+        showEl.classList.remove('hidden');
+        showEl.style.zIndex = '10001';
+        showEl.scrollTop = 0;
+        const showBox = showEl.querySelector('.modal-box');
+        if (showBox) showBox.scrollTop = 0;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                if (hideEl) {
+                    hideEl.classList.remove('modal-hist-swapping');
+                    hideEl.classList.add('hidden');
+                    hideEl.style.zIndex = '';
+                    window.TVC_ModalDrag?.resetModal?.(hideEl);
+                }
+            });
+        });
     }
     function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
 
@@ -6604,7 +6733,8 @@ const TVC_App = (function () {
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,
         togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader, refreshActualPlan,
         setBatchActiveJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
-        openWorkReportFromHistory, openDefectFromHistory, getWorkHistoryDefectNavList, modifyWorkReport, selectHistRow,
+        openWorkReportFromHistory, openDefectFromHistory, openWorkHistoryEntry, navWorkHistoryEntry,
+        modifyWorkReport, cancelWorkReportEdit, selectHistRow,
         buildDefectHistRowHtml, matchDefectHistSearch, initHistCellTips,
         formatHistGroupEquipmentName, isPlaceholderJobCode, defectEffectiveJobCode,
         histDetailWorkReport, histModifyReport, histReportApproval, histDeleteReport,
@@ -6625,7 +6755,7 @@ const TVC_App = (function () {
         menuXferConfirmDefectExport, menuXferConfirmMonthlyExport,
         menuXferExportDefect, menuXferExportMonthly, onMenuXferImportFile,
         openMenuHistoryModal, closeMenuHistoryModal,
-        uploadAttachment, saveDetailReport, closeModal, showModal, dismissSpicsAlerts, openSpicsRequisition,
+        uploadAttachment, saveDetailReport, closeModal, showModal, swapHistoryModals, dismissSpicsAlerts, openSpicsRequisition,
     };
 })();
 

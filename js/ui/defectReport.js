@@ -1220,14 +1220,15 @@ const TVC_DefectReport = (function () {
     }
 
     function defectNavList() {
-        const s = getState();
-        if (s._dfNavSource === 'history') {
-            return TVC_App?.getWorkHistoryDefectNavList?.() || [];
-        }
         return defectListRows();
     }
 
     function navDefectModal(dir) {
+        const s = getState();
+        if (s._dfNavSource === 'history') {
+            TVC_App.navWorkHistoryEntry(dir);
+            return;
+        }
         const list = defectNavList();
         if (!list.length) return;
         const curId = getState()._defectCaseId;
@@ -1253,7 +1254,7 @@ const TVC_DefectReport = (function () {
         const s = getState();
         const id = s._defectCaseId;
         if (!id) return;
-        if (s._dfNavSource !== 'list') return requestCloseModal();
+        if (s._dfNavSource !== 'list' && s._dfNavSource !== 'history') return requestCloseModal();
         closeAllDfPicks();
         if ((s._dfPage || '1') === '2') {
             TVC_SpareMenu.teardownWrSparePage2();
@@ -1268,7 +1269,7 @@ const TVC_DefectReport = (function () {
 
     async function reopenDefectCaseAfterSave(id) {
         const nav = getState()._dfNavSource;
-        if (nav === 'list') await openCase(id, 'view');
+        if (nav === 'list' || nav === 'history') await openCase(id, 'view');
         else await openCase(id);
     }
 
@@ -1338,18 +1339,18 @@ const TVC_DefectReport = (function () {
         return 'edit';
     }
 
-    function openCaseFromNav(id, navSource, modeOverride) {
+    function openCaseFromNav(id, navSource, modeOverride, opts = {}) {
         const row = (getState().defectCases || []).find(c => c.id === id);
         getState()._dfNavSource = navSource;
         if (navSource === 'history') {
-            openCase(id, 'view');
+            openCase(id, modeOverride || 'view', opts);
             return;
         }
         if (modeOverride) {
-            openCase(id, modeOverride);
+            openCase(id, modeOverride, opts);
             return;
         }
-        openCase(id, 'view');
+        openCase(id, 'view', opts);
     }
 
     function dfDetailReport() {
@@ -1846,17 +1847,11 @@ const TVC_DefectReport = (function () {
             const printBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.printDefectModal()">Print</button>`;
             const closeBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button>`;
             let centerBtns = '';
-            if (canModifyRow && fromListNav) {
+            if (canModifyRow && (fromListNav || fromHistoryNav)) {
                 centerBtns = forceView
                     ? `<button type="button" class="btn" onclick="TVC_DefectReport.modifyDefectModal()">Modify</button>`
                     : `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.cancelDefectModalEdit()">Cancel</button>`;
-            } else if (canModifyRow) {
-                if (forceView) {
-                    centerBtns = `<button type="button" class="btn" onclick="TVC_DefectReport.modifyDefectModal()">Modify</button>`;
-                } else if (canSave) {
-                    centerBtns = `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>`;
-                }
             }
             actionsHtml = `<div class="df-modal-actions-left">${navBtns}</div>
                 <div class="df-modal-actions-center">${centerBtns}</div>
@@ -1896,10 +1891,11 @@ const TVC_DefectReport = (function () {
         });
     }
 
-    async function openCase(id, mode) {
-        const row = await TVC_DefectCaseService.get(id);
-        if (!row) return alert('Case not found.');
+    async function openCase(id, mode, opts = {}) {
         const s = getState();
+        let row = (s.defectCases || []).find(c => c.id === id);
+        if (!row) row = await TVC_DefectCaseService.get(id);
+        if (!row) return alert('Case not found.');
         if (s._defectCaseId !== id) s._dfPage = '1';
         s._defectCaseId = id;
         s._defectMode = mode === 'view' ? 'view' : (mode || 'edit');
@@ -1910,7 +1906,11 @@ const TVC_DefectReport = (function () {
         ensureDfUsedParts(row);
         const body = document.getElementById('defectReportBody');
         if (body) body.innerHTML = renderModalBody(getDefectModalRow() || row, s._defectMode);
-        document.getElementById('defectReportModal')?.classList.remove('hidden');
+        if (opts.swapHide && window.TVC_App?.swapHistoryModals) {
+            TVC_App.swapHistoryModals('defectReportModal', opts.swapHide);
+        } else {
+            document.getElementById('defectReportModal')?.classList.remove('hidden');
+        }
         if ((s._dfPage || '1') === '2') {
             const forceView = s._defectMode === 'view';
             const page2ro = forceView || !TVC_DefectCase.canModifyListWorkflow(row);
