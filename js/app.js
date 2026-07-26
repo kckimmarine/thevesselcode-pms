@@ -42,6 +42,7 @@ const TVC_App = (function () {
         _wrUsedParts: [],
         _wrSpareSearch: '',
         _wrForm: {},
+        _wrPostSaveView: false,
         department: 'ENGINE',
         station: null,                     // CCR | ECR | CAPTAIN
         captainView: 'all',                // all | deck | engine (Captain Hub dashboard)
@@ -4793,6 +4794,7 @@ const TVC_App = (function () {
         state._wrReportId = null;
         state._wrBatchItemId = null;
         state._wrReadonly = false;
+        state._wrPostSaveView = false;
         state._wrJobId = jobId;
         state._wrUsedParts = [];
         state.selectedJobId = jobId;
@@ -4818,6 +4820,7 @@ const TVC_App = (function () {
         state.selectedJobId = job.id;
         state._wrReportId = reportId;
         state._wrBatchItemId = item?.maintenance_job_id || null;
+        state._wrPostSaveView = false;
         const histEntry = { source: 'report', report: rep, item };
         state._wrReadonly = !canModifyHistEntry(histEntry);
         state._wrForm = { ...(item?.form || rep.report_form || {}) };
@@ -4832,7 +4835,23 @@ const TVC_App = (function () {
     /** 히스토리 읽기 뷰 → 편집 모드 전환 */
     function modifyWorkReport() {
         state._wrReadonly = false;
+        state._wrPostSaveView = false;
         renderWorkReportModal();
+    }
+
+    function reloadWorkReportStateFromSaved(report, job) {
+        TVC_WorkReport.fromLegacy(report);
+        const item = TVC_WorkReport.findItem(report, job.id)
+            || TVC_WorkReport.getJobItems(report)[0];
+        state._wrReportId = report.id;
+        state._wrBatchItemId = item?.maintenance_job_id || null;
+        state._wrForm = { ...(item?.form || report.report_form || {}) };
+        state._wrUsedParts = enrichUsedParts(item?.used_parts || report.used_parts || []);
+        state._wrTab = report.work_type === 'POSTPONE' ? 'postpone' : 'repair';
+        state._wrPage = '1';
+        state._wrSpareSearch = '';
+        state._wrReadonly = true;
+        state._wrPostSaveView = true;
     }
 
     /** Work Report 창에서 이전/다음 리포트로 이동 (Work History 목록 순서 기준) */
@@ -5737,8 +5756,14 @@ const TVC_App = (function () {
         const printBtn = isHist
             ? `<button class="btn" onclick="TVC_App.printWorkReport()">Print</button>`
             : '';
+        let actionsClass = 'modal-actions wr-actions';
         let actionsHtml;
-        if (isHist) {
+        if (state._wrPostSaveView) {
+            actionsClass += ' wr-actions-split';
+            actionsHtml = `<div class="wr-modal-actions-left"></div>
+                <div class="wr-modal-actions-center"></div>
+                <div class="wr-modal-actions-right"><button class="btn" onclick="TVC_App.requestCloseWorkReport()">Close</button></div>`;
+        } else if (isHist) {
             const closeBtn = `<button class="btn" onclick="TVC_App.requestCloseWorkReport()">Close</button>`;
             if (!canModifyRow) {
                 actionsHtml = `${navBtns}${printBtn}${closeBtn}`;
@@ -5771,7 +5796,7 @@ const TVC_App = (function () {
                 ${headHtml}
                 ${body}
             </div>
-            <div class="modal-actions wr-actions">
+            <div class="${actionsClass}">
                 ${actionsHtml}
             </div>`;
 
@@ -5849,6 +5874,7 @@ const TVC_App = (function () {
         state._wrReportId = null;
         state._wrBatchItemId = null;
         state._wrReadonly = false;
+        state._wrPostSaveView = false;
         state._wrForm = {};
         state._wrUsedParts = [];
         state._wrPage = '1';
@@ -5974,14 +6000,10 @@ const TVC_App = (function () {
             }
 
             const wasModify = !!state._wrReportId;
-            state._wrForm = {};
-            state._wrUsedParts = [];
-            state._wrPage = '1';
-            state._wrSpareSearch = '';
-            state._wrReportId = null;
-            state._wrReadonly = false;
-            closeModal('workReportModal');
             await refreshAll();
+            const saved = state.reports.find(r => r.id === report.id) || report;
+            reloadWorkReportStateFromSaved(saved, job);
+            renderWorkReportModal();
             alert(wasModify
                 ? `${WR_TABS[tab]} 보고가 수정되었습니다.`
                 : tab === 'postpone'

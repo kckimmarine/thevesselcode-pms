@@ -1724,6 +1724,24 @@ input.tvc-date-input::placeholder {
 .wr-maint-postpone-note { margin: 0 0 8px; }
 .wr-postpone-date input { border-color: var(--red); background: #fffaf0; font-weight: 700; }
 .wr-actions { padding: 10px 14px; background: #edf2f7; margin: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+.wr-actions.wr-actions-split {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+    justify-content: stretch;
+}
+.wr-modal-actions-left,
+.wr-modal-actions-center,
+.wr-modal-actions-right {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+}
+.wr-modal-actions-left { justify-content: flex-start; }
+.wr-modal-actions-center { justify-content: center; }
+.wr-modal-actions-right { justify-content: flex-end; }
 .wr-spare-page { margin-top: 4px; }
 .wr-spare-search { margin-bottom: 4px; }
 .wr-spare-search-input { width: 100%; box-sizing: border-box; padding: 8px 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 13px; margin-bottom: 8px; }
