@@ -467,6 +467,69 @@ const TVC_Transaction = (function () {
         return TVC_RBAC.isApprover(user);
     }
 
+    function isPlaceholderJobCode(code) {
+        const s = String(code || '').trim();
+        if (!s) return true;
+        return /JOB CODE\s*(선택|选择)/i.test(s) || /^Select JOB CODE$/i.test(s);
+    }
+
+    function defectEffectiveJobCode(row) {
+        const items = row?.job_items;
+        if (Array.isArray(items)) {
+            const fromItems = items.map(i => String(i.job_code || '').trim()).find(c => c && !isPlaceholderJobCode(c));
+            if (fromItems) return fromItems;
+        }
+        const code = String(row?.pms_job_code || row?.job_code || '').trim();
+        return isPlaceholderJobCode(code) ? '' : code;
+    }
+
+    function resolveDefectLastDone(row) {
+        return String(
+            row?.ship_verified_date || row?.work_date || row?.report_date
+                || row?.last_maintenance_date || now().slice(0, 10),
+        ).slice(0, 10);
+    }
+
+    /** Defect Cleared + linked Job Code — any list status (Reported~Approved) before Closed out */
+    function shouldApplyDefectJobSchedule(row) {
+        if (!row || row.job_schedule_applied_at) return false;
+        if (!row.defect_cleared) return false;
+        const jobId = String(row.maintenance_job_id || '').trim()
+            || (row.job_items || []).map(i => i.maintenance_job_id).find(id => String(id || '').trim());
+        const code = defectEffectiveJobCode(row);
+        return !!(jobId || code);
+    }
+
+    async function resolveDefectMaintenanceJob(api, row) {
+        const jobId = String(row.maintenance_job_id || '').trim()
+            || (row.job_items || []).map(i => i.maintenance_job_id).find(id => String(id || '').trim());
+        if (jobId) {
+            const job = await api.get('maintenance_jobs', jobId);
+            if (job) return job;
+        }
+        const code = defectEffectiveJobCode(row);
+        if (!code) return null;
+        const jobs = await api.getAll('maintenance_jobs');
+        return jobs.find(j => j.job_code === code) || null;
+    }
+
+    /** Defect Report DEFECT CLEARED — Work Plan LAST DONE / NEXT DATE (Work Report Confirm와 동일) */
+    async function applyDefectJobSchedule(api, row) {
+        if (!shouldApplyDefectJobSchedule(row)) return null;
+        const job = await resolveDefectMaintenanceJob(api, row);
+        if (!job) return null;
+        const lastDone = resolveDefectLastDone(row);
+        job.last_done = lastDone;
+        job.next_date = calcNextDate(job, lastDone);
+        job.is_overdue = _isOverdue(job.next_date);
+        job.plan_status = 'COMPLETED';
+        if (job.schedule_basis === 'POSTPONE') job.schedule_basis = null;
+        markPending(job);
+        await api.put('maintenance_jobs', job);
+        if (!String(row.maintenance_job_id || '').trim()) row.maintenance_job_id = job.id;
+        return job;
+    }
+
     function calcNextDate(job, fromDateStr) {
         const d = new Date(fromDateStr);
         const p = Number(job.period) || 1;
@@ -537,6 +600,7 @@ const TVC_Transaction = (function () {
     return {
         submitReport, submitBatchReport, updateReport, deleteReport,
         approveReport, executeMaintenance, confirmReport, calcNextDate, markPending,
+        applyDefectJobSchedule, shouldApplyDefectJobSchedule,
         purgeAllWorkReports,
     };
 })();

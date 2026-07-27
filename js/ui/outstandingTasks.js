@@ -147,7 +147,7 @@ const TVC_OutstandingTasks = (function () {
                 count: defect.length,
                 items: defect,
                 renderItem: dc => defectItemHtml(dc, state),
-                navigate: () => ctx.menuNavigate('defect'),
+                navigate: () => ctx.menuNavigate('history'),
             },
             overdue: {
                 key: 'overdue',

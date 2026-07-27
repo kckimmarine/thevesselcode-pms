@@ -37,6 +37,42 @@ const TVC_DefectCaseService = (function () {
         return row;
     }
 
+    const DEFECT_SCHEDULE_ROW_FIELDS = [
+        'action_taken', 'pms_job_code', 'job_code', 'maintenance_job_id', 'job_items',
+        'work_date', 'last_maintenance_date', 'report_date',
+        'defect_cleared', 'ship_verified_date', 'ship_verified_after_clear',
+    ];
+
+    function mergeDefectScheduleFields(row, payload) {
+        DEFECT_SCHEDULE_ROW_FIELDS.forEach(k => {
+            if (payload[k] !== undefined) row[k] = payload[k];
+        });
+        return row;
+    }
+
+    async function persistDefectWithJobSchedule(row, auditLog) {
+        if (!TVC_Transaction.shouldApplyDefectJobSchedule(row)) return false;
+        let applied = false;
+        await TVC_DB.runTransaction(['defect_cases', 'maintenance_jobs', 'audit_logs'], async (api) => {
+            const appliedJob = await TVC_Transaction.applyDefectJobSchedule(api, row);
+            if (appliedJob) {
+                row.job_schedule_applied_at = now();
+                applied = true;
+            }
+            markPending(row);
+            await api.put('defect_cases', row);
+            const scheduleNote = appliedJob
+                ? ` · LAST DONE ${appliedJob.last_done} · NEXT ${appliedJob.next_date}`
+                : '';
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `${auditLog}${scheduleNote}`,
+                sync_status: 'LOCAL',
+            });
+        });
+        return applied;
+    }
+
     async function saveDraft(user, payload, existingId) {
         const vesselId = await resolveVesselId(user);
         let row = existingId ? await get(existingId) : null;
@@ -56,6 +92,10 @@ const TVC_DefectCaseService = (function () {
                 vessel_id: vesselId || row.vessel_id,
                 reported_by: user?.username || row.reported_by,
             });
+            mergeDefectScheduleFields(row, payload);
+            if (await persistDefectWithJobSchedule(row, `✏️ [Defect/MODIFIED] ${row.case_no}`)) {
+                return row;
+            }
             markPending(row);
             await TVC_DB.put('defect_cases', row);
             await TVC_DB.put('audit_logs', {
@@ -80,6 +120,10 @@ const TVC_DefectCaseService = (function () {
                 ? row.status
                 : TVC_DefectCase.Status.DRAFT,
         });
+        mergeDefectScheduleFields(row, payload);
+        if (await persistDefectWithJobSchedule(row, `🛠 [Defect/DRAFT] ${row.case_no}`)) {
+            return row;
+        }
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
@@ -179,6 +223,10 @@ const TVC_DefectCaseService = (function () {
         if (!v.ok) {
             throw Object.assign(new Error(`Required: ${v.missing.join(', ')}`), { code: 'VALIDATION', missing: v.missing });
         }
+        mergeDefectScheduleFields(row, phase3);
+        if (await persistDefectWithJobSchedule(row, `✔ [Defect/Phase3] ${row.case_no} — Cleared, reported to Company`)) {
+            return row;
+        }
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
@@ -272,7 +320,12 @@ const TVC_DefectCaseService = (function () {
             row.approved_at = today;
             changed = true;
         }
-        if (!changed) return row;
+        if (!changed) {
+            if (await persistDefectWithJobSchedule(row, `✅ [Defect/Approval] ${row.case_no}`)) {
+                return row;
+            }
+            return row;
+        }
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
@@ -280,6 +333,7 @@ const TVC_DefectCaseService = (function () {
             log: `✅ [Defect/Approval] ${row.case_no}${confirm ? ' — Confirmed' : ''}${approve ? ' — Approved' : ''}`,
             sync_status: 'LOCAL',
         });
+        await persistDefectWithJobSchedule(row, `✅ [Defect/Approval] ${row.case_no}`);
         return row;
     }
 
@@ -293,7 +347,7 @@ const TVC_DefectCaseService = (function () {
             throw Object.assign(new Error('Available after Company approval.'), { code: 'INVALID_STATUS' });
         }
         const keys = [
-            'ship_verified_after_clear', 'working_hours', 'working_member',
+            'ship_verified_after_clear', 'ship_verified_date', 'working_hours', 'working_member',
             'shore_support', 'defect_cleared', 'shore_technician', 'ship_attachments',
         ];
         keys.forEach(k => {
@@ -307,6 +361,10 @@ const TVC_DefectCaseService = (function () {
             row.status = TVC_DefectCase.Status.AWAITING_COMPLETION;
             row.phase3_locked = true;
             row.completed_at = now();
+        }
+        mergeDefectScheduleFields(row, payload);
+        if (await persistDefectWithJobSchedule(row, `✔ [Defect/Ship Verify] ${row.case_no}`)) {
+            return row;
         }
         markPending(row);
         await TVC_DB.put('defect_cases', row);
@@ -328,6 +386,49 @@ const TVC_DefectCaseService = (function () {
         if (payload.company_attachments !== undefined) row.company_attachments = payload.company_attachments;
         markPending(row);
         await TVC_DB.put('defect_cases', row);
+        return row;
+    }
+
+    /** Ship's Comments 박스 — Draft~Approved Modify 시 선박 확인 섹션만 저장 */
+    async function saveShipCommentsFields(user, id, payload) {
+        if (TVC_RBAC.isHqAccount(user)) {
+            throw Object.assign(new Error('Ship only.'), { code: 'FORBIDDEN' });
+        }
+        const row = await get(id);
+        if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
+        if (row.status === TVC_DefectCase.Status.CLOSED) {
+            throw Object.assign(new Error('Closed cases cannot be modified.'), { code: 'LOCKED' });
+        }
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (!['Draft', 'Reported', 'Confirmed', 'Submitted', 'Approved'].includes(st)) {
+            throw Object.assign(new Error('Modify permission denied.'), { code: 'FORBIDDEN' });
+        }
+        if (st === 'Submitted' || st === 'Approved') {
+            if (!TVC_RBAC.canConfirmDepartment(user, row.department)) {
+                throw Object.assign(new Error('Captain / Chief Engineer only.'), { code: 'FORBIDDEN' });
+            }
+        } else if (!TVC_RBAC.canModifyDeleteListReport(user, row.department, st)) {
+            throw Object.assign(new Error('Modify permission denied.'), { code: 'FORBIDDEN' });
+        }
+        const keys = [
+            'ship_verified_after_clear', 'ship_verified_date', 'working_hours', 'working_member',
+            'shore_support', 'defect_cleared', 'shore_technician', 'ship_attachments',
+        ];
+        keys.forEach(k => {
+            if (payload[k] !== undefined) row[k] = payload[k];
+        });
+        if (row.shore_support) row.shore_technician = true;
+        mergeDefectScheduleFields(row, payload);
+        if (await persistDefectWithJobSchedule(row, `✏️ [Defect/Ship Comments] ${row.case_no}`)) {
+            return row;
+        }
+        markPending(row);
+        await TVC_DB.put('defect_cases', row);
+        await TVC_DB.put('audit_logs', {
+            timestamp: new Date().toLocaleString(),
+            log: `✏️ [Defect/Ship Comments] ${row.case_no}`,
+            sync_status: 'LOCAL',
+        });
         return row;
     }
 
@@ -354,7 +455,7 @@ const TVC_DefectCaseService = (function () {
     }
 
     return {
-        listAll, get, saveDraft, submitToCompany, saveHqPhase2, saveShipPhase3, saveShipVerification, saveHqPhase4,
+        listAll, get, saveDraft, submitToCompany, saveHqPhase2, saveShipPhase3, saveShipVerification, saveShipCommentsFields, saveHqPhase4,
         saveHqCompanyFields, startWork, createFromJob, deleteCase, saveApprovalMeta,
         resolveVesselId, nextCaseNo, markPending,
     };

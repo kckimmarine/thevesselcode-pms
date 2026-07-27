@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260727-rh-cols">
+    <link rel="stylesheet" href="css/app.css?v=20260727-menu-daily-defect">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260724-req-multi-action">
 </head>
 <body>
@@ -134,7 +134,6 @@
     <nav id="tabBar" class="tab-bar" role="tablist">
         <button class="tab-btn active" data-tab="menu" onclick="TVC_App.switchTab('menu')">📑 Menu</button>
         <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 Work Plan</button>
-        <button class="tab-btn" data-tab="defect" onclick="TVC_App.switchTab('defect')">🚨 Defect Report</button>
         <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Work History</button>
         <button class="tab-btn" data-tab="runhrs" onclick="TVC_App.switchTab('runhrs')">⏱ Running Hours</button>
         <button class="tab-btn" data-tab="spare" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
@@ -170,75 +169,6 @@
                     <div class="cmaxs-cards" id="cmaxsCards"></div>
                     <div id="outstandingTasksPanel" class="outstanding-tasks-host"></div>
                 </div>
-            </div>
-        </section>
-
-        <!-- TAB: Defect Report -->
-        <section id="tab-defect" class="tab-pane hidden">
-            <div class="sheet-head">
-                <h2>🚨 Defect Report</h2>
-                <span class="sheet-sub">Select a row · double-click or Detail Defect Report · check (ㅁ) for Report Confirm</span>
-                <span style="flex:1"></span>
-                <button type="button" class="btn btn-sm btn-amber" data-feature="showDefectReport" onclick="TVC_DefectReport.openNewBlank()">＋ New Defect Report</button>
-            </div>
-            <div class="list-tab-frame">
-            <div class="hist-toolbar-stack">
-                <div class="hist-toolbar hist-toolbar-actions filter-bar">
-                    <button type="button" id="dfBtnDetail" class="btn btn-sm" disabled onclick="TVC_DefectReport.dfDetailReport()">Detail Defect Report</button>
-                    <button type="button" id="dfBtnConfirm" class="btn btn-sm btn-green" disabled onclick="TVC_DefectReport.dfReportConfirm()">Report Confirm</button>
-                    <span class="orig-toolbar-sep"></span>
-                    <button type="button" id="dfBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_DefectReport.dfModifyReport()">Modify</button>
-                    <button type="button" id="dfBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_DefectReport.dfDeleteReport()">Delete</button>
-                    <div class="tab-toolbar-end">
-                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', false)">🖨 Print</button>
-                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('defect', true)">👁 Preview</button>
-                    </div>
-                </div>
-                <div class="hist-toolbar hist-toolbar-filters list-filter-stack">
-                    <div class="filter-bar list-filter-period-row">
-                        <div id="dfPeriodFilter" class="act-period-filter" title="Filter by Reported Date">
-                            <span class="act-period-label">Period</span>
-                            <input type="date" id="dfPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onReportPeriodChange()">
-                            <span class="act-period-sep">~</span>
-                            <input type="date" id="dfPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onReportPeriodChange()">
-                            <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearReportPeriod()">Clear</button>
-                        </div>
-                        <div class="list-filter-wrap">
-                            <button type="button" id="dfListFilterBtn" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('defect', event)">Filter</button>
-                        </div>
-                        <span class="count-label" id="dfListCount">—</span>
-                    </div>
-                    <div class="filter-bar list-filter-search-row">
-                        <div class="search-field-wrap">
-                            <input class="search-input" id="dfListSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_DefectReport.dfListSearch(this.value)">
-                            <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_DefectReport.clearDfListSearch()">×</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <p class="hist-legend">⚠: Critical Equipment · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
-            <div class="sheet-table-wrap list-table-scroll-wrap">
-                <table class="sheet-table hist-table hist-table-defect-list">
-                    <thead><tr>
-                        <th class="hist-chk-h"><input type="checkbox" id="dfSelectAll" title="Select all confirmable" onclick="TVC_DefectReport.toggleDfListSelectAll(this.checked)"></th>
-                        <th class="hist-file-h">File No</th>
-                        <th class="hist-crit-h" title="Critical Equipment" aria-label="Critical Equipment">⚠</th>
-                        <th class="hist-code-h">JOB CODE</th>
-                        <th class="hist-sort1-h">SORT-1</th>
-                        <th class="hist-sort2-h">SORT-2</th>
-                        <th class="hist-date-h"><span class="hist-th-stack"><span>Reported</span><span>Date</span></span></th>
-                        <th class="hist-status-h">Status</th>
-                        <th class="hist-flag-h" title="Repair Request">RR</th>
-                        <th class="hist-flag-h" title="Conducted by Shore Support">SS</th>
-                        <th class="hist-flag-h" title="Defect Cleared">DC</th>
-                        <th class="hist-flag-h" title="Ship's Comment">SC</th>
-                        <th class="hist-flag-h" title="Company's Comment">CC</th>
-                        <th class="hist-at-h hist-at-ship-h" title="Ship's Attachment"><span class="hist-th-stack"><span>Ship's</span><span>AT</span></span></th>
-                        <th class="hist-at-h hist-at-company-h" title="Company's Attachment"><span class="hist-th-stack"><span>Company's</span><span>AT</span></span></th>
-                    </tr></thead>
-                    <tbody id="defectTabBody"></tbody>
-                </table>
-            </div>
             </div>
         </section>
 
@@ -325,11 +255,11 @@
 
         <!-- TAB: Work History -->
         <section id="tab-history" class="tab-pane hidden">
-            <div class="sheet-head"><h2>📜 Work History</h2><span class="sheet-sub">Select a row · double-click or Detail Work Report · check (ㅁ) for Report Approval</span></div>
+            <div class="sheet-head"><h2>📜 Work History</h2><span class="sheet-sub">Select a row · double-click or Detail Report · check (ㅁ) for Report Approval</span></div>
             <div class="list-tab-frame">
             <div class="hist-toolbar-stack">
                 <div class="hist-toolbar hist-toolbar-actions filter-bar">
-                    <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Work Report</button>
+                    <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Report</button>
                     <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Report Confirm</button>
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" id="histBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_App.histModifyReport()">Modify</button>
@@ -367,6 +297,7 @@
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
                         <th class="hist-type-h" title="D: Defect Report · M: Maintenance · P: Postponed">Type</th>
+                        <th class="hist-file-h">File No</th>
                         <th class="hist-crit-h" title="Critical Equipment" aria-label="Critical Equipment">⚠</th>
                         <th class="hist-code-h">JOB CODE</th>
                         <th class="hist-sort1-h">SORT-1</th>
@@ -621,7 +552,7 @@
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/rbac.js?v=20260725-defect-status-4"></script>
-<script src="js/core/schema.js?v=20260725-defect-status-4"></script>
+<script src="js/core/schema.js?v=20260727-df-schedule-wp-hist"></script>
 <script src="js/core/db.js?v=20260721-spare-class"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260721-stock-ledger"></script>
@@ -629,7 +560,7 @@
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js?v=20260723-rh-gate"></script>
-<script src="js/ui/spareMenu.js?v=20260727-tab-print-end"></script>
+<script src="js/ui/spareMenu.js?v=20260727-df-spare-export"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -638,19 +569,19 @@
 <script src="js/core/pbkdf2-fallback.js"></script>
 <script src="js/space.js?v=20260716-menu-flow"></script>
 <script src="js/auth.js?v=20260723-login-fast"></script>
-<script src="js/services/transaction.js?v=20260723-reported-by"></script>
+<script src="js/services/transaction.js?v=20260727-df-dc-any-status"></script>
 <script src="js/services/maintenancePlan.js?v=20260726-job-code-edit"></script>
-<script src="js/services/defectCase.js?v=20260725-df-delete"></script>
+<script src="js/services/defectCase.js?v=20260727-df-dc-reconcile"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
 <script src="js/services/sync.js?v=20260722-hq-import"></script>
 <script src="js/services/stationSync.js?v=20260715-space-auth"></script>
 <script src="js/services/fleet.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
-<script src="js/ui/listFilters.js?v=20260725-hist-type-letter"></script>
-<script src="js/ui/defectReport.js?v=20260727-df-draft-title"></script>
-<script src="js/ui/outstandingTasks.js?v=20260722-hq-ot"></script>
-<script src="js/app.js?v=20260727-wr-draft-title"></script>
+<script src="js/ui/listFilters.js?v=20260727-hist-open-only-d"></script>
+<script src="js/ui/defectReport.js?v=20260727-df-labels-upper"></script>
+<script src="js/ui/outstandingTasks.js?v=20260727-unified-hist-defect"></script>
+<script src="js/app.js?v=20260727-df-dc-reconcile"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

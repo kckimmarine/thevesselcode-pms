@@ -401,9 +401,9 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
 .menu-flow-panel { padding: 0; }
-/* Vessel Menu — 4 columns in one row (Daily / Defect / Monthly / If Necessary) */
+/* Vessel Menu — 3 columns in one row (Daily / Monthly / If Necessary) */
 .menu-flow-panel.spare-flow-panel {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .cmaxs-body.hq-mode .menu-flow-panel.spare-flow-panel {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1788,6 +1788,14 @@ input.tvc-date-input::placeholder {
 .wr-maint-inline-box .wr-maint-chk { margin: 0; }
 .wr-maint-inline-attach { padding: 6px 8px; }
 .wr-maint-inline-attach .wr-attach-block { margin: 0; }
+.df-ship-initial-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+}
+.df-ship-initial-actions .wr-attach-block { margin: 0; }
 .df-ship-initial-pair { width: 100%; }
 @media (max-width: 640px) {
     .df-ship-initial-pair { grid-template-columns: 1fr; }
@@ -2071,6 +2079,9 @@ input.tvc-date-input::placeholder {
     background: #234876;
     border-color: #234876;
 }
+.plan-action-btns .plan-new-defect-btn {
+    margin-left: auto;
+}
 .queues-side .panel-body { display: flex; flex-direction: column; gap: 12px; }
 
 /* Sheet tables (History / Run Hrs) */
@@ -2208,6 +2219,18 @@ input.tvc-date-input::placeholder {
     border-radius: 8px;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.12);
     padding: 10px 12px;
+}
+.list-filter-pop-history {
+    max-height: min(520px, calc(100vh - 80px));
+}
+.list-filter-pop-history .list-filter-group-list {
+    max-height: 120px;
+}
+.list-filter-pop-history .list-filter-actions {
+    position: sticky;
+    bottom: 0;
+    background: #fff;
+    z-index: 1;
 }
 .list-filter-pop-float {
     position: fixed;
@@ -6170,6 +6193,16 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     overflow: hidden;
     text-overflow: ellipsis;
 }
+.list-tab-frame .hist-table-history-list th.hist-file-h,
+.list-tab-frame .hist-table-history-list td.hist-file {
+    width: 115px;
+    min-width: 115px;
+    max-width: 115px;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 .list-tab-frame .hist-table-defect-list th.hist-code-h,
 .list-tab-frame .hist-table-defect-list td.hist-code {
     width: 72px;
@@ -6453,6 +6486,45 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     text-transform: uppercase;
     color: #4a5568;
 }
+.df-post-title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-bottom: 4px;
+}
+.df-post-title-row .df-post-title {
+    margin: 0;
+    flex: 1 1 240px;
+    min-width: 0;
+}
+.df-post-date-field {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+    margin-left: auto;
+}
+.df-post-date-field label {
+    margin: 0;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #4a5568;
+    white-space: nowrap;
+}
+.df-post-date-field input[type="date"] {
+    width: 148px;
+    padding: 6px 8px;
+    border: 1px solid #cbd5e0;
+    border-radius: 5px;
+    font-size: 13px;
+    box-sizing: border-box;
+    background: #fff;
+}
+.df-company-attach-row .wr-attach-block { margin: 0; }
 .df-post-date-row {
     max-width: 200px;
 }

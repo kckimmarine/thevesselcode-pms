@@ -11,6 +11,8 @@ const TVC_DefectReport = (function () {
     }
 
     const DF_PICK_Z = 10100;
+    const DF_NO_GROUP_KEY = '__NO_GROUP__';
+    const DF_NO_GROUP_LABEL = 'No PMS GROUP';
     let _dfGroupPickSearch = '';
     let _dfJobPickSearch = '';
     let _dfJobRowPickUnbind = null;
@@ -59,7 +61,14 @@ const TVC_DefectReport = (function () {
         return TVC_SpareMenu?.safeTreeLabel?.(v) || String(v || '').trim();
     }
 
+    function dfIsNoGroup(row) {
+        const key = dfVal(row, 'pms_group_key');
+        const label = dfVal(row, 'pms_group_no');
+        return key === DF_NO_GROUP_KEY || label === DF_NO_GROUP_LABEL || label === 'No selection';
+    }
+
     function dfGroupKey(row) {
+        if (dfIsNoGroup(row)) return '';
         const key = dfVal(row, 'pms_group_key');
         if (key) return key;
         const job = resolveJob(row);
@@ -173,20 +182,19 @@ const TVC_DefectReport = (function () {
 
     function buildDfGroupPickList(row) {
         const st = getState();
-        const draftKey = dfGroupKey(row);
+        const selKey = dfVal(row, 'pms_group_key') || dfGroupKey(row) || '';
         const q = (_dfGroupPickSearch || '').toLowerCase().trim();
         const matchNode = (n) => !q || dfTreeLabel(n.label).toLowerCase().includes(q)
             || String(n.department || '').toLowerCase().includes(q);
-        const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
+        const matchNoSelection = !q || 'no pms group'.includes(q) || q.includes('no pms') || q.includes('no group');
         let html = '';
-        const critKey = TVC_SpareMenu?.CRITICAL_GROUP_KEY || '__CRITICAL_EQUIPMENT__';
-        if (matchCritical) {
-            const sel = draftKey === critKey ? ' selected' : '';
-            html += `<button type="button" class="spare-consume-pick-item${sel}"
-                onclick="TVC_DefectReport.pickDfGroup('${escAttr(critKey)}','${escAttr('Critical Equipment')}')">⚠ Critical Equipment</button>`;
+        if (matchNoSelection) {
+            const sel = selKey === DF_NO_GROUP_KEY ? ' selected' : '';
+            html += `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-none${sel}"
+                onclick="TVC_DefectReport.pickDfGroup('${escAttr(DF_NO_GROUP_KEY)}','${escAttr(DF_NO_GROUP_LABEL)}')">${esc(DF_NO_GROUP_LABEL)}</button>`;
         }
         const nodes = (TVC_SpareMenu?.getPlanGroupPickNodes?.(st) || []).filter(matchNode);
-        if (!nodes.length && !matchCritical) {
+        if (!nodes.length && !matchNoSelection) {
             return '<div class="spare-consume-pick-empty muted">PMS GROUP Tree를 불러오는 중…</div>';
         }
         let curDept = '';
@@ -195,7 +203,7 @@ const TVC_DefectReport = (function () {
                 html += `<div class="spare-consume-pick-dept">${esc(n.department)}</div>`;
                 curDept = n.department;
             }
-            const sel = draftKey === n.key ? ' selected' : '';
+            const sel = selKey === n.key ? ' selected' : '';
             html += `<button type="button" class="spare-consume-pick-item${sel}"
                 onclick="TVC_DefectReport.pickDfGroup('${escAttr(n.key)}','${escAttr(n.label)}')">${esc(dfTreeLabel(n.label))}</button>`;
         });
@@ -219,8 +227,8 @@ const TVC_DefectReport = (function () {
         const selectedCode = activeRow.job_code || '';
         const clearBtn = `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-none${selectedCode ? '' : ' selected'}"
                 onclick="TVC_DefectReport.clearDfJobRow()">
-                <span class="spare-consume-pick-job-code">— Job Code 없음 —</span>
-                <span class="spare-consume-pick-job-sub muted">PMS Group만 지정</span>
+                <span class="spare-consume-pick-job-code">— No Job Code —</span>
+                <span class="spare-consume-pick-job-sub muted">PMS Group only</span>
             </button>`;
         if (!jobs.length) {
             return clearBtn + '<div class="spare-consume-pick-empty muted">검색 결과 없음</div>';
@@ -331,12 +339,24 @@ const TVC_DefectReport = (function () {
         draft.type_model_serial = [hdr.modelType, hdr.serialNo].filter(Boolean).join(' / ');
     }
 
+    function applyDfNoGroupHeader(draft) {
+        draft.pms_group_key = DF_NO_GROUP_KEY;
+        draft.pms_group_no = DF_NO_GROUP_LABEL;
+        draft.machinery_name = '';
+        draft.maker = '';
+        draft.manufacturer = '';
+        draft.model_type = '';
+        draft.capacity = '';
+        draft.serial_no = '';
+        draft.type_model_serial = '';
+    }
+
     function pickDfGroup(groupKey, groupLabel) {
         captureDfFormFields();
         const s = getState();
         const draft = s._dfDraft;
         if (!draft) return;
-        const prevKey = draft.pms_group_key || dfGroupKey(draft);
+        const prevKey = draft.pms_group_key || dfGroupKey(draft) || '';
         if (prevKey !== groupKey) {
             draft.maintenance_job_id = '';
             draft.pms_job_code = '';
@@ -345,7 +365,8 @@ const TVC_DefectReport = (function () {
             draft.job_detail = '';
             draft.job_items = [TVC_SpareMenu.newConsumeJobRow()];
         }
-        applyDfGroupHeader(s, draft, groupKey, groupLabel);
+        if (groupKey === DF_NO_GROUP_KEY) applyDfNoGroupHeader(draft);
+        else applyDfGroupHeader(s, draft, groupKey, groupLabel);
         closeDfPickMenu(document.getElementById('dfGroupPick'));
         rerenderDefectForm();
     }
@@ -474,7 +495,9 @@ const TVC_DefectReport = (function () {
 
     function renderDfGroupPick(row, ro) {
         const label = dfVal(row, 'pms_group_no');
-        const text = label ? dfTreeLabel(label) : '— PMS Group 선택 —';
+        const text = dfIsNoGroup(row)
+            ? DF_NO_GROUP_LABEL
+            : (label ? dfTreeLabel(label) : '— Select PMS Group —');
         if (ro) {
             return `<input class="wr-ro" value="${esc(text)}" readonly tabindex="-1">`;
         }
@@ -507,7 +530,7 @@ const TVC_DefectReport = (function () {
             jobInner = roInp(item.job_code, 'job_code');
         } else {
             jobInner = `<button type="button" id="dfJobPickTrigger-${idx}" class="wr-maint-job-pick spare-consume-job-pick-trigger"${jobDisabled ? ' disabled' : ''} onclick="TVC_DefectReport.toggleDfJobRowPick(event, ${idx})">
-                    <span class="spare-consume-pick-text">${esc(item.job_code || '— JOB CODE 선택 —')}</span>
+                    <span class="spare-consume-pick-text">${esc(item.job_code || '— No Job Code —')}</span>
                     <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
                 </button>
                 <input type="hidden" data-field="job_code" value="${escAttr(item.job_code || '')}">`;
@@ -546,7 +569,7 @@ const TVC_DefectReport = (function () {
             groupKey,
             rowCount: items.length,
         })).join('');
-        const addBtn = !ro
+        const addBtn = !ro && groupKey
             ? `<div class="spare-consume-meta-job-add">
                 <button type="button" class="btn btn-sm spare-consume-job-row-add" onclick="TVC_DefectReport.addDfJobRow()" title="Add JOB CODE row">+</button>
                </div>`
@@ -767,7 +790,9 @@ const TVC_DefectReport = (function () {
                 job_code: normalizeDfJobCode(dfVal(row, 'pms_job_code', job?.job_code || row?.job_code || '')),
                 sort1: dfVal(row, 'item_sort1', job?.item_sort1 || ''),
                 sort2: dfVal(row, 'item_sort2', job?.item_sort2 || ''),
-                job_detail: dfVal(row, 'job_detail', job?.job_detail || ''),
+                job_detail: Array.isArray(row?.job_items) && row.job_items.length
+                    ? (row.job_items[0]?.job_detail ?? '')
+                    : dfVal(row, 'job_detail', job?.job_detail || ''),
             }),
             maintenance_job_id: row?.maintenance_job_id || job?.id || '',
         }];
@@ -779,16 +804,21 @@ const TVC_DefectReport = (function () {
         if (!draft) return;
         const container = document.getElementById('dfJobRows');
         if (!container) return;
-        ensureDfJobItems(draft);
+        const prevItems = ensureDfJobItems(draft);
         const rowEls = container.querySelectorAll('[data-df-job-row]');
         if (!rowEls.length) return;
-        draft.job_items = [...rowEls].map(rowEl => ({
-            job_code: normalizeDfJobCode(rowEl.querySelector('input[data-field="job_code"]')?.value),
-            sort1: rowEl.querySelector('[data-field="sort1"]')?.value?.trim() || '',
-            sort2: rowEl.querySelector('[data-field="sort2"]')?.value?.trim() || '',
-            job_detail: rowEl.querySelector('[data-field="job_detail"]')?.value?.trim() || '',
-            maintenance_job_id: rowEl.dataset.jobId || '',
-        }));
+        draft.job_items = [...rowEls].map((rowEl, idx) => {
+            const prev = prevItems[idx] || {};
+            const hiddenCode = rowEl.querySelector('input[data-field="job_code"]')?.value;
+            const jobCode = normalizeDfJobCode(hiddenCode) || normalizeDfJobCode(prev.job_code);
+            return {
+                job_code: jobCode,
+                sort1: rowEl.querySelector('[data-field="sort1"]')?.value?.trim() ?? prev.sort1 ?? '',
+                sort2: rowEl.querySelector('[data-field="sort2"]')?.value?.trim() ?? prev.sort2 ?? '',
+                job_detail: rowEl.querySelector('[data-field="job_detail"]')?.value?.trim() ?? prev.job_detail ?? '',
+                maintenance_job_id: rowEl.dataset.jobId || prev.maintenance_job_id || '',
+            };
+        });
         syncDfPrimaryJobFromItems(draft);
     }
 
@@ -844,17 +874,46 @@ const TVC_DefectReport = (function () {
 
     function dfVal(row, key, fallback = '') {
         const draft = getState()._dfDraft;
-        const v = draft?.[key];
-        if (v !== undefined && v !== null && v !== '') return v;
-        const rv = row?.[key];
-        if (rv !== undefined && rv !== null && rv !== '') return rv;
+        if (draft && Object.prototype.hasOwnProperty.call(draft, key)) {
+            const v = draft[key];
+            return v == null ? '' : v;
+        }
+        if (row && Object.prototype.hasOwnProperty.call(row, key)) {
+            const rv = row[key];
+            return rv == null ? '' : rv;
+        }
         return fallback ?? '';
+    }
+
+    function upsertDefectCaseInState(row) {
+        if (!row?.id) return;
+        const s = getState();
+        if (!Array.isArray(s.defectCases)) s.defectCases = [];
+        const i = s.defectCases.findIndex(c => c.id === row.id);
+        if (i >= 0) s.defectCases[i] = row;
+        else s.defectCases.push(row);
+    }
+
+    function syncDfDraftFromRow(row) {
+        const s = getState();
+        if (!row?.id) return;
+        s._dfCaseId = row.id;
+        s._dfDraft = {
+            ...row,
+            ship_attachments: Array.isArray(row.ship_attachments) ? row.ship_attachments.map(a => ({ ...a })) : [],
+            company_attachments: Array.isArray(row.company_attachments) ? row.company_attachments.map(a => ({ ...a })) : [],
+            used_parts: Array.isArray(row.used_parts) ? row.used_parts.map(p => ({ ...p })) : [],
+            job_items: Array.isArray(row.job_items) ? row.job_items.map(i => ({ ...i })) : [],
+        };
     }
 
     function captureDfFormFields() {
         const host = document.getElementById('defectReportBody');
-        const draft = getState()._dfDraft || {};
-        if (!host) return draft;
+        const draft = { ...(getState()._dfDraft || {}) };
+        if (!host) {
+            getState()._dfDraft = draft;
+            return draft;
+        }
         host.querySelectorAll('[data-df]').forEach(el => {
             const key = el.dataset.df;
             if (el.type === 'radio') return;
@@ -936,7 +995,7 @@ const TVC_DefectReport = (function () {
             alert(e.message || '파일을 읽을 수 없습니다.');
         }
         input.value = '';
-        refreshDefectModal();
+        refreshDefectModal({ preserveScroll: true });
     }
 
     async function removeAttachment(kind, attId) {
@@ -944,7 +1003,7 @@ const TVC_DefectReport = (function () {
         const list = dfAttachmentList(kind);
         const i = list.findIndex(a => a.id === attId);
         if (i >= 0) list.splice(i, 1);
-        refreshDefectModal();
+        refreshDefectModal({ preserveScroll: true });
     }
 
     function refresh() { _ctx?.refresh?.(); }
@@ -968,8 +1027,7 @@ const TVC_DefectReport = (function () {
         } else if (s.department) {
             rows = rows.filter(r => TVC_DefectCase.belongsToDepartment(r, s.department));
         }
-        return rows.filter(r => r.visible_in_list !== false)
-            .sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+        return rows.filter(r => r.visible_in_list !== false);
     }
 
     function defectListWorkflowStatus(row) {
@@ -1014,7 +1072,7 @@ const TVC_DefectReport = (function () {
         const jobName = String(row.job_name || '').trim();
         const equipName = formatDfGroupEquipmentName(row.pms_group_no)
             || (String(row.machinery_name || '').trim() !== jobName ? String(row.machinery_name || '').trim() : '');
-        if (row.pms_group_no) {
+        if (row.pms_group_no && !dfIsNoGroup(row)) {
             return {
                 jobCode: formatDfGroupNoShort(row.pms_group_no),
                 sort1: equipName,
@@ -1038,9 +1096,7 @@ const TVC_DefectReport = (function () {
     }
 
     function defectListRowsRaw() {
-        return filteredCases().sort((a, b) =>
-            (b.work_date || b.report_date || b.updated_at || '').localeCompare(a.work_date || a.report_date || a.updated_at || '')
-        );
+        return filteredCases().sort((a, b) => TVC_App.compareDefectCaseByReportedDate(a, b));
     }
 
     function matchDfListSearch(row) {
@@ -1052,16 +1108,12 @@ const TVC_DefectReport = (function () {
     }
 
     function hasDfListFilterActive() {
-        return !!(_dfListSearch || TVC_App.hasReportPeriodFilter?.()
-            || TVC_ListFilters?.hasActive('defect', { listFilters: TVC_App.getListFilterState?.() }));
+        return !!(_dfListSearch || TVC_App.hasReportPeriodFilter?.());
     }
 
     function defectListRows() {
-        const ctx = TVC_App.listFilterCtx?.() || {};
-        const df = TVC_App.getListFilterState?.()?.defect;
         return defectListRowsRaw().filter(r =>
             matchDfListSearch(r) && matchDfListPeriod(r)
-            && (!TVC_ListFilters || !df || TVC_ListFilters.matchDefectRow(r, df, ctx))
         );
     }
 
@@ -1099,6 +1151,35 @@ const TVC_DefectReport = (function () {
         if (!row || !getState().user) return false;
         if (!TVC_DefectCase.canModifyListWorkflow(row)) return false;
         const st = TVC_DefectCase.listWorkflowStatus(row);
+        return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
+    }
+
+    /** Submitted / Approved — Ship's Comments 등 선박 확인 섹션만 Modify */
+    function canModifyDfShipCommentsOnly(row) {
+        if (!row || !getState().user || isHq()) return false;
+        if (row.status === TVC_DefectCase.Status.CLOSED) return false;
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (!['Reported', 'Confirmed', 'Submitted', 'Approved'].includes(st)) return false;
+        if (TVC_DefectCase.isPhase1Editable(row)) return false;
+        if (st === 'Submitted' || st === 'Approved') {
+            return TVC_RBAC.canConfirmDepartment(getState().user, row.department);
+        }
+        return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
+    }
+
+    function canOpenDfModifyRow(row) {
+        return canModifyDfListRow(row) || canModifyDfShipCommentsOnly(row);
+    }
+
+    function canEditDfShipCommentsSection(row, forceView) {
+        if (forceView || isHq() || !row || !getState().user) return false;
+        if (row.status === TVC_DefectCase.Status.CLOSED) return false;
+        if (TVC_DefectCase.isShipVerificationEditable(row)) return true;
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (!['Draft', 'Reported', 'Confirmed', 'Submitted', 'Approved'].includes(st)) return false;
+        if (st === 'Submitted' || st === 'Approved') {
+            return TVC_RBAC.canConfirmDepartment(getState().user, row.department);
+        }
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
@@ -1160,9 +1241,9 @@ const TVC_DefectReport = (function () {
             if (el) el.classList.toggle('hidden', !show);
         };
         setDis('dfBtnDetail', !row);
-        const modifiableStatus = !!(row && TVC_DefectCase.canModifyListWorkflow(row));
+        const modifiableStatus = !!(row && (TVC_DefectCase.canModifyListWorkflow(row) || canModifyDfShipCommentsOnly(row)));
         setVis('dfBtnModify', modifiableStatus);
-        setDis('dfBtnModify', !row || !canModifyDfListRow(row));
+        setDis('dfBtnModify', !row || !canOpenDfModifyRow(row));
         setDis('dfBtnDelete', !(row && canDeleteDfListRow(row)) && !checkedRows.some(canDeleteDfListRow));
         setDis('dfBtnConfirm', !canConfirm && !(row && isDfListRowConfirmable(row)));
 
@@ -1244,9 +1325,19 @@ const TVC_DefectReport = (function () {
         const id = getState()._defectCaseId;
         if (!id) return;
         const row = (getState().defectCases || []).find(c => c.id === id);
-        const mode = row && getState()._dfNavSource === 'list'
+        if (row && !canOpenDfModifyRow(row)) {
+            const st = TVC_DefectCase.listWorkflowStatus(row);
+            if (st === 'Submitted' || st === 'Approved') {
+                return alert('Submitted · Approved 상태는 Captain / Chief Engineer만 Ship\'s Comments를 수정할 수 있습니다.');
+            }
+            return alert('Modify permission denied.');
+        }
+        const mode = row && (getState()._dfNavSource === 'list' || getState()._dfNavSource === 'history')
             ? resolveDfOpenMode(row)
             : 'edit';
+        const s = getState();
+        s._dfCaseId = null;
+        s._dfDraft = null;
         openCase(id, mode);
     }
 
@@ -1268,19 +1359,27 @@ const TVC_DefectReport = (function () {
     }
 
     async function reopenDefectCaseAfterSave(id) {
+        const saved = await TVC_DefectCaseService.get(id);
+        if (saved) {
+            upsertDefectCaseInState(saved);
+            syncDfDraftFromRow(saved);
+        }
         const nav = getState()._dfNavSource;
-        if (nav === 'list' || nav === 'history') await openCase(id, 'view');
-        else await openCase(id);
+        if (nav === 'list' || nav === 'history') await openCase(id, 'view', { keepDraft: true });
+        else await openCase(id, undefined, { keepDraft: true });
     }
 
     async function syncDefectConsumeStock(row, usedParts) {
         const s = getState();
         const user = s.user;
         if (!user || !row?.id) return row;
+        if ((s._dfPage || '1') === '2' || (s._wrUsedParts || s._dfUsedParts || []).length) {
+            captureDfUsedParts();
+        }
         captureDfJobItems();
         const draft = s._dfDraft || row;
         try {
-            const enriched = enrichDfUsedParts(usedParts || row.used_parts || []);
+            const enriched = enrichDfUsedParts(usedParts || dfUsedPartsPayload() || row.used_parts || []);
             const syncResult = await TVC_SpareMenu.syncConsumeLogFromDefectReport({
                 defectCase: { ...row, job_items: draft.job_items || row.job_items || [] },
                 usedParts: enriched,
@@ -1295,6 +1394,11 @@ const TVC_DefectReport = (function () {
                 row.consume_log_id = consumeLogId || null;
                 row.stock_applied_at = stockAppliedAt || '';
                 await TVC_DB.put('defect_cases', row);
+                upsertDefectCaseInState(row);
+                if (s._dfCaseId === row.id && s._dfDraft) {
+                    s._dfDraft.consume_log_id = row.consume_log_id;
+                    s._dfDraft.stock_applied_at = row.stock_applied_at;
+                }
             }
         } catch (syncErr) {
             console.error('Defect consumed log sync failed:', syncErr);
@@ -1362,12 +1466,56 @@ const TVC_DefectReport = (function () {
     function dfModifyReport() {
         const row = getSelectedDfRow();
         if (!row) return alert('Defect Report 목록에서 항목을 선택하세요.');
-        if (!canModifyDfListRow(row)) {
+        dfModifyCase(row.id, 'list');
+    }
+
+    function dfModifyCase(id, navSource, opts = {}) {
+        const row = (getState().defectCases || []).find(c => c.id === id);
+        if (!row) return alert('Defect Report를 찾을 수 없습니다.');
+        if (!canOpenDfModifyRow(row)) {
             const st = TVC_DefectCase.listWorkflowStatus(row);
             if (st === 'Confirmed') return alert('Confirmed 상태는 Captain / Chief Engineer만 수정할 수 있습니다.');
+            if (st === 'Submitted' || st === 'Approved') {
+                return alert('Submitted · Approved 상태는 Captain / Chief Engineer만 Ship\'s Comments를 수정할 수 있습니다.');
+            }
             return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
         }
-        openCaseFromNav(row.id, 'list', row ? resolveDfOpenMode(row) : 'edit');
+        openCaseFromNav(id, navSource, resolveDfOpenMode(row), opts);
+    }
+
+    async function dfDeleteByIds(ids, opts = {}) {
+        const user = getState().user;
+        if (!user) return alert('로그인이 필요합니다.');
+        const idList = (ids || []).filter(Boolean);
+        if (!idList.length) return alert('삭제할 항목을 선택하세요.');
+        const rows = idList.map(id => (getState().defectCases || []).find(r => r.id === id)).filter(Boolean);
+        const deletable = rows.filter(canDeleteDfListRow);
+        if (!deletable.length) return alert('삭제 권한이 없거나 Submitted · Approved 상태입니다.');
+        if (!confirm(`${deletable.length}건의 Defect Report를 삭제하시겠습니까?`)) return;
+
+        for (const row of deletable) {
+            try {
+                await TVC_DefectCaseService.deleteCase(user, row.id);
+                delete _dfListChecked[row.id];
+                if (_dfListSelId === row.id) _dfListSelId = null;
+            } catch (e) {
+                alert(`${row.case_no}: ${e.message || e.code || 'Delete failed'}`);
+                break;
+            }
+        }
+        await refresh();
+        if (getState().currentTab === 'history') TVC_App.renderWorkHistory?.();
+        if (opts.clearHistSelection && getState()._histSelReportId) {
+            const deletedKeys = new Set(deletable.map(r => TVC_App.histDefectRowKey?.(r.id)));
+            if (deletedKeys.has(getState()._histSelReportId)) getState()._histSelReportId = null;
+        }
+    }
+
+    async function dfDeleteReport() {
+        let ids = getCheckedDfListIds();
+        const sel = getSelectedDfRow();
+        if (!ids.length && sel && canDeleteDfListRow(sel)) ids = [sel.id];
+        await dfDeleteByIds(ids);
     }
 
     async function dfReportConfirm() {
@@ -1393,6 +1541,12 @@ const TVC_DefectReport = (function () {
         for (const row of toConfirm) {
             try {
                 await TVC_DefectCaseService.saveApprovalMeta(user, row.id, { confirm: true });
+                let fresh = await TVC_DefectCaseService.get(row.id);
+                if (fresh && (fresh.used_parts || []).some(p => Number(p.qty_used) > 0) && !fresh.stock_applied_at) {
+                    fresh = await syncDefectConsumeStock(fresh, fresh.used_parts);
+                } else if (fresh) {
+                    upsertDefectCaseInState(fresh);
+                }
                 ok++;
             } catch (e) {
                 alert(`${row.case_no}: ${e.message || e.code || 'Confirm failed'}`);
@@ -1405,84 +1559,14 @@ const TVC_DefectReport = (function () {
         if (ok) alert(`${ok}건 Report Confirm 완료`);
     }
 
-    async function dfDeleteReport() {
-        const user = getState().user;
-        if (!user) return alert('로그인이 필요합니다.');
-        let ids = getCheckedDfListIds();
-        const sel = getSelectedDfRow();
-        if (!ids.length && sel && canDeleteDfListRow(sel)) ids = [sel.id];
-        if (!ids.length) return alert('삭제할 항목을 선택하세요.');
-        const rows = ids.map(id => defectListRowsRaw().find(r => r.id === id)).filter(Boolean);
-        const deletable = rows.filter(canDeleteDfListRow);
-        if (!deletable.length) return alert('삭제 권한이 없거나 Submitted · Approved 상태입니다.');
-        if (!confirm(`${deletable.length}건의 Defect Report를 삭제하시겠습니까?`)) return;
-
-        for (const row of deletable) {
-            try {
-                await TVC_DefectCaseService.deleteCase(user, row.id);
-                delete _dfListChecked[row.id];
-                if (_dfListSelId === row.id) _dfListSelId = null;
-            } catch (e) {
-                alert(`${row.case_no}: ${e.message || e.code || 'Delete failed'}`);
-                break;
-            }
-        }
-        await refresh();
-        renderTab();
-    }
-
     function renderInbox() {
         renderTab();
     }
 
     function renderTab() {
-        const body = document.getElementById('defectTabBody');
-        if (!body) return;
-        bindDfListTableEvents();
-        pruneDfListChecked();
-        const all = defectListRowsRaw();
-        const rows = defectListRows();
-        const colSpan = 15;
-        const countEl = document.getElementById('dfListCount');
-        if (countEl) countEl.textContent = `${rows.length} / ${all.length} entries`;
-        const searchEl = document.getElementById('dfListSearch');
-        if (searchEl && document.activeElement !== searchEl) searchEl.value = _dfListSearch || '';
-        TVC_App.updateSearchClearBtn?.('dfListSearch');
-        TVC_App.syncReportPeriodInputs?.();
-
-        if (!all.length) {
-            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No defect cases yet. Create a Defect Report when trouble is identified.</td></tr>`;
-            updateDfListToolbarState();
-            return;
+        if (getState().currentTab === 'history') {
+            TVC_App.renderWorkHistory?.();
         }
-        if (!rows.length) {
-            const noMatchMsg = hasDfListFilterActive()
-                ? 'No matches for the current search or period filter.'
-                : `No matches for "${esc(_dfListSearch)}".`;
-            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">${noMatchMsg}</td></tr>`;
-            updateDfListToolbarState();
-            return;
-        }
-
-        body.innerHTML = rows.map(r => {
-            const canCheck = isDfListRowCheckable(r);
-            const checked = canCheck && !!_dfListChecked?.[r.id];
-            const chk = canCheck
-                ? `<input type="checkbox" class="df-list-chk-input"${checked ? ' checked' : ''}>`
-                : `<input type="checkbox" disabled title="${escAttr(dfListCheckDisabledTitle(r))}">`;
-            return TVC_App.buildDefectHistRowHtml(r, {
-                selected: _dfListSelId === r.id,
-                checkboxHtml: chk,
-                fileNoColumn: true,
-                criticalColumn: true,
-                omitDetailColumn: true,
-                onclick: `TVC_DefectReport.selectDfListRow('${escAttr(r.id)}', event)`,
-                ondblclick: `TVC_DefectReport.openCaseFromList('${escAttr(r.id)}')`,
-            });
-        }).join('');
-        updateDfListToolbarState();
-        TVC_App.bindSearchClearInput?.('dfListSearch');
-        TVC_ListFilters?.syncBtn('defect');
     }
 
     function renderInboxTo(bodyId, headId) {
@@ -1534,6 +1618,7 @@ const TVC_DefectReport = (function () {
         const {
             canEditCompanyReply = false,
             canEditShipVerify = false,
+            canEditShoreSupport = canEditShipVerify,
             canEditCompanyFinal = false,
         } = opts;
         const fld = (label, inner, extraCls = '') =>
@@ -1566,17 +1651,24 @@ const TVC_DefectReport = (function () {
         const p3ro = !canEditShipVerify;
         const p4ro = !canEditCompanyFinal;
         const canUploadCompanyAttach = canEditCompanyReply || canEditCompanyFinal;
+        const replyDateInp = inp('reply_date', row.reply_date || '', 'date', p2ro)
+            .replace('data-df="reply_date"', 'id="dfReplyDate" data-df="reply_date"');
+        const shipVerifiedDateInp = inp('ship_verified_date', row.ship_verified_date || '', 'date', p3ro)
+            .replace('data-df="ship_verified_date"', 'id="dfShipVerifiedDate" data-df="ship_verified_date"');
 
         return `<div class="df-post-action-stack">
             <section class="df-post-block df-company-reply">
-                <h4 class="df-post-title">INITIAL REPLY FROM COMPANY / PERMIT TO WORK FOR UNPLANNED MAINTENANCE</h4>
-                <div class="df-post-date-row">
-                    ${fld('DATE', inp('reply_date', row.reply_date || '', 'date', p2ro))}
+                <div class="df-post-title-row">
+                    <h4 class="df-post-title">Initial Reply from Company / Permit to Work for Unplanned Maintenance</h4>
+                    <div class="df-post-date-field">
+                        <label for="dfReplyDate">Date</label>
+                        ${replyDateInp}
+                    </div>
                 </div>
                 ${fld('', ta('company_initial_reply', '', 4, p2ro), 'wr-maint-span-all')}
                 <textarea class="hidden" data-df="permit_to_work" aria-hidden="true">${esc(dfVal(row, 'permit_to_work', dfVal(row, 'company_initial_reply', '')))}</textarea>
                 <div class="df-checks df-post-checks">
-                    <span class="df-checks-label">Require to report to</span>
+                    <span class="df-checks-label">REQUIRE TO REPORT TO</span>
                     ${reportChk('report_to_class', 'Class', p2ro)}
                     ${reportChk('report_to_flag', 'Flag State', p2ro)}
                     ${reportChk('report_to_external_stakeholder', 'External Stakeholder', p2ro)}
@@ -1585,20 +1677,28 @@ const TVC_DefectReport = (function () {
                 </div>
             </section>
             <section class="df-post-block df-ship-verify">
-                <h4 class="df-post-title">Verified by Ship (After defect was cleared)</h4>
+                <div class="df-post-title-row">
+                    <h4 class="df-post-title">Ship's Comments (After defect was cleared)</h4>
+                    <div class="df-post-date-field">
+                        <label for="dfShipVerifiedDate">Date</label>
+                        ${shipVerifiedDateInp}
+                    </div>
+                </div>
                 ${fld('', ta('ship_verified_after_clear', '', 4, p3ro), 'wr-maint-span-all')}
                 <div class="wr-footer-labor df-verify-labor">
                     ${fld('Working Hours', inp('working_hours', '0', 'number', p3ro))}
                     ${fld('Working Member', inp('working_member', '0', 'number', p3ro))}
                     <div class="wr-footer-flags df-verify-flags" role="group" aria-label="Verification flags">
-                        ${flagChk('shore_support', 'Conducted by Shore Support', canEditShipVerify)}
-                        ${flagChk('defect_cleared', 'Defect Cleared', canEditShipVerify)}
+                        ${flagChk('shore_support', 'CONDUCTED BY SHORE SUPPORT', canEditShoreSupport)}
+                        ${flagChk('defect_cleared', 'DEFECT CLEARED', canEditShipVerify)}
                     </div>
                 </div>
             </section>
             <section class="df-post-block df-company-final">
                 ${fld("Company's Comments", ta('company_comment', '', 3, p4ro), 'wr-maint-span-all')}
-                ${fld("Company's Attachment", `<div class="wr-maint-inline-box wr-maint-inline-attach">${renderDfAttachmentBlock('company', { canUpload: canUploadCompanyAttach })}</div>`, 'wr-maint-span-all')}
+                <div class="df-company-attach-row wr-maint-span-all">
+                    ${renderDfAttachmentBlock('company', { canUpload: canUploadCompanyAttach })}
+                </div>
             </section>
         </div>`;
     }
@@ -1642,6 +1742,7 @@ const TVC_DefectReport = (function () {
     function renderPhase1(row, readonly, opts = {}) {
         const { includeApproval = true, postAction = {} } = opts;
         const canEditShipInitial = postAction.canEditShipInitial ?? !readonly;
+        const canEditShipAttach = postAction.canEditShipAttach ?? canEditShipInitial;
         ensureDfDraft(row);
         ensureDfJobItems(row);
         const s = getState();
@@ -1665,7 +1766,7 @@ const TVC_DefectReport = (function () {
             return `<input data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
         };
         const ta = (name, val, rows = 3) => `<textarea class="wr-maint-textarea${roCls}" data-df="${name}" rows="${rows}"${roAttr}>${esc(dfVal(row, name, val))}</textarea>`;
-        const repairChk = `<label class="wr-maint-chk"><input type="checkbox" data-df="repair_request"${dfFlagChecked(row, 'repair_request') ? ' checked' : ''}${canEditShipInitial ? '' : ' disabled'} aria-label="Repair Request"></label>`;
+        const repairChk = `<label class="wr-maint-chk df-repair-request-chk"><input type="checkbox" data-df="repair_request"${dfFlagChecked(row, 'repair_request') ? ' checked' : ''}${canEditShipInitial ? '' : ' disabled'}> REPAIR REQUEST (IF SHORE SUPPORT IS REQUIRED)</label>`;
 
         return `<div class="wr-maint-form">
             ${includeApproval ? renderDfApprovalHtml(row) : ''}
@@ -1696,9 +1797,9 @@ const TVC_DefectReport = (function () {
                 ${fld('Estimated Cause of Defect', ta('estimated_cause', ''), 'wr-maint-span-all')}
                 ${fld('Possible Effect to Other System', ta('possible_effect', ''), 'wr-maint-span-all')}
                 ${fld('Action Plan / Corrective Action', ta('action_taken', ''), 'wr-maint-span-all')}
-                <div class="wr-maint-grid wr-maint-grid-2 df-ship-initial-pair">
-                    ${fld('Repair Request', `<div class="wr-maint-inline-box">${repairChk}</div>`)}
-                    ${fld("Ship's Attachment", `<div class="wr-maint-inline-box wr-maint-inline-attach">${renderDfAttachmentBlock('ship', { canUpload: canEditShipInitial })}</div>`)}
+                <div class="df-ship-initial-actions wr-maint-span-all wr-maint-grid-gap">
+                    ${repairChk}
+                    ${renderDfAttachmentBlock('ship', { canUpload: canEditShipAttach })}
                 </div>
                 ${renderDfPostActionSections(row, opts.postAction || {})}
             </section>
@@ -1740,7 +1841,29 @@ const TVC_DefectReport = (function () {
         return { ...base, ...draft, id };
     }
 
-    function refreshDefectModal() {
+    function captureDefectModalScroll() {
+        const page = document.querySelector('#defectReportBody .wr-page');
+        const modal = document.getElementById('defectReportModal');
+        return {
+            pageTop: page?.scrollTop ?? 0,
+            modalTop: modal?.scrollTop ?? 0,
+        };
+    }
+
+    function restoreDefectModalScroll(saved) {
+        if (!saved) return;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const page = document.querySelector('#defectReportBody .wr-page');
+                const modal = document.getElementById('defectReportModal');
+                if (page) page.scrollTop = saved.pageTop;
+                if (modal) modal.scrollTop = saved.modalTop;
+            });
+        });
+    }
+
+    function refreshDefectModal(opts = {}) {
+        const scroll = opts.preserveScroll ? captureDefectModalScroll() : null;
         closeAllDfPicks();
         const s = getState();
         if ((s._dfPage || '1') === '2') {
@@ -1760,6 +1883,7 @@ const TVC_DefectReport = (function () {
             const page2ro = forceView || !TVC_DefectCase.canModifyListWorkflow(row);
             syncDfSparePage2Ui(true, page2ro);
         }
+        restoreDefectModalScroll(scroll);
     }
 
     function setDefectReportPage(page) {
@@ -1794,19 +1918,22 @@ const TVC_DefectReport = (function () {
         const navSource = getState()._dfNavSource;
         const fromHistoryNav = navSource === 'history';
         const fromListNav = navSource === 'list';
-        const forceView = mode === 'view' || fromHistoryNav;
+        const forceView = mode === 'view';
         const dfPage = getState()._dfPage || '1';
         const approval = dfApprovalState(row);
         const canEditP1 = !forceView && TVC_DefectCase.isPhase1Editable(row)
             && (!hq || row.status === TVC_DefectCase.Status.DRAFT);
         const canEditShipInitial = canEditP1;
         const canEditCompanyReply = !forceView && hq && TVC_DefectCase.isPhase2Editable(row);
-        const canEditShipVerify = !forceView && !hq && TVC_DefectCase.isShipVerificationEditable(row);
+        const canEditShipComments = canEditDfShipCommentsSection(row, forceView);
+        const canEditShipVerify = canEditShipComments;
+        const canEditShoreSupport = canEditShipInitial || canEditShipComments;
+        const canEditShipAttach = canEditShipInitial || canEditShipComments;
         const canEditP4 = !forceView && hq && TVC_DefectCase.isPhase4Editable(row);
         const canEditCompanyFinal = !forceView && hq && (canEditP4 || canEditCompanyReply);
         const canHqApproveOnly = !forceView && hq && approval.canApproveNow;
         const canSave = !forceView && (
-            canEditP1 || canEditCompanyReply || canEditShipVerify || canEditP4 || canEditCompanyFinal || canHqApproveOnly
+            canEditP1 || canEditCompanyReply || canEditShipVerify || canEditShoreSupport || canEditP4 || canEditCompanyFinal || canHqApproveOnly
         );
         const titleText = fromListNav || fromHistoryNav
             ? 'Defect Report'
@@ -1829,6 +1956,8 @@ const TVC_DefectReport = (function () {
                 includeApproval: true,
                 postAction: {
                     canEditShipInitial,
+                    canEditShipAttach,
+                    canEditShoreSupport,
                     canEditCompanyReply,
                     canEditShipVerify,
                     canEditCompanyFinal,
@@ -1843,7 +1972,7 @@ const TVC_DefectReport = (function () {
         let actionsHtml;
         if (fromListNav || fromHistoryNav) {
             actionsClass += ' df-modal-actions-split';
-            const canModifyRow = canModifyDfListRow(row);
+            const canModifyRow = canOpenDfModifyRow(row);
             const navBtns = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>`;
             const printBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.printDefectModal()">Print</button>`;
@@ -1877,33 +2006,48 @@ const TVC_DefectReport = (function () {
     }
 
     function captureForm() {
-        if ((getState()._dfPage || '1') === '1') {
+        const st = getState();
+        if (!st._dfDraft && st._defectCaseId) {
+            const base = (st.defectCases || []).find(c => c.id === st._defectCaseId);
+            if (base) ensureDfDraft(base);
+        }
+        const snapshot = { ...(st._dfDraft || {}) };
+        if ((st._dfPage || '1') === '1') {
             captureDfJobItems();
-        } else if ((getState()._dfPage || '1') === '2') {
+        }
+        if ((st._dfPage || '1') === '2' || (st._wrUsedParts || st._dfUsedParts || []).length) {
             captureDfUsedParts();
         }
         const draft = captureDfFormFields();
-        const st = getState();
         return normalizeDfSubmitRow(st, {
+            ...snapshot,
             ...draft,
             ship_attachments: dfAttachmentList('ship'),
             company_attachments: dfAttachmentList('company'),
             used_parts: dfUsedPartsPayload(),
-            job_items: draft.job_items || [],
+            job_items: draft.job_items || snapshot.job_items || [],
         });
     }
 
     async function openCase(id, mode, opts = {}) {
         const s = getState();
-        let row = (s.defectCases || []).find(c => c.id === id);
+        let row = opts.row || (s.defectCases || []).find(c => c.id === id);
         if (!row) row = await TVC_DefectCaseService.get(id);
         if (!row) return alert('Case not found.');
-        if (s._defectCaseId !== id) s._dfPage = '1';
+        const caseChanged = s._defectCaseId !== id;
+        if (caseChanged) {
+            s._dfPage = '1';
+            s._dfCaseId = null;
+            s._dfDraft = null;
+        }
         s._defectCaseId = id;
         s._defectMode = mode === 'view' ? 'view' : (mode || 'edit');
-        s._dfCaseId = null;
         _dfListSelId = id;
-        ensureDfDraft(row);
+        if (opts.keepDraft && s._dfDraft) {
+            /* saved reopen — draft already synced from DB */
+        } else {
+            ensureDfDraft(row);
+        }
         s._dfUsedPartsCaseId = null;
         ensureDfUsedParts(row);
         const body = document.getElementById('defectReportBody');
@@ -1927,6 +2071,7 @@ const TVC_DefectReport = (function () {
     async function openNewFromJob(jobId) {
         const s = getState();
         s._dfNavSource = null;
+        TVC_App.switchTab?.('actual');
         const job = s.jobs?.find(j => j.id === jobId);
         if (!job) return alert('Select a job first.');
         const shipName = document.getElementById('cmaxsShipName')?.textContent || '';
@@ -1959,6 +2104,7 @@ const TVC_DefectReport = (function () {
             return alert('Select a vessel first.');
         }
         s._dfNavSource = null;
+        TVC_App.switchTab?.('actual');
         s._dfNewSession = true;
         s._dfSavedToList = false;
         const shipName = document.getElementById('cmaxsShipName')?.textContent || '';
@@ -1994,9 +2140,27 @@ const TVC_DefectReport = (function () {
             alert('Report approved.');
             return;
         }
+        if (!isHq() && canModifyDfShipCommentsOnly(row)) return saveShipCommentsFieldsModal();
         if (!isHq() && TVC_DefectCase.isShipVerificationEditable(row)) return saveShipVerificationModal();
         if (!isHq() && TVC_DefectCase.isPhase3Editable(row)) return saveShipPhase3();
         return saveDraft();
+    }
+
+    async function saveShipCommentsFieldsModal() {
+        const s = getState();
+        const id = s._defectCaseId;
+        if (!id) return;
+        try {
+            await TVC_DefectCaseService.saveShipCommentsFields(s.user, id, captureForm());
+            s._dfSavedToList = true;
+            const saved = await TVC_DefectCaseService.get(id);
+            if (saved) syncDfDraftFromRow(saved);
+            await refresh();
+            await reopenDefectCaseAfterSave(id);
+            alert('Ship\'s Comments saved.');
+        } catch (e) {
+            alert(e.message || e.code || 'Save failed');
+        }
     }
 
     async function saveShipVerificationModal() {
@@ -2006,6 +2170,8 @@ const TVC_DefectReport = (function () {
         try {
             await TVC_DefectCaseService.saveShipVerification(s.user, id, captureForm());
             s._dfSavedToList = true;
+            const saved = await TVC_DefectCaseService.get(id);
+            if (saved) syncDfDraftFromRow(saved);
             await refresh();
             await reopenDefectCaseAfterSave(id);
             alert('Ship verification saved.');
@@ -2021,9 +2187,16 @@ const TVC_DefectReport = (function () {
         const data = { ...captureForm(), visible_in_list: true };
         let row = await TVC_DefectCaseService.saveDraft(s.user, data, id);
         row = await syncDefectConsumeStock(row, data.used_parts);
+        upsertDefectCaseInState(row);
+        syncDfDraftFromRow(row);
         s._dfSavedToList = true;
         promoteNewDefectToListView(id);
         await refresh();
+        const fresh = await TVC_DefectCaseService.get(id);
+        if (fresh) {
+            upsertDefectCaseInState(fresh);
+            syncDfDraftFromRow(fresh);
+        }
         await reopenDefectCaseAfterSave(id);
         alert('Defect Report saved.');
     }
@@ -2032,7 +2205,10 @@ const TVC_DefectReport = (function () {
         const s = getState();
         const id = s._defectCaseId;
         if (!id) return;
-        await TVC_DefectCaseService.saveDraft(s.user, captureForm(), id);
+        const form = captureForm();
+        let row = await TVC_DefectCaseService.saveDraft(s.user, form, id);
+        row = await syncDefectConsumeStock(row, form.used_parts);
+        upsertDefectCaseInState(row);
         try {
             await TVC_DefectCaseService.submitToCompany(s.user, id);
             await refresh();
@@ -2137,9 +2313,11 @@ const TVC_DefectReport = (function () {
     function promoteNewDefectToListView(id) {
         const s = getState();
         if (!s._dfNewSession || s._dfNavSource) return;
-        s._dfNavSource = 'list';
+        s._dfNavSource = 'history';
         s._dfNewSession = false;
         _dfListSelId = id;
+        if (TVC_App.histDefectRowKey) s._histSelReportId = TVC_App.histDefectRowKey(id);
+        TVC_App.switchTab?.('history');
     }
 
     function showCancelConfirm() {
@@ -2210,7 +2388,7 @@ const TVC_DefectReport = (function () {
         s._dfNewSession = false;
         s._dfSavedToList = false;
         s._dfPage = '1';
-        if (s.currentTab === 'defect') renderTab();
+        if (s.currentTab === 'history') renderTab();
     }
 
     return {
@@ -2220,7 +2398,9 @@ const TVC_DefectReport = (function () {
         toggleDfGroupPick, toggleDfJobPick, toggleDfJobRowPick, pickDfGroup, pickDfJob, pickDfJobForRow,
         clearDfJob, clearDfJobRow, addDfJobRow, removeDfJobRow, dfGroupPickSearch, dfJobPickSearch, dfJobRowPickSearch,
         filteredCases, statusLabel, defectListRows,
-        dfDetailReport, dfReportConfirm, dfModifyReport, dfDeleteReport,
+        dfDetailReport, dfReportConfirm, dfModifyReport, dfModifyCase, dfDeleteReport, dfDeleteByIds,
+        isDefectReportConfirmable,
+        canOpenDfModifyRow, canDeleteDfListRow, canModifyDfShipCommentsOnly,
         dfListSearch, clearDfListSearch, selectDfListRow, toggleDfListCheck, toggleDfListSelectAll,
         navDefectModal, modifyDefectModal, cancelDefectModalEdit, deleteDefectModal, setDefectReportPage,
     };

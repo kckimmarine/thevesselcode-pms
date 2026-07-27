@@ -10776,6 +10776,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             nextLines: logLines,
             ref: draft.job_code,
             note: `Defect Report — ${defectCase.case_no || defectCase.id}`,
+            sourceType: 'defect_report',
             skipRbac: true,
         });
         if (stockAppliedAt) {

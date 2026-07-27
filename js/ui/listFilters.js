@@ -18,18 +18,20 @@ const TVC_ListFilters = (function () {
         return state?.listFilters?.[tab] || {};
     }
 
+    function filterBtnId(tab) {
+        if (tab === 'actual') return 'actListFilterBtn';
+        if (tab === 'history') return 'histListFilterBtn';
+        return null;
+    }
+
     function activeCount(tab, state) {
         const f = filters(state, tab);
         if (tab === 'actual') {
             let n = (f.pics?.length || 0) + (f.unassigned ? 1 : 0);
             return n;
         }
-        if (tab === 'defect') {
-            let n = (f.groupKeys?.length || 0) + (f.openOnly ? 1 : 0);
-            return n;
-        }
         if (tab === 'history') {
-            let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0);
+            let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0);
             return n;
         }
         return 0;
@@ -125,9 +127,15 @@ const TVC_ListFilters = (function () {
         return true;
     }
 
+    function effectiveHistType(f) {
+        if (f.openOnly) return 'd';
+        return f.type || 'all';
+    }
+
     function matchHistEntry(entry, f, ctx) {
-        const type = f.type || 'all';
+        const type = effectiveHistType(f);
         if (type !== 'all' && histEntryType(entry) !== type) return false;
+        if (f.openOnly && entry?.source === 'defect' && !isDefectOpen(entry.defect)) return false;
         if (!matchGroupKeys(resolveHistEntryGroupKey(entry, ctx), f.groupKeys)) return false;
         return true;
     }
@@ -172,7 +180,8 @@ const TVC_ListFilters = (function () {
     }
 
     function syncBtn(tab) {
-        const btn = document.getElementById(`${tab === 'actual' ? 'act' : tab === 'defect' ? 'df' : 'hist'}ListFilterBtn`);
+        const btnId = filterBtnId(tab);
+        const btn = btnId ? document.getElementById(btnId) : null;
         if (!btn || !TVC_App?.getListFilterState) return;
         const n = activeCount(tab, { listFilters: TVC_App.getListFilterState() });
         btn.classList.toggle('list-filter-btn-active', n > 0);
@@ -211,8 +220,10 @@ const TVC_ListFilters = (function () {
 
     function renderPopover(tab) {
         const pop = getPopover();
-        const btn = document.getElementById(`${tab === 'actual' ? 'act' : tab === 'defect' ? 'df' : 'hist'}ListFilterBtn`);
+        const btnId = filterBtnId(tab);
+        const btn = btnId ? document.getElementById(btnId) : null;
         if (!pop || !btn || !TVC_App?.getListFilterState) return;
+        pop.classList.toggle('list-filter-pop-history', tab === 'history');
         const state = {
             listFilters: TVC_App.getListFilterState(),
             department: TVC_App.getAppDepartment?.(),
@@ -245,23 +256,21 @@ const TVC_ListFilters = (function () {
                     <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
                     <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
                 </div>`;
-        } else if (tab === 'defect') {
-            pop.innerHTML = renderGroupPanel(f, tab) + `
-                <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="dfFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open only <span class="muted">(DC unchecked)</span></label>
-                <div class="list-filter-actions">
-                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
-                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
-                </div>`;
         } else {
             const types = ['all', 'm', 'p', 'd'];
+            const histType = effectiveHistType(f);
             pop.innerHTML = `
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Report type</div>
                     <div class="list-filter-type-seg">
-                        ${types.map(t => `<button type="button" class="list-filter-type-btn${(f.type || 'all') === t ? ' active' : ''}" data-hist-type="${t}">${TYPE_LABELS[t]}</button>`).join('')}
+                        ${types.map(t => `<button type="button" class="list-filter-type-btn${histType === t ? ' active' : ''}" data-hist-type="${t}">${TYPE_LABELS[t]}</button>`).join('')}
                     </div>
                 </div>
                 ${renderGroupPanel(f, tab)}
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Defect Report</div>
+                    <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="histFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open only <span class="muted">(DC unchecked)</span></label>
+                </div>
                 <div class="list-filter-actions">
                     <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
                     <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
@@ -278,6 +287,11 @@ const TVC_ListFilters = (function () {
                 pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
             });
+        });
+        pop.querySelector('#histFilterOpenOnly')?.addEventListener('change', (ev) => {
+            if (!ev.target.checked) return;
+            pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
+            pop.querySelector('[data-hist-type="d"]')?.classList.add('active');
         });
         const gs = pop.querySelector('.list-filter-group-search');
         if (gs) {
@@ -335,15 +349,13 @@ const TVC_ListFilters = (function () {
             const pics = [...pop.querySelectorAll('[data-pic]:checked')].map(el => el.dataset.pic);
             const unassigned = !!pop.querySelector('#actFilterUnassigned')?.checked;
             TVC_App.setListFilters('actual', { pics, unassigned });
-        } else if (tab === 'defect') {
-            const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
-            const openOnly = !!pop.querySelector('#dfFilterOpenOnly')?.checked;
-            TVC_App.setListFilters('defect', { groupKeys, openOnly });
         } else {
-            const typeBtn = pop.querySelector('[data-hist-type].active');
-            const type = typeBtn?.dataset.histType || 'all';
             const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
-            TVC_App.setListFilters('history', { groupKeys, type });
+            const openOnly = !!pop.querySelector('#histFilterOpenOnly')?.checked;
+            const typeBtn = pop.querySelector('[data-hist-type].active');
+            let type = typeBtn?.dataset.histType || 'all';
+            if (openOnly) type = 'd';
+            TVC_App.setListFilters('history', { groupKeys, type, openOnly });
         }
         closePopover();
     }
@@ -356,7 +368,8 @@ const TVC_ListFilters = (function () {
     function toggle(tab, ev) {
         ev?.stopPropagation();
         const pop = getPopover();
-        const btn = document.getElementById(`${tab === 'actual' ? 'act' : tab === 'defect' ? 'df' : 'hist'}ListFilterBtn`);
+        const btnId = filterBtnId(tab);
+        const btn = btnId ? document.getElementById(btnId) : null;
         if (!pop || !btn) return;
         if (isPopoverOpen(tab)) {
             closePopover();
@@ -373,13 +386,15 @@ const TVC_ListFilters = (function () {
         document._listFilterBound = true;
         window.addEventListener('resize', () => {
             if (!_openTab) return;
-            const btn = document.getElementById(`${_openTab === 'actual' ? 'act' : _openTab === 'defect' ? 'df' : 'hist'}ListFilterBtn`);
+            const btnId = filterBtnId(_openTab);
+            const btn = btnId ? document.getElementById(btnId) : null;
             const pop = getPopover();
             if (btn && pop && !pop.classList.contains('hidden')) positionPopover(btn, pop);
         });
         window.addEventListener('scroll', () => {
             if (!_openTab) return;
-            const btn = document.getElementById(`${_openTab === 'actual' ? 'act' : _openTab === 'defect' ? 'df' : 'hist'}ListFilterBtn`);
+            const btnId = filterBtnId(_openTab);
+            const btn = btnId ? document.getElementById(btnId) : null;
             const pop = getPopover();
             if (btn && pop && !pop.classList.contains('hidden')) positionPopover(btn, pop);
         }, true);
@@ -392,12 +407,9 @@ const TVC_ListFilters = (function () {
             if (f.pics?.length) parts.push(`PIC: ${f.pics.join(', ')}`);
             if (f.unassigned) parts.push('PIC: Unassigned');
         }
-        if (tab === 'defect') {
-            if (f.openOnly) parts.push('Open only');
-            if (f.groupKeys?.length) parts.push(`Group: ${f.groupKeys.length} selected`);
-        }
         if (tab === 'history') {
             if (f.type && f.type !== 'all') parts.push(`Type: ${TYPE_LABELS[f.type]}`);
+            if (f.openOnly) parts.push('Open only');
             if (f.groupKeys?.length) parts.push(`Group: ${f.groupKeys.length} selected`);
         }
         return parts;

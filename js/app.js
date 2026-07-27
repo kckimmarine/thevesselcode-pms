@@ -3,7 +3,7 @@ const TVC_App = (function () {
     const ROW_H = 36;
     const PLAN_SHEET_MIN_WIDTH = 924;
     const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
-    const TABS = ['menu', 'actual', 'defect', 'history', 'runhrs', 'spare'];
+    const TABS = ['menu', 'actual', 'history', 'runhrs', 'spare'];
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
     const NEW_ORIG_JOB_EDIT_ID = '__new_orig_job__';
     let _wrSpareSearchT = null;
@@ -27,8 +27,7 @@ const TVC_App = (function () {
         reportPeriodTo: '',
         listFilters: {
             actual: { pics: [], unassigned: false },
-            defect: { groupKeys: [], openOnly: false },
-            history: { groupKeys: [], type: 'all' },
+            history: { groupKeys: [], type: 'all', openOnly: false },
         },
         jobSort: { field: 'job_code', asc: true },
         search: '',
@@ -351,6 +350,64 @@ const TVC_App = (function () {
         }
     }
 
+    /** Defect Cleared(DC) — Work Plan LAST DONE / NEXT DATE (저장 누락·Confirm 전 DC 등 보정) */
+    async function applyDefectClearedSchedules() {
+        const jobById = new Map((state.jobs || []).map(j => [j.id, j]));
+        const jobByCode = new Map((state.jobs || []).map(j => [j.job_code, j]));
+        const dirtyJobs = [];
+        const dirtyCases = [];
+        const ts = new Date().toISOString();
+
+        const cleared = (state.defectCases || [])
+            .filter(dc => dc.defect_cleared && defectHistoryHasJob(dc))
+            .sort((a, b) => String(b.ship_verified_date || b.report_date || '').localeCompare(
+                String(a.ship_verified_date || a.report_date || ''),
+            ));
+
+        for (const dc of cleared) {
+            const code = defectEffectiveJobCode(dc);
+            const job = (dc.maintenance_job_id && jobById.get(dc.maintenance_job_id))
+                || (code ? jobByCode.get(code) : null);
+            if (!job) continue;
+            const lastDone = String(
+                dc.ship_verified_date || dc.work_date || dc.report_date || dc.last_maintenance_date || '',
+            ).slice(0, 10);
+            if (!lastDone) continue;
+            const nextDate = TVC_Transaction.calcNextDate(job, lastDone);
+            const overdue = new Date(nextDate) < new Date(new Date().toDateString());
+            const scheduleMatches = job.last_done === lastDone
+                && job.next_date === nextDate
+                && job.plan_status === 'COMPLETED';
+            if (scheduleMatches) {
+                if (!dc.job_schedule_applied_at) {
+                    dc.job_schedule_applied_at = ts;
+                    dirtyCases.push(dc);
+                }
+                continue;
+            }
+            job.last_done = lastDone;
+            job.next_date = nextDate;
+            job.is_overdue = overdue;
+            job.plan_status = 'COMPLETED';
+            if (job.schedule_basis === 'POSTPONE') job.schedule_basis = null;
+            job.updated_at = ts;
+            job.sync_status = job.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (job.sync_status || 'LOCAL');
+            if (!dirtyJobs.includes(job)) dirtyJobs.push(job);
+            if (!dc.maintenance_job_id) dc.maintenance_job_id = job.id;
+            if (!dc.job_schedule_applied_at) {
+                dc.job_schedule_applied_at = ts;
+                dirtyCases.push(dc);
+            }
+        }
+
+        for (const job of dirtyJobs) await TVC_DB.put('maintenance_jobs', job);
+        for (const dc of dirtyCases) {
+            dc.updated_at = ts;
+            dc.sync_status = dc.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (dc.sync_status || 'LOCAL');
+            await TVC_DB.put('defect_cases', dc);
+        }
+    }
+
     async function loadData() {
         const allComponents = await TVC_DB.getAll('ship_components');
         const allJobs = await TVC_DB.getAll('maintenance_jobs');
@@ -413,6 +470,7 @@ const TVC_App = (function () {
         }
         state.reports.forEach(r => TVC_WorkReport.fromLegacy(r));
         await applyActiveReportSchedules();
+        await applyDefectClearedSchedules();
         state.idx = TVC_Indexes.build(state);
         assertDeptIsolation();
         await backfillOriginalNextDates(state.jobs);
@@ -505,7 +563,6 @@ const TVC_App = (function () {
         menu: renderMainMenu,
         actual: renderActualPlan,
         history: renderWorkHistory,
-        defect: renderDefectTab,
         runhrs: renderRunHrs,
         spare: renderSpareMenu,
     };
@@ -626,8 +683,16 @@ const TVC_App = (function () {
     }
 
     function defectCaseReportDate(dc) {
-        if (!dc) return '';
-        return (dc.report_date || dc.work_date || dc.submitted_at || dc.created_at || '').slice(0, 10);
+        return listReportedDateStr(dc);
+    }
+
+    /** Defect Report · Work History 목록 — Reported Date (Occurred/work_date·created_at 날짜와 분리) */
+    function listReportedDateStr(record) {
+        if (!record) return '';
+        const rd = String(record.report_date || '').slice(0, 10);
+        if (rd) return rd;
+        const fallback = record.created_at || record.submitted_at || '';
+        return String(fallback).slice(0, 10);
     }
 
     function matchReportPeriodDate(dateStr) {
@@ -911,13 +976,51 @@ const TVC_App = (function () {
         };
     }
 
-    function histEntrySortDate(entry) {
+    function compareReportedDateDesc(dateA, timeA, dateB, timeB) {
+        const dA = String(dateA || '').slice(0, 10);
+        const dB = String(dateB || '').slice(0, 10);
+        const byDate = dB.localeCompare(dA);
+        if (byDate !== 0) return byDate;
+        return String(timeB || '').localeCompare(String(timeA || ''));
+    }
+
+    function compareDefectCaseByReportedDate(a, b) {
+        return compareReportedDateDesc(
+            listReportedDateStr(a), a?.created_at || a?.submitted_at || a?.id,
+            listReportedDateStr(b), b?.created_at || b?.submitted_at || b?.id,
+        );
+    }
+
+    function compareReportByReportedDate(a, b) {
+        return compareReportedDateDesc(
+            listReportedDateStr(a), a?.created_at || a?.id,
+            listReportedDateStr(b), b?.created_at || b?.id,
+        );
+    }
+
+    function histEntryReportedDate(entry) {
+        if (isHistDefectEntry(entry)) return listReportedDateStr(entry.defect);
+        return listReportedDateStr(entry.report);
+    }
+
+    function histEntryCreatedAt(entry) {
         if (isHistDefectEntry(entry)) {
             const d = entry.defect;
-            return d.work_date || d.report_date || d.submitted_at || d.created_at || '';
+            return d?.created_at || d?.submitted_at || d?.id || '';
         }
         const r = entry.report;
-        return r.work_date || r.report_date || r.created_at || '';
+        return r?.created_at || r?.id || '';
+    }
+
+    function compareHistEntryByReportedDate(a, b) {
+        return compareReportedDateDesc(
+            histEntryReportedDate(a), histEntryCreatedAt(a),
+            histEntryReportedDate(b), histEntryCreatedAt(b),
+        );
+    }
+
+    function histEntrySortDate(entry) {
+        return histEntryReportedDate(entry);
     }
 
     function workHistoryDefectCases() {
@@ -1140,7 +1243,7 @@ const TVC_App = (function () {
     }
 
     function bindTabSearchClearInputs() {
-        ['actSearch', 'actTreeSearch', 'histSearch', 'dfListSearch', 'spareSearch', 'spareTreeSearch']
+        ['actSearch', 'actTreeSearch', 'histSearch', 'spareSearch', 'spareTreeSearch']
             .forEach(bindSearchClearInput);
     }
     function sortJobs(field) {
@@ -1177,9 +1280,8 @@ const TVC_App = (function () {
     }
 
     function onReportPeriodChange() {
-        const tab = state.currentTab;
-        const fromEl = document.getElementById(tab === 'defect' ? 'dfPeriodFrom' : 'histPeriodFrom');
-        const toEl = document.getElementById(tab === 'defect' ? 'dfPeriodTo' : 'histPeriodTo');
+        const fromEl = document.getElementById('histPeriodFrom');
+        const toEl = document.getElementById('histPeriodTo');
         const from = fromEl?.value || '';
         const to = toEl?.value || '';
         if (from && to && from > to) {
@@ -1190,29 +1292,22 @@ const TVC_App = (function () {
         state.reportPeriodFrom = from;
         state.reportPeriodTo = to;
         syncReportPeriodInputs();
-        if (tab === 'defect') TVC_DefectReport?.renderTab?.();
-        else if (tab === 'history') renderWorkHistory();
+        if (state.currentTab === 'history') renderWorkHistory();
     }
 
     function clearReportPeriod() {
         state.reportPeriodFrom = '';
         state.reportPeriodTo = '';
         syncReportPeriodInputs();
-        if (state.currentTab === 'defect') TVC_DefectReport?.renderTab?.();
-        else if (state.currentTab === 'history') renderWorkHistory();
+        if (state.currentTab === 'history') renderWorkHistory();
     }
 
     function syncReportPeriodInputs() {
-        [['dfPeriodFrom', 'histPeriodFrom'], ['dfPeriodTo', 'histPeriodTo']].forEach(([dfId, histId], i) => {
-            const val = i === 0 ? state.reportPeriodFrom : state.reportPeriodTo;
-            [dfId, histId].forEach(id => {
-                const el = document.getElementById(id);
-                if (el && document.activeElement !== el) el.value = val || '';
-            });
-        });
-        ['dfPeriodFilter', 'histPeriodFilter'].forEach(id => {
-            document.getElementById(id)?.classList.toggle('active', hasReportPeriodFilter());
-        });
+        const fromEl = document.getElementById('histPeriodFrom');
+        const toEl = document.getElementById('histPeriodTo');
+        if (fromEl && document.activeElement !== fromEl) fromEl.value = state.reportPeriodFrom || '';
+        if (toEl && document.activeElement !== toEl) toEl.value = state.reportPeriodTo || '';
+        document.getElementById('histPeriodFilter')?.classList.toggle('active', hasReportPeriodFilter());
     }
 
     function syncActualPeriodInputs() {
@@ -1570,16 +1665,14 @@ const TVC_App = (function () {
         const dailyItems = [
             { label: 'Check Work Plan', tag: 'D', action: "TVC_App.menuAction('checkPlan')", badge: c.overdue, badgeTone: 'red' },
             { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
+            { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
         ];
 
         const necessaryItems = menuNecessaryItems();
 
         if (isHq) {
         return [
-                { key: 'defect', tone: 'defect', title: 'Defect Report', items: [
-                    { label: 'View Defect List', tag: 'D', action: "TVC_App.menuAction('defectInbox')", badge: c.defectPending, badgeTone: 'amber' },
-                    { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')" },
-                ] },
+                { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: dailyItems },
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
                     { label: 'Approve Work Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
                 ] },
@@ -1594,10 +1687,6 @@ const TVC_App = (function () {
             ];
             return [
                 { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: dailyItems },
-                { key: 'defect', tone: 'defect', title: 'Defect Report', items: [
-                    { label: 'View Defect List', tag: 'D', action: "TVC_App.menuAction('defectInbox')" },
-                    { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
-                ] },
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: monthlyCore },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
@@ -1605,10 +1694,6 @@ const TVC_App = (function () {
 
         return [
             { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: dailyItems },
-            { key: 'defect', tone: 'defect', title: 'Defect Report', items: [
-                { label: 'View Defect List', tag: 'D', action: "TVC_App.menuAction('defectInbox')" },
-                { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
-            ] },
             { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
                 { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" },
                 { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
@@ -1633,6 +1718,8 @@ const TVC_App = (function () {
 
     function resetMenuXfer() {
         _menuXfer = { step: 'mode' };
+        const body = document.getElementById('menuXferBody');
+        if (body) body._menuXferDefectBound = false;
     }
 
     function menuXferCanExportTarget(user, target) {
@@ -1672,10 +1759,22 @@ const TVC_App = (function () {
 
     function menuXferDefectExportRows() {
         const target = menuXferResolveExportTarget(state.user, 'defect');
-        const cases = defectCasesForExportTarget(state.defectCases || [], target || 'COMPANY');
-        return cases
-            .filter(c => c.visible_in_list !== false)
-            .sort((a, b) => String(b.report_date || b.created_at || '').localeCompare(String(a.report_date || a.created_at || '')));
+        let cases = workHistoryDefectCases();
+        if (TVC_RBAC.isHqAccount(state.user)) {
+            cases = cases.filter(r =>
+                r.hq_synced === true
+                || r.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+                || r.status === TVC_DefectCase.Status.AWAITING_COMPLETION
+                || (r.status === TVC_DefectCase.Status.DRAFT && r.visible_in_list !== false)
+            );
+            if (state.selectedVesselId) {
+                cases = cases.filter(r => r.vessel_id === state.selectedVesselId);
+            }
+        } else if (target && target !== 'COMPANY') {
+            cases = cases.filter(c => TVC_DefectCase.belongsToDepartment(c, target));
+        }
+        cases = defectCasesForExportTarget(cases, target || 'COMPANY');
+        return cases.sort(compareDefectCaseByReportedDate);
     }
 
     function menuXferDefectRowSelectable(row) {
@@ -1697,11 +1796,26 @@ const TVC_App = (function () {
         const selectable = rows.filter(menuXferDefectRowSelectable);
         const selectedCount = selectable.filter(r => sel[r.id]).length;
         const allChecked = selectable.length > 0 && selectable.every(r => sel[r.id]);
+        const dest = menuXferExportTargetLabel(menuXferResolveExportTarget(state.user, 'defect'));
+        const searchQ = (_menuXfer.defectSearch || '').trim().toLowerCase();
+        const filteredRows = searchQ
+            ? rows.filter(row => {
+                const cols = defectHistoryColumns(row);
+                const hay = [
+                    row.file_no, cols.jobCode, cols.sort1, cols.sort2,
+                    TVC_DefectCase.listWorkflowStatus(row),
+                    row.case_no,
+                ].filter(Boolean).join(' ').toLowerCase();
+                return hay.includes(searchQ);
+            })
+            : rows;
         let tableBody = '';
         if (!rows.length) {
-            tableBody = `<tr><td colspan="6" class="muted menu-xfer-empty">No defect reports in scope.</td></tr>`;
+            tableBody = `<tr><td colspan="8" class="muted menu-xfer-empty">No defect reports in scope for ${esc(dest)}.</td></tr>`;
+        } else if (!filteredRows.length) {
+            tableBody = `<tr><td colspan="8" class="muted menu-xfer-empty">No matches for search.</td></tr>`;
         } else {
-            tableBody = rows.map(row => {
+            tableBody = filteredRows.map(row => {
                 const cols = defectHistoryColumns(row);
                 const st = TVC_DefectCase.listWorkflowStatus(row);
                 const dt = formatCmaxsHistDate(row.report_date || row.created_at);
@@ -1710,9 +1824,12 @@ const TVC_App = (function () {
                 const chk = canSelect
                     ? `<input type="checkbox" class="menu-xfer-defect-chk" data-defect-id="${escAttr(row.id)}"${checked ? ' checked' : ''}>`
                     : `<input type="checkbox" disabled title="${escAttr(menuXferDefectSelectDisabledTitle(row))}">`;
+                const crit = defectShowsCriticalEquipmentMark(row) ? '⚠' : '';
                 return `<tr class="menu-xfer-defect-row${canSelect ? '' : ' menu-xfer-defect-row-disabled'}">
                     <td class="menu-xfer-chk">${chk}</td>
-                    <td>${esc(String(row.file_no || '').trim())}</td>
+                    <td>${esc(String(row.file_no || '').trim() || '—')}</td>
+                    <td class="hist-type hist-type-defect" title="Defect Report"><span class="hist-type-mark">D</span></td>
+                    <td>${esc(crit)}</td>
                     <td>${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
                     <td>${histCellHtml(cols.sort1)}</td>
                     <td class="hist-status">${esc(st)}</td>
@@ -1721,13 +1838,16 @@ const TVC_App = (function () {
             }).join('');
         }
         return `
-            <p class="spare-sync-hint">Select <strong>Confirmed</strong> defect reports to export.</p>
-            <p class="spare-sync-note muted">Only Confirmed (not yet Submitted) rows can be selected. Reported, Draft, Submitted, and Approved rows are shown for reference.</p>
+            <p class="spare-sync-hint">Select <strong>Confirmed</strong> defect reports to export → <strong>${esc(dest)}</strong></p>
+            <p class="spare-sync-note muted">${rows.length} in list · ${selectable.length} selectable (Confirmed, not yet Submitted). Same scope as Work History / Defect tab.</p>
+            <div class="search-field-wrap menu-xfer-defect-search">
+                <input type="text" class="search-input" id="menuXferDefectSearch" placeholder="Search File No / Job Code / SORT…" value="${escAttr(_menuXfer.defectSearch || '')}">
+            </div>
             <div class="menu-xfer-table-wrap">
-                <table class="menu-xfer-table">
+                <table class="menu-xfer-table menu-xfer-defect-table">
                     <thead><tr>
                         <th class="menu-xfer-chk"><input type="checkbox" id="menuXferDefectSelectAll"${allChecked ? ' checked' : ''}${selectable.length ? '' : ' disabled'}></th>
-                        <th>File No</th><th>Job Code</th><th>SORT-1</th><th>Status</th><th>Reported Date</th>
+                        <th>File No</th><th>Type</th><th>⚠</th><th>Job Code</th><th>SORT-1</th><th>Status</th><th>Reported Date</th>
                     </tr></thead>
                     <tbody>${tableBody}</tbody>
                 </table>
@@ -1775,8 +1895,13 @@ const TVC_App = (function () {
         const btn = document.getElementById('menuXferDefectExportBtn');
         if (!btn) return;
         const count = Object.keys(_menuXfer.selectedDefectIds || {}).filter(id => _menuXfer.selectedDefectIds[id]).length;
-        btn.disabled = count === 0;
-        btn.textContent = count ? `Export (${count})` : 'Export';
+        if (count === 0) {
+            btn.setAttribute('disabled', '');
+            btn.textContent = 'Export';
+        } else {
+            btn.removeAttribute('disabled');
+            btn.textContent = `Export (${count})`;
+        }
     }
 
     function bindMenuXferDefectTableEvents() {
@@ -1805,6 +1930,12 @@ const TVC_App = (function () {
             const selectAll = document.getElementById('menuXferDefectSelectAll');
             if (selectAll) {
                 selectAll.checked = selectable.length > 0 && selectable.every(r => _menuXfer.selectedDefectIds[r.id]);
+            }
+        });
+        body.addEventListener('input', (ev) => {
+            if (ev.target.id === 'menuXferDefectSearch') {
+                _menuXfer.defectSearch = ev.target.value;
+                renderMenuXferModal();
             }
         });
     }
@@ -1882,6 +2013,7 @@ const TVC_App = (function () {
         if (_menuXfer.step === 'export-defect-select' || _menuXfer.step === 'export-monthly-ready') {
             _menuXfer.step = 'export-type';
             delete _menuXfer.selectedDefectIds;
+            delete _menuXfer.defectSearch;
         } else if (_menuXfer.step === 'export-type' || _menuXfer.step === 'import') {
             _menuXfer.step = 'mode';
         }
@@ -1893,6 +2025,7 @@ const TVC_App = (function () {
         if (type === 'defect') {
             _menuXfer.step = 'export-defect-select';
             _menuXfer.selectedDefectIds = {};
+            _menuXfer.defectSearch = '';
         } else {
             _menuXfer.step = 'export-monthly-ready';
         }
@@ -1902,15 +2035,18 @@ const TVC_App = (function () {
     async function menuXferConfirmDefectExport() {
         const ids = Object.keys(_menuXfer.selectedDefectIds || {}).filter(id => _menuXfer.selectedDefectIds[id]);
         if (!ids.length) return alert('Select at least one Confirmed defect to export.');
+        const selectable = new Set(menuXferDefectExportRows().filter(menuXferDefectRowSelectable).map(r => r.id));
+        const scopedIds = ids.filter(id => selectable.has(id));
+        if (!scopedIds.length) return alert('No selected defect reports are exportable (Confirmed, not yet Submitted).');
         const target = menuXferResolveExportTarget(state.user, 'defect');
         if (!target || !menuXferCanExportTarget(state.user, target)) {
             return alert('No permission to export defect reports.');
         }
         const destLabel = menuXferExportTargetLabel(target);
-        if (!confirm(`Export ${ids.length} defect report(s) to ${destLabel}?`)) return;
+        if (!confirm(`Export ${scopedIds.length} defect report(s) to ${destLabel}?`)) return;
         closeMenuXferMenu();
         try {
-            await menuXferExportDefect(target, ids);
+            await menuXferExportDefect(target, scopedIds);
         } catch (e) { alert(e.message || e); }
     }
 
@@ -2008,7 +2144,7 @@ const TVC_App = (function () {
             renderSyncHistory();
             TVC_DefectReport?.renderInbox?.();
         }
-        if (state.currentTab === 'defect') TVC_DefectReport?.renderTab?.();
+        if (state.currentTab === 'history') renderWorkHistory();
         const dest = target === 'COMPANY' ? 'Company' : TVC_RBAC.getDeptLabel(target);
         alert(`Exported ${exported} defect package(s) → ${dest}.`);
     }
@@ -2209,11 +2345,6 @@ const TVC_App = (function () {
         TVC_OutstandingTasks.render();
     }
 
-    function renderDefectTab() {
-        applyRoleUi(state.user);
-        TVC_DefectReport.renderTab();
-    }
-
     function setHistView(view) {
         state.histView = view;
         document.querySelectorAll('.hist-view-btn').forEach(b => b.classList.toggle('active', b.dataset.hview === view));
@@ -2359,12 +2490,11 @@ const TVC_App = (function () {
                 break;
             case 'backup': handleExport(); break;
             case 'defectReport':
-                switchTab('defect');
                 if (state.selectedJobId) TVC_DefectReport.openNewFromJob(state.selectedJobId);
                 else TVC_DefectReport.openNewBlank();
                 break;
             case 'defectInbox':
-                switchTab('defect');
+                switchTab('history');
                 break;
             case 'defectImport':
                 document.getElementById('importDefectUrgent')?.click();
@@ -3745,17 +3875,28 @@ const TVC_App = (function () {
                 <button type="button" id="planWpBtn" class="btn btn-sm" onclick="TVC_App.openPlanWorkProcedure()"${noJob ? ' disabled' : ''}>Work Procedure / History</button>
                 <button type="button" id="planReportBtn" class="btn btn-sm btn-green" onclick="TVC_App.openWorkReportInput()"${canReport ? '' : ' disabled'}${reportTitle ? ` title="${escAttr(reportTitle)}"` : ''}>${reportLabel}</button>
                 ${selectedItemsBtn}
+                <button type="button" class="btn btn-sm btn-amber plan-new-defect-btn" data-feature="showDefectReport" onclick="TVC_App.openNewDefectFromPlan()">＋ New Defect Report</button>
             </div>`;
     }
 
-    /** Job 단위 Work History — Work History 탭과 동일한 daily_work_reports / job_items 소스 */
+    function openNewDefectFromPlan() {
+        const job = getPlanFocusJob();
+        if (job) TVC_DefectReport.openNewFromJob(job.id);
+        else TVC_DefectReport.openNewBlank();
+    }
+
+    /** Job 단위 Work History — Work History 탭과 동일한 daily_work_reports / defect_cases 소스 */
     function jobWorkHistoryEntries(jobId) {
         const job = resolveJobById(jobId);
         if (!job) return [];
         return workHistoryEntriesRaw().filter(e => {
             if (e.source === 'defect') {
                 const dc = e.defect;
-                return dc && (dc.maintenance_job_id === job.id || dc.job_code === job.job_code);
+                return dc && (
+                    dc.maintenance_job_id === job.id
+                    || dc.job_code === job.job_code
+                    || defectEffectiveJobCode(dc) === job.job_code
+                );
             }
             const item = e.item;
             return item && (item.maintenance_job_id === job.id || item.job_code === job.job_code);
@@ -3766,12 +3907,27 @@ const TVC_App = (function () {
         const spareById = new Map((state.spares || []).map(s => [s.id, s]));
         const consumed = [];
         jobWorkHistoryEntries(jobId).forEach(entry => {
-            if (entry.source !== 'report') return;
-            const { report: r, item } = entry;
-            if (!r || !item) return;
-            const parts = item.used_parts?.length ? item.used_parts : (r.is_batch ? [] : (r.used_parts || []));
-            const dt = formatCmaxsHistDate(r.work_date || r.report_date || r.created_at);
-            parts.forEach(u => {
+            if (entry.source === 'report') {
+                const { report: r, item } = entry;
+                if (!r || !item) return;
+                const parts = item.used_parts?.length ? item.used_parts : (r.is_batch ? [] : (r.used_parts || []));
+                const dt = formatCmaxsHistDate(listReportedDateStr(r));
+                parts.forEach(u => {
+                    const s = spareById.get(u.spare_part_id) || {};
+                    consumed.push({
+                        date: dt,
+                        part_no: s.part_no || u.part_no || u.spare_part_id,
+                        name: s.name || '—',
+                        unit: s.unit || '—',
+                        qty: u.qty_used,
+                    });
+                });
+                return;
+            }
+            const dc = entry.defect;
+            if (!dc) return;
+            const dt = formatCmaxsHistDate(dc.ship_verified_date || listReportedDateStr(dc) || dc.work_date);
+            (dc.used_parts || []).forEach(u => {
                 const s = spareById.get(u.spare_part_id) || {};
                 consumed.push({
                     date: dt,
@@ -3846,7 +4002,7 @@ const TVC_App = (function () {
     function workHistoryReports() {
         let reports = state.reports.slice();
         if (state.department) reports = reports.filter(r => reportDept(r) === state.department);
-        reports.sort((a, b) => (b.work_date || b.report_date || b.created_at || '').localeCompare(a.work_date || a.report_date || a.created_at || ''));
+        reports.sort(compareReportByReportedDate);
         return reports;
     }
 
@@ -3867,12 +4023,11 @@ const TVC_App = (function () {
 
     function clearListFilters(tab) {
         if (tab === 'actual') setListFilters('actual', { pics: [], unassigned: false });
-        else if (tab === 'defect') setListFilters('defect', { groupKeys: [], openOnly: false });
-        else if (tab === 'history') setListFilters('history', { groupKeys: [], type: 'all' });
+        else if (tab === 'history') setListFilters('history', { groupKeys: [], type: 'all', openOnly: false });
     }
 
     function syncListFilterBtns() {
-        ['actual', 'defect', 'history'].forEach(t => TVC_ListFilters?.syncBtn(t));
+        ['actual', 'history'].forEach(t => TVC_ListFilters?.syncBtn(t));
     }
 
     function listFilterCtx() {
@@ -3886,7 +4041,7 @@ const TVC_App = (function () {
             (r.job_items || []).forEach(item => entries.push({ source: 'report', report: r, item }));
         });
         workHistoryDefectCases().forEach(dc => entries.push({ source: 'defect', defect: dc }));
-        entries.sort((a, b) => histEntrySortDate(b).localeCompare(histEntrySortDate(a)));
+        entries.sort(compareHistEntryByReportedDate);
         return entries;
     }
 
@@ -3933,14 +4088,24 @@ const TVC_App = (function () {
         return workHistoryEntries().find(e => histEntryRowKey(e) === state._histSelReportId) || null;
     }
 
+    function isHistDefectRowConfirmable(entry) {
+        if (!isHistDefectEntry(entry) || !state.user) return false;
+        const dc = entry.defect;
+        if (TVC_RBAC.isHqAccount(state.user)) {
+            return dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY;
+        }
+        return TVC_DefectReport.isDefectReportConfirmable(dc);
+    }
+
     function isHistRowCheckable(entry) {
-        if (isHistDefectEntry(entry)) return false;
+        if (isHistDefectEntry(entry)) return isHistDefectRowConfirmable(entry);
         const { report: r, item } = entry;
         if (!state.user || r.is_locked || reportIsApproved(r)) return false;
         return itemSt(item) === 'REPORTED';
     }
 
     function isHistRowApprovable(entry) {
+        if (isHistDefectEntry(entry)) return isHistDefectRowConfirmable(entry);
         if (!isHistRowCheckable(entry)) return false;
         const { report: r } = entry;
         if (TVC_RBAC.isConfirmedStatus(r.status)) return false;
@@ -3948,7 +4113,21 @@ const TVC_App = (function () {
     }
 
     function histCheckDisabledTitle(entry) {
-        if (isHistDefectEntry(entry)) return 'Defect case — Confirm 불가';
+        if (isHistDefectEntry(entry)) {
+            const dc = entry.defect;
+            if (!state.user) return '로그인 필요';
+            if (TVC_RBAC.isHqAccount(state.user)) {
+                if (dc.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Awaiting HQ 항목만 선택 가능';
+                return '선택 불가';
+            }
+            if (dc.confirmed_at || dc.confirmed_by) return '이미 Confirm 됨';
+            if (dc.approved_at || dc.approved_by) return '승인 완료';
+            if (dc.status === TVC_DefectCase.Status.CLOSED) return 'Closed';
+            if (!TVC_DefectReport.isDefectReportConfirmable(dc)) {
+                return 'Confirm 권한 없음 (Engine Mode · C/E 또는 Master Mode · Captain)';
+            }
+            return '선택 불가';
+        }
         const { report: r, item } = entry;
         if (!state.user) return '로그인 필요';
         if (r.is_locked || reportIsApproved(r)) return '승인 완료된 리포트';
@@ -4014,7 +4193,7 @@ const TVC_App = (function () {
     }
 
     function initHistCellTips() {
-        document.querySelectorAll('#tab-history .sheet-table-wrap, #tab-defect .sheet-table-wrap').forEach(container => {
+        document.querySelectorAll('#tab-history .sheet-table-wrap').forEach(container => {
             if (container._histTipsBound) return;
             container._histTipsBound = true;
             const syncTip = (tip) => {
@@ -4062,7 +4241,7 @@ const TVC_App = (function () {
 
     function buildDefectHistRowHtml(dc, opts = {}) {
         const cols = defectHistoryColumns(dc);
-        const dt = formatCmaxsHistDate(dc.work_date || dc.report_date || dc.submitted_at || dc.created_at);
+        const dt = formatCmaxsHistDate(listReportedDateStr(dc));
         const st = defectHistoryStatusLabel(dc);
         const flags = defectHistoryFormFlags(dc);
         const sel = opts.selected ? ' row-selected' : '';
@@ -4075,15 +4254,16 @@ const TVC_App = (function () {
             : '';
         const typeCell = opts.criticalColumn ? defectCriticalTypeCell(dc) : defectReportTypeCell();
         const critCell = opts.includeCriticalColumn ? defectCriticalTypeCell(dc) : '';
+        const typeFileCritCells = (opts.includeCriticalColumn && opts.fileNoColumn)
+            ? `${defectReportTypeCell()}${fileNoCell}${critCell}`
+            : `${fileNoCell}${typeCell}${critCell}`;
         const detailCell = opts.omitDetailColumn ? '' : `<td class="hist-detail">${histCellHtml(cols.jobDetail)}</td>`;
         const useListColStyle = opts.omitDetailColumn || opts.historyListColumns;
         const atShipClass = useListColStyle ? 'hist-at-ship' : '';
         const atCompanyClass = useListColStyle ? 'hist-at-company' : '';
         return `<tr class="hist-row hist-row-defect${sel}" data-df-id="${escAttr(dc.id)}" data-hist-key="${escAttr(rowKey)}"${onclick}${ondblclick}>
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
-                ${fileNoCell}
-                ${typeCell}
-                ${critCell}
+                ${typeFileCritCells}
                 <td class="hist-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
                 <td class="hist-sort1">${histCellHtml(cols.sort1)}</td>
                 <td class="hist-sort2">${histCellHtml(cols.sort2)}</td>
@@ -4144,7 +4324,12 @@ const TVC_App = (function () {
     }
 
     function isHistWorkReportModifiableStatus(entry) {
-        if (!entry || isHistDefectEntry(entry)) return false;
+        if (!entry) return false;
+        if (isHistDefectEntry(entry)) {
+            const row = entry.defect;
+            return !!(row && (TVC_DefectCase.canModifyListWorkflow(row)
+                || TVC_DefectReport?.canModifyDfShipCommentsOnly?.(row)));
+        }
         const r = entry?.report;
         if (!r) return false;
         if (TVC_RBAC.isApprovedStatus(r.status, r.is_locked)) return false;
@@ -4155,7 +4340,9 @@ const TVC_App = (function () {
 
     function canModifyHistEntry(entry) {
         if (!entry || !state.user) return false;
-        if (isHistDefectEntry(entry)) return false;
+        if (isHistDefectEntry(entry)) {
+            return TVC_DefectReport?.canOpenDfModifyRow?.(entry.defect) ?? false;
+        }
         const r = entry?.report;
         if (!r) return false;
         if (TVC_RBAC.isApprovedStatus(r.status, r.is_locked)) return false;
@@ -4166,7 +4353,9 @@ const TVC_App = (function () {
     }
 
     function canDeleteHistEntry(entry) {
-        if (isHistDefectEntry(entry)) return false;
+        if (isHistDefectEntry(entry)) {
+            return TVC_DefectReport?.canDeleteDfListRow?.(entry.defect) ?? false;
+        }
         const r = entry?.report;
         if (!r || !state.user) return false;
         if (TVC_RBAC.isApprovedStatus(r.status, r.is_locked)) return false;
@@ -4189,14 +4378,13 @@ const TVC_App = (function () {
 
     function canConfirmHistReports(candidates) {
         if (!candidates.length) return false;
-        const reportIds = [...new Set(candidates.map(e => e.report.id))];
-        return reportIds.every(id => {
-            const rep = state.reports.find(r => r.id === id);
-            if (!rep) return false;
-            const hasReported = TVC_WorkReport.getJobItems(rep).some(i => itemSt(i) === 'REPORTED');
-            if (!hasReported || rep.is_locked || reportIsApproved(rep)) return false;
-            if (TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked)) return false;
-            return state.user && TVC_RBAC.canConfirmDepartment(state.user, reportDept(rep));
+        return candidates.every(entry => {
+            if (isHistDefectEntry(entry)) return isHistDefectRowConfirmable(entry);
+            const { report: r, item } = entry;
+            if (!r) return false;
+            if (itemSt(item) !== 'REPORTED' || r.is_locked || reportIsApproved(r)) return false;
+            if (TVC_RBAC.isConfirmedStatus(r.status, r.is_locked)) return false;
+            return state.user && TVC_RBAC.canConfirmDepartment(state.user, reportDept(r));
         });
     }
 
@@ -4333,7 +4521,7 @@ const TVC_App = (function () {
         const entry = getSelectedHistEntry();
         if (!entry) return alert('Work History에서 항목을 선택하세요.');
         if (isHistDefectEntry(entry)) {
-            return alert('Defect Report Modify · Delete는 Defect Report 탭에서만 가능합니다.');
+            return TVC_DefectReport.dfModifyCase(entry.defect.id, 'history', { swapHide: 'workReportModal' });
         }
         if (!canModifyHistEntry(entry)) {
             const st = workReportListWorkflowStatus(entry.report);
@@ -4351,13 +4539,27 @@ const TVC_App = (function () {
         if (!confirmCandidates.length) {
             return alert('Confirm할 REPORTED 항목의 체크박스(ㅁ)를 선택하세요.');
         }
-        if (checkedEntries.length && confirmCandidates.length !== checkedEntries.length) {
+        if (checkedEntries.length && confirmCandidates.length !== checkedEntries.filter(isHistRowApprovable).length) {
             return alert('선택한 항목 중 Confirm할 수 없는 항목이 있습니다.\nEngine Mode(C/E) 또는 Master Mode(Captain) 로그인을 확인하세요.');
         }
-        const reportIds = [...new Set(confirmCandidates.map(e => e.report.id))];
+
         const user = TVC_Auth.requirePermission(TVC_RBAC.Action.APPROVE_DAILY_REPORT);
         if (!user) return;
 
+        const defectEntries = confirmCandidates.filter(isHistDefectEntry);
+        const workEntries = confirmCandidates.filter(e => !isHistDefectEntry(e));
+
+        if (TVC_RBAC.isHqAccount(user) && defectEntries.length) {
+            const pending = defectEntries.filter(e =>
+                e.defect.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+            );
+            if (pending.length) {
+                TVC_DefectReport.openCase(pending[0].defect.id, 'phase2');
+                return;
+            }
+        }
+
+        const reportIds = [...new Set(workEntries.map(e => e.report.id))];
         for (const id of reportIds) {
             const rep = state.reports.find(r => r.id === id);
             if (!rep) return alert('리포트를 찾을 수 없습니다.');
@@ -4368,7 +4570,16 @@ const TVC_App = (function () {
                 return alert(`타 부서(${dept || '?'}) 리포트는 Confirm할 수 없습니다: ${rep.job_code}`);
             }
         }
-        if (!confirm(`${reportIds.length}건의 Work Report를 Confirm하시겠습니까?\n(재고 차감 · LAST DONE / NEXT DATE 갱신)`)) return;
+
+        const defectToConfirm = defectEntries.filter(e => TVC_DefectReport.isDefectReportConfirmable(e.defect));
+        const totalCount = reportIds.length + defectToConfirm.length;
+        if (!totalCount) return alert('Confirm할 수 있는 항목이 없습니다.');
+
+        const parts = [];
+        if (reportIds.length) parts.push(`${reportIds.length}건의 Work Report`);
+        if (defectToConfirm.length) parts.push(`${defectToConfirm.length}건의 Defect Report`);
+        const wrNote = reportIds.length ? '\n(재고 차감 · LAST DONE / NEXT DATE 갱신)' : '';
+        if (!confirm(`${parts.join(' · ')}를 Confirm하시겠습니까?${wrNote}`)) return;
 
         let ok = 0;
         for (const id of reportIds) {
@@ -4377,6 +4588,15 @@ const TVC_App = (function () {
                 ok++;
             } catch (e) {
                 alert(`${id}: ${e.message || e.code || 'Confirm 실패'}`);
+                break;
+            }
+        }
+        for (const entry of defectToConfirm) {
+            try {
+                await TVC_DefectCaseService.saveApprovalMeta(user, entry.defect.id, { confirm: true });
+                ok++;
+            } catch (e) {
+                alert(`${entry.defect.case_no || entry.defect.id}: ${e.message || e.code || 'Confirm failed'}`);
                 break;
             }
         }
@@ -4389,7 +4609,7 @@ const TVC_App = (function () {
         const entry = getSelectedHistEntry();
         if (!entry) return alert('Work History에서 항목을 선택하세요.');
         if (isHistDefectEntry(entry)) {
-            return alert('Defect Report Modify · Delete는 Defect Report 탭에서만 가능합니다.');
+            return TVC_DefectReport.dfDeleteByIds([entry.defect.id], { clearHistSelection: true });
         }
         if (!canDeleteHistEntry(entry)) {
             if (reportIsApproved(entry.report) || entry.report.is_locked) {
@@ -4410,7 +4630,7 @@ const TVC_App = (function () {
         pruneHistChecked();
         const all = workHistoryEntriesRaw();
         const entries = workHistoryEntries();
-        const colSpan = 15;
+        const colSpan = 16;
         setText('histCount', `${entries.length} / ${all.length} entries`);
         const searchEl = document.getElementById('histSearch');
         if (searchEl && document.activeElement !== searchEl) searchEl.value = state.search || '';
@@ -4436,11 +4656,17 @@ const TVC_App = (function () {
                 const dc = entry.defect;
                 const rowKey = histEntryRowKey(entry);
                 const sel = state._histSelReportId === rowKey;
-                const chk = `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(entry))}">`;
+                const dfEntry = { source: 'defect', defect: dc };
+                const canCheck = isHistRowCheckable(dfEntry);
+                const checked = canCheck && !!state._histChecked?.[rowKey];
+                const chk = canCheck
+                    ? `<input type="checkbox" class="hist-chk-input"${checked ? ' checked' : ''}>`
+                    : `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(dfEntry))}">`;
                 return buildDefectHistRowHtml(dc, {
                     rowKey,
                     selected: sel,
                     checkboxHtml: chk,
+                    fileNoColumn: true,
                     includeCriticalColumn: true,
                     omitDetailColumn: true,
                     historyListColumns: true,
@@ -4451,7 +4677,7 @@ const TVC_App = (function () {
             const { report: r, item } = entry;
             const job = state.idx?.jobById.get(item.maintenance_job_id) || state.jobs.find(j => j.job_code === item.job_code);
             const f = item.form || wrReportForm(r);
-            const dt = formatCmaxsHistDate(r.work_date || r.report_date || r.created_at);
+            const dt = formatCmaxsHistDate(listReportedDateStr(r));
             const st = reportWorkflowStatusLabel(r, item);
             const flags = workHistoryFormFlags(f, r);
             const rowKey = histEntryRowKey(entry);
@@ -4463,9 +4689,11 @@ const TVC_App = (function () {
             const chk = canCheck
                 ? `<input type="checkbox" class="hist-chk-input"${checked ? ' checked' : ''}>`
                 : `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(wrEntry))}">`;
+            const fileNo = String(f.fileNo || '').trim();
             return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(item.maintenance_job_id)}',{fromHistory:true,view:true})">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 ${histTypeCell(wrEntry)}
+                <td class="hist-file">${esc(fileNo || '—')}</td>
                 ${histCriticalCell(wrEntry)}
                 <td class="hist-code">${batchTag}${item.job_code ? `<strong>${esc(item.job_code)}</strong>` : '—'}</td>
                 <td class="hist-sort1">${histCellHtml(job?.item_sort1)}</td>
@@ -4728,7 +4956,7 @@ const TVC_App = (function () {
         const host = document.getElementById('workProcedureBody');
         if (!job || !host) return;
         const meta = TVC_JobMeta.getHistoryForJob(job.job_code);
-        const histEntries = jobWorkHistoryEntries(job.id).filter(e => e.source === 'report');
+        const histEntries = jobWorkHistoryEntries(job.id);
         const procActive = state._wpTab === 'procedure' ? ' active' : '';
         const histActive = state._wpTab === 'history' ? ' active' : '';
 
@@ -4748,9 +4976,25 @@ const TVC_App = (function () {
                 <label class="wp-label">Work Procedure</label>
                 ${procField}`;
         } else {
-            const histRows = histEntries.length ? histEntries.map(({ report: r, item }) => {
+            const histRows = histEntries.length ? histEntries.map(entry => {
+                if (entry.source === 'defect') {
+                    const dc = entry.defect;
+                    const dt = formatCmaxsHistDate(dc.ship_verified_date || listReportedDateStr(dc) || dc.work_date);
+                    const st = defectHistoryStatusLabel(dc);
+                    const desc = dc.outline_maintenance_request || dc.action_taken || '—';
+                    const reporter = reporterLabel(dc.reported_by || dc.chief_engineer || dc.master || '');
+                    const company = dc.company_comment || dc.company_initial_reply || '—';
+                    return `<tr class="wp-hist-row wp-hist-row-defect" ondblclick="TVC_App.closeModal('workProcedureModal');TVC_App.openDefectFromHistory('${escAttr(dc.id)}')" title="Double-click to open Defect Report">
+                <td>${esc(dt)}</td>
+                <td><span class="pill ${st === 'Approved' || st === 'Confirmed' ? 'ok' : 'warn'}">${esc(st)}</span> <span class="pill warn" title="Defect Report">D</span></td>
+                <td>${esc(reporter || '—')}</td>
+                <td>${esc(desc)}</td>
+                <td>${esc(company)}</td>
+            </tr>`;
+                }
+                const { report: r, item } = entry;
                 const f = item.form || wrReportForm(r);
-                const dt = formatCmaxsHistDate(r.work_date || r.report_date || r.created_at);
+                const dt = formatCmaxsHistDate(listReportedDateStr(r));
                 const st = reportWorkflowStatusLabel(r, item);
                 const desc = item.description || r.description || '—';
                 const batchTag = r.is_batch ? ' <span class="pill ok" title="Batch report">B</span>' : '';
@@ -5419,10 +5663,10 @@ const TVC_App = (function () {
                 </div>
             ${showShipComment ? `
                 ${fld("Ship's Comments (If any)", `<textarea class="wr-maint-textarea" data-wf="shipComments" rows="3"${roAttr}${dis}>${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
-                ${fld("Ship's Attachment", renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach && !ro }), 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld('', renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach && !ro }), 'wr-maint-span-all wr-maint-grid-gap')}
             ` : ''}
             ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
-            ${fld("Company's Attachment", renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach && !ro }), 'wr-maint-span-all wr-maint-grid-gap')}
+            ${fld('', renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach && !ro }), 'wr-maint-span-all wr-maint-grid-gap')}
         `;
     }
 
@@ -5688,7 +5932,7 @@ const TVC_App = (function () {
             alert(e.message || '파일을 읽을 수 없습니다.');
         }
         input.value = '';
-        renderWorkReportModal();
+        renderWorkReportModal({ preserveScroll: true });
     }
 
     function removeWrAttachment(kind, id) {
@@ -5698,7 +5942,7 @@ const TVC_App = (function () {
         const list = wrAttachmentList(formKey);
         const i = list.findIndex(a => a.id === id);
         if (i >= 0) list.splice(i, 1);
-        renderWorkReportModal();
+        renderWorkReportModal({ preserveScroll: true });
     }
 
     function renderBatchWorkReportModal(host) {
@@ -5763,7 +6007,29 @@ const TVC_App = (function () {
         syncWorkReportPage2Ui(showPages, ro);
     }
 
-    function renderWorkReportModal() {
+    function captureWorkReportModalScroll() {
+        const page = document.querySelector('#workReportBody .wr-page');
+        const modal = document.getElementById('workReportModal');
+        return {
+            pageTop: page?.scrollTop ?? 0,
+            modalTop: modal?.scrollTop ?? 0,
+        };
+    }
+
+    function restoreWorkReportModalScroll(saved) {
+        if (!saved) return;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const page = document.querySelector('#workReportBody .wr-page');
+                const modal = document.getElementById('workReportModal');
+                if (page) page.scrollTop = saved.pageTop;
+                if (modal) modal.scrollTop = saved.modalTop;
+            });
+        });
+    }
+
+    function renderWorkReportModal(opts = {}) {
+        const scroll = opts.preserveScroll ? captureWorkReportModalScroll() : null;
         const host = document.getElementById('workReportBody');
         if (!host) return;
         if (state._batchMode) return renderBatchWorkReportModal(host);
@@ -5910,6 +6176,7 @@ const TVC_App = (function () {
                 });
         }
         syncWorkReportPage2Ui(showPages, ro);
+        restoreWorkReportModalScroll(scroll);
     }
 
     function isNewUnsavedWorkReportSession() {
@@ -6284,7 +6551,7 @@ const TVC_App = (function () {
         renderFleetList();
         rerenderCurrentTab();
         if (state.currentTab === 'menu') renderSyncHistory();
-        if (state.currentTab === 'defect') TVC_DefectReport.renderTab();
+        if (state.currentTab === 'history') renderWorkHistory();
     }
 
     function jobActualStatusText(j) {
@@ -6330,7 +6597,7 @@ const TVC_App = (function () {
 
     function printDefectRowCells(dc, opts = {}) {
         const cols = defectHistoryColumns(dc);
-        const dt = formatCmaxsHistDate(dc.work_date || dc.report_date || dc.submitted_at || dc.created_at);
+        const dt = formatCmaxsHistDate(listReportedDateStr(dc));
         const st = defectHistoryStatusLabel(dc);
         const flags = defectHistoryFormFlags(dc);
         const detailCell = opts.omitDetail
@@ -6365,7 +6632,7 @@ const TVC_App = (function () {
         </tr>`;
 
     const PRINT_WORK_HIST_HEAD = `<tr>
-            <th>Type</th><th>⚠</th><th>JOB CODE</th><th>SORT-1</th><th>SORT-2</th>
+            <th>Type</th><th>File No</th><th>⚠</th><th>JOB CODE</th><th>SORT-1</th><th>SORT-2</th>
             <th>Reported Date</th><th>Status</th>
             <th>RR</th><th>SS</th><th>DC</th><th>SC</th><th>CC</th>
             <th>Ship's AT</th><th>Company's AT</th>
@@ -6431,19 +6698,22 @@ const TVC_App = (function () {
         filterParts.push(...(TVC_ListFilters?.describeFilters('history', state) || []));
         const bodyRows = entries.map(entry => {
             if (isHistDefectEntry(entry)) {
-                return `<tr><td>D</td><td>${esc(printHistCriticalMark(entry))}</td>${printDefectRowCells(entry.defect, { omitDetail: true })}</tr>`;
+                const fileNo = String(entry.defect.file_no || '').trim() || '—';
+                return `<tr><td>D</td><td>${esc(fileNo)}</td><td>${esc(printHistCriticalMark(entry))}</td>${printDefectRowCells(entry.defect, { omitDetail: true })}</tr>`;
             }
             const { report: r, item } = entry;
             const job = state.idx?.jobById.get(item.maintenance_job_id)
                 || state.jobs.find(j => j.job_code === item.job_code);
             const f = item.form || wrReportForm(r);
-            const dt = formatCmaxsHistDate(r.work_date || r.report_date || r.created_at);
+            const dt = formatCmaxsHistDate(listReportedDateStr(r));
             const st = reportWorkflowStatusLabel(r, item);
             const flags = workHistoryFormFlags(f, r);
             const type = histTypeMarker(entry).letter;
             const batch = r.is_batch ? 'B ' : '';
+            const fileNo = String(f.fileNo || '').trim() || '—';
             return `<tr>
                 <td>${esc(type)}</td>
+                <td>${esc(fileNo)}</td>
                 <td>${esc(printHistCriticalMark(entry))}</td>
                 <td>${esc(batch + (item.job_code || '—'))}</td>
                 <td>${esc(job?.item_sort1 || '')}</td>
@@ -6458,7 +6728,7 @@ const TVC_App = (function () {
         return `${printListMeta('Work History')}
             ${printFilterNote(filterParts)}
             <p class="meta">${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}</p>
-            <table>${PRINT_WORK_HIST_HEAD}${bodyRows || `<tr><td colspan="14">No history entries to print.</td></tr>`}</table>`;
+            <table>${PRINT_WORK_HIST_HEAD}${bodyRows || `<tr><td colspan="15">No history entries to print.</td></tr>`}</table>`;
     }
 
     function openListPrintWindow(title, bodyHtml, preview) {
@@ -6481,9 +6751,6 @@ const TVC_App = (function () {
         if (tab === 'actual') {
             title = 'Work Plan';
             body = buildWorkPlanPrintBody();
-        } else if (tab === 'defect') {
-            title = 'Defect Report';
-            body = buildDefectReportPrintBody();
         } else if (tab === 'history') {
             title = 'Work History';
             body = buildWorkHistoryPrintBody();
@@ -6597,7 +6864,7 @@ const TVC_App = (function () {
                 renderSyncHistory();
                 TVC_DefectReport.renderInbox();
             }
-            if (state.currentTab === 'defect') TVC_DefectReport.renderTab();
+            if (state.currentTab === 'history') renderWorkHistory();
             alert(`Urgent Defect package created:\n${filename}\n\nAttach ZIP or HTML to email to Company. HQ imports the ZIP for Phase 2.`);
         } catch (e) { alert(e.message); }
     }
@@ -6612,7 +6879,7 @@ const TVC_App = (function () {
                 renderSyncHistory();
                 TVC_DefectReport.renderInbox();
             }
-            if (state.currentTab === 'defect') TVC_DefectReport.renderTab();
+            if (state.currentTab === 'history') renderWorkHistory();
             alert(`Completion package created:\n${filename}`);
         } catch (e) { alert(e.message); }
     }
@@ -6722,7 +6989,7 @@ const TVC_App = (function () {
         boot, switchTab, navigate,
         setDepartment, setCaptainView, setHistView, setHistTab, menuAction, resolveDeptPick,
         setFleetView, setFleetSearch, selectVessel,
-        setSearch, setTreeSearch, clearSearchField, updateSearchClearBtn, bindSearchClearInput, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, matchReportPeriodDate, selectGroup, renderGroupTree,
+        setSearch, setTreeSearch, clearSearchField, updateSearchClearBtn, bindSearchClearInput, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, renderGroupTree,
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
         getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs,
         renderSectionCard,
@@ -6733,10 +7000,10 @@ const TVC_App = (function () {
         uploadWrAttachment, removeWrAttachment,
         toggleWrGroupPick, toggleWrJobPick, pickWrGroup, pickWrJob, wrGroupPickSearch, wrJobPickSearch,
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,
-        togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader, refreshActualPlan,
+        togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader, refreshActualPlan, openNewDefectFromPlan,
         setBatchActiveJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
         openWorkReportFromHistory, openDefectFromHistory, openWorkHistoryEntry, navWorkHistoryEntry,
-        modifyWorkReport, cancelWorkReportEdit, selectHistRow,
+        modifyWorkReport, cancelWorkReportEdit, selectHistRow, renderWorkHistory, histDefectRowKey,
         buildDefectHistRowHtml, matchDefectHistSearch, initHistCellTips,
         formatHistGroupEquipmentName, isPlaceholderJobCode, defectEffectiveJobCode,
         histDetailWorkReport, histModifyReport, histReportApproval, histDeleteReport,
