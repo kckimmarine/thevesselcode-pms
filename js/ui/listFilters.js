@@ -314,11 +314,32 @@ const TVC_ListFilters = (function () {
             </div>`;
     }
 
+    function deptLabel(dept) {
+        if (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.getDeptLabel) {
+            return TVC_RBAC.getDeptLabel(dept);
+        }
+        return dept || 'Other';
+    }
+
     function renderGroupChecks(nodes, selected) {
         if (!nodes.length) return '<p class="muted list-filter-empty">No groups</p>';
-        return nodes.map(n => {
-            const checked = selected?.includes(n.key) ? ' checked' : '';
-            return `<label class="list-filter-check" title="${escAttr(n.key)}"><input type="checkbox" data-group-key="${escAttr(n.key)}"${checked}> ${esc(n.label)}</label>`;
+        const byDept = new Map();
+        nodes.forEach(n => {
+            const dept = n.department || 'OTHER';
+            if (!byDept.has(dept)) byDept.set(dept, []);
+            byDept.get(dept).push(n);
+        });
+        const depts = [...byDept.keys()].sort((a, b) => a.localeCompare(b));
+        return depts.map(dept => {
+            const deptNodes = byDept.get(dept);
+            const checks = deptNodes.map(n => {
+                const checked = selected?.includes(n.key) ? ' checked' : '';
+                return `<label class="list-filter-check" title="${escAttr(n.key)}"><input type="checkbox" data-group-key="${escAttr(n.key)}"${checked}> ${esc(n.label)}</label>`;
+            }).join('');
+            return `<div class="list-filter-dept-block">
+                <div class="list-filter-dept-title">${esc(deptLabel(dept))}</div>
+                ${checks}
+            </div>`;
         }).join('');
     }
 

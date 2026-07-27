@@ -969,11 +969,12 @@ const TVC_DefectReport = (function () {
         const uploadBtn = canUpload
             ? `<button type="button" class="wr-attach-btn" onclick="document.getElementById('${inputId}').click()">📎 ${esc(label)}</button>
                <input type="file" id="${inputId}" class="hidden" multiple onchange="TVC_DefectReport.uploadAttachment('${kind}')">`
-            : (list.length
-                ? ''
-                : `<button type="button" class="wr-attach-btn" disabled tabindex="-1">📎 ${esc(label)}</button>`);
+            : `<button type="button" class="wr-attach-btn" disabled tabindex="-1">📎 ${esc(label)}</button>`;
         const listHtml = list.length ? `<ul class="wr-attach-list">${items}</ul>` : '';
-        return `<div class="wr-attach-block">${uploadBtn}${listHtml}</div>`;
+        return `<div class="wr-attach-block">
+            <div class="wr-attach-toolbar">${uploadBtn}</div>
+            ${listHtml ? `<div class="wr-attach-list-wrap">${listHtml}</div>` : ''}
+        </div>`;
     }
 
     async function uploadAttachment(kind) {

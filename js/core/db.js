@@ -471,6 +471,11 @@ const TVC_DB = (function () {
                     r.onsuccess = () => res(r.result);
                     r.onerror = () => rej(r.error);
                 }),
+                getAll: (s) => new Promise((res, rej) => {
+                    const r = t.objectStore(s).getAll();
+                    r.onsuccess = () => res(r.result || []);
+                    r.onerror = () => rej(r.error);
+                }),
                 put: (s, v) => new Promise((res, rej) => {
                     const r = t.objectStore(s).put(v);
                     r.onsuccess = () => res(r.result);
