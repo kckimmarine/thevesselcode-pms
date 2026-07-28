@@ -98,6 +98,8 @@ const TVC_RBAC = (function () {
             Action.UPDATE_RUN_HOURS, Action.CREATE_REQUISITION,
             Action.DEDUCT_INVENTORY, Action.SUPPLY_PARTS,
             Action.SUBMIT_DEFECT_REPORT,
+            Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
+            Action.IMPORT_DEFECT_URGENT,
         ]),
         SHIP_CHIEF: new Set([
             Action.CREATE_DAILY_REPORT, Action.APPROVE_DAILY_REPORT,
@@ -122,12 +124,15 @@ const TVC_RBAC = (function () {
             Action.SUBMIT_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
         ]),
         HQ_SUPERVISOR: new Set([
+            Action.CREATE_DAILY_REPORT, Action.EDIT_OWN_PENDING_REPORT,
+            Action.APPROVE_DAILY_REPORT, Action.POSTPONE_DAILY_REPORT,
             Action.VIEW_INVENTORY, Action.VIEW_PMS_SCHEDULE,
             Action.IMPORT_HQ_SYNC, Action.EXPORT_HQ_FEEDBACK,
             Action.REVIEW_MASTER_PLAN, Action.APPROVE_ORIGINAL_PLAN,
             Action.ADD_COMPANY_COMMENT, Action.CONFIRM_REPORT,
             Action.VIEW_AUDIT_LOG, Action.MODIFY_MAINTENANCE_ITEM,
             Action.REPLY_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
+            Action.SUBMIT_DEFECT_REPORT,
             Action.DEDUCT_INVENTORY, Action.MODIFY_INVENTORY,
             Action.CREATE_REQUISITION, Action.SUPPLY_PARTS,
         ]),
@@ -149,9 +154,9 @@ const TVC_RBAC = (function () {
             showDefectImportUrgent: false,
         },
         HQ: {
-            showDailyReportSubmit: false,
+            showDailyReportSubmit: true,
             showMaintenanceExecute: false,
-            showApprovalQueue: false,
+            showApprovalQueue: true,
             showHqConfirmPanel: true,
             showExportShip: false,
             showImportShip: false,
@@ -212,7 +217,7 @@ const TVC_RBAC = (function () {
             SHIP_OFFICER: { REPORTED: [] },
             SHIP_CAPTAIN: { REPORTED: ['CONFIRMED'] },
             SHIP_CHIEF: { REPORTED: ['CONFIRMED'] },
-            HQ_SUPERVISOR: { CONFIRMED: ['APPROVED'] },
+            HQ_SUPERVISOR: { REPORTED: ['CONFIRMED'], CONFIRMED: ['APPROVED'] },
         };
         return (transitions[user.role]?.[from] || []).includes(to);
     }
@@ -240,6 +245,7 @@ const TVC_RBAC = (function () {
 
     /** 선장/기관장: Reported → Confirmed */
     function canConfirmDepartment(user, dept) {
+        if (isHqAccount(user)) return true;
         if (typeof TVC_Space !== 'undefined' && user?.station) {
             return TVC_Space.canApproveReport(user, dept);
         }
@@ -264,6 +270,8 @@ const TVC_RBAC = (function () {
     /** 보고서/승인 기록용 간결 직책 라벨: Officer / Engineer / C/E / Captain / Superintendent */
     function getRankLabel(user) {
         if (!user) return '';
+        const uname = String(user.username || '').toLowerCase();
+        if (uname === 'co') return 'C/O';
         switch (user.role) {
             case 'SHIP_CAPTAIN': return 'Captain';
             case 'SHIP_CHIEF': return 'C/E';
@@ -366,23 +374,28 @@ const TVC_RBAC = (function () {
         return s;
     }
 
-    /** Confirmed by 표시 — ENGINE: Chief Engineer, DECK: Captain */
-    function getDepartmentConfirmLabel(dept) {
+    /** Confirmed by 표시 — ENGINE: Chief Engineer, DECK: Chief Officer / Captain */
+    function getDepartmentConfirmLabel(dept, user) {
         const d = String(dept || '').toUpperCase();
+        const uname = String(user?.username || '').toLowerCase();
         if (d === 'ENGINE') return 'Chief Engineer';
-        if (d === 'DECK') return 'Captain';
+        if (d === 'DECK') return uname === 'co' ? 'Chief Officer' : 'Captain';
         return '';
     }
 
     /**
-     * 목록 Modify/Delete — Reported·Draft: Engineer/Officer(동 부서)
-     * Confirmed: Chief Engineer/Captain(동 부서) · Submitted/Approved: 불가
+     * 목록 Modify/Delete — Reported·Draft: 작성자(동 부서)
+     * Confirmed: 확인자(동 부서) · Submitted: HQ only (선박 제출분) · Approved: 불가
      */
     function canModifyDeleteListReport(user, dept, listStatus) {
-        if (!user || isHqAccount(user)) return false;
+        if (!user) return false;
         const st = String(listStatus || '').trim();
-        if (st === 'Submitted' || st === 'Approved') return false;
+        if (st === 'Approved') return false;
+        if (isHqAccount(user)) {
+            return st === 'Submitted' || st === 'Draft' || st === 'Reported' || st === 'Confirmed';
+        }
         const department = dept || user.department || '';
+        if (st === 'Submitted') return false;
         if (st === 'Draft' || st === 'Reported') {
             if (!can(user, Action.CREATE_DAILY_REPORT)) return false;
             if (department && user.department && user.department !== department) return false;

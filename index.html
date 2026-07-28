@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260728-filter-dept">
+    <link rel="stylesheet" href="css/app.css?v=20260728-rh-cols-balance">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260724-req-multi-action">
 </head>
 <body>
@@ -135,7 +135,6 @@
         <button class="tab-btn active" data-tab="menu" onclick="TVC_App.switchTab('menu')">📑 Menu</button>
         <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 Work Plan</button>
         <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Work History</button>
-        <button class="tab-btn" data-tab="runhrs" data-feature="showRunningHours" onclick="TVC_App.switchTab('runhrs')">⏱ Running Hours</button>
         <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
     </nav>
 
@@ -180,6 +179,7 @@
                 <span id="actPlanCalcMsg" class="plan-calc-msg hidden"></span>
                 <span style="flex:1"></span>
                 <button type="button" id="actUpdatePlanBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateOriginalPlanFromRunHours()" disabled title="Running Hours Update를 먼저 완료하세요.">↻ Update Plan</button>
+                <button type="button" id="actApprovePlanBtn" class="btn btn-sm btn-green hidden" onclick="TVC_App.approveWorkPlanFromHq()">✅ Approve Work Plan</button>
             </div>
             <div id="actPlanActionBar" class="plan-action-bar"></div>
             <div id="spicsAlertBanner" class="spics-alert-banner hidden" style="margin:0 20px 8px"></div>
@@ -261,6 +261,7 @@
                 <div class="hist-toolbar hist-toolbar-actions filter-bar">
                     <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Report</button>
                     <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Report Confirm</button>
+                    <button type="button" id="histBtnHqApprove" class="btn btn-sm btn-green hidden" disabled onclick="TVC_App.histHqReportApproval()">Approve</button>
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" id="histBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_App.histModifyReport()">Modify</button>
                     <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
@@ -315,42 +316,6 @@
                     <tbody id="historyBody"></tbody>
                 </table>
             </div>
-            </div>
-        </section>
-
-        <!-- TAB: Running Hours -->
-        <section id="tab-runhrs" class="tab-pane hidden">
-            <div class="sheet-head">
-                <h2>⏱ Running Hours</h2>
-                <span class="sheet-sub">Run-hour based predictive scheduling · M/E &amp; No.1~3 G/E</span>
-            </div>
-            <div class="rh-content-frame">
-                <div class="rh-toolbar filter-bar">
-                    <button type="button" id="rhUpdateBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateRunHrs()">↻ Update</button>
-                    <button type="button" id="rhRevertBtn" class="btn btn-sm" onclick="TVC_App.revertRunHrs()" disabled>↩ Revert</button>
-                    <span class="rh-toolbar-sep" aria-hidden="true"></span>
-                    <label class="rh-last-label" for="rhLastUpdated">Last Updated Date</label>
-                    <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="—" aria-label="Last Updated Date">
-                </div>
-                <div class="sheet-table-wrap list-table-scroll-wrap">
-                    <table class="sheet-table runhrs-table">
-                        <colgroup>
-                            <col class="rh-col-equip">
-                            <col class="rh-col-jobs">
-                            <col class="rh-col-hours">
-                            <col class="rh-col-hours">
-                            <col class="rh-col-hours">
-                        </colgroup>
-                        <thead><tr>
-                            <th class="rh-equip-h">Group / Equipment</th>
-                            <th class="rh-jobs-h">Run hour Jobs</th>
-                            <th class="rh-hours-h">Actual Run Hours<br>Previous Month</th>
-                            <th class="rh-hours-h">Total Run Hours</th>
-                            <th class="rh-hours-h">Estimated Run Hours<br>Next month</th>
-                        </tr></thead>
-                        <tbody id="runHrsBody"></tbody>
-                    </table>
-                </div>
             </div>
         </section>
 
@@ -439,6 +404,43 @@
 </div>
 <div id="menuHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeMenuHistoryModal()">
     <div class="modal-box wide" onclick="event.stopPropagation()"><div id="menuHistoryBody"></div></div>
+</div>
+<div id="runHoursModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeRunHoursModal()">
+    <div class="modal-box runhrs-modal" onclick="event.stopPropagation()">
+        <button type="button" class="modal-x" onclick="TVC_App.closeRunHoursModal()" aria-label="Close">×</button>
+        <div class="sheet-head runhrs-modal-head">
+            <h2>⏱ Running Hours</h2>
+            <span class="sheet-sub">Run-hour based predictive scheduling · M/E &amp; No.1~3 G/E</span>
+        </div>
+        <div class="rh-content-frame">
+            <div class="rh-toolbar filter-bar">
+                <button type="button" id="rhUpdateBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateRunHrs()">↻ Update</button>
+                <button type="button" id="rhRevertBtn" class="btn btn-sm" onclick="TVC_App.revertRunHrs()" disabled>↩ Revert</button>
+                <span class="rh-toolbar-sep" aria-hidden="true"></span>
+                <label class="rh-last-label" for="rhLastUpdated">Last Updated Date</label>
+                <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="—" aria-label="Last Updated Date">
+            </div>
+            <div class="sheet-table-wrap list-table-scroll-wrap">
+                <table class="sheet-table runhrs-table">
+                    <colgroup>
+                        <col class="rh-col-equip">
+                        <col class="rh-col-jobs">
+                        <col class="rh-col-hours">
+                        <col class="rh-col-hours">
+                        <col class="rh-col-hours">
+                    </colgroup>
+                    <thead><tr>
+                        <th class="rh-equip-h">Group / Equipment</th>
+                        <th class="rh-jobs-h">Run hour Jobs</th>
+                        <th class="rh-hours-h">Actual Run Hours<br>Previous Month</th>
+                        <th class="rh-hours-h">Total Run Hours</th>
+                        <th class="rh-hours-h">Estimated Run Hours<br>Next month</th>
+                    </tr></thead>
+                    <tbody id="runHrsBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
 </div>
 <div id="spareReqListModal" class="modal hidden spare-req-list-modal-wrap">
     <div class="modal-box spare-req-list-modal" onclick="event.stopPropagation()"><div id="spareReqListBody"></div></div>
@@ -551,7 +553,7 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/rbac.js?v=20260728-mode-login"></script>
+<script src="js/rbac.js?v=20260728-data-xfer"></script>
 <script src="js/core/schema.js?v=20260727-df-schedule-wp-hist"></script>
 <script src="js/core/db.js?v=20260727-tx-getall"></script>
 <script src="js/core/indexes.js"></script>
@@ -567,22 +569,23 @@
 <script src="js/services/inventoryService.js?v=20260721-stock-reported"></script>
 <script src="js/services/excel.js?v=20260725-wait-to-os"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
-<script src="js/space.js?v=20260728-mode-login"></script>
-<script src="js/auth.js?v=20260728-mode-login"></script>
-<script src="js/services/transaction.js?v=20260727-tx-getall"></script>
+<script src="js/space.js?v=20260728-no-officer-xfer"></script>
+<script src="js/auth.js?v=20260728-data-xfer"></script>
+<script src="js/services/transaction.js?v=20260728-report-matrix"></script>
 <script src="js/services/maintenancePlan.js?v=20260726-job-code-edit"></script>
 <script src="js/services/defectCase.js?v=20260727-df-dc-reconcile"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
 <script src="js/services/postponeSync.js?v=20260727-postpone-critical"></script>
-<script src="js/services/sync.js?v=20260722-hq-import"></script>
-<script src="js/services/stationSync.js?v=20260715-space-auth"></script>
+<script src="js/services/sync.js?v=20260728-data-xfer"></script>
+<script src="js/services/stationSync.js?v=20260728-data-xfer"></script>
+<script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
 <script src="js/services/fleet.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260728-hq-postpone-hqonly"></script>
-<script src="js/ui/defectReport.js?v=20260727-df-attach-btn"></script>
+<script src="js/ui/defectReport.js?v=20260728-report-matrix"></script>
 <script src="js/ui/outstandingTasks.js?v=20260727-unified-hist-defect"></script>
-<script src="js/app.js?v=20260728-deck-no-spare"></script>
+<script src="js/app.js?v=20260728-hq-plan-postpone"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

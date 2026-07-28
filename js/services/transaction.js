@@ -245,7 +245,9 @@ const TVC_Transaction = (function () {
             if (!report) throw Object.assign(new Error('REPORT_NOT_FOUND'), { code: 'NOT_FOUND' });
             if (report.is_locked) throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
             if (report.sync_status === 'SYNCED' && TVC_RBAC.isConfirmedStatus(report.status, report.is_locked)) {
-                throw Object.assign(new Error('Submitted reports cannot be modified.'), { code: 'LOCKED' });
+                if (!TVC_RBAC.isHqAccount(user)) {
+                    throw Object.assign(new Error('Submitted reports cannot be modified.'), { code: 'LOCKED' });
+                }
             }
             TVC_WorkReport.fromLegacy(report);
 

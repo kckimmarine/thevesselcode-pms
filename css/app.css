@@ -2367,10 +2367,30 @@ input.tvc-date-input::placeholder {
 .hist-row.row-selected:hover { background: rgba(66, 153, 225, 0.45) !important; }
 .rh-input { width: min(120px, 92%); max-width: 100%; padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
 .runhrs-table { table-layout: fixed; width: 100%; }
-.runhrs-table col.rh-col-equip { width: 30%; }
-.runhrs-table col.rh-col-jobs { width: 10%; }
-.runhrs-table col.rh-col-hours { width: 20%; }
-.runhrs-table th { vertical-align: middle; line-height: 1.25; }
+.runhrs-table col.rh-col-equip { width: 27%; }
+.runhrs-table col.rh-col-jobs { width: 15%; }
+.runhrs-table col.rh-col-hours { width: 19.33%; }
+.runhrs-table th {
+    vertical-align: middle;
+    line-height: 1.25;
+    white-space: normal;
+    overflow: visible;
+    word-break: keep-all;
+}
+.runhrs-table th.rh-equip-h,
+.runhrs-table td.rh-equip {
+    white-space: normal;
+    overflow: visible;
+    word-break: keep-all;
+    line-height: 1.35;
+}
+.runhrs-table th.rh-jobs-h {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+.runhrs-table td.rh-jobs {
+    white-space: nowrap;
+}
 .runhrs-table th:first-child,
 .runhrs-table td:first-child {
     text-align: left;
@@ -2387,6 +2407,7 @@ input.tvc-date-input::placeholder {
     display: block;
     margin-left: auto;
     margin-right: auto;
+    width: min(100px, 92%);
 }
 .rh-total { font-weight: 700; color: #1a365d; font-variant-numeric: tabular-nums; }
 .rh-total.rh-total-live { color: #276749; background: #f0fff4; }
@@ -2401,25 +2422,36 @@ input.tvc-date-input::placeholder {
     border: 1px solid #e2e8f0;
     border-radius: 10px;
 }
-#tab-runhrs .rh-content-frame {
-    margin: 0 20px 16px;
+#runHoursModal .rh-content-frame {
     display: flex;
     flex-direction: column;
     gap: 12px;
     min-width: 0;
-    flex: 1;
 }
-#tab-runhrs .rh-content-frame .rh-toolbar {
+#runHoursModal .rh-content-frame .rh-toolbar {
     margin: 0;
     width: 100%;
     box-sizing: border-box;
 }
-#tab-runhrs .rh-content-frame .sheet-table-wrap {
+#runHoursModal .rh-content-frame .sheet-table-wrap {
     margin: 0;
     width: 100%;
     box-sizing: border-box;
     border-radius: 10px;
     scrollbar-gutter: auto;
+    max-height: min(60vh, 520px);
+    overflow: auto;
+}
+.runhrs-modal {
+    max-width: min(1080px, 96vw);
+    width: 100%;
+}
+.runhrs-modal-head {
+    margin: 0 0 12px;
+    padding-right: 28px;
+}
+.runhrs-modal-head h2 {
+    margin: 0 0 4px;
 }
 .rh-toolbar-sep {
     width: 1px;

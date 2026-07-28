@@ -253,7 +253,7 @@ const TVC_Sync = (function () {
             await failImport(err);
         }
         let status = 'SUCCESS';
-        const mergeDept = (isHubMerge && dept === 'ALL') ? null : dept;
+        const mergeDept = dept === 'ALL' ? null : dept;
         try {
             await mergePayload(payload, mergeDept, isHq, importVesselId, { importAuthoritative: true });
         } catch (err) {

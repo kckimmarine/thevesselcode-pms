@@ -1152,6 +1152,10 @@ const TVC_DefectReport = (function () {
         if (!row || !getState().user) return false;
         if (!TVC_DefectCase.canModifyListWorkflow(row)) return false;
         const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (isHq()) {
+            if (st === 'Approved') return false;
+            return st === 'Submitted' || TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
+        }
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 

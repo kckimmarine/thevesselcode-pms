@@ -3,7 +3,7 @@ const TVC_App = (function () {
     const ROW_H = 36;
     const PLAN_SHEET_MIN_WIDTH = 924;
     const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
-    const TABS = ['menu', 'actual', 'history', 'runhrs', 'spare'];
+    const TABS = ['menu', 'actual', 'history', 'spare'];
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
     const NEW_ORIG_JOB_EDIT_ID = '__new_orig_job__';
     let _wrSpareSearchT = null;
@@ -585,17 +585,12 @@ const TVC_App = (function () {
         menu: renderMainMenu,
         actual: renderActualPlan,
         history: renderWorkHistory,
-        runhrs: renderRunHrs,
         spare: renderSpareMenu,
     };
 
     /** 상단 탭 전환 — 부서 필터 상태는 그대로 유지된다. */
     function switchTab(tab) {
         if (!TABS.includes(tab)) tab = 'menu';
-        if (tab === 'runhrs' && state.user && typeof TVC_Space !== 'undefined'
-            && !TVC_Space.getUiFeatures(state.user).showRunningHours) {
-            tab = 'menu';
-        }
         if (tab === 'spare' && state.user && typeof TVC_Space !== 'undefined'
             && !TVC_Space.getUiFeatures(state.user).showSpareTab) {
             tab = 'menu';
@@ -676,8 +671,7 @@ const TVC_App = (function () {
         const dash = document.getElementById('captainViewDashboard');
         if (dash) dash.classList.toggle('hidden', !f.showCaptainDashboard);
         syncPlanGroupTreeUi();
-        if ((!f.showRunningHours && state.currentTab === 'runhrs')
-            || (!f.showSpareTab && state.currentTab === 'spare')) {
+        if (!f.showSpareTab && state.currentTab === 'spare') {
             switchTab('menu');
             return;
         }
@@ -1771,32 +1765,12 @@ const TVC_App = (function () {
 
     function openHqApproveReports() {
         if (!TVC_RBAC.isHqAccount(state.user)) return;
-        const defects = hqPendingDefectCases();
-        const postpones = hqPendingPostponeReports({ monthly: true });
-        const workReports = hqPendingWorkReports();
-        if (!defects.length && !postpones.length && !workReports.length) {
-            return alert('승인 대기 중인 Report가 없습니다.');
-        }
+        state.listFilters.history = { groupKeys: [], type: 'all', openOnly: false, postponeAwaitingApproval: false };
+        state.reportPeriodFrom = '';
+        state.reportPeriodTo = '';
+        state.search = '';
         switchTab('history');
-        if (defects.length && TVC_RBAC.can(state.user, TVC_RBAC.Action.REPLY_DEFECT_REPORT)) {
-            TVC_DefectReport.openCase(defects[0].id, 'phase2');
-            return;
-        }
-        if (postpones.length && TVC_RBAC.canApproveHqReport(state.user)) {
-            const rep = postpones[0];
-            const item = TVC_WorkReport.getJobItems(rep)[0];
-            if (!item) return alert('Postpone Report 항목을 찾을 수 없습니다.');
-            openWorkReportFromHistory(rep.id, item.maintenance_job_id, { fromHistory: true, view: true });
-            return;
-        }
-        if (workReports.length && TVC_RBAC.canApproveHqReport(state.user)) {
-            const rep = workReports[0];
-            const item = TVC_WorkReport.getJobItems(rep)[0];
-            if (!item) return alert('Work Report 항목을 찾을 수 없습니다.');
-            openWorkReportFromHistory(rep.id, item.maintenance_job_id, { fromHistory: true, view: true });
-            return;
-        }
-        alert('승인 권한이 없거나 처리 가능한 Report가 없습니다.');
+        TVC_ListFilters?.syncBtn('history');
     }
 
     function openHqApproveDefectReport() {
@@ -1842,6 +1816,8 @@ const TVC_App = (function () {
             { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
         ];
         const hqDailyItems = [
+            { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
+            { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
             { label: 'Approve Defect Report', tag: 'B', action: "TVC_App.menuAction('approveDefectReport')", badge: c.defectPending, badgeTone: 'amber' },
             { label: 'Approve Postpone Report', tag: 'B', action: "TVC_App.menuAction('approvePostponeReport')", badge: c.postponePending, badgeTone: 'amber' },
         ];
@@ -1861,7 +1837,7 @@ const TVC_App = (function () {
 
         if (isMaster) {
             const monthlyCore = [
-                { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
+                { label: 'Update Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
                 { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
             ];
             return [
@@ -1874,7 +1850,7 @@ const TVC_App = (function () {
         return [
             { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
             { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
-                { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
+                { label: 'Update Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
                 { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
             ] },
             { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
@@ -1884,7 +1860,7 @@ const TVC_App = (function () {
     function menuNecessaryItems() {
         return [
                     { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
-            { label: 'Data Export & Import', tag: 'C', action: 'TVC_App.openMenuXferMenu()' },
+            { label: 'Data Export & Import', tag: 'C', action: 'TVC_App.openMenuXferMenu()', feature: 'showDataXfer' },
             { label: 'View Data History', tag: 'C', action: 'TVC_App.openMenuHistoryModal()' },
         ];
     }
@@ -1902,6 +1878,51 @@ const TVC_App = (function () {
         if (body) {
             body._menuXferDefectBound = false;
             body._menuXferPostponeBound = false;
+        }
+    }
+
+    function menuXferStationContext(user) {
+        if (!user || typeof TVC_Space === 'undefined') return null;
+        if (TVC_Space.isCaptainHub(user)) return 'master';
+        if (TVC_Space.isStationPc(user)) return 'station';
+        if (TVC_RBAC.isHqAccount(user)) return 'hq';
+        return null;
+    }
+
+    function menuXferDefaultChannelHint(user) {
+        const ctx = menuXferStationContext(user);
+        if (ctx === 'station') return 'Default transfer: offline ZIP → Master (email/USB).';
+        if (ctx === 'master') return 'Default transfer: offline ZIP ↔ HQ (email). Online sync available when configured.';
+        if (ctx === 'hq') return 'Default transfer: offline ZIP import (email fallback). Online sync available when configured.';
+        return 'Default transfer: offline ZIP.';
+    }
+
+    function menuXferOnlineSyncHtml(user) {
+        const f = typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(user) : {};
+        if (!f.showOnlineSync || typeof TVC_OnlineSync === 'undefined') return '';
+        const online = TVC_OnlineSync.isAvailable();
+        const msg = TVC_OnlineSync.statusMessage();
+        const dir = TVC_RBAC.isHqAccount(user) ? 'HQ_PULL' : 'SHIP_TO_HQ';
+        const label = TVC_RBAC.isHqAccount(user) ? 'Pull from vessel (online)' : 'Push to HQ (online)';
+        return `
+            <div class="menu-xfer-online${online ? '' : ' menu-xfer-online-disabled'}">
+                <p class="spare-sync-note muted">${esc(msg)}</p>
+                <button type="button" class="btn spare-sync-btn${online ? '' : ' disabled'}"${online ? '' : ' disabled'}
+                    onclick="TVC_App.menuXferTryOnlineSync('${escAttr(dir)}')">${esc(label)}</button>
+            </div>`;
+    }
+
+    async function menuXferTryOnlineSync(direction) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || typeof TVC_OnlineSync === 'undefined') return;
+        try {
+            const vesselId = TVC_RBAC.isHqAccount(user) ? state.selectedVesselId : undefined;
+            const result = await TVC_OnlineSync.syncNow(user, direction, { vesselId });
+            alert(result.message || (result.status === 'SCAFFOLD'
+                ? 'Online sync is scaffolded — use offline ZIP for now.'
+                : 'Online sync request completed.'));
+        } catch (e) {
+            alert(e.message || String(e));
         }
     }
 
@@ -1936,7 +1957,11 @@ const TVC_App = (function () {
     }
 
     function menuXferExportTargetLabel(target) {
-        if (target === 'COMPANY') return 'Company';
+        if (target === 'COMPANY') return 'Company (HQ)';
+        const user = state.user;
+        if (target && typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user)) {
+            return `Master Hub (${TVC_RBAC.getDeptLabel(target)})`;
+        }
         return target ? TVC_RBAC.getDeptLabel(target) : '—';
     }
 
@@ -2298,15 +2323,25 @@ const TVC_App = (function () {
         if (modalBox) modalBox.classList.toggle('menu-xfer-wide', step === 'export-defect-select' || step === 'export-postpone-select');
         let content = '';
         if (step === 'mode') {
+            const hint = menuXferDefaultChannelHint(state.user);
             content = `
                 <p class="spare-sync-hint">Choose whether to send data out or bring data in.</p>
+                <p class="spare-sync-note muted">${esc(hint)}</p>
                 <div class="spare-sync-actions">
-                    <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferPickMode('export')">Export</button>
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickMode('import')">Import</button>
-                </div>`;
+                    <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferPickMode('export')">Export (ZIP)</button>
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickMode('import')">Import (ZIP)</button>
+                </div>
+                ${menuXferOnlineSyncHtml(state.user)}`;
         } else if (step === 'export-type') {
+            const ctx = menuXferStationContext(state.user);
+            const exportNote = ctx === 'station'
+                ? 'Monthly Report exports your department delta to Master Hub.'
+                : ctx === 'master'
+                    ? 'Monthly Report exports aggregated vessel data to Company (HQ). Import Engine/Deck station ZIPs on Master first.'
+                    : '';
             content = `
                 <p class="spare-sync-hint">Select the report type to export.</p>
+                ${exportNote ? `<p class="spare-sync-note muted">${esc(exportNote)}</p>` : ''}
                 <div class="spare-sync-actions">
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickExportType('defect')">Defect Report</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickExportType('postpone')">Postpone Report</button>
@@ -2319,8 +2354,16 @@ const TVC_App = (function () {
         } else if (step === 'export-monthly-ready') {
             content = menuXferMonthlyReadyHtml();
         } else if (step === 'import') {
+            const ctx = menuXferStationContext(state.user);
+            const importHint = ctx === 'station'
+                ? 'Import HQ feedback ZIP received by email (HQ → Ship).'
+                : ctx === 'master'
+                    ? 'Import Engine/Deck station ZIP or HQ feedback ZIP. Station packages merge into Master Hub.'
+                    : ctx === 'hq'
+                        ? 'Import vessel company report ZIP received by email (Ship → HQ). Select vessel in fleet list first.'
+                        : 'Select a PMS sync ZIP from Master or Company.';
             content = `
-                <p class="spare-sync-hint">Select a file from Master PC or Company.</p>
+                <p class="spare-sync-hint">${esc(importHint)}</p>
                 <p class="spare-sync-note muted">Supported: PMS sync ZIP (Monthly Report), Defect package ZIP, Postpone package ZIP. File type is detected automatically.</p>
                 <div class="spare-sync-actions">
                     <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferTriggerImport()">Open file…</button>
@@ -2348,6 +2391,12 @@ const TVC_App = (function () {
     }
 
     function openMenuXferMenu() {
+        const f = state.user
+            ? (typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(state.user) : TVC_RBAC.getUiFeatures(state.user))
+            : {};
+        if (!f.showDataXfer && !f.showExportHq && !f.showImportHq) {
+            return alert('Data Export & Import 권한이 없습니다.');
+        }
         resetMenuXfer();
         renderMenuXferModal();
         showModal('menuXferModal');
@@ -2589,6 +2638,34 @@ const TVC_App = (function () {
         const user = TVC_Auth.getCurrentUser();
         if (!user || !file) return;
         const name = (file.name || '').toLowerCase();
+
+        if (name.endsWith('.zip')) {
+            const zip = await JSZip.loadAsync(await file.arrayBuffer());
+            const jsonFile = zip.file('tvc_sync.json');
+            if (jsonFile) {
+                const payload = JSON.parse(await jsonFile.async('string'));
+                const dir = payload.export_meta?.direction;
+                if (dir === 'STATION_TO_HUB') {
+                    if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) {
+                        await handleHubImport(file);
+                        return;
+                    }
+                    throw new Error('Station export ZIP must be imported on Master login (Captain Hub).');
+                }
+                if (TVC_RBAC.isHqAccount(user) && (dir === 'SHIP_TO_HQ' || payload.export_meta?.package_type === 'COMPANY_REPORT')) {
+                    state._pendingImportDept = 'ALL';
+                    await handleImport(file);
+                    return;
+                }
+                if (!TVC_RBAC.isHqAccount(user) && dir === 'HQ_TO_SHIP') {
+                    const fileDept = payload.export_meta?.department;
+                    state._pendingImportDept = fileDept === 'ALL' ? (user.department || 'ALL') : (fileDept || user.department);
+                    await handleImport(file);
+                    return;
+                }
+            }
+        }
+
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)
             && (name.endsWith('.json') || name.endsWith('.csv'))) {
             await handleHubImport(file);
@@ -2600,6 +2677,8 @@ const TVC_App = (function () {
         };
         if (user.department) {
             await run(user.department);
+        } else if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) {
+            await run('ALL');
         } else {
             pickDepartmentThen('Import할 부서를 선택하세요 (DECK / ENGINE)', run);
         }
@@ -2884,10 +2963,12 @@ const TVC_App = (function () {
             case 'hqConfirm': menuNavigate('history'); break;
             case 'runHour':
                 if (typeof TVC_Space !== 'undefined' && TVC_Space.getUiFeatures(state.user).showRunningHours === false) break;
-                menuNavigate('runhrs');
+                openRunHoursModal();
+                break;
+            case 'approveOriginalPlan':
+                approveWorkPlanFromHq();
                 break;
             case 'originalPlan':
-            case 'approveOriginalPlan':
                 if (rhUpdateGateApplies() && !isRhUpdateCommitted()) {
                     alert('Running Hours Update를 먼저 완료하세요.');
                     return;
@@ -3030,20 +3111,29 @@ const TVC_App = (function () {
     }
 
     function syncPlanUpdateUi() {
+        const isHq = !!(state.user && TVC_RBAC.isHqAccount(state.user));
         const dept = getPlanLockDept();
         const planLocked = isOriginalPlanUpdateLocked(dept);
-        const rhLocked = rhUpdateGateApplies() && !isRhUpdateCommitted();
+        const rhLocked = !isHq && rhUpdateGateApplies() && !isRhUpdateCommitted();
         const locked = planLocked || rhLocked;
-        const btn = document.getElementById('actUpdatePlanBtn');
-        if (btn) {
-            btn.disabled = locked;
+        const updateBtn = document.getElementById('actUpdatePlanBtn');
+        const approveBtn = document.getElementById('actApprovePlanBtn');
+        if (updateBtn) updateBtn.classList.toggle('hidden', isHq);
+        if (approveBtn) approveBtn.classList.toggle('hidden', !isHq);
+        if (updateBtn && !isHq) {
+            updateBtn.disabled = locked;
             if (planLocked) {
-                btn.title = getOriginalPlanLockMessage(dept);
+                updateBtn.title = getOriginalPlanLockMessage(dept);
             } else if (rhLocked) {
-                btn.title = 'Running Hours Update를 먼저 완료하세요.';
+                updateBtn.title = 'Running Hours Update를 먼저 완료하세요.';
             } else {
-                btn.title = '';
+                updateBtn.title = '';
             }
+        }
+        if (approveBtn && isHq) {
+            const canApprove = TVC_RBAC.can(state.user, TVC_RBAC.Action.APPROVE_ORIGINAL_PLAN) && !!dept;
+            approveBtn.disabled = !canApprove;
+            approveBtn.title = !dept ? '부서(Deck / Engine)를 선택하세요.' : '';
         }
         syncPlanItemUi();
         const msgEl = document.getElementById('actPlanCalcMsg');
@@ -3770,9 +3860,24 @@ const TVC_App = (function () {
         if (ok || state.currentTab === 'actual') renderActualPlan();
     }
 
+    /** HQ Mode — Work Plan Approve (Menu · Work Plan tab) */
+    async function approveWorkPlanFromHq() {
+        if (!TVC_RBAC.isHqAccount(state.user)) return;
+        if (!TVC_RBAC.can(state.user, TVC_RBAC.Action.APPROVE_ORIGINAL_PLAN)) {
+            alert('Approve Work Plan 권한이 없습니다.');
+            return;
+        }
+        if (!getPlanLockDept()) {
+            alert('부서(Deck / Engine)를 선택하세요.');
+            return;
+        }
+        await updateOriginalPlanFromRunHours({ hqApprove: true });
+    }
+
     /** Menu → Update Original Plan: Run-hour 입력값으로 H 주기 Due Date 재계산 (CMAXS Calculation) */
-    async function updateOriginalPlanFromRunHours() {
-        if (rhUpdateGateApplies() && !isRhUpdateCommitted()) {
+    async function updateOriginalPlanFromRunHours(opts = {}) {
+        const isHqApprove = opts.hqApprove === true;
+        if (!isHqApprove && rhUpdateGateApplies() && !isRhUpdateCommitted()) {
             alert('Running Hours Update를 먼저 완료하세요.');
             return;
         }
@@ -4541,10 +4646,53 @@ const TVC_App = (function () {
     }
 
     function isHistRowCheckable(entry) {
-        if (isHistDefectEntry(entry)) return isHistDefectRowConfirmable(entry);
+        if (isHistDefectEntry(entry)) {
+            if (TVC_RBAC.isHqAccount(state.user)) {
+                return isHistDefectRowConfirmable(entry) || isHistDefectRowHqApprovable(entry);
+            }
+            return isHistDefectRowConfirmable(entry);
+        }
         const { report: r, item } = entry;
         if (!state.user || r.is_locked || reportIsApproved(r)) return false;
+        if (TVC_RBAC.isHqAccount(state.user)) {
+            if (itemSt(item) === 'REPORTED' && !TVC_RBAC.isConfirmedStatus(r.status, r.is_locked)) return true;
+            if (isHistRowHqApprovable(entry)) return true;
+            return false;
+        }
         return itemSt(item) === 'REPORTED';
+    }
+
+    function isHistDefectRowHqApprovable(entry) {
+        if (!isHistDefectEntry(entry) || !state.user || !TVC_RBAC.isHqAccount(state.user)) return false;
+        if (!TVC_RBAC.canApproveHqReport(state.user)) return false;
+        const dc = entry.defect;
+        if (dc.status === TVC_DefectCase.Status.CLOSED) return false;
+        return !!dc.confirmed_at && !dc.approved_at;
+    }
+
+    function isHistRowHqApprovable(entry) {
+        if (!state.user || !TVC_RBAC.isHqAccount(state.user) || !TVC_RBAC.canApproveHqReport(state.user)) return false;
+        if (isHistDefectEntry(entry)) return isHistDefectRowHqApprovable(entry);
+        const { report: r, item } = entry;
+        if (!r || reportIsApproved(r) || r.is_locked) return false;
+        if (!TVC_RBAC.isConfirmedStatus(r.status, r.is_locked)) return false;
+        if (itemSt(item) !== 'CONFIRMED') return false;
+        if (r.work_type === 'POSTPONE') return postponeRequiresCompanyApproval(r);
+        return true;
+    }
+
+    function hqApprovePostponeDate(report) {
+        TVC_WorkReport.fromLegacy(report);
+        const item = TVC_WorkReport.getJobItems(report)[0];
+        return String(
+            report.approved_postpone_date || report.postpone_date
+            || item?.form?.postponeDate || wfFromReport(report, 'postponeDate') || '',
+        ).slice(0, 10);
+    }
+
+    function wfFromReport(report, key) {
+        const item = TVC_WorkReport.getJobItems(report)[0];
+        return item?.form?.[key] ?? report.report_form?.[key] ?? '';
     }
 
     function isHistRowApprovable(entry) {
@@ -4560,25 +4708,27 @@ const TVC_App = (function () {
             const dc = entry.defect;
             if (!state.user) return '로그인 필요';
             if (TVC_RBAC.isHqAccount(state.user)) {
-                if (dc.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Awaiting HQ 항목만 선택 가능';
-                return '선택 불가';
+                if (dc.approved_at) return '승인 완료';
+                if (dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Report Confirm 또는 Approve 대상';
+                if (dc.confirmed_at) return 'Approve 대기';
+                return 'Awaiting HQ · Confirmed 항목만 선택 가능';
             }
             if (dc.confirmed_at || dc.confirmed_by) return '이미 Confirm 됨';
             if (dc.approved_at || dc.approved_by) return '승인 완료';
             if (dc.status === TVC_DefectCase.Status.CLOSED) return 'Closed';
             if (!TVC_DefectReport.isDefectReportConfirmable(dc)) {
-                return 'Confirm 권한 없음 (Engine Mode · C/E 또는 Master Mode · Captain)';
+                return 'Confirm 권한 없음 (Engine · C/E · Deck · C/O · Master · Captain · HQ)';
             }
             return '선택 불가';
         }
         const { report: r, item } = entry;
         if (!state.user) return '로그인 필요';
         if (r.is_locked || reportIsApproved(r)) return '승인 완료된 리포트';
-        if (itemSt(item) !== 'REPORTED') return 'REPORTED 항목만 선택 가능';
-        if (!TVC_RBAC.canConfirmDepartment(state.user, reportDept(r))) {
-            return 'Confirm 권한 없음 (Engine Mode · C/E 또는 Master Mode · Captain)';
+        if (itemSt(item) !== 'REPORTED' && !isHistRowHqApprovable(entry)) return 'REPORTED · Confirmed 항목만 선택 가능';
+            if (!TVC_RBAC.canConfirmDepartment(state.user, reportDept(r)) && !isHistRowHqApprovable(entry)) {
+            return 'Confirm 권한 없음 (Engine · C/E · Deck · C/O · Master · Captain · HQ)';
         }
-        if (TVC_RBAC.isConfirmedStatus(r.status)) return '이미 Confirm 됨';
+        if (TVC_RBAC.isConfirmedStatus(r.status) && !isHistRowHqApprovable(entry)) return '이미 Confirm 됨';
         return '선택 불가';
     }
 
@@ -4789,8 +4939,12 @@ const TVC_App = (function () {
         const r = entry?.report;
         if (!r) return false;
         if (TVC_RBAC.isApprovedStatus(r.status, r.is_locked)) return false;
-        if (TVC_RBAC.isConfirmedStatus(r.status, r.is_locked) && r.sync_status === 'SYNCED') return false;
         const st = workReportListWorkflowStatus(r);
+        if (TVC_RBAC.isHqAccount(state.user)) {
+            if (st === 'Approved') return false;
+            return st === 'Submitted' || TVC_RBAC.canModifyDeleteListReport(state.user, reportDept(r), st);
+        }
+        if (TVC_RBAC.isConfirmedStatus(r.status, r.is_locked) && r.sync_status === 'SYNCED') return false;
         if (st === 'Approved' || st === 'Submitted') return false;
         return TVC_RBAC.canModifyDeleteListReport(state.user, reportDept(r), st);
     }
@@ -4807,6 +4961,22 @@ const TVC_App = (function () {
         if (st === 'Approved' || st === 'Submitted') return false;
         if (r.is_locked || reportIsApproved(r)) return false;
         return TVC_RBAC.canModifyDeleteListReport(state.user, reportDept(r), st);
+    }
+
+    function getHistHqApproveCandidates() {
+        const checkedEntries = workHistoryEntries().filter(e =>
+            state._histChecked?.[histEntryRowKey(e)]
+        );
+        const hqApprovable = checkedEntries.filter(isHistRowHqApprovable);
+        if (hqApprovable.length) return hqApprovable;
+        const entry = getSelectedHistEntry();
+        if (entry && isHistRowHqApprovable(entry)) return [entry];
+        return [];
+    }
+
+    function canHqApproveHistReports(candidates) {
+        if (!candidates.length) return false;
+        return candidates.every(isHistRowHqApprovable);
     }
 
     function getHistConfirmCandidates() {
@@ -4837,10 +5007,17 @@ const TVC_App = (function () {
             state._histChecked?.[histEntryRowKey(e)]
         );
         const confirmCandidates = getHistConfirmCandidates();
+        const hqApproveCandidates = getHistHqApproveCandidates();
         const checkedApprovableCount = checkedEntries.filter(isHistRowApprovable).length;
+        const checkedHqApproveCount = checkedEntries.filter(isHistRowHqApprovable).length;
         const canConfirm = checkedEntries.length
             ? checkedEntries.length === checkedApprovableCount && canConfirmHistReports(confirmCandidates)
             : canConfirmHistReports(confirmCandidates);
+        const canHqApprove = TVC_RBAC.isHqAccount(state.user) && (
+            checkedEntries.length
+                ? checkedEntries.length === checkedHqApproveCount && canHqApproveHistReports(hqApproveCandidates)
+                : canHqApproveHistReports(hqApproveCandidates)
+        );
         const setDis = (id, dis) => {
             const el = document.getElementById(id);
             if (el) { if (dis) el.setAttribute('disabled', ''); else el.removeAttribute('disabled'); }
@@ -4860,6 +5037,14 @@ const TVC_App = (function () {
             approveBtn.textContent = checkedApprovableCount >= 1
                 ? `Report Confirm (${checkedApprovableCount})`
                 : 'Report Confirm';
+        }
+        const hqApproveBtn = document.getElementById('histBtnHqApprove');
+        if (hqApproveBtn) {
+            hqApproveBtn.classList.toggle('hidden', !TVC_RBAC.isHqAccount(state.user));
+            setDis('histBtnHqApprove', !canHqApprove);
+            hqApproveBtn.textContent = checkedHqApproveCount >= 1
+                ? `Approve (${checkedHqApproveCount})`
+                : 'Approve';
         }
 
         const approvable = workHistoryEntries().filter(isHistRowCheckable);
@@ -4983,7 +5168,7 @@ const TVC_App = (function () {
             return alert('Confirm할 REPORTED 항목의 체크박스(ㅁ)를 선택하세요.');
         }
         if (checkedEntries.length && confirmCandidates.length !== checkedEntries.filter(isHistRowApprovable).length) {
-            return alert('선택한 항목 중 Confirm할 수 없는 항목이 있습니다.\nEngine Mode(C/E) 또는 Master Mode(Captain) 로그인을 확인하세요.');
+            return alert('선택한 항목 중 Confirm할 수 없는 항목이 있습니다.\nEngine(C/E) · Deck(C/O) · Master(Captain) · HQ 권한을 확인하세요.');
         }
 
         const user = TVC_Auth.requirePermission(TVC_RBAC.Action.APPROVE_DAILY_REPORT);
@@ -5046,6 +5231,82 @@ const TVC_App = (function () {
         state._histChecked = {};
         await refreshAll();
         if (ok) alert(`${ok}건 Confirm 완료`);
+    }
+
+    async function histHqReportApproval() {
+        if (!TVC_RBAC.isHqAccount(state.user)) return;
+        const checkedEntries = workHistoryEntries().filter(e =>
+            state._histChecked?.[histEntryRowKey(e)]
+        );
+        const approveCandidates = getHistHqApproveCandidates();
+        if (!approveCandidates.length) {
+            return alert('Approve할 Confirmed 항목의 체크박스(ㅁ)를 선택하세요.');
+        }
+        if (checkedEntries.length && approveCandidates.length !== checkedEntries.filter(isHistRowHqApprovable).length) {
+            return alert('선택한 항목 중 Approve할 수 없는 항목이 있습니다.\nConfirmed 상태 · HQ 승인 권한을 확인하세요.');
+        }
+
+        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.CONFIRM_REPORT);
+        if (!user) return;
+
+        const defectEntries = approveCandidates.filter(isHistDefectEntry);
+        const workEntries = approveCandidates.filter(e => !isHistDefectEntry(e));
+        const reportIds = [...new Set(workEntries.map(e => e.report.id))];
+        const postponeIds = reportIds.filter(id => {
+            const rep = state.reports.find(r => r.id === id);
+            return rep && rep.work_type === 'POSTPONE' && postponeRequiresCompanyApproval(rep);
+        });
+        const maintenanceIds = reportIds.filter(id => !postponeIds.includes(id));
+
+        for (const id of reportIds) {
+            const rep = state.reports.find(r => r.id === id);
+            if (!rep) return alert('리포트를 찾을 수 없습니다.');
+            if (!TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked)) {
+                return alert(`${rep.job_code}: Confirmed 상태만 Approve할 수 있습니다.`);
+            }
+            if (reportIsApproved(rep)) {
+                return alert(`${rep.job_code}: 이미 Approved 되었습니다.`);
+            }
+            if (rep.work_type === 'POSTPONE' && postponeRequiresCompanyApproval(rep) && !hqApprovePostponeDate(rep)) {
+                return alert(`${rep.job_code}: Approved Postpone Date가 필요합니다. Work Report에서 확인하세요.`);
+            }
+        }
+
+        const totalCount = reportIds.length + defectEntries.length;
+        if (!totalCount) return alert('Approve할 수 있는 항목이 없습니다.');
+
+        const parts = [];
+        if (maintenanceIds.length) parts.push(`${maintenanceIds.length}건의 Work Report`);
+        if (postponeIds.length) parts.push(`${postponeIds.length}건의 Postpone Report`);
+        if (defectEntries.length) parts.push(`${defectEntries.length}건의 Defect Report`);
+        if (!confirm(`${parts.join(' · ')}를 Approve하시겠습니까?`)) return;
+
+        let ok = 0;
+        for (const id of reportIds) {
+            try {
+                const rep = state.reports.find(r => r.id === id);
+                const opts = (rep?.work_type === 'POSTPONE' && postponeRequiresCompanyApproval(rep))
+                    ? { approvedPostponeDate: hqApprovePostponeDate(rep) }
+                    : {};
+                await TVC_Transaction.approveReport(user, id, '', opts);
+                ok++;
+            } catch (e) {
+                alert(`${id}: ${e.message || e.code || 'Approve 실패'}`);
+                break;
+            }
+        }
+        for (const entry of defectEntries) {
+            try {
+                await TVC_DefectCaseService.saveApprovalMeta(user, entry.defect.id, { approve: true });
+                ok++;
+            } catch (e) {
+                alert(`${entry.defect.case_no || entry.defect.id}: ${e.message || e.code || 'Approve failed'}`);
+                break;
+            }
+        }
+        state._histChecked = {};
+        await refreshAll();
+        if (ok) alert(`${ok}건 Approve 완료`);
     }
 
     async function histDeleteReport() {
@@ -5164,7 +5425,18 @@ const TVC_App = (function () {
         renderWorkHistory();
     }
 
-    // ── TAB: Running Hours (예측 정비 엔진 UI) ───────────────────────
+    // ── Running Hours modal (예측 정비 엔진 UI) ───────────────────────
+    function openRunHoursModal() {
+        if (state.user && typeof TVC_Space !== 'undefined'
+            && !TVC_Space.getUiFeatures(state.user).showRunningHours) return;
+        TVC_RunHours.render();
+        showModal('runHoursModal');
+    }
+
+    function closeRunHoursModal() {
+        closeModal('runHoursModal');
+    }
+
     function renderRunHrs() { TVC_RunHours.render(); }
     function updateRunHrs() { return TVC_RunHours.updateAll(); }
     function revertRunHrs() { return TVC_RunHours.revert(); }
@@ -6892,17 +7164,25 @@ const TVC_App = (function () {
             <div class="modal-actions">${buildActionButtons(job)}</div>`;
     }
 
+    function canAccessJobDepartment(jobDept) {
+        if (!state.user) return false;
+        if (typeof TVC_Space !== 'undefined' && state.user.station) {
+            return TVC_Space.canAccessDepartment(state.user, jobDept);
+        }
+        return TVC_RBAC.canAccessDepartment(state.user, jobDept);
+    }
+
     function buildActionButtons(job) {
         const f = TVC_RBAC.getUiFeatures(state.user);
-        const sameDept = !state.user.department || state.user.department === job.department;
+        const canJob = canAccessJobDepartment(job.department);
         let h = '';
         const canAp = TVC_RBAC.canApproveDepartment(state.user, job.department);
-        if (f.showDailyReportSubmit && sameDept) h += `<button class="btn btn-green" onclick="TVC_App.doSubmit('${job.id}')">📋 Report (REPORTED)</button>`;
-        if (f.showMaintenanceExecute && sameDept && canAp) h += `<button class="btn btn-green" onclick="TVC_App.doExecute('${job.id}')">🛠️ Approve & Deduct</button>`;
-        if (f.showMaintenanceExecute && sameDept && !canAp) h += `<button class="btn btn-green" disabled title="타 부서 — 승인 불가">🛠️ Approve & Deduct</button>`;
+        if (f.showDailyReportSubmit && canJob) h += `<button class="btn btn-green" onclick="TVC_App.doSubmit('${job.id}')">📋 Report (REPORTED)</button>`;
+        if (f.showMaintenanceExecute && canJob && canAp) h += `<button class="btn btn-green" onclick="TVC_App.doExecute('${job.id}')">🛠️ Approve & Deduct</button>`;
+        if (f.showMaintenanceExecute && canJob && !canAp) h += `<button class="btn btn-green" disabled title="타 부서 — 승인 불가">🛠️ Approve & Deduct</button>`;
         h += `<button class="btn" onclick="TVC_App.saveDetailReport('${job.id}')">💾 Save Detail</button>`;
         h += `<button class="btn" onclick="TVC_App.openProcedureHistory('${job.id}')">📜 Procedure / History</button>`;
-        if (!sameDept) h += `<span class="dept-warn">타 부서 항목 — 조작 불가</span>`;
+        if (!canJob) h += `<span class="dept-warn">타 부서 항목 — 조작 불가</span>`;
         return h;
     }
 
@@ -7376,8 +7656,12 @@ const TVC_App = (function () {
     async function handleExport() {
         const user = TVC_Auth.getCurrentUser();
         if (!user) return;
+        if (typeof TVC_Space !== 'undefined' && user.station && !TVC_Space.canStationDataXfer(user)) {
+            alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
+            return;
+        }
         if (!TVC_RBAC.can(user, user.account_type === 'HQ' ? TVC_RBAC.Action.EXPORT_HQ_FEEDBACK : TVC_RBAC.Action.EXPORT_SHIP_SYNC)) {
-            alert('Data Export는 Captain / Chief engineer만 수행할 수 있습니다.');
+            alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
             return;
         }
         pickDepartmentThen('Export할 부서를 선택하세요 (DECK / ENGINE)', async (dept) => {
@@ -7396,7 +7680,11 @@ const TVC_App = (function () {
         if (!user || !file) return;
         const importAction = user.account_type === 'HQ' ? TVC_RBAC.Action.IMPORT_HQ_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC;
         if (!TVC_RBAC.can(user, importAction)) {
-            alert('Data Import는 Captain / Chief engineer만 수행할 수 있습니다.');
+            alert('Data Import 권한이 없습니다.');
+            return;
+        }
+        if (typeof TVC_Space !== 'undefined' && user.station && !TVC_Space.canStationDataXfer(user)) {
+            alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
             return;
         }
         const dept = state._pendingImportDept || user.department;
@@ -7496,13 +7784,15 @@ const TVC_App = (function () {
         modifyWorkReport, cancelWorkReportEdit, selectHistRow, renderWorkHistory, histDefectRowKey,
         buildDefectHistRowHtml, matchDefectHistSearch, initHistCellTips,
         formatHistGroupEquipmentName, isPlaceholderJobCode, defectEffectiveJobCode,
-        histDetailWorkReport, histModifyReport, histReportApproval, histDeleteReport,
+        histDetailWorkReport, histModifyReport, histReportApproval, histHqReportApproval, histDeleteReport,
         toggleHistCheck, toggleHistSelectAll,
         navReport, deleteWorkReport, printWorkReport, closeWorkReport, requestCloseWorkReport,
         confirmCancelWorkReport, dismissWrCancelConfirm,
         selectJobRow,
         selectSpareRow, focusSpareRow, toggleSpareRow, syncSpareItemToolbar, spareActionIds, canEditSpareItems, openSpareAppend, openSpareModify, deleteSpareItem,
-        saveRunHrs, updateRunHrs, revertRunHrs, runHrsPreview, runHrsTotalEdit,         updateOriginalPlanFromRunHours,
+        saveRunHrs, updateRunHrs, revertRunHrs, runHrsPreview, runHrsTotalEdit,
+        openRunHoursModal, closeRunHoursModal,
+        updateOriginalPlanFromRunHours, approveWorkPlanFromHq,
         openOrigJobModify, openOrigJobAppend, saveOrigJobEditor, saveOrigJobInlineEdit, cancelOrigJobInlineEdit, deleteOrigJob,
         openOrigGroupAdd, openOrigGroupRename, deleteOrigGroup, saveGroupEditor,
         confirmPlanUpdate, closePlanUpdateModal, printTabList, printCurrentTab,
@@ -7512,6 +7802,7 @@ const TVC_App = (function () {
         openMenuXferMenu, closeMenuXferMenu, menuXferPickMode, menuXferBack, menuXferTriggerImport,
         menuXferPickExportType,
         menuXferConfirmDefectExport, menuXferConfirmPostponeExport, menuXferConfirmMonthlyExport,
+        menuXferTryOnlineSync,
         menuXferExportDefect, menuXferExportPostpone, menuXferExportMonthly, onMenuXferImportFile,
         openMenuHistoryModal, closeMenuHistoryModal,
         uploadAttachment, saveDetailReport, closeModal, showModal, swapHistoryModals, dismissSpicsAlerts, openSpicsRequisition,

@@ -167,6 +167,15 @@ const TVC_Space = (function () {
         };
         const ep = map[action];
         if (ep) assertEndpoint(user, ep);
+        if (action === TVC_RBAC.Action.EXPORT_SHIP_SYNC || action === TVC_RBAC.Action.IMPORT_SHIP_SYNC) {
+            if (!canStationDataXfer(user)) {
+                const station = getStation(user);
+                const who = station === Station.CCR ? 'Chief officer (co)' : 'Chief engineer (ce) / Captain';
+                throw Object.assign(new Error(`Data Export & Import는 ${who}만 수행할 수 있습니다.`), {
+                    code: 'STATION_XFER_DENIED',
+                });
+            }
+        }
     }
 
     function canAccessDepartment(user, dept) {
@@ -178,7 +187,7 @@ const TVC_Space = (function () {
         return TVC_RBAC.canAccessDepartment(user, dept);
     }
 
-    /** Approval: Master(Captain) → all depts; ECR(C/E) → Engine; CCR(Captain) → Deck */
+    /** Approval: Master(Captain) → all depts; ECR(C/E) → Engine; CCR(C/O) → Deck */
     function canApproveReport(user, dept) {
         if (!user || !TVC_RBAC.isApprover(user)) return false;
         if (isCaptainHub(user)) {
@@ -213,37 +222,68 @@ const TVC_Space = (function () {
         return user.department === 'ENGINE';
     }
 
+    /** Deck CCR 확인자 — Chief officer (co) */
+    function isDeckChief(user) {
+        if (!user || getStation(user) !== Station.CCR) return false;
+        return user.role === 'SHIP_CAPTAIN';
+    }
+
+    /** Engine ECR 확인자 — Chief engineer (ce) */
+    function isEngineChief(user) {
+        if (!user || getStation(user) !== Station.ECR) return false;
+        return user.role === 'SHIP_CHIEF';
+    }
+
+    /** Station PC Data Export/Import — Deck: co only · Engine: ce only · Master/HQ: hub rules */
+    function canStationDataXfer(user) {
+        if (!user) return false;
+        if (TVC_RBAC.isHqAccount(user)) return true;
+        const station = getStation(user);
+        if (station === Station.CCR) return isDeckChief(user);
+        if (station === Station.ECR) return isEngineChief(user);
+        if (isCaptainHub(user)) return user.role === 'SHIP_CAPTAIN';
+        return false;
+    }
+
     function getUiFeatures(user) {
         const base = { ...TVC_RBAC.getUiFeatures(user) };
         if (!user) return base;
         if (user.account_type === 'HQ') {
             base.showRunningHours = true;
             base.showSpareTab = true;
+            base.showDataXfer = true;
+            base.showOnlineSync = true;
             return base;
         }
 
         const station = getStation(user);
         if (station === Station.CCR) {
-            base.showApprovalQueue = user.role === 'SHIP_CAPTAIN';
-            base.showExportShip = true;
-            base.showImportShip = true;
-            base.showStationExport = true;
+            const isCo = isDeckChief(user);
+            base.showApprovalQueue = isCo;
+            base.showExportShip = isCo;
+            base.showImportShip = isCo;
+            base.showStationExport = isCo;
             base.showHubImport = false;
             base.showCompanyExport = false;
+            base.showDataXfer = isCo;
             base.showCaptainDashboard = false;
             base.showDefectReport = true;
             base.showDefectInbox = true;
+            base.showDefectImportUrgent = isCo;
         }
         if (station === Station.ECR) {
-            base.showApprovalQueue = user.role === 'SHIP_CHIEF';
-            base.showExportShip = true;
-            base.showImportShip = true;
-            base.showStationExport = true;
+            const isCe = isEngineChief(user);
+            base.showApprovalQueue = isCe;
+            base.showExportShip = isCe;
+            base.showImportShip = isCe;
+            base.showStationExport = isCe;
             base.showHubImport = false;
             base.showCompanyExport = false;
+            base.showDataXfer = isCe;
             base.showCaptainDashboard = false;
             base.showDefectReport = true;
             base.showDefectInbox = true;
+            base.showDefectImportUrgent = isCe;
         }
         if (isCaptainHub(user)) {
             base.showCaptainDashboard = false;
@@ -253,7 +293,9 @@ const TVC_Space = (function () {
             base.showHubStationExport = TVC_RBAC.isApprover(user);
             base.showStationExport = false;
             base.showExportShip = false;
-            base.showImportShip = false;
+            base.showImportShip = true;
+            base.showDataXfer = true;
+            base.showOnlineSync = true;
             base.showApprovalQueue = TVC_RBAC.isApprover(user);
             base.showDefectReport = true;
             base.showDefectInbox = true;
@@ -285,7 +327,7 @@ const TVC_Space = (function () {
         Station, Direction, Endpoint, LoginMode, STATION_LABELS, LOGIN_MODE_LABELS,
         getStation, isCaptainHub, isStationPc, fixedDepartment, stationLabel, loginModeLabel,
         stationFromLoginMode, validateLogin, canEndpoint, assertEndpoint, assertAction,
-        canAccessDepartment, canApproveReport, getUiFeatures, getModeBadge,
+        canAccessDepartment, canApproveReport, canStationDataXfer, isDeckChief, isEngineChief, getUiFeatures, getModeBadge,
         canSwitchDepartmentView, isDeckVesselMode, isEngineVesselMode,
     };
 })();

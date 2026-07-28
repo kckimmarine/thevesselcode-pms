@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260728-mode-login';
+const CACHE_VERSION = 'tvc-pms-20260728-hq-plan-postpone';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -42,6 +42,7 @@ const PRECACHE_ASSETS = [
     '/js/services/postponeSync.js',
     '/js/services/sync.js',
     '/js/services/stationSync.js',
+    '/js/services/onlineSync.js',
     '/js/services/fleet.js',
     '/js/services/dataPurge.js',
     '/js/services/seed.js',
