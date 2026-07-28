@@ -194,6 +194,7 @@ const TVC_App = (function () {
                     isWorkHistoryEntryConfirmed,
                     workHistoryEntriesRaw,
                     canUpdateRunningHours,
+                    canEditRunningHours: canEditRunningHoursPerm,
                     onRhToolbarChange: () => {
                         syncPlanUpdateUi();
                         if (state.currentTab === 'menu') renderMainMenu();
@@ -255,41 +256,79 @@ const TVC_App = (function () {
     }
 
     /** 부서별 데이터 독립성(영구 분리): 선박 계정은 로드 단계에서부터 자기 부서 데이터만 취득한다. */
-    /** PMS Group 부서 재분류: Engine Work Plan과 분리 — 지정 그룹은 DECK 전용 */
-    const FORCE_DECK_GROUP_NOS = new Set([24, 25, 26, 28, 29, 30, 33, 35]);
+    /** PMS Group 부서 재분류: 24·25 → ENGINE, 28·29·30·33·35 → DECK, 26번은 JOB CODE별 분리 */
+    const FORCE_ENGINE_GROUP_NOS = new Set([24, 25]);
+    const FORCE_DECK_GROUP_NOS = new Set([28, 29, 30, 33, 35]);
+    const JOB_DEPT_OVERRIDES = {
+        '26-001': 'DECK',
+        '26-002': 'DECK',
+        '26-003': 'ENGINE',
+        '26-004': 'ENGINE',
+    };
 
     function pmsGroupNoFromLabel(label) {
         const mm = String(label || '').trim().match(/^(\d+)\s*\./);
         return mm ? parseInt(mm[1], 10) : null;
     }
 
+    function forceDeptForGroupNo(n) {
+        if (FORCE_ENGINE_GROUP_NOS.has(n)) return 'ENGINE';
+        if (FORCE_DECK_GROUP_NOS.has(n)) return 'DECK';
+        return null;
+    }
+
+    function forceDeptForJob(job) {
+        const code = String(job?.job_code || '').trim().toUpperCase();
+        if (JOB_DEPT_OVERRIDES[code]) return JOB_DEPT_OVERRIDES[code];
+        const n = pmsGroupNoFromLabel(job?.group);
+        return n != null ? forceDeptForGroupNo(n) : null;
+    }
+
+    function forceDeptForGroup26Component(c) {
+        const grpLabel = Array.isArray(c.path) ? c.path[1] : null;
+        if (pmsGroupNoFromLabel(grpLabel) !== 26) return null;
+        const pathStr = (c.path || []).join('\0').toUpperCase();
+        if (pathStr.includes('CARGO TANK MONITORING SYSTEM')) return 'DECK';
+        if (pathStr.includes('F.O TANK MONITORING SYSTEM')) return 'ENGINE';
+        return null;
+    }
+
+    function forceDeptForComponent(c) {
+        const fromSplit26 = forceDeptForGroup26Component(c);
+        if (fromSplit26) return fromSplit26;
+        const grpLabel = Array.isArray(c.path) ? c.path[1] : null;
+        const n = pmsGroupNoFromLabel(grpLabel);
+        return n != null ? forceDeptForGroupNo(n) : null;
+    }
+
     async function normalizeGroupDepartments(jobs, components, groups) {
         const changedJobs = [];
         (jobs || []).forEach(j => {
-            const n = pmsGroupNoFromLabel(j.group);
-            if (n != null && FORCE_DECK_GROUP_NOS.has(n) && j.department !== 'DECK') {
-                j.department = 'DECK';
+            const target = forceDeptForJob(j);
+            if (target && j.department !== target) {
+                j.department = target;
                 changedJobs.push(j);
             }
         });
         const changedComps = [];
         (components || []).forEach(c => {
-            const grpLabel = Array.isArray(c.path) ? c.path[1] : null;
-            const n = pmsGroupNoFromLabel(grpLabel);
-            if (n == null || !FORCE_DECK_GROUP_NOS.has(n)) return;
+            const target = forceDeptForComponent(c);
+            if (!target) return;
             let changed = false;
-            if (Array.isArray(c.path) && c.path[0] && c.path[0] !== 'DECK') {
-                c.path = ['DECK', ...c.path.slice(1)];
+            if (Array.isArray(c.path) && c.path[0] && c.path[0] !== target) {
+                c.path = [target, ...c.path.slice(1)];
                 changed = true;
             }
-            if (c.department && c.department !== 'DECK') { c.department = 'DECK'; changed = true; }
+            if (c.department && c.department !== target) { c.department = target; changed = true; }
             if (changed) changedComps.push(c);
         });
         const changedGroups = [];
         (groups || []).forEach(g => {
             const n = pmsGroupNoFromLabel(g.label);
-            if (n != null && FORCE_DECK_GROUP_NOS.has(n) && g.department !== 'DECK') {
-                g.department = 'DECK';
+            if (n === 26) return;
+            const target = n != null ? forceDeptForGroupNo(n) : null;
+            if (target && g.department !== target) {
+                g.department = target;
                 changedGroups.push(g);
             }
         });
@@ -1838,7 +1877,7 @@ const TVC_App = (function () {
         if (isMaster) {
             const monthlyCore = [
                 { label: 'Update Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
-                { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
+                { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true, feature: 'showUpdateWorkPlan' },
             ];
             return [
                 { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
@@ -1851,7 +1890,7 @@ const TVC_App = (function () {
             { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
             { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
                 { label: 'Update Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
-                { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
+                { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true, feature: 'showUpdateWorkPlan' },
             ] },
             { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
         ];
@@ -2759,7 +2798,12 @@ const TVC_App = (function () {
         const lockTip = planLocked ? getPlanMenuLockMessage() : '';
         const colHtml = cols.map(col => {
             const items = col.items
-                .map(it => renderMenuFlowItem(it, f, it.planLock ? { locked: planLocked, disabledTitle: lockTip } : {}))
+                .map(it => {
+                    if (it.planLock) {
+                        return renderMenuFlowItem(it, f, { locked: planLocked, disabledTitle: lockTip });
+                    }
+                    return renderMenuFlowItem(it, f, {});
+                })
                 .filter(Boolean)
                 .join('');
             const empty = items || '<p class="menu-flow-empty muted">No permitted action</p>';
@@ -2962,13 +3006,20 @@ const TVC_App = (function () {
             case 'approveReport': menuNavigate('history'); break;
             case 'hqConfirm': menuNavigate('history'); break;
             case 'runHour':
-                if (typeof TVC_Space !== 'undefined' && TVC_Space.getUiFeatures(state.user).showRunningHours === false) break;
+                if (typeof TVC_Space !== 'undefined') {
+                    const rhF = TVC_Space.getUiFeatures(state.user);
+                    if (rhF.showRunningHours === false) break;
+                }
                 openRunHoursModal();
                 break;
             case 'approveOriginalPlan':
                 approveWorkPlanFromHq();
                 break;
             case 'originalPlan':
+                if (typeof TVC_Space !== 'undefined' && !TVC_Space.getUiFeatures(state.user).showUpdateWorkPlan) {
+                    alert('Update Work Plan은 확인자(Chief engineer / Chief officer / Captain)만 사용할 수 있습니다.');
+                    return;
+                }
                 if (rhUpdateGateApplies() && !isRhUpdateCommitted()) {
                     alert('Running Hours Update를 먼저 완료하세요.');
                     return;
@@ -3118,9 +3169,12 @@ const TVC_App = (function () {
         const locked = planLocked || rhLocked;
         const updateBtn = document.getElementById('actUpdatePlanBtn');
         const approveBtn = document.getElementById('actApprovePlanBtn');
-        if (updateBtn) updateBtn.classList.toggle('hidden', isHq);
+        const canUpdateWorkPlan = !state.user || (typeof TVC_Space !== 'undefined'
+            ? TVC_Space.getUiFeatures(state.user).showUpdateWorkPlan !== false
+            : TVC_RBAC.getUiFeatures(state.user).showUpdateWorkPlan !== false);
+        if (updateBtn) updateBtn.classList.toggle('hidden', isHq || !canUpdateWorkPlan);
         if (approveBtn) approveBtn.classList.toggle('hidden', !isHq);
-        if (updateBtn && !isHq) {
+        if (updateBtn && !isHq && canUpdateWorkPlan) {
             updateBtn.disabled = locked;
             if (planLocked) {
                 updateBtn.title = getOriginalPlanLockMessage(dept);
@@ -3146,10 +3200,7 @@ const TVC_App = (function () {
     }
 
     function origPlanEditDeniedMessage() {
-        if (state.user && TVC_RBAC.isShipAccount(state.user) && !TVC_RBAC.isApprover(state.user)) {
-            return 'Captain / Chief Engineer만 Modify · Append · Delete 가능합니다.';
-        }
-        return getOriginalPlanLockMessage(getPlanLockDept()) || 'Maintenance Plan 항목을 편집할 수 없습니다.';
+        return 'Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.';
     }
 
     function canEditOriginalPlanItems() {
@@ -3184,7 +3235,7 @@ const TVC_App = (function () {
 
     function canEditPlanGroupHeader() {
         if (!state.user) return false;
-        return TVC_RBAC.canModifySpareInventory(state.user) || TVC_RBAC.canModifyOriginalPlan(state.user);
+        return TVC_RBAC.canModifyOriginalPlan(state.user);
     }
 
     function syncPlanGroupTreeUi() {
@@ -3305,32 +3356,36 @@ const TVC_App = (function () {
     }
 
     function syncPlanItemUi() {
+        const canShow = !!(state.user && TVC_RBAC.isMaintPlanEditor?.(state.user));
         const canEdit = canEditOriginalPlanItems();
         const hasSel = !!state.selectedJobId;
         let tip = '';
-        if (!canEdit) {
-            if (state.user && TVC_RBAC.isShipAccount(state.user) && !TVC_RBAC.isApprover(state.user)) {
-                tip = origPlanEditDeniedMessage();
-            } else {
-                tip = getOriginalPlanLockMessage(getPlanLockDept()) || '권한 없음';
-            }
+        if (!canEdit && canShow) {
+            tip = getOriginalPlanLockMessage(getPlanLockDept()) || '권한 없음';
+        } else if (!canShow) {
+            tip = origPlanEditDeniedMessage();
         }
-        ['actModifyBtn', 'actAppendBtn'].forEach(id => {
-            const el = document.getElementById(id);
-            if (!el) return;
-            el.disabled = !canEdit;
-            el.title = tip;
-        });
+
+        const mod = document.getElementById('actModifyBtn');
+        const app = document.getElementById('actAppendBtn');
         const del = document.getElementById('actDeleteBtn');
+
+        [mod, app, del].forEach(el => el?.classList.toggle('hidden', !canShow));
+
+        if (!canShow) return;
+
+        if (mod) {
+            mod.disabled = !canEdit || (!hasSel && !isOrigJobInlineEditing());
+            mod.title = !canEdit ? tip : ((!hasSel && !isOrigJobInlineEditing()) ? '수정할 행을 선택하세요' : '');
+        }
+        if (app) {
+            app.disabled = !canEdit || (isOrigJobInlineEditing() && !canEdit);
+            app.title = !canEdit ? tip : '';
+        }
         if (del) {
             del.disabled = !canEdit || !hasSel;
             del.title = !canEdit ? tip : (!hasSel ? '삭제할 행을 선택하세요' : '');
         }
-        const mod = document.getElementById('actModifyBtn');
-        if (mod) mod.disabled = !canEdit || (!hasSel && !isOrigJobInlineEditing());
-        if (mod) mod.title = !canEdit ? tip : ((!hasSel && !isOrigJobInlineEditing()) ? '수정할 행을 선택하세요' : '');
-        const app = document.getElementById('actAppendBtn');
-        if (app && isOrigJobInlineEditing()) app.disabled = !canEdit;
     }
 
     const ORIG_PIC_BY_DEPT = {
@@ -3877,6 +3932,10 @@ const TVC_App = (function () {
     /** Menu → Update Original Plan: Run-hour 입력값으로 H 주기 Due Date 재계산 (CMAXS Calculation) */
     async function updateOriginalPlanFromRunHours(opts = {}) {
         const isHqApprove = opts.hqApprove === true;
+        if (!isHqApprove && typeof TVC_Space !== 'undefined' && !TVC_Space.getUiFeatures(state.user).showUpdateWorkPlan) {
+            alert('Update Work Plan은 확인자(Chief engineer / Chief officer / Captain)만 사용할 수 있습니다.');
+            return;
+        }
         if (!isHqApprove && rhUpdateGateApplies() && !isRhUpdateCommitted()) {
             alert('Running Hours Update를 먼저 완료하세요.');
             return;
@@ -4613,7 +4672,16 @@ const TVC_App = (function () {
         return TVC_RunHours.hasPendingRevert();
     }
 
+    function canEditRunningHoursPerm() {
+        if (!state.user) return false;
+        const f = typeof TVC_Space !== 'undefined'
+            ? TVC_Space.getUiFeatures(state.user)
+            : TVC_RBAC.getUiFeatures(state.user);
+        return f.canEditRunningHours === true;
+    }
+
     function canUpdateRunningHours() {
+        if (!canEditRunningHoursPerm()) return false;
         return allWorkHistoryConfirmed() && !isRhUpdateCommitted();
     }
 
@@ -5427,8 +5495,10 @@ const TVC_App = (function () {
 
     // ── Running Hours modal (예측 정비 엔진 UI) ───────────────────────
     function openRunHoursModal() {
-        if (state.user && typeof TVC_Space !== 'undefined'
-            && !TVC_Space.getUiFeatures(state.user).showRunningHours) return;
+        if (state.user && typeof TVC_Space !== 'undefined') {
+            const rhF = TVC_Space.getUiFeatures(state.user);
+            if (rhF.showRunningHours === false) return;
+        }
         TVC_RunHours.render();
         showModal('runHoursModal');
     }

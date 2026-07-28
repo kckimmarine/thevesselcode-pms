@@ -42,17 +42,28 @@ const TVC_RunHours = (function () {
         return !!revertSnapshot;
     }
 
+    function canEditRh() {
+        return ctx?.canEditRunningHours ? ctx.canEditRunningHours() : true;
+    }
+
+    function rhEditLockTip() {
+        return 'Running Hours Update는 Chief engineer (ce) · Superintendent (hq)만 사용할 수 있습니다.';
+    }
+
     function updateRevertButtonState() {
         const btn = document.getElementById('rhRevertBtn');
-        if (btn) btn.disabled = !revertSnapshot;
+        if (btn) btn.disabled = !canEditRh() || !revertSnapshot;
     }
 
     function syncRhToolbarUi() {
-        const canUpdate = ctx?.canUpdateRunningHours ? ctx.canUpdateRunningHours() : !revertSnapshot;
+        const editable = canEditRh();
+        const canUpdate = editable && (ctx?.canUpdateRunningHours ? ctx.canUpdateRunningHours() : !revertSnapshot);
         const updateBtn = document.getElementById('rhUpdateBtn');
         if (updateBtn) {
             updateBtn.disabled = !canUpdate;
-            if (revertSnapshot) {
+            if (!editable) {
+                updateBtn.title = rhEditLockTip();
+            } else if (revertSnapshot) {
                 updateBtn.title = 'Running Hours Update가 완료되었습니다. Revert 후 다시 Update할 수 있습니다.';
             } else if (ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
                 updateBtn.title = 'Work History의 모든 항목이 Confirm된 후 Update할 수 있습니다.';
@@ -84,6 +95,9 @@ const TVC_RunHours = (function () {
         syncLastUpdatedField(store);
         syncRhToolbarUi();
 
+        const editable = canEditRh();
+        const ro = editable ? '' : ' readonly tabindex="-1"';
+
         if (!nodes.length) {
             body.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center">No run-hour tracked equipment for this view. (Only M/E and No.1~3 G/E are time-based.)</td></tr>';
             return;
@@ -96,13 +110,13 @@ const TVC_RunHours = (function () {
             return `<tr>
                 <td class="rh-equip"><strong>${esc(n.label)}</strong></td>
                 <td class="rh-jobs">${hourJobs}</td>
-                <td class="rh-prev"><input type="number" min="0" step="1" class="rh-input" id="rh-prev-${i}" placeholder="0"
+                <td class="rh-prev"><input type="number" min="0" step="1" class="rh-input${editable ? '' : ' rh-readonly'}" id="rh-prev-${i}" placeholder="0"${ro}
                     oninput="TVC_App.runHrsPreview(${i})"></td>
-                <td class="rh-total-cell"><input type="number" min="0" step="1" class="rh-input rh-total" id="rh-total-${i}"
-                    data-base="${total}" value="${total}"
+                <td class="rh-total-cell"><input type="number" min="0" step="1" class="rh-input rh-total${editable ? '' : ' rh-readonly'}" id="rh-total-${i}"
+                    data-base="${total}" value="${total}"${ro}
                     oninput="TVC_App.runHrsTotalEdit(${i})"></td>
-                <td class="rh-exp"><input type="number" min="0" step="1" class="rh-input" id="rh-exp-${i}"
-                    value="${rec.expectedNextMonth ?? ''}" placeholder="0"></td>
+                <td class="rh-exp"><input type="number" min="0" step="1" class="rh-input${editable ? '' : ' rh-readonly'}" id="rh-exp-${i}"
+                    value="${rec.expectedNextMonth ?? ''}" placeholder="0"${ro}></td>
             </tr>`;
         }).join('');
     }
@@ -143,6 +157,10 @@ const TVC_RunHours = (function () {
 
     /** 모든 장비 입력값 저장 → 누적 → Due Date 재계산 */
     async function updateAll() {
+        if (!canEditRh()) {
+            alert(rhEditLockTip());
+            return;
+        }
         const state = ctx.getState();
         const nodes = state._rhNodes || trackedNodes(state);
         if (!nodes.length) return;
@@ -215,6 +233,10 @@ const TVC_RunHours = (function () {
 
     /** 마지막 Update 이전 상태로 되돌림 */
     async function revert() {
+        if (!canEditRh()) {
+            alert(rhEditLockTip());
+            return;
+        }
         if (!revertSnapshot) {
             alert('되돌릴 Update 기록이 없습니다.');
             return;

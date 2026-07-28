@@ -250,6 +250,7 @@ const TVC_Space = (function () {
         if (!user) return base;
         if (user.account_type === 'HQ') {
             base.showRunningHours = true;
+            base.canEditRunningHours = true;
             base.showSpareTab = true;
             base.showDataXfer = true;
             base.showOnlineSync = true;
@@ -270,6 +271,7 @@ const TVC_Space = (function () {
             base.showDefectReport = true;
             base.showDefectInbox = true;
             base.showDefectImportUrgent = isCo;
+            base.showRunningHours = false;
         }
         if (station === Station.ECR) {
             const isCe = isEngineChief(user);
@@ -303,7 +305,11 @@ const TVC_Space = (function () {
             base.showDefectUrgentExport = TVC_RBAC.isApprover(user);
         }
         base.showRunningHours = !isDeckVesselMode(user);
-        base.showSpareTab = !isDeckVesselMode(user);
+        if (station === Station.CCR) {
+            base.showSpareTab = true;
+        } else {
+            base.showSpareTab = !isDeckVesselMode(user);
+        }
         return base;
     }
 

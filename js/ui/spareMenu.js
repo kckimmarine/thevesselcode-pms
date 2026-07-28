@@ -333,11 +333,20 @@ const TVC_SpareMenu = (function () {
         }).groupNodes;
     }
 
+    /** SPARE GROUP Tree — DECK 그룹은 ENGINE 섹션에 표시 (Work Plan 트리는 부서 유지) */
+    function spareTreeDisplayDept(node) {
+        if (node?.department === 'DECK') return 'ENGINE';
+        return node?.department || '';
+    }
+
     /** Engine vessel SPARE tree also lists Deck groups (same set as Deck tab). */
-    function spareGroupTreeIncludesDept(st, nodeDept) {
+    function spareGroupTreeIncludesDept(st, nodeOrDept) {
+        const node = typeof nodeOrDept === 'object' && nodeOrDept ? nodeOrDept : null;
+        const nodeDept = node ? node.department : nodeOrDept;
+        const displayDept = node ? spareTreeDisplayDept(node) : nodeDept;
         if (!st?.department) return true;
-        if (nodeDept === st.department) return true;
-        return isEngineVesselMode(st) && nodeDept === 'DECK';
+        if (displayDept === st.department) return true;
+        return isEngineVesselMode(st) && st.department === 'ENGINE' && nodeDept === 'DECK';
     }
 
     /** Spare list department scope — selected group dept wins over session dept. */
@@ -348,6 +357,16 @@ const TVC_SpareMenu = (function () {
             if (node?.department) return node.department;
         }
         return st.department;
+    }
+
+    /** Vessel Mode - Deck: SPARE 탭은 표시하되 GROUP Tree는 비움 */
+    function isDeckSpareTreeEmpty(st) {
+        return typeof TVC_Space !== 'undefined' && TVC_Space.isDeckVesselMode(st?.user);
+    }
+
+    function renderEmptySpareGroupTreeHtml(st, selectAllAction) {
+        const allSelected = !st.selectedGroupKey;
+        return `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="${selectAllAction}"><span>📋 All Groups</span></div>`;
     }
 
     /** SPARE GROUP Tree — 03/04/05 Generator Engine 통합 노드 */
@@ -961,7 +980,7 @@ const TVC_SpareMenu = (function () {
         //  - 라벨 기준 동일 정렬
         const seen = new Set();
         const nodes = (st.idx?.groupNodes || [])
-            .filter(n => !st.department || n.department === st.department)
+            .filter(n => !st.department || spareTreeDisplayDept(n) === st.department)
             .filter(n => !isHiddenSpareGroup(n.label, n.department))
             .filter(n => {
                 if (isGeneratorEngineGroupLabel(n.label)) return true; // 병합 단계에서 처리
@@ -2078,6 +2097,12 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const root = document.getElementById('spareGroupTree');
         if (!root) return;
+        if (isDeckSpareTreeEmpty(st)) {
+            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_App.selectGroup(null)");
+            const searchEl = document.getElementById('spareTreeSearch');
+            if (searchEl && document.activeElement !== searchEl) searchEl.value = st.treeSearch || '';
+            return;
+        }
         if (st.selectedGroupKey === CRITICAL_GROUP_KEY) st.selectedGroupKey = null;
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
@@ -2093,13 +2118,14 @@ const TVC_SpareMenu = (function () {
         (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
+                if (!spareGroupTreeIncludesDept(st, n)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
             .forEach(n => {
-                if (!byDept.has(n.department)) byDept.set(n.department, []);
-                byDept.get(n.department).push(n);
+                const dept = spareTreeDisplayDept(n);
+                if (!byDept.has(dept)) byDept.set(dept, []);
+                byDept.get(dept).push(n);
             });
         const allSelected = !st.selectedGroupKey;
         let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_App.selectGroup(null)"><span>📋 All Groups</span></div>`;
@@ -5405,6 +5431,10 @@ const TVC_SpareMenu = (function () {
     }
 
     function canEditGroupHeader(st) {
+        if (st?.currentTab === 'actual') {
+            const user = spareInventoryUser(st);
+            return !!(user && window.TVC_RBAC?.canModifyOriginalPlan?.(user));
+        }
         if (canModifySpare(st)) return true;
         const user = spareInventoryUser(st);
         return !!(user && window.TVC_RBAC?.canModifyOriginalPlan?.(user));
@@ -5417,6 +5447,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function renderSpareTreeActionBtns(st) {
+        if (isDeckSpareTreeEmpty(st)) return '';
         if (!canEditGroupHeader(st)) return '';
         const canDelete = canDeleteSelectedGroup(st);
         return `<span class="spare-tree-actions">
@@ -5427,14 +5458,19 @@ const TVC_SpareMenu = (function () {
     }
 
     function appendGroupFromTree() {
-        if (!canEditGroupHeader(getState())) return alert('Chief Engineer / Captain permission required.');
+        const st = getState();
+        if (!canEditGroupHeader(st)) {
+            return alert('Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.');
+        }
         if (window.TVC_App?.openOrigGroupAdd) return TVC_App.openOrigGroupAdd();
         alert('Group append is unavailable.');
     }
 
     async function deleteGroupFromTree() {
         const st = getState();
-        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain permission required.');
+        if (!canEditGroupHeader(st)) {
+            return alert('Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.');
+        }
         const node = groupSelectedNode(st);
         if (!canDeleteSelectedGroup(st)) return alert('Select a group to delete.');
         if (!confirm(`Delete GROUP "${node.label}"?\n\nOnly empty groups (no jobs, no spare parts) can be deleted.`)) return;
@@ -5456,7 +5492,9 @@ const TVC_SpareMenu = (function () {
 
     function startGroupHeaderEdit() {
         const st = getState();
-        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain permission required.');
+        if (!canEditGroupHeader(st)) {
+            return alert('Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.');
+        }
         const key = st.selectedGroupKey;
         const treeName = st.currentTab === 'actual'
             ? 'PMS GROUP Tree' : 'SPARE GROUP Tree';
@@ -5490,7 +5528,9 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (!m.groupHeaderEdit) return;
-        if (!canEditGroupHeader(st)) return alert('Chief Engineer / Captain permission required.');
+        if (!canEditGroupHeader(st)) {
+            return alert('Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.');
+        }
         const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
         const draft = m.groupHeaderDraft || {};
         const key = st.selectedGroupKey;
@@ -6510,6 +6550,10 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const root = document.getElementById('reqWorkGroupTree');
         if (!root) return;
+        if (isDeckSpareTreeEmpty(st)) {
+            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_SpareMenu.reqWorkSelectGroup(null)");
+            return;
+        }
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -6525,13 +6569,14 @@ const TVC_SpareMenu = (function () {
         (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
+                if (!spareGroupTreeIncludesDept(st, n)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
             .forEach(n => {
-                if (!byDept.has(n.department)) byDept.set(n.department, []);
-                byDept.get(n.department).push(n);
+                const dept = spareTreeDisplayDept(n);
+                if (!byDept.has(dept)) byDept.set(dept, []);
+                byDept.get(dept).push(n);
             });
         const allSelected = !st.selectedGroupKey;
         let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_SpareMenu.reqWorkSelectGroup(null)"><span>📋 All Groups</span></div>`;
@@ -9326,6 +9371,10 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const root = document.getElementById('consumeGroupTree');
         if (!root) return;
+        if (isDeckSpareTreeEmpty(st)) {
+            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_SpareMenu.consumeSelectGroup(null)");
+            return;
+        }
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -9341,13 +9390,14 @@ const TVC_SpareMenu = (function () {
         (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
+                if (!spareGroupTreeIncludesDept(st, n)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
             .forEach(n => {
-                if (!byDept.has(n.department)) byDept.set(n.department, []);
-                byDept.get(n.department).push(n);
+                const dept = spareTreeDisplayDept(n);
+                if (!byDept.has(dept)) byDept.set(dept, []);
+                byDept.get(dept).push(n);
             });
         const allSelected = !st.selectedGroupKey;
         let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_SpareMenu.consumeSelectGroup(null)"><span>📋 All Groups</span></div>`;
@@ -9967,6 +10017,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const st = getState();
         const root = document.getElementById('wrSpareGroupTree');
         if (!root) return;
+        if (isDeckSpareTreeEmpty(st)) {
+            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_SpareMenu.wrSpareSelectGroup(null)");
+            return;
+        }
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -9982,13 +10036,14 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
+                if (!spareGroupTreeIncludesDept(st, n)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
             .forEach(n => {
-                if (!byDept.has(n.department)) byDept.set(n.department, []);
-                byDept.get(n.department).push(n);
+                const dept = spareTreeDisplayDept(n);
+                if (!byDept.has(dept)) byDept.set(dept, []);
+                byDept.get(dept).push(n);
             });
         const allSelected = !st.selectedGroupKey;
         let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_SpareMenu.wrSpareSelectGroup(null)"><span>📋 All Groups</span></div>`;
@@ -11235,6 +11290,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const st = getState();
         const root = document.getElementById('receiveGroupTree');
         if (!root) return;
+        if (isDeckSpareTreeEmpty(st)) {
+            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_SpareMenu.receiveSelectGroup(null)");
+            return;
+        }
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -11250,13 +11309,14 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
+                if (!spareGroupTreeIncludesDept(st, n)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
             .forEach(n => {
-                if (!byDept.has(n.department)) byDept.set(n.department, []);
-                byDept.get(n.department).push(n);
+                const dept = spareTreeDisplayDept(n);
+                if (!byDept.has(dept)) byDept.set(dept, []);
+                byDept.get(dept).push(n);
             });
         const allSelected = !st.selectedGroupKey;
         let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_SpareMenu.receiveSelectGroup(null)"><span>📋 All Groups</span></div>`;

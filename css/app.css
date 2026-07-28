@@ -2366,6 +2366,7 @@ input.tvc-date-input::placeholder {
 .sheet-table tbody tr.hist-row.row-selected { background: rgba(66, 153, 225, 0.35) !important; }
 .hist-row.row-selected:hover { background: rgba(66, 153, 225, 0.45) !important; }
 .rh-input { width: min(120px, 92%); max-width: 100%; padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 13px; box-sizing: border-box; }
+.rh-input.rh-readonly { background: #f1f5f9; color: #475569; cursor: default; }
 .runhrs-table { table-layout: fixed; width: 100%; }
 .runhrs-table col.rh-col-equip { width: 27%; }
 .runhrs-table col.rh-col-jobs { width: 15%; }

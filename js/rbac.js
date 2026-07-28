@@ -95,7 +95,7 @@ const TVC_RBAC = (function () {
         SHIP_OFFICER: new Set([
             Action.CREATE_DAILY_REPORT, Action.EDIT_OWN_PENDING_REPORT,
             Action.VIEW_INVENTORY, Action.VIEW_PMS_SCHEDULE,
-            Action.UPDATE_RUN_HOURS, Action.CREATE_REQUISITION,
+            Action.CREATE_REQUISITION,
             Action.DEDUCT_INVENTORY, Action.SUPPLY_PARTS,
             Action.SUBMIT_DEFECT_REPORT,
             Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
@@ -199,13 +199,25 @@ const TVC_RBAC = (function () {
             base.showExportShip = true;
             base.showImportShip = true;
             base.showModifyOriginalPlan = true;
+            base.showUpdateWorkPlan = true;
             base.showDefectUrgentExport = true;
             base.showDefectImportUrgent = true;
         }
         if (user.role === Role.SHIP_OFFICER) {
             base.showMaintenanceExecute = false;
             base.showApprovalQueue = false;
+            base.showUpdateWorkPlan = false;
+            base.canEditRunningHours = false;
             base.showDefectUrgentExport = false;
+        }
+        if (user.role === Role.SHIP_CAPTAIN) {
+            base.canEditRunningHours = false;
+        }
+        if (user.role === Role.SHIP_CHIEF) {
+            base.canEditRunningHours = true;
+        }
+        if (isHqAccount(user)) {
+            base.canEditRunningHours = true;
         }
         return base;
     }
@@ -301,13 +313,21 @@ const TVC_RBAC = (function () {
         return DEMO_ROLE_BY_USERNAME[String(user.username || '').toLowerCase()] || null;
     }
 
-    /** Original Plan Modify / Append / Delete — 선박: Captain·Chief Engineer만, HQ: 본사 감독 */
-    function canModifyOriginalPlan(user) {
+    /** Work Plan Modify / Append / Delete — ce · co · captain · hq 만 */
+    const MAINT_PLAN_EDITOR_USERNAMES = new Set(['ce', 'co', 'captain', 'hq']);
+
+    function isMaintPlanEditor(user) {
         if (!user) return false;
+        if (isHqAccount(user)) return true;
+        return MAINT_PLAN_EDITOR_USERNAMES.has(String(user.username || '').toLowerCase());
+    }
+
+    /** Original Plan Modify / Append / Delete — 확인자(ce/co/captain) · 승인자(hq) */
+    function canModifyOriginalPlan(user) {
+        if (!user || !isMaintPlanEditor(user)) return false;
         const role = resolveUserRole(user);
         const u = role && role !== user.role ? { ...user, role } : user;
-        if (isHqAccount(u)) return can(u, Action.MODIFY_MAINTENANCE_ITEM);
-        return isApprover(u) && can(u, Action.MODIFY_MAINTENANCE_ITEM);
+        return can(u, Action.MODIFY_MAINTENANCE_ITEM);
     }
 
     /** SPARE Modify / Append / Delete — 선박: Captain·Chief Engineer, HQ: 본사 감독 */
@@ -318,7 +338,7 @@ const TVC_RBAC = (function () {
         if (can(u, Action.MODIFY_INVENTORY)) return true;
         if (isApprover(u)) return true;
         const name = String(user.username || '').toLowerCase();
-        return name === 'ce' || name === 'captain';
+        return name === 'ce' || name === 'co' || name === 'captain';
     }
 
     function assertModifyOriginalPlan(user) {
@@ -410,7 +430,7 @@ const TVC_RBAC = (function () {
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, normalizeReportedByLabel,
         getDepartmentConfirmLabel, canModifyDeleteListReport,
         isShipAccount, isHqAccount, isApprover,
-        canModifyOriginalPlan, assertModifyOriginalPlan,
+        canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
         normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,
         getAccessibleDepartments, canAccessDepartment, canConfirmDepartment, canApproveDepartment, canApproveHqReport,
