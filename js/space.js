@@ -63,6 +63,18 @@ const TVC_Space = (function () {
         ENGINE: 'Engine',
     };
 
+    const LOGIN_MODE_USERS = {
+        [LoginMode.MASTER]: new Set(['captain']),
+        [LoginMode.DECK]: new Set(['officer', 'co']),
+        [LoginMode.ENGINE]: new Set(['engineer', 'ce']),
+    };
+
+    const LOGIN_MODE_DENIED = {
+        [LoginMode.MASTER]: 'Vessel Mode - Master는 Captain(captain) 계정만 접속할 수 있습니다.',
+        [LoginMode.DECK]: 'Vessel Mode - Deck은 Officer(officer) · Chief officer(co) 계정만 접속할 수 있습니다.',
+        [LoginMode.ENGINE]: 'Vessel Mode - Engine은 Engineer(engineer) · Chief engineer(ce) 계정만 접속할 수 있습니다.',
+    };
+
     function stationFromLoginMode(mode) {
         if (mode === LoginMode.MASTER) return Station.CAPTAIN;
         if (mode === LoginMode.DECK) return Station.CCR;
@@ -100,36 +112,22 @@ const TVC_Space = (function () {
     /** Login gate — loginMode: MASTER | DECK | ENGINE */
     function validateLogin(user, loginMode) {
         if (!user) return { ok: false, error: '계정을 확인할 수 없습니다.' };
-        if (user.account_type === 'HQ') return { ok: true, station: null };
+        if (user.account_type === 'HQ') {
+            return { ok: false, error: 'HQ 계정은 Department 선택 없이 로그인하세요.' };
+        }
 
         if (!loginMode || !LOGIN_MODE_LABELS[loginMode]) {
             return { ok: false, error: 'Department(Master / Deck / Engine)를 선택하세요.' };
         }
 
+        const uname = String(user.username || '').toLowerCase();
+        const allowed = LOGIN_MODE_USERS[loginMode];
+        if (!allowed?.has(uname)) {
+            return { ok: false, error: LOGIN_MODE_DENIED[loginMode] || '이 Department에 접속할 수 없는 계정입니다.' };
+        }
+
         const station = stationFromLoginMode(loginMode);
-
-        if (loginMode === LoginMode.MASTER) {
-            if (user.role !== 'SHIP_CAPTAIN') {
-                return { ok: false, error: 'Master Mode access is restricted to the Captain.' };
-            }
-            return { ok: true, station };
-        }
-
-        if (loginMode === LoginMode.DECK) {
-            if (user.department !== 'DECK') {
-                return { ok: false, error: 'Deck department access is limited to Officers and the Captain.' };
-            }
-            return { ok: true, station };
-        }
-
-        if (loginMode === LoginMode.ENGINE) {
-            if (user.department !== 'ENGINE') {
-                return { ok: false, error: 'Engine department access is limited to Engineers and the Chief Engineer.' };
-            }
-            return { ok: true, station };
-        }
-
-        return { ok: false, error: '유효하지 않은 Department입니다.' };
+        return { ok: true, station };
     }
 
     /** Client-side endpoint middleware */
@@ -199,9 +197,30 @@ const TVC_Space = (function () {
         return false;
     }
 
+    function isDeckVesselMode(user) {
+        if (!user || user.account_type === 'HQ') return false;
+        if (isCaptainHub(user)) return false;
+        const station = getStation(user);
+        if (station === Station.CCR) return true;
+        return user.department === 'DECK';
+    }
+
+    function isEngineVesselMode(user) {
+        if (!user || user.account_type === 'HQ') return false;
+        if (isCaptainHub(user) || isDeckVesselMode(user)) return false;
+        const station = getStation(user);
+        if (station === Station.ECR) return true;
+        return user.department === 'ENGINE';
+    }
+
     function getUiFeatures(user) {
         const base = { ...TVC_RBAC.getUiFeatures(user) };
-        if (!user || user.account_type === 'HQ') return base;
+        if (!user) return base;
+        if (user.account_type === 'HQ') {
+            base.showRunningHours = true;
+            base.showSpareTab = true;
+            return base;
+        }
 
         const station = getStation(user);
         if (station === Station.CCR) {
@@ -241,6 +260,8 @@ const TVC_Space = (function () {
             base.showDefectImportUrgent = true;
             base.showDefectUrgentExport = TVC_RBAC.isApprover(user);
         }
+        base.showRunningHours = !isDeckVesselMode(user);
+        base.showSpareTab = !isDeckVesselMode(user);
         return base;
     }
 
@@ -265,6 +286,6 @@ const TVC_Space = (function () {
         getStation, isCaptainHub, isStationPc, fixedDepartment, stationLabel, loginModeLabel,
         stationFromLoginMode, validateLogin, canEndpoint, assertEndpoint, assertAction,
         canAccessDepartment, canApproveReport, getUiFeatures, getModeBadge,
-        canSwitchDepartmentView,
+        canSwitchDepartmentView, isDeckVesselMode, isEngineVesselMode,
     };
 })();

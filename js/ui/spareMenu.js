@@ -293,6 +293,63 @@ const TVC_SpareMenu = (function () {
     /** Original/Actual Plan GROUP Tree — Critical Equipment 키와 동일 */
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
     const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
+
+    /** Vessel Mode - Engine (Captain Hub · Deck 제외) */
+    function isEngineVesselMode(st) {
+        const user = st?.user;
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isEngineVesselMode) {
+            return TVC_Space.isEngineVesselMode(user);
+        }
+        if (!user || !window.TVC_RBAC || TVC_RBAC.isHqAccount(user)) return false;
+        return user.department === 'ENGINE';
+    }
+
+    /** Engine vessel: idx includes Deck group nodes for SPARE tree. */
+    function spareGroupTreeNodes(st) {
+        if (isEngineVesselMode(st) && Array.isArray(st.idx?.spareGroupNodes)) {
+            return st.idx.spareGroupNodes;
+        }
+        return st.idx?.groupNodes || [];
+    }
+
+    function findSpareGroupNode(st, key) {
+        if (!key) return null;
+        return spareGroupTreeNodes(st).find(n => n.key === key) || null;
+    }
+
+    function ensureSpareGroupNodes(st) {
+        if (!isEngineVesselMode(st) || !st.idx || Array.isArray(st.idx.spareGroupNodes)) return;
+        const allJobs = st._allJobs || st.jobs || [];
+        const allGroups = st._allGroups || st.groups || [];
+        const spareJobs = allJobs.filter(j => j.department === 'ENGINE' || j.department === 'DECK');
+        const spareGroups = allGroups.filter(g => g.department === 'ENGINE' || g.department === 'DECK');
+        if (!spareJobs.length && !spareGroups.length) return;
+        st.idx.spareGroupNodes = TVC_Indexes.build({
+            jobs: spareJobs,
+            groups: spareGroups,
+            components: [],
+            spares: st.spares || [],
+            reports: [],
+        }).groupNodes;
+    }
+
+    /** Engine vessel SPARE tree also lists Deck groups (same set as Deck tab). */
+    function spareGroupTreeIncludesDept(st, nodeDept) {
+        if (!st?.department) return true;
+        if (nodeDept === st.department) return true;
+        return isEngineVesselMode(st) && nodeDept === 'DECK';
+    }
+
+    /** Spare list department scope — selected group dept wins over session dept. */
+    function spareListDeptScope(st, selectedGroupKey) {
+        if (!st?.department) return null;
+        if (selectedGroupKey && selectedGroupKey !== CRITICAL_GROUP_KEY) {
+            const node = findSpareGroupNode(st, selectedGroupKey);
+            if (node?.department) return node.department;
+        }
+        return st.department;
+    }
+
     /** SPARE GROUP Tree — 03/04/05 Generator Engine 통합 노드 */
     const MERGED_GEN_ENGINE_KEY = '__SPARE_MERGE_03_05_GENERATOR__';
     const MERGED_GEN_ENGINE_LABEL = '03~05. GENERATOR ENGINE';
@@ -897,6 +954,7 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         // GROUP Tree와 동일한 목록을 노출한다:
         //  - 부서 필터 + 숨김 그룹(예: ENGINE 27/36, DECK 34/36) 제외
         //  - 03~05 GENERATOR ENGINE 은 하나로 병합
@@ -920,6 +978,7 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         return (st.idx?.groupNodes || [])
             .filter(n => !st.department || n.department === st.department);
     }
@@ -2023,6 +2082,7 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         if (!st.idx) {
             root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…<br>Please open the Original Plan tab once.</div>';
             return;
@@ -2030,10 +2090,10 @@ const TVC_SpareMenu = (function () {
         const q = (st.treeSearch || '').toLowerCase();
         const matchNode = (n) => !q || (n.label || '').toLowerCase().includes(q) || (n.department || '').toLowerCase().includes(q);
         const byDept = new Map();
-        (st.idx.groupNodes || [])
+        (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (st.department && n.department !== st.department) return false;
+                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
@@ -2065,6 +2125,7 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         const deptRank = { ENGINE: 0, DECK: 1 };
         const nodes = (st.idx?.groupNodes || [])
             .filter(n => !st.department || n.department === st.department)
@@ -2116,9 +2177,10 @@ const TVC_SpareMenu = (function () {
             ].join(' ').toLowerCase();
             if (!hay.includes(q)) return false;
         }
-        if (st.department) {
+        const deptScope = spareListDeptScope(st, st.selectedGroupKey);
+        if (deptScope) {
             const cat = (s.category || 'GENERAL').toUpperCase();
-            if (cat !== st.department) return false;
+            if (cat !== deptScope) return false;
         }
         const groupKey = st.selectedGroupKey;
         if (groupKey === CRITICAL_GROUP_KEY) {
@@ -2126,14 +2188,8 @@ const TVC_SpareMenu = (function () {
         } else if (groupKey === MERGED_GEN_ENGINE_KEY) {
             if (!spareInMergedGeneratorEngine(s)) return false;
         } else if (groupKey) {
-            const node = st.idx?.groupNodes?.find(n => n.key === groupKey);
-            if (node) {
-                if (node.department) {
-                    const cat = (s.category || 'GENERAL').toUpperCase();
-                    if (cat !== node.department) return false;
-                }
-                if (!spareMatchesGroup(s, node)) return false;
-            }
+            const node = findSpareGroupNode(st, groupKey);
+            if (node && !spareMatchesGroup(s, node)) return false;
         }
         const sf = f.spareFilter || (f.showLowOnly ? 'lowStock' : 'total');
         if (sf === 'lowStock' && !TVC_Inventory.isLowStock(s)) return false;
@@ -2149,25 +2205,20 @@ const TVC_SpareMenu = (function () {
     /** 검색/재고 필터와 무관하게, 현재 선택된 그룹(병합/크리티컬 포함)에 속한 모든 부품 */
     function sparesInSelectedGroup(st) {
         const key = st.selectedGroupKey;
+        const deptScope = spareListDeptScope(st, key);
         const all = (st.spares || []).map(canon).filter(s => {
-            if (st.department) {
+            if (deptScope) {
                 const cat = (s.category || 'GENERAL').toUpperCase();
-                if (cat !== st.department) return false;
+                if (cat !== deptScope) return false;
             }
             return true;
         });
         if (!key) return all;
         if (key === CRITICAL_GROUP_KEY) return all.filter(s => s.isCritical);
         if (key === MERGED_GEN_ENGINE_KEY) return all.filter(s => spareInMergedGeneratorEngine(s));
-        const node = st.idx?.groupNodes?.find(n => n.key === key);
+        const node = findSpareGroupNode(st, key);
         if (!node) return [];
-        return all.filter(s => {
-            if (node.department) {
-                const cat = (s.category || 'GENERAL').toUpperCase();
-                if (cat !== node.department) return false;
-            }
-            return spareMatchesGroup(s, node);
-        });
+        return all.filter(s => spareMatchesGroup(s, node));
     }
 
     function spareListSearchQuery(st) {
@@ -6462,6 +6513,7 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         if (!st.idx) {
             root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…</div>';
             return;
@@ -6470,10 +6522,10 @@ const TVC_SpareMenu = (function () {
         const matchNode = (n) => !q || (n.label || '').toLowerCase().includes(q) || (n.department || '').toLowerCase().includes(q);
         const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
         const byDept = new Map();
-        (st.idx.groupNodes || [])
+        (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (st.department && n.department !== st.department) return false;
+                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
@@ -8394,6 +8446,7 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         if (!st.idx) return [];
         let jobs = (st.jobs || []).filter(j => !st.department || j.department === st.department);
         if (groupKey === CRITICAL_GROUP_KEY) {
@@ -9276,6 +9329,7 @@ const TVC_SpareMenu = (function () {
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         if (!st.idx) {
             root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…</div>';
             return;
@@ -9284,10 +9338,10 @@ const TVC_SpareMenu = (function () {
         const matchNode = (n) => !q || (n.label || '').toLowerCase().includes(q) || (n.department || '').toLowerCase().includes(q);
         const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
         const byDept = new Map();
-        (st.idx.groupNodes || [])
+        (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (st.department && n.department !== st.department) return false;
+                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
@@ -9916,6 +9970,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         if (!st.idx) {
             root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…</div>';
             return;
@@ -9924,10 +9979,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const matchNode = (n) => !q || (n.label || '').toLowerCase().includes(q) || (n.department || '').toLowerCase().includes(q);
         const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
         const byDept = new Map();
-        (st.idx.groupNodes || [])
+        (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (st.department && n.department !== st.department) return false;
+                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })
@@ -10238,6 +10293,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         if (!isPreview) renderWrSpareGroupTree();
         mountWrSpareVirtualList();
         bindWrSpareTreePopover();
@@ -11182,6 +11238,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
+        ensureSpareGroupNodes(st);
         if (!st.idx) {
             root.innerHTML = '<div class="tree-empty muted">Loading Maintenance Plan…</div>';
             return;
@@ -11190,10 +11247,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const matchNode = (n) => !q || (n.label || '').toLowerCase().includes(q) || (n.department || '').toLowerCase().includes(q);
         const matchCritical = !q || 'critical equipment'.includes(q) || q.includes('critical') || q.includes('crit');
         const byDept = new Map();
-        (st.idx.groupNodes || [])
+        (spareGroupTreeNodes(st))
             .filter(n => {
                 if (isHiddenSpareGroup(n.label, n.department)) return false;
-                if (st.department && n.department !== st.department) return false;
+                if (!spareGroupTreeIncludesDept(st, n.department)) return false;
                 if (matchNode(n)) return true;
                 return isGeneratorEngineGroupLabel(n.label) && matchMergedGeneratorSearch(q);
             })

@@ -84,6 +84,7 @@ const TVC_RBAC = (function () {
     // 계정 명칭 정의 — Username → Header 표시 타이틀
     const ACCOUNT_TITLES = {
         'officer': 'Officer',
+        'co': 'Chief officer',
         'captain': 'Captain',
         'engineer': 'Engineer',
         'ce': 'Chief engineer',
@@ -278,6 +279,7 @@ const TVC_RBAC = (function () {
 
     /** 데모 계정 username → role (IndexedDB role 누락/불일치 시 fallback) */
     const DEMO_ROLE_BY_USERNAME = {
+        co: Role.SHIP_CAPTAIN,
         ce: Role.SHIP_CHIEF,
         captain: Role.SHIP_CAPTAIN,
         officer: Role.SHIP_OFFICER,

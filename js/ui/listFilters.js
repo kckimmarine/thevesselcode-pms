@@ -24,6 +24,15 @@ const TVC_ListFilters = (function () {
         return null;
     }
 
+    function isHqMode() {
+        const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser?.() : null;
+        return typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isHqAccount?.(user);
+    }
+
+    function postponeAwaitingActive(f) {
+        return isHqMode() && !!f?.postponeAwaitingApproval;
+    }
+
     function activeCount(tab, state) {
         const f = filters(state, tab);
         if (tab === 'actual') {
@@ -31,7 +40,7 @@ const TVC_ListFilters = (function () {
             return n;
         }
         if (tab === 'history') {
-            let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0);
+            let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0) + (postponeAwaitingActive(f) ? 1 : 0);
             return n;
         }
         return 0;
@@ -129,6 +138,7 @@ const TVC_ListFilters = (function () {
 
     function effectiveHistType(f) {
         if (f.openOnly) return 'd';
+        if (postponeAwaitingActive(f)) return 'p';
         return f.type || 'all';
     }
 
@@ -136,6 +146,9 @@ const TVC_ListFilters = (function () {
         const type = effectiveHistType(f);
         if (type !== 'all' && histEntryType(entry) !== type) return false;
         if (f.openOnly && entry?.source === 'defect' && !isDefectOpen(entry.defect)) return false;
+        if (postponeAwaitingActive(f)) {
+            if (entry?.source !== 'report' || !TVC_App?.reportMatchesPostponeAwaitingApproval?.(entry.report)) return false;
+        }
         if (!matchGroupKeys(resolveHistEntryGroupKey(entry, ctx), f.groupKeys)) return false;
         return true;
     }
@@ -259,6 +272,12 @@ const TVC_ListFilters = (function () {
         } else {
             const types = ['all', 'm', 'p', 'd'];
             const histType = effectiveHistType(f);
+            const hqMode = isHqMode();
+            const postponeSection = hqMode ? `
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Postpone Report</div>
+                    <label class="list-filter-check list-filter-postpone-awaiting"><input type="checkbox" id="histFilterPostponeAwaiting"${postponeAwaitingActive(f) ? ' checked' : ''}> Awaiting company approval <span class="muted">(Confirmed · Submitted · not Approved)</span></label>
+                </div>` : '';
             pop.innerHTML = `
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Report type</div>
@@ -271,6 +290,7 @@ const TVC_ListFilters = (function () {
                     <div class="list-filter-section-title">Defect Report</div>
                     <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="histFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open only <span class="muted">(DC unchecked)</span></label>
                 </div>
+                ${postponeSection}
                 <div class="list-filter-actions">
                     <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
                     <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
@@ -290,8 +310,15 @@ const TVC_ListFilters = (function () {
         });
         pop.querySelector('#histFilterOpenOnly')?.addEventListener('change', (ev) => {
             if (!ev.target.checked) return;
+            pop.querySelector('#histFilterPostponeAwaiting').checked = false;
             pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
             pop.querySelector('[data-hist-type="d"]')?.classList.add('active');
+        });
+        pop.querySelector('#histFilterPostponeAwaiting')?.addEventListener('change', (ev) => {
+            if (!ev.target.checked) return;
+            pop.querySelector('#histFilterOpenOnly').checked = false;
+            pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
+            pop.querySelector('[data-hist-type="p"]')?.classList.add('active');
         });
         const gs = pop.querySelector('.list-filter-group-search');
         if (gs) {
@@ -373,10 +400,12 @@ const TVC_ListFilters = (function () {
         } else {
             const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
             const openOnly = !!pop.querySelector('#histFilterOpenOnly')?.checked;
+            const postponeAwaitingApproval = isHqMode() && !!pop.querySelector('#histFilterPostponeAwaiting')?.checked;
             const typeBtn = pop.querySelector('[data-hist-type].active');
             let type = typeBtn?.dataset.histType || 'all';
             if (openOnly) type = 'd';
-            TVC_App.setListFilters('history', { groupKeys, type, openOnly });
+            else if (postponeAwaitingApproval) type = 'p';
+            TVC_App.setListFilters('history', { groupKeys, type, openOnly, postponeAwaitingApproval });
         }
         closePopover();
     }
@@ -431,6 +460,7 @@ const TVC_ListFilters = (function () {
         if (tab === 'history') {
             if (f.type && f.type !== 'all') parts.push(`Type: ${TYPE_LABELS[f.type]}`);
             if (f.openOnly) parts.push('Open only');
+            if (postponeAwaitingActive(f)) parts.push('Awaiting company approval');
             if (f.groupKeys?.length) parts.push(`Group: ${f.groupKeys.length} selected`);
         }
         return parts;

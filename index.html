@@ -74,9 +74,9 @@
                 <span class="login-hint-label">Demo access</span>
                 Password <strong>0000</strong>
                 <ul class="login-hint-list">
-                    <li><b>Master</b> · captain (Hub · all zones)</li>
+                    <li><b>Master</b> · captain</li>
                     <li><b>Engine</b> · engineer / ce</li>
-                    <li><b>Deck</b> · officer / captain</li>
+                    <li><b>Deck</b> · officer / co</li>
                     <li><b>HQ</b> · hq (Department not required)</li>
                 </ul>
             </div>
@@ -135,8 +135,8 @@
         <button class="tab-btn active" data-tab="menu" onclick="TVC_App.switchTab('menu')">📑 Menu</button>
         <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 Work Plan</button>
         <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Work History</button>
-        <button class="tab-btn" data-tab="runhrs" onclick="TVC_App.switchTab('runhrs')">⏱ Running Hours</button>
-        <button class="tab-btn" data-tab="spare" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
+        <button class="tab-btn" data-tab="runhrs" data-feature="showRunningHours" onclick="TVC_App.switchTab('runhrs')">⏱ Running Hours</button>
+        <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
     </nav>
 
     <div id="tabContent">
@@ -551,7 +551,7 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/rbac.js?v=20260725-defect-status-4"></script>
+<script src="js/rbac.js?v=20260728-mode-login"></script>
 <script src="js/core/schema.js?v=20260727-df-schedule-wp-hist"></script>
 <script src="js/core/db.js?v=20260727-tx-getall"></script>
 <script src="js/core/indexes.js"></script>
@@ -560,15 +560,15 @@
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/runHours.js?v=20260723-rh-gate"></script>
-<script src="js/ui/spareMenu.js?v=20260727-df-spare-export"></script>
+<script src="js/ui/spareMenu.js?v=20260728-spare-deck-nodes"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
 <script src="js/services/inventoryService.js?v=20260721-stock-reported"></script>
 <script src="js/services/excel.js?v=20260725-wait-to-os"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
-<script src="js/space.js?v=20260716-menu-flow"></script>
-<script src="js/auth.js?v=20260723-login-fast"></script>
+<script src="js/space.js?v=20260728-mode-login"></script>
+<script src="js/auth.js?v=20260728-mode-login"></script>
 <script src="js/services/transaction.js?v=20260727-tx-getall"></script>
 <script src="js/services/maintenancePlan.js?v=20260726-job-code-edit"></script>
 <script src="js/services/defectCase.js?v=20260727-df-dc-reconcile"></script>
@@ -579,10 +579,10 @@
 <script src="js/services/fleet.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
-<script src="js/ui/listFilters.js?v=20260728-filter-dept"></script>
+<script src="js/ui/listFilters.js?v=20260728-hq-postpone-hqonly"></script>
 <script src="js/ui/defectReport.js?v=20260727-df-attach-btn"></script>
 <script src="js/ui/outstandingTasks.js?v=20260727-unified-hist-defect"></script>
-<script src="js/app.js?v=20260728-hq-approve-menu"></script>
+<script src="js/app.js?v=20260728-deck-no-spare"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

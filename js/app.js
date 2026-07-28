@@ -27,7 +27,7 @@ const TVC_App = (function () {
         reportPeriodTo: '',
         listFilters: {
             actual: { pics: [], unassigned: false },
-            history: { groupKeys: [], type: 'all', openOnly: false },
+            history: { groupKeys: [], type: 'all', openOnly: false, postponeAwaitingApproval: false },
         },
         jobSort: { field: 'job_code', asc: true },
         search: '',
@@ -420,6 +420,8 @@ const TVC_App = (function () {
         const allJobs = await TVC_DB.getAll('maintenance_jobs');
         const allGroups = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         await normalizeGroupDepartments(allJobs, allComponents, allGroups);
+        state._allJobs = allJobs;
+        state._allGroups = allGroups;
         const allReports = await TVC_DB.getAll('daily_work_reports');
         const allDefects = await TVC_DB.getAll('defect_cases').catch(() => []);
         state.spares = await TVC_DB.SparePart.listAll().catch(() =>
@@ -479,6 +481,19 @@ const TVC_App = (function () {
         await applyActiveReportSchedules();
         await applyDefectClearedSchedules();
         state.idx = TVC_Indexes.build(state);
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isEngineVesselMode(state.user)) {
+            const spareJobs = allJobs.filter(j => j.department === 'ENGINE' || j.department === 'DECK');
+            const spareGroups = allGroups.filter(g => g.department === 'ENGINE' || g.department === 'DECK');
+            state.idx.spareGroupNodes = TVC_Indexes.build({
+                jobs: spareJobs,
+                groups: spareGroups,
+                components: [],
+                spares: state.spares,
+                reports: [],
+            }).groupNodes;
+        } else {
+            state.idx.spareGroupNodes = null;
+        }
         assertDeptIsolation();
         await backfillOriginalNextDates(state.jobs);
         // run-hour 미적용 작업 — Original Plan 기준 Due Date 스냅샷
@@ -577,6 +592,14 @@ const TVC_App = (function () {
     /** 상단 탭 전환 — 부서 필터 상태는 그대로 유지된다. */
     function switchTab(tab) {
         if (!TABS.includes(tab)) tab = 'menu';
+        if (tab === 'runhrs' && state.user && typeof TVC_Space !== 'undefined'
+            && !TVC_Space.getUiFeatures(state.user).showRunningHours) {
+            tab = 'menu';
+        }
+        if (tab === 'spare' && state.user && typeof TVC_Space !== 'undefined'
+            && !TVC_Space.getUiFeatures(state.user).showSpareTab) {
+            tab = 'menu';
+        }
         TVC_ListFilters?.closePopover();
         if (tab !== 'actual') state.actualSelectedOnly = false;
         state.currentTab = tab;
@@ -647,11 +670,20 @@ const TVC_App = (function () {
     function applyRoleUi(user) {
         const f = typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(user) : TVC_RBAC.getUiFeatures(user);
         document.querySelectorAll('[data-feature]').forEach(el => {
+            if (el.classList.contains('tab-pane')) return;
             el.classList.toggle('hidden', !f[el.dataset.feature]);
         });
         const dash = document.getElementById('captainViewDashboard');
         if (dash) dash.classList.toggle('hidden', !f.showCaptainDashboard);
         syncPlanGroupTreeUi();
+        if ((!f.showRunningHours && state.currentTab === 'runhrs')
+            || (!f.showSpareTab && state.currentTab === 'spare')) {
+            switchTab('menu');
+            return;
+        }
+        const activeTab = state.currentTab || 'menu';
+        document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
+        document.getElementById('tab-' + activeTab)?.classList.remove('hidden');
     }
 
     function daysUntil(dateStr) {
@@ -1688,8 +1720,16 @@ const TVC_App = (function () {
             d.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
         ).length;
         const postponePending = hqPendingPostponeReports().length;
+        const workReportPending = hqPendingWorkReports().length;
+        const reportsPending = hqMonthlyReportsPendingCount();
         const critical = jobs.filter(jobShowsCriticalEquipmentMark).length;
-        return { total: jobs.length, overdue, due30, dueMonth, pending: pending.length, approved, defectPending, postponePending, critical };
+        return { total: jobs.length, overdue, due30, dueMonth, pending: pending.length, approved, defectPending, postponePending, workReportPending, reportsPending, critical };
+    }
+
+    function hqMonthlyReportsPendingCount() {
+        return hqPendingDefectCases().length
+            + hqPendingPostponeReports({ monthly: true }).length
+            + hqPendingWorkReports().length;
     }
 
     function hqPendingDefectCases() {
@@ -1698,17 +1738,65 @@ const TVC_App = (function () {
         );
     }
 
-    function hqPendingPostponeReports() {
+    function reportMatchesPostponeAwaitingApproval(report, opts = {}) {
+        const monthly = opts.monthly === true;
+        if (!report) return false;
+        TVC_WorkReport.fromLegacy(report);
+        if (report.work_type !== 'POSTPONE') return false;
+        if (!TVC_RBAC.isConfirmedStatus(report.status, report.is_locked)) return false;
+        if (reportIsApproved(report)) return false;
+        const critical = postponeRequiresCompanyApproval(report);
+        if (critical) return report.sync_status === 'SYNCED';
+        return monthly;
+    }
+
+    function hqPendingPostponeReports(opts = {}) {
+        let reports = state.reports || [];
+        if (state.department) reports = reports.filter(r => reportDept(r) === state.department);
+        return reports.filter(r => reportMatchesPostponeAwaitingApproval(r, opts))
+            .sort(compareReportByReportedDate);
+    }
+
+    function hqPendingWorkReports() {
         let reports = state.reports || [];
         if (state.department) reports = reports.filter(r => reportDept(r) === state.department);
         return reports.filter(r => {
             TVC_WorkReport.fromLegacy(r);
-            if (r.work_type !== 'POSTPONE') return false;
-            if (!postponeRequiresCompanyApproval(r)) return false;
+            if (r.work_type === 'POSTPONE') return false;
             if (!TVC_RBAC.isConfirmedStatus(r.status, r.is_locked)) return false;
             if (reportIsApproved(r)) return false;
-            return r.sync_status === 'SYNCED';
+            return true;
         }).sort(compareReportByReportedDate);
+    }
+
+    function openHqApproveReports() {
+        if (!TVC_RBAC.isHqAccount(state.user)) return;
+        const defects = hqPendingDefectCases();
+        const postpones = hqPendingPostponeReports({ monthly: true });
+        const workReports = hqPendingWorkReports();
+        if (!defects.length && !postpones.length && !workReports.length) {
+            return alert('승인 대기 중인 Report가 없습니다.');
+        }
+        switchTab('history');
+        if (defects.length && TVC_RBAC.can(state.user, TVC_RBAC.Action.REPLY_DEFECT_REPORT)) {
+            TVC_DefectReport.openCase(defects[0].id, 'phase2');
+            return;
+        }
+        if (postpones.length && TVC_RBAC.canApproveHqReport(state.user)) {
+            const rep = postpones[0];
+            const item = TVC_WorkReport.getJobItems(rep)[0];
+            if (!item) return alert('Postpone Report 항목을 찾을 수 없습니다.');
+            openWorkReportFromHistory(rep.id, item.maintenance_job_id, { fromHistory: true, view: true });
+            return;
+        }
+        if (workReports.length && TVC_RBAC.canApproveHqReport(state.user)) {
+            const rep = workReports[0];
+            const item = TVC_WorkReport.getJobItems(rep)[0];
+            if (!item) return alert('Work Report 항목을 찾을 수 없습니다.');
+            openWorkReportFromHistory(rep.id, item.maintenance_job_id, { fromHistory: true, view: true });
+            return;
+        }
+        alert('승인 권한이 없거나 처리 가능한 Report가 없습니다.');
     }
 
     function openHqApproveDefectReport() {
@@ -1716,10 +1804,15 @@ const TVC_App = (function () {
         if (!TVC_RBAC.can(state.user, TVC_RBAC.Action.REPLY_DEFECT_REPORT)) {
             return alert('Defect Report 승인 권한이 없습니다.');
         }
-        const pending = hqPendingDefectCases();
-        if (!pending.length) return alert('승인 대기 중인 Defect Report가 없습니다.');
+        state.listFilters.history = {
+            ...state.listFilters.history,
+            groupKeys: [],
+            type: 'd',
+            openOnly: true,
+            postponeAwaitingApproval: false,
+        };
         switchTab('history');
-        TVC_DefectReport.openCase(pending[0].id, 'phase2');
+        TVC_ListFilters?.syncBtn('history');
     }
 
     function openHqApprovePostponeReport() {
@@ -1727,13 +1820,15 @@ const TVC_App = (function () {
         if (!TVC_RBAC.canApproveHqReport(state.user)) {
             return alert('Postpone Report 승인 권한이 없습니다.');
         }
-        const pending = hqPendingPostponeReports();
-        if (!pending.length) return alert('승인 대기 중인 Postpone Report가 없습니다.');
-        const rep = pending[0];
-        const item = TVC_WorkReport.getJobItems(rep)[0];
-        if (!item) return alert('Postpone Report 항목을 찾을 수 없습니다.');
+        state.listFilters.history = {
+            ...state.listFilters.history,
+            groupKeys: [],
+            type: 'p',
+            openOnly: false,
+            postponeAwaitingApproval: true,
+        };
         switchTab('history');
-        openWorkReportFromHistory(rep.id, item.maintenance_job_id, { fromHistory: true, view: true });
+        TVC_ListFilters?.syncBtn('history');
     }
 
     function menuModel() {
@@ -1741,24 +1836,23 @@ const TVC_App = (function () {
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
         const isMaster = state.user && TVC_Space.isCaptainHub(state.user);
 
-        const dailyItems = [
+        const shipDailyItems = [
             { label: 'Check Work Plan', tag: 'D', action: "TVC_App.menuAction('checkPlan')", badge: c.overdue, badgeTone: 'red' },
             { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
             { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
         ];
-        if (isHq) {
-            dailyItems.push(
-                { label: 'Approve Defect Report', tag: 'B', action: "TVC_App.menuAction('approveDefectReport')", badge: c.defectPending, badgeTone: 'amber' },
-                { label: 'Approve Postpone Report', tag: 'B', action: "TVC_App.menuAction('approvePostponeReport')", badge: c.postponePending, badgeTone: 'amber' },
-            );
-        }
-
+        const hqDailyItems = [
+            { label: 'Approve Defect Report', tag: 'B', action: "TVC_App.menuAction('approveDefectReport')", badge: c.defectPending, badgeTone: 'amber' },
+            { label: 'Approve Postpone Report', tag: 'B', action: "TVC_App.menuAction('approvePostponeReport')", badge: c.postponePending, badgeTone: 'amber' },
+        ];
         const necessaryItems = menuNecessaryItems();
 
         if (isHq) {
         return [
-                { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: dailyItems },
+                { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: hqDailyItems },
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
+                    { label: 'Check Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" },
+                    { label: 'Approve Reports', tag: 'B', action: "TVC_App.menuAction('approveReports')", badge: c.reportsPending, badgeTone: 'amber' },
                     { label: 'Approve Work Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
                 ] },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
@@ -1767,20 +1861,20 @@ const TVC_App = (function () {
 
         if (isMaster) {
             const monthlyCore = [
-                { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" },
+                { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
                 { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
             ];
             return [
-                { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: dailyItems },
+                { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: monthlyCore },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
         }
 
         return [
-            { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: dailyItems },
+            { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
             { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
-                { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" },
+                { label: 'Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
                 { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true },
             ] },
             { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
@@ -2788,10 +2882,13 @@ const TVC_App = (function () {
             case 'inputReport': menuNavigate('actual', { actualFilter: 'total' }); break;
             case 'approveReport': menuNavigate('history'); break;
             case 'hqConfirm': menuNavigate('history'); break;
-            case 'runHour': menuNavigate('runhrs'); break;
+            case 'runHour':
+                if (typeof TVC_Space !== 'undefined' && TVC_Space.getUiFeatures(state.user).showRunningHours === false) break;
+                menuNavigate('runhrs');
+                break;
             case 'originalPlan':
             case 'approveOriginalPlan':
-                if (!isRhUpdateCommitted()) {
+                if (rhUpdateGateApplies() && !isRhUpdateCommitted()) {
                     alert('Running Hours Update를 먼저 완료하세요.');
                     return;
                 }
@@ -2824,6 +2921,9 @@ const TVC_App = (function () {
                 if (state.selectedJobId) TVC_DefectReport.openNewFromJob(state.selectedJobId);
                 else TVC_DefectReport.openNewBlank();
                 break;
+            case 'approveReports':
+                openHqApproveReports();
+                break;
             case 'approveDefectReport':
                 openHqApproveDefectReport();
                 break;
@@ -2850,6 +2950,11 @@ const TVC_App = (function () {
     function getPlanLockDept() {
         if (state.user && !TVC_RBAC.isHqAccount(state.user)) return state.user.department;
         return state.department || null;
+    }
+
+    function rhUpdateGateApplies() {
+        if (!state.user) return true;
+        return !(typeof TVC_Space !== 'undefined' && TVC_Space.isDeckVesselMode(state.user));
     }
 
     async function loadOriginalPlanLock() {
@@ -2918,7 +3023,7 @@ const TVC_App = (function () {
     }
 
     function getPlanMenuLockMessage() {
-        if (!isRhUpdateCommitted()) {
+        if (rhUpdateGateApplies() && !isRhUpdateCommitted()) {
             return 'Running Hours Update를 먼저 완료하세요.';
         }
         return getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.';
@@ -2927,7 +3032,7 @@ const TVC_App = (function () {
     function syncPlanUpdateUi() {
         const dept = getPlanLockDept();
         const planLocked = isOriginalPlanUpdateLocked(dept);
-        const rhLocked = !isRhUpdateCommitted();
+        const rhLocked = rhUpdateGateApplies() && !isRhUpdateCommitted();
         const locked = planLocked || rhLocked;
         const btn = document.getElementById('actUpdatePlanBtn');
         if (btn) {
@@ -3667,7 +3772,7 @@ const TVC_App = (function () {
 
     /** Menu → Update Original Plan: Run-hour 입력값으로 H 주기 Due Date 재계산 (CMAXS Calculation) */
     async function updateOriginalPlanFromRunHours() {
-        if (!isRhUpdateCommitted()) {
+        if (rhUpdateGateApplies() && !isRhUpdateCommitted()) {
             alert('Running Hours Update를 먼저 완료하세요.');
             return;
         }
@@ -4360,7 +4465,7 @@ const TVC_App = (function () {
 
     function clearListFilters(tab) {
         if (tab === 'actual') setListFilters('actual', { pics: [], unassigned: false });
-        else if (tab === 'history') setListFilters('history', { groupKeys: [], type: 'all', openOnly: false });
+        else if (tab === 'history') setListFilters('history', { groupKeys: [], type: 'all', openOnly: false, postponeAwaitingApproval: false });
     }
 
     function syncListFilterBtns() {
@@ -4408,6 +4513,7 @@ const TVC_App = (function () {
     }
 
     function canUpdateWorkPlanFromRh() {
+        if (!rhUpdateGateApplies()) return canPerformOriginalPlanUpdate();
         return isRhUpdateCommitted() && canPerformOriginalPlanUpdate();
     }
 
@@ -7374,6 +7480,7 @@ const TVC_App = (function () {
         setFleetView, setFleetSearch, selectVessel,
         setSearch, setTreeSearch, clearSearchField, updateSearchClearBtn, bindSearchClearInput, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, renderGroupTree,
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
+        reportMatchesPostponeAwaitingApproval,
         getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs,
         renderSectionCard,
         openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab,

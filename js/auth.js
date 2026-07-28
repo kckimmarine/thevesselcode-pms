@@ -2,11 +2,12 @@
 const TVC_Auth = (function () {
     const SESSION_KEY = 'tvc_session_v2';
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 6;
+    const USERS_SEED_VERSION = 7;
 
     const DEFAULT_USERS = [
         // Deck part
         { id: 'user-officer', username: 'officer', display_name: 'Kim 2/O (Deck Officer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'INCHEON CHEMI' },
+        { id: 'user-co', username: 'co', display_name: 'Park C/O (Chief Officer)', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'INCHEON CHEMI' },
         { id: 'user-captain', username: 'captain', display_name: 'Choi Captain (선장)', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'INCHEON CHEMI' },
         // Engine part
         { id: 'user-engineer', username: 'engineer', display_name: 'Kim 3/E (Engineer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'ENGINE', vessel_id: 'INCHEON CHEMI' },
@@ -129,6 +130,9 @@ const TVC_Auth = (function () {
         const sessionRole = user.role || (window.TVC_RBAC?.resolveUserRole?.(user));
 
         if (user.account_type === 'HQ') {
+            if (loginMode) {
+                return { ok: false, error: 'Superintendent(hq) 계정은 Department 선택 없이 로그인하세요.' };
+            }
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,
                 account_type: user.account_type, role: sessionRole,
