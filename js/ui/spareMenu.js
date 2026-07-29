@@ -292,7 +292,7 @@ const TVC_SpareMenu = (function () {
 
     /** Original/Actual Plan GROUP Tree — Critical Equipment 키와 동일 */
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
-    const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
+    const DEPT_TREE_ORDER = ['DECK', 'ENGINE'];
 
     /** Vessel Mode - Engine (Captain Hub · Deck 제외) */
     function isEngineVesselMode(st) {
@@ -2152,7 +2152,7 @@ const TVC_SpareMenu = (function () {
             st.idx = TVC_Indexes.build(st);
         }
         ensureSpareGroupNodes(st);
-        const deptRank = { ENGINE: 0, DECK: 1 };
+        const deptRank = { DECK: 0, ENGINE: 1 };
         const nodes = (st.idx?.groupNodes || [])
             .filter(n => !st.department || n.department === st.department)
             .sort((a, b) => (deptRank[a.department] ?? 9) - (deptRank[b.department] ?? 9) || a.label.localeCompare(b.label));

@@ -245,7 +245,7 @@ const TVC_RBAC = (function () {
     // ── Department scoping ───────────────────────────────────────────
     /** 계정이 접근 가능한 부서 목록. HQ는 전체, 선박은 자기 부서만. */
     function getAccessibleDepartments(user) {
-        if (isHqAccount(user)) return [Department.ENGINE, Department.DECK];
+        if (isHqAccount(user)) return [Department.DECK, Department.ENGINE];
         return user?.department ? [user.department] : [];
     }
 

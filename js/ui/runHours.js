@@ -6,6 +6,7 @@
 const TVC_RunHours = (function () {
     let ctx = null; // { getState: () => state, refresh: async () => {} }
     let revertSnapshot = null;
+    let inputEditMode = false;
 
     function init(context) { ctx = context; }
 
@@ -57,18 +58,21 @@ const TVC_RunHours = (function () {
 
     function syncRhToolbarUi() {
         const editable = canEditRh();
-        const canUpdate = editable && (ctx?.canUpdateRunningHours ? ctx.canUpdateRunningHours() : !revertSnapshot);
+        const canUpdate = editable && !revertSnapshot && (inputEditMode || (ctx?.canUpdateRunningHours ? ctx.canUpdateRunningHours() : true));
         const updateBtn = document.getElementById('rhUpdateBtn');
         if (updateBtn) {
             updateBtn.disabled = !canUpdate;
+            updateBtn.textContent = inputEditMode ? '↻ Apply Update' : '↻ Update';
             if (!editable) {
                 updateBtn.title = rhEditLockTip();
             } else if (revertSnapshot) {
                 updateBtn.title = 'Running Hours Update가 완료되었습니다. Revert 후 다시 Update할 수 있습니다.';
-            } else if (ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
+            } else if (!inputEditMode && ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
                 updateBtn.title = 'Work History의 모든 항목이 Confirm된 후 Update할 수 있습니다.';
+            } else if (inputEditMode) {
+                updateBtn.title = '입력 후 Apply Update를 눌러 저장합니다.';
             } else {
-                updateBtn.title = '';
+                updateBtn.title = 'Update를 눌러 입력을 시작합니다.';
             }
         }
         updateRevertButtonState();
@@ -95,8 +99,8 @@ const TVC_RunHours = (function () {
         syncLastUpdatedField(store);
         syncRhToolbarUi();
 
-        const editable = canEditRh();
-        const ro = editable ? '' : ' readonly tabindex="-1"';
+        const fieldsEditable = canEditRh() && inputEditMode && !revertSnapshot;
+        const ro = fieldsEditable ? '' : ' readonly tabindex="-1"';
 
         if (!nodes.length) {
             body.innerHTML = '<tr><td colspan="5" class="muted" style="text-align:center">No run-hour tracked equipment for this view. (Only M/E and No.1~3 G/E are time-based.)</td></tr>';
@@ -110,12 +114,12 @@ const TVC_RunHours = (function () {
             return `<tr>
                 <td class="rh-equip"><strong>${esc(n.label)}</strong></td>
                 <td class="rh-jobs">${hourJobs}</td>
-                <td class="rh-prev"><input type="number" min="0" step="1" class="rh-input${editable ? '' : ' rh-readonly'}" id="rh-prev-${i}" placeholder="0"${ro}
+                <td class="rh-prev"><input type="number" min="0" step="1" class="rh-input${fieldsEditable ? '' : ' rh-readonly'}" id="rh-prev-${i}" placeholder="0"${ro}
                     oninput="TVC_App.runHrsPreview(${i})"></td>
-                <td class="rh-total-cell"><input type="number" min="0" step="1" class="rh-input rh-total${editable ? '' : ' rh-readonly'}" id="rh-total-${i}"
+                <td class="rh-total-cell"><input type="number" min="0" step="1" class="rh-input rh-total${fieldsEditable ? '' : ' rh-readonly'}" id="rh-total-${i}"
                     data-base="${total}" value="${total}"${ro}
                     oninput="TVC_App.runHrsTotalEdit(${i})"></td>
-                <td class="rh-exp"><input type="number" min="0" step="1" class="rh-input${editable ? '' : ' rh-readonly'}" id="rh-exp-${i}"
+                <td class="rh-exp"><input type="number" min="0" step="1" class="rh-input${fieldsEditable ? '' : ' rh-readonly'}" id="rh-exp-${i}"
                     value="${rec.expectedNextMonth ?? ''}" placeholder="0"${ro}></td>
             </tr>`;
         }).join('');
@@ -155,7 +159,7 @@ const TVC_RunHours = (function () {
         };
     }
 
-    /** 모든 장비 입력값 저장 → 누적 → Due Date 재계산 */
+    /** Update: 1st click → unlock inputs; 2nd click (Apply Update) → save */
     async function updateAll() {
         if (!canEditRh()) {
             alert(rhEditLockTip());
@@ -170,16 +174,22 @@ const TVC_RunHours = (function () {
             return;
         }
 
-        if (ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
-            const entries = ctx.workHistoryEntriesRaw ? ctx.workHistoryEntriesRaw() : [];
-            const isConfirmed = ctx.isWorkHistoryEntryConfirmed;
-            const unconfirmed = isConfirmed
-                ? entries.filter(e => !isConfirmed(e)).length
-                : entries.length;
-            alert(
-                `Work History에 Confirm되지 않은 항목이 ${unconfirmed}건 있습니다.\n` +
-                '모든 Work History 항목이 Confirm(또는 Approved/Submitted)된 후 Running Hours Update를 진행하세요.'
-            );
+        if (!inputEditMode) {
+            if (ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
+                const entries = ctx.workHistoryEntriesRaw ? ctx.workHistoryEntriesRaw() : [];
+                const isConfirmed = ctx.isWorkHistoryEntryConfirmed;
+                const unconfirmed = isConfirmed
+                    ? entries.filter(e => !isConfirmed(e)).length
+                    : entries.length;
+                alert(
+                    `Work History에 Confirm되지 않은 항목이 ${unconfirmed}건 있습니다.\n` +
+                    '모든 Work History 항목이 Confirm(또는 Approved/Submitted)된 후 Running Hours Update를 진행하세요.'
+                );
+                return;
+            }
+            inputEditMode = true;
+            render();
+            syncRhToolbarUi();
             return;
         }
 
@@ -215,6 +225,7 @@ const TVC_RunHours = (function () {
         store._lastUpdatedDate = updatedYmd;
         TVC_PMS.writeStore(store);
 
+        inputEditMode = false;
         const res = await TVC_PMS.updateMaintenanceSchedule(state, { persist: true });
         if (ctx.refresh) await ctx.refresh();
         render();
@@ -247,6 +258,7 @@ const TVC_RunHours = (function () {
 
         TVC_PMS.writeStore(JSON.parse(JSON.stringify(revertSnapshot.store)));
         revertSnapshot = null;
+        inputEditMode = false;
 
         const state = ctx.getState();
         await TVC_PMS.updateMaintenanceSchedule(state, { persist: true });
@@ -256,8 +268,12 @@ const TVC_RunHours = (function () {
         alert('Running Hours Update가 되돌려졌습니다.');
     }
 
+    function resetInputEditMode() {
+        inputEditMode = false;
+    }
+
     /** @deprecated per-row save — use updateAll */
     async function save(i) { return updateAll(); }
 
-    return { init, render, preview, totalEdit, updateAll, revert, save, hasPendingRevert, syncRhToolbarUi };
+    return { init, render, preview, totalEdit, updateAll, revert, save, hasPendingRevert, syncRhToolbarUi, resetInputEditMode };
 })();

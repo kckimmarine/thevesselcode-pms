@@ -70,7 +70,11 @@ const TVC_Indexes = (function () {
                 isEmpty: true,
             });
         });
-        nodes.sort((a, b) => a.department.localeCompare(b.department) || a.label.localeCompare(b.label));
+        nodes.sort((a, b) => {
+            const deptOrder = (d) => (d === 'DECK' ? 0 : d === 'ENGINE' ? 1 : 9);
+            const dc = deptOrder(a.department) - deptOrder(b.department);
+            return dc || a.label.localeCompare(b.label);
+        });
         return nodes;
     }
 

@@ -2,7 +2,7 @@
 const TVC_App = (function () {
     const ROW_H = 36;
     const PLAN_SHEET_MIN_WIDTH = 924;
-    const DEPT_TREE_ORDER = ['ENGINE', 'DECK'];
+    const DEPT_TREE_ORDER = ['DECK', 'ENGINE'];
     const TABS = ['menu', 'actual', 'history', 'spare'];
     const CRITICAL_GROUP_KEY = '__CRITICAL_EQUIPMENT__';
     const NEW_ORIG_JOB_EDIT_ID = '__new_orig_job__';
@@ -787,7 +787,7 @@ const TVC_App = (function () {
             : TVC_RBAC.isHqAccount(user);
         document.querySelectorAll('.dept-toggle').forEach(group => {
             if (canSwitch) {
-                const opts = [{ v: null, l: 'All' }, { v: 'ENGINE', l: 'Engine' }, { v: 'DECK', l: 'Deck' }];
+                const opts = [{ v: null, l: 'All' }, { v: 'DECK', l: 'Deck' }, { v: 'ENGINE', l: 'Engine' }];
             const btns = opts.map(o => {
                 const active = state.department === o.v ? ' active' : '';
                 const arg = o.v ? `'${o.v}'` : 'null';
@@ -863,7 +863,7 @@ const TVC_App = (function () {
         host.innerHTML = `
             <div class="captain-dash-head">
                 <span class="captain-dash-title">⚓ Captain Hub — Vessel Overview</span>
-                <span class="captain-dash-sub">All / Engine / Deck 구역 모니터링</span>
+                <span class="captain-dash-sub">All / Deck / Engine 구역 모니터링</span>
             </div>
             <div class="captain-view-tabs" role="tablist" aria-label="Vessel view">
                 <button type="button" class="captain-view-btn${v === 'all' ? ' active' : ''}" onclick="TVC_App.setCaptainView('all')">All</button>
@@ -887,9 +887,10 @@ const TVC_App = (function () {
         return ids.sort((a, b) => {
             const ja = state.idx.jobById.get(a), jb = state.idx.jobById.get(b);
             if (!ja || !jb) return 0;
-            // All departments / All groups — keep ENGINE·DECK blocks and group order before job_code.
+            // All departments / All groups — keep DECK·ENGINE blocks and group order before job_code.
             if (!state.department) {
-                const dc = String(ja.department || '').localeCompare(String(jb.department || ''));
+                const deptRank = (d) => (d === 'DECK' ? 0 : d === 'ENGINE' ? 1 : 9);
+                const dc = deptRank(ja.department) - deptRank(jb.department);
                 if (dc) return dc;
             }
             if (!state.selectedGroupKey) {
@@ -1867,21 +1868,20 @@ const TVC_App = (function () {
             { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
         ];
         const hqDailyItems = [
-            { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
-            { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
             { label: 'Approve Defect Report', tag: 'B', action: "TVC_App.menuAction('approveDefectReport')", badge: c.defectPending, badgeTone: 'amber' },
             { label: 'Approve Postpone Report', tag: 'B', action: "TVC_App.menuAction('approvePostponeReport')", badge: c.postponePending, badgeTone: 'amber' },
         ];
         const necessaryItems = menuNecessaryItems();
 
         if (isHq) {
+            const hqMonthlyItems = [
+                ...(state.department !== 'DECK' ? [{ label: 'Check Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" }] : []),
+                { label: 'Approve Reports', tag: 'B', action: "TVC_App.menuAction('approveReports')", badge: c.reportsPending, badgeTone: 'amber' },
+                { label: 'Approve Work Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
+            ];
         return [
                 { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: hqDailyItems },
-                { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
-                    { label: 'Check Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" },
-                    { label: 'Approve Reports', tag: 'B', action: "TVC_App.menuAction('approveReports')", badge: c.reportsPending, badgeTone: 'amber' },
-                    { label: 'Approve Work Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
-                ] },
+                { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: hqMonthlyItems },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
         }
@@ -3041,7 +3041,7 @@ const TVC_App = (function () {
                     alert(getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.');
                     return;
                 }
-                updateOriginalPlanFromRunHours();
+                updateOriginalPlanFromRunHours({ fromMenu: true });
                 break;
             case 'companyComment': menuNavigate('actual'); break;
             case 'modifyItem':
@@ -3236,9 +3236,17 @@ const TVC_App = (function () {
         return 'Work Procedure를 편집할 수 없습니다.';
     }
 
-    /** HQ MODE — Original Plan GROUP Tree 그룹명 수정·추가 */
+    /** HQ MODE — Original Plan GROUP Tree 그룹명 수정·추가 · PMS Master Excel */
     function canEditOriginalPlanGroups() {
         return canEditOriginalPlanItems() && TVC_RBAC.isHqAccount(state.user);
+    }
+
+    function canPmsMasterExcel() {
+        return canEditOriginalPlanGroups();
+    }
+
+    function pmsMasterExcelDeniedMessage() {
+        return 'PMS Master Export · Import는 HQ Mode (Superintendent)만 사용할 수 있습니다.';
     }
 
     function selectedGroupNode() {
@@ -3275,7 +3283,7 @@ const TVC_App = (function () {
         const node = selectedGroupNode();
         const isRename = mode === 'rename';
         const dept = node?.department || state.department || 'ENGINE';
-        const depts = ['ENGINE', 'DECK'];
+        const depts = ['DECK', 'ENGINE'];
         const deptField = isRename
             ? `<label>Department<input value="${esc(dept)}" readonly class="wr-ro"></label>`
             : `<label>Department<select name="department">${depts.map(d =>
@@ -3385,9 +3393,11 @@ const TVC_App = (function () {
         const pmsEx = document.getElementById('actPmsMasterExportBtn');
         const pmsIm = document.getElementById('actPmsMasterImportBtn');
 
-        [mod, app, del, pmsEx, pmsIm].forEach(el => el?.classList.toggle('hidden', !canShow));
+        [mod, app, del].forEach(el => el?.classList.toggle('hidden', !canShow));
+        const canMaster = canPmsMasterExcel();
+        [pmsEx, pmsIm].forEach(el => el?.classList.toggle('hidden', !canMaster));
 
-        if (!canShow) return;
+        if (!canShow && !canMaster) return;
 
         if (mod) {
             mod.disabled = !canEdit || (!hasSel && !isOrigJobInlineEditing());
@@ -3402,12 +3412,12 @@ const TVC_App = (function () {
             del.title = !canEdit ? tip : (!hasSel ? '삭제할 행을 선택하세요' : '');
         }
         if (pmsEx) {
-            pmsEx.disabled = !canEdit;
-            pmsEx.title = !canEdit ? tip : 'PMS Master Excel Export (Group · Equipment · Jobs)';
+            pmsEx.disabled = !canMaster;
+            pmsEx.title = canMaster ? 'PMS Master Excel Export (Group · Equipment · Jobs)' : pmsMasterExcelDeniedMessage();
         }
         if (pmsIm) {
-            pmsIm.disabled = !canEdit;
-            pmsIm.title = !canEdit ? tip : 'PMS Master Excel Import';
+            pmsIm.disabled = !canMaster;
+            pmsIm.title = canMaster ? 'PMS Master Excel Import' : pmsMasterExcelDeniedMessage();
         }
     }
 
@@ -3952,9 +3962,25 @@ const TVC_App = (function () {
         await updateOriginalPlanFromRunHours({ hqApprove: true });
     }
 
+    /** Menu · HQ Approve Work Plan — skip Calculation modal and Outstanding Rate table */
+    function shouldSkipPlanUpdateUi(opts = {}) {
+        return opts.hqApprove === true || opts.fromMenu === true;
+    }
+
+    async function promptPlanUpdateConfirm() {
+        const stats = buildPlanUpdateStats();
+        state._planUpdateStats = stats;
+        let msg = 'Original Plan을 업데이트하고 확정하시겠습니까?';
+        if (stats.pendingReports > 0) {
+            msg += `\n\n미완료 Work Report ${stats.pendingReports}건 — Cancel 선택 후 Work Plan에서 입력하세요.`;
+        }
+        await confirmPlanUpdate(confirm(msg));
+    }
+
     /** Menu → Update Original Plan: Run-hour 입력값으로 H 주기 Due Date 재계산 (CMAXS Calculation) */
     async function updateOriginalPlanFromRunHours(opts = {}) {
         const isHqApprove = opts.hqApprove === true;
+        const skipUi = shouldSkipPlanUpdateUi(opts);
         if (!isHqApprove && typeof TVC_Space !== 'undefined' && !TVC_Space.getUiFeatures(state.user).showUpdateWorkPlan) {
             alert('Update Work Plan은 확인자(Chief engineer / Chief officer / Captain)만 사용할 수 있습니다.');
             return;
@@ -3969,33 +3995,41 @@ const TVC_App = (function () {
         }
         menuNavigate('actual', { actualFilter: 'total' });
         state._planCalcMsg = '';
-        showPlanCalc(true);
         _planUpdateSnapshot = snapshotRunHourJobs();
 
-        const start = Date.now();
         let calcError = null;
-        const calcPromise = TVC_PMS.updateMaintenanceSchedule(state, { persist: false })
-            .catch(e => { calcError = e; });
+        if (skipUi) {
+            try {
+                await TVC_PMS.updateMaintenanceSchedule(state, { persist: false });
+            } catch (e) {
+                calcError = e;
+            }
+        } else {
+            showPlanCalc(true);
+            const start = Date.now();
+            const calcPromise = TVC_PMS.updateMaintenanceSchedule(state, { persist: false })
+                .catch(e => { calcError = e; });
 
-        const fill = document.getElementById('planCalcFill');
-        await new Promise(resolve => {
-            if (_planCalcTimer) clearInterval(_planCalcTimer);
-            _planCalcTimer = setInterval(() => {
-                const elapsed = Date.now() - start;
-                const pct = Math.min(100, Math.round((elapsed / PLAN_CALC_MS) * 100));
-                if (fill) fill.style.width = pct + '%';
-                if (elapsed >= PLAN_CALC_MS) {
-                    clearInterval(_planCalcTimer);
-                    _planCalcTimer = null;
-                    resolve();
-                }
-            }, 50);
-        });
+            const fill = document.getElementById('planCalcFill');
+            await new Promise(resolve => {
+                if (_planCalcTimer) clearInterval(_planCalcTimer);
+                _planCalcTimer = setInterval(() => {
+                    const elapsed = Date.now() - start;
+                    const pct = Math.min(100, Math.round((elapsed / PLAN_CALC_MS) * 100));
+                    if (fill) fill.style.width = pct + '%';
+                    if (elapsed >= PLAN_CALC_MS) {
+                        clearInterval(_planCalcTimer);
+                        _planCalcTimer = null;
+                        resolve();
+                    }
+                }, 50);
+            });
 
-        await calcPromise;
-        if (fill) fill.style.width = '100%';
-        await new Promise(r => setTimeout(r, 200));
-        showPlanCalc(false);
+            await calcPromise;
+            if (fill) fill.style.width = '100%';
+            await new Promise(r => setTimeout(r, 200));
+            showPlanCalc(false);
+        }
 
         if (calcError) {
             console.error('[TVC] updateOriginalPlanFromRunHours', calcError);
@@ -4006,7 +4040,8 @@ const TVC_App = (function () {
         }
 
         renderActualPlan();
-        openPlanUpdateModal();
+        if (skipUi) await promptPlanUpdateConfirm();
+        else openPlanUpdateModal();
     }
 
     function renderGroupTree(rootId) {
@@ -5522,6 +5557,7 @@ const TVC_App = (function () {
             const rhF = TVC_Space.getUiFeatures(state.user);
             if (rhF.showRunningHours === false) return;
         }
+        TVC_RunHours.resetInputEditMode();
         TVC_RunHours.render();
         showModal('runHoursModal');
     }
@@ -5759,6 +5795,18 @@ const TVC_App = (function () {
         alert('Work Procedure saved.');
     }
 
+    function renderWpAttachmentList(attachments, canRemove) {
+        const list = attachments || [];
+        if (!list.length) return '';
+        const items = list.map(a => `
+            <li class="wr-attach-item">
+                <a class="wr-attach-link" href="${escAttr(a.dataUrl)}" download="${escAttr(a.name)}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>
+                <span class="wr-attach-size">${Math.max(1, Math.round(a.size / 1024))}KB</span>
+                ${canRemove ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_App.removeWorkProcedureAttachment('${escAttr(String(a.id))}')">×</button>` : ''}
+            </li>`).join('');
+        return `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>`;
+    }
+
     function renderWorkProcedureModal() {
         const job = resolveJobById(state._wpJobId);
         const host = document.getElementById('workProcedureBody');
@@ -5843,6 +5891,8 @@ const TVC_App = (function () {
         const canEditProc = canEditWorkProcedure();
         const editingProc = state._wpTab === 'procedure' && !!state._wpEditing;
         const procEditTip = escAttr(workProcedureEditDeniedMessage());
+        const canAttach = editingProc;
+        const attachTip = escAttr(canAttach ? 'Attach files to this Work Procedure' : 'Modify 상태에서만 첨부할 수 있습니다.');
         let procEditBtns = '';
         if (state._wpTab === 'procedure') {
             procEditBtns = editingProc
@@ -5850,6 +5900,8 @@ const TVC_App = (function () {
                 <button type="button" class="btn" onclick="TVC_App.cancelWorkProcedureEdit()">Cancel</button>`
                 : `<button type="button" class="btn" onclick="TVC_App.enterWorkProcedureEdit()"${canEditProc ? '' : ` disabled title="${procEditTip}"`}>Modify</button>`;
         }
+
+        const attachListHtml = renderWpAttachmentList(meta.attachments, canAttach);
 
         host.innerHTML = `
             <h3 class="wp-title">Work Procedure</h3>
@@ -5865,10 +5917,37 @@ const TVC_App = (function () {
             </div>
             <div class="wp-tab-pane">${tabContent}</div>
             <div class="modal-actions wp-modal-actions">
-                ${procEditBtns}
-                <button type="button" class="btn btn-green" onclick="TVC_App.closeModal('workProcedureModal');TVC_App.openWorkReportInput('${job.id}')"${editingProc ? ' disabled' : ''}>Report Input</button>
-                <button type="button" class="btn" onclick="TVC_App.closeModal('workProcedureModal')">Close</button>
+                <div class="wp-modal-actions-left">
+                    ${procEditBtns}
+                    <button type="button" class="btn btn-green" onclick="TVC_App.closeModal('workProcedureModal');TVC_App.openWorkReportInput('${job.id}')"${editingProc ? ' disabled' : ''}>Report Input</button>
+                    <button type="button" class="btn" onclick="TVC_App.closeModal('workProcedureModal')">Close</button>
+                </div>
+                <div class="wp-modal-actions-right wp-attach-panel">
+                    <div class="wr-attach-toolbar">
+                        <button type="button" class="wr-attach-btn" onclick="document.getElementById('wpAttachInput').click()"${canAttach ? '' : ' disabled'} title="${attachTip}">📎 Attachment</button>
+                        <input type="file" id="wpAttachInput" class="hidden" multiple onchange="TVC_App.uploadWorkProcedureAttachment()">
+                    </div>
+                    ${attachListHtml}
+                </div>
             </div>`;
+    }
+
+    async function uploadWorkProcedureAttachment() {
+        if (!state._wpEditing || state._wpTab !== 'procedure') return;
+        const job = resolveJobById(state._wpJobId);
+        const input = document.getElementById('wpAttachInput');
+        if (!job || !input?.files?.length) return;
+        for (const f of input.files) await TVC_JobMeta.addAttachment(job.job_code, f);
+        input.value = '';
+        renderWorkProcedureModal();
+    }
+
+    function removeWorkProcedureAttachment(attachmentId) {
+        if (!state._wpEditing || state._wpTab !== 'procedure') return;
+        const job = resolveJobById(state._wpJobId);
+        if (!job) return;
+        TVC_JobMeta.removeAttachment(job.job_code, attachmentId);
+        renderWorkProcedureModal();
     }
 
     // ── CMAXS Work Report (3 tabs) ───────────────────────────────────
@@ -7849,7 +7928,7 @@ const TVC_App = (function () {
         });
     }
     async function exportPmsMasterExcel() {
-        if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+        if (!canPmsMasterExcel()) return alert(pmsMasterExcelDeniedMessage());
         if (typeof TVC_PmsMasterExcel === 'undefined') return alert('PMS Master Export를 사용할 수 없습니다.');
         try {
             await TVC_PmsMasterExcel.exportToFile();
@@ -7859,13 +7938,13 @@ const TVC_App = (function () {
     }
 
     function triggerPmsMasterImport() {
-        if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+        if (!canPmsMasterExcel()) return alert(pmsMasterExcelDeniedMessage());
         document.getElementById('pmsMasterImportFile')?.click();
     }
 
     async function importPmsMasterExcel(file) {
         const user = TVC_Auth.getCurrentUser();
-        if (!user || !canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+        if (!user || !canPmsMasterExcel()) return alert(pmsMasterExcelDeniedMessage());
         if (!file) return;
         if (typeof TVC_PmsMasterExcel === 'undefined') return alert('PMS Master Import를 사용할 수 없습니다.');
         if (!confirm(`PMS Master Excel을 Import 합니다.\n\n${file.name}\n\nGroup · Equipment · Jobs가 갱신됩니다. 계속할까요?`)) return;
@@ -7896,7 +7975,7 @@ const TVC_App = (function () {
         getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs,
         renderSectionCard,
         openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab,
-        enterWorkProcedureEdit, cancelWorkProcedureEdit, saveWorkProcedure,
+        enterWorkProcedureEdit, cancelWorkProcedureEdit, saveWorkProcedure, uploadWorkProcedureAttachment, removeWorkProcedureAttachment,
         openProcedureHistory, openProcedureHistoryByCode,
         openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport,
         uploadWrAttachment, removeWrAttachment,

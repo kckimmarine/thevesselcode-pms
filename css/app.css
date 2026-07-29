@@ -1111,7 +1111,35 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    align-items: flex-start;
+    justify-content: space-between;
+}
+.wp-modal-actions-left {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
     align-items: center;
+}
+.wp-modal-actions-right {
+    display: flex;
+    align-items: center;
+    margin-left: auto;
+}
+.wp-modal-actions-right.wp-attach-panel {
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 6px;
+    min-width: 160px;
+    max-width: 300px;
+}
+.wp-modal-actions-right .wr-attach-list-wrap {
+    width: 100%;
+    max-height: 120px;
+    overflow-y: auto;
+    text-align: right;
+}
+.wp-modal-actions-right .wr-attach-item {
+    justify-content: flex-end;
 }
 .wp-section { margin-bottom: 14px; }
 .wp-section-head { font-weight: 700; font-size: 13px; color: var(--navy); margin-bottom: 6px; }

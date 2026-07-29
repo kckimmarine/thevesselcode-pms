@@ -562,6 +562,9 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     async function importFromWorkbook(wb, user) {
+        if (!TVC_RBAC.isHqAccount(user)) {
+            throw Object.assign(new Error('PMS Master Import는 HQ Mode (Superintendent)만 사용할 수 있습니다.'), { code: 'PERMISSION_DENIED' });
+        }
         TVC_RBAC.assertModifyOriginalPlan(user);
         const wsG = wb.getWorksheet('Group Headers');
         const wsE = wb.getWorksheet('Equipment Headers');

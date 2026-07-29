@@ -71,11 +71,19 @@ const TVC_JobMeta = (function () {
         });
     }
 
+    function removeAttachment(jobCode, attachmentId) {
+        const all = loadAll();
+        const m = ensure(jobCode);
+        m.attachments = (m.attachments || []).filter(a => String(a.id) !== String(attachmentId));
+        all[jobCode] = m;
+        saveAll(all);
+    }
+
     function getHistoryForJob(jobCode) {
         const meta = get(jobCode);
         const reports = [];
         return { procedure: meta.procedure, history: meta.history, attachments: meta.attachments };
     }
 
-    return { get, setProcedure, addHistory, addAttachment, getHistoryForJob };
+    return { get, setProcedure, addHistory, addAttachment, removeAttachment, getHistoryForJob };
 })();
