@@ -256,9 +256,9 @@ const TVC_App = (function () {
     }
 
     /** 부서별 데이터 독립성(영구 분리): 선박 계정은 로드 단계에서부터 자기 부서 데이터만 취득한다. */
-    /** PMS Group 부서 재분류: 24·25 → ENGINE, 28·29·30·33·35 → DECK, 26번은 JOB CODE별 분리 */
+    /** PMS Group 부서 재분류: legacy 24·25 → ENGINE; legacy DECK catalog name+no → DECK; 26번은 JOB CODE별 분리.
+     *  Per-dept group numbers (01, 02, …) are not forced — only legacy seed labels match. */
     const FORCE_ENGINE_GROUP_NOS = new Set([24, 25]);
-    const FORCE_DECK_GROUP_NOS = new Set([28, 29, 30, 33, 35]);
     const JOB_DEPT_OVERRIDES = {
         '26-001': 'DECK',
         '26-002': 'DECK',
@@ -271,17 +271,19 @@ const TVC_App = (function () {
         return mm ? parseInt(mm[1], 10) : null;
     }
 
-    function forceDeptForGroupNo(n) {
-        if (FORCE_ENGINE_GROUP_NOS.has(n)) return 'ENGINE';
-        if (FORCE_DECK_GROUP_NOS.has(n)) return 'DECK';
+    function forceDeptForGroupLabel(label) {
+        const n = pmsGroupNoFromLabel(label);
+        if (n != null && FORCE_ENGINE_GROUP_NOS.has(n)) return 'ENGINE';
+        if (label && typeof TVC_PmsMasterExcel !== 'undefined' && TVC_PmsMasterExcel.isLegacyDeckGroupLabel?.(label)) {
+            return 'DECK';
+        }
         return null;
     }
 
     function forceDeptForJob(job) {
         const code = String(job?.job_code || '').trim().toUpperCase();
         if (JOB_DEPT_OVERRIDES[code]) return JOB_DEPT_OVERRIDES[code];
-        const n = pmsGroupNoFromLabel(job?.group);
-        return n != null ? forceDeptForGroupNo(n) : null;
+        return forceDeptForGroupLabel(job?.group);
     }
 
     function forceDeptForGroup26Component(c) {
@@ -297,8 +299,7 @@ const TVC_App = (function () {
         const fromSplit26 = forceDeptForGroup26Component(c);
         if (fromSplit26) return fromSplit26;
         const grpLabel = Array.isArray(c.path) ? c.path[1] : null;
-        const n = pmsGroupNoFromLabel(grpLabel);
-        return n != null ? forceDeptForGroupNo(n) : null;
+        return forceDeptForGroupLabel(grpLabel);
     }
 
     async function normalizeGroupDepartments(jobs, components, groups) {
@@ -326,7 +327,7 @@ const TVC_App = (function () {
         (groups || []).forEach(g => {
             const n = pmsGroupNoFromLabel(g.label);
             if (n === 26) return;
-            const target = n != null ? forceDeptForGroupNo(n) : null;
+            const target = forceDeptForGroupLabel(g.label);
             if (target && g.department !== target) {
                 g.department = target;
                 changedGroups.push(g);
@@ -614,6 +615,7 @@ const TVC_App = (function () {
     function showLogin() {
         document.getElementById('appShell')?.classList.add('hidden');
         document.getElementById('loginScreen')?.classList.remove('hidden');
+        setLoginBusy(false);
     }
     function showApp() {
         document.getElementById('loginScreen')?.classList.add('hidden');
@@ -690,7 +692,7 @@ const TVC_App = (function () {
         }
         if (vessel) {
             setText('cmaxsShipName', vessel.name);
-            setText('cmaxsShipCode', vessel.code || '—');
+            setText('cmaxsShipCode', vessel.imo_no || vessel.code || '—');
             setText('cmaxsShipDelivery', vessel.delivery || '—');
         } else {
             setText('cmaxsShipName', 'HEAD OFFICE (Fleet View)');
@@ -881,11 +883,21 @@ const TVC_App = (function () {
     // ── Shared job-id computation ────────────────────────────────────
     function sortIds(ids) {
         const { field, asc } = state.jobSort;
+        const dir = asc ? 1 : -1;
         return ids.sort((a, b) => {
             const ja = state.idx.jobById.get(a), jb = state.idx.jobById.get(b);
-            let va = (ja?.[field]) || '', vb = (jb?.[field]) || '';
-            return asc ? String(va).localeCompare(String(vb), undefined, { numeric: true })
-                       : String(vb).localeCompare(String(va), undefined, { numeric: true });
+            if (!ja || !jb) return 0;
+            // All departments / All groups — keep ENGINE·DECK blocks and group order before job_code.
+            if (!state.department) {
+                const dc = String(ja.department || '').localeCompare(String(jb.department || ''));
+                if (dc) return dc;
+            }
+            if (!state.selectedGroupKey) {
+                const gc = String(ja.group || '').localeCompare(String(jb.group || ''), undefined, { numeric: true });
+                if (gc) return gc;
+            }
+            const va = ja[field] ?? '', vb = jb[field] ?? '';
+            return dir * String(va).localeCompare(String(vb), undefined, { numeric: true });
         });
     }
 
@@ -2836,6 +2848,7 @@ const TVC_App = (function () {
         const q = (state.fleetSearch || '').toLowerCase();
         if (q) vessels = vessels.filter(v =>
             (v.name || '').toLowerCase().includes(q) ||
+            (v.imo_no || '').toLowerCase().includes(q) ||
             (v.code || '').toLowerCase().includes(q) ||
             (v.id || '').toLowerCase().includes(q)
         );
@@ -2855,7 +2868,7 @@ const TVC_App = (function () {
             return `<tr class="fleet-row${sel}" onclick="TVC_App.selectVessel('${escAttr(v.id)}')">
                 <td>${i + 1}</td>
                 <td><strong>${esc(v.name)}</strong></td>
-                <td>${esc(v.code || '—')}</td>
+                <td>${esc(v.imo_no || '—')}</td>
                 <td>${esc(v.delivery || '—')}</td>
             </tr>`;
         }).join('');
@@ -3369,8 +3382,10 @@ const TVC_App = (function () {
         const mod = document.getElementById('actModifyBtn');
         const app = document.getElementById('actAppendBtn');
         const del = document.getElementById('actDeleteBtn');
+        const pmsEx = document.getElementById('actPmsMasterExportBtn');
+        const pmsIm = document.getElementById('actPmsMasterImportBtn');
 
-        [mod, app, del].forEach(el => el?.classList.toggle('hidden', !canShow));
+        [mod, app, del, pmsEx, pmsIm].forEach(el => el?.classList.toggle('hidden', !canShow));
 
         if (!canShow) return;
 
@@ -3385,6 +3400,14 @@ const TVC_App = (function () {
         if (del) {
             del.disabled = !canEdit || !hasSel;
             del.title = !canEdit ? tip : (!hasSel ? '삭제할 행을 선택하세요' : '');
+        }
+        if (pmsEx) {
+            pmsEx.disabled = !canEdit;
+            pmsEx.title = !canEdit ? tip : 'PMS Master Excel Export (Group · Equipment · Jobs)';
+        }
+        if (pmsIm) {
+            pmsIm.disabled = !canEdit;
+            pmsIm.title = !canEdit ? tip : 'PMS Master Excel Import';
         }
     }
 
@@ -7629,13 +7652,14 @@ const TVC_App = (function () {
             console.error('[TVC] login failed', e);
             if (errEl) errEl.textContent = e.message || '로그인 중 오류가 발생했습니다.';
         } finally {
-            if (!state.user) setLoginBusy(false);
+            setLoginBusy(false);
         }
     }
 
     function handleLogout() {
         TVC_Auth.logout();
         state.user = null;
+        setLoginBusy(false);
         showLogin();
     }
 
@@ -7824,6 +7848,36 @@ const TVC_App = (function () {
             });
         });
     }
+    async function exportPmsMasterExcel() {
+        if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+        if (typeof TVC_PmsMasterExcel === 'undefined') return alert('PMS Master Export를 사용할 수 없습니다.');
+        try {
+            await TVC_PmsMasterExcel.exportToFile();
+        } catch (e) {
+            alert(e.message || 'Export failed');
+        }
+    }
+
+    function triggerPmsMasterImport() {
+        if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+        document.getElementById('pmsMasterImportFile')?.click();
+    }
+
+    async function importPmsMasterExcel(file) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+        if (!file) return;
+        if (typeof TVC_PmsMasterExcel === 'undefined') return alert('PMS Master Import를 사용할 수 없습니다.');
+        if (!confirm(`PMS Master Excel을 Import 합니다.\n\n${file.name}\n\nGroup · Equipment · Jobs가 갱신됩니다. 계속할까요?`)) return;
+        try {
+            const r = await TVC_PmsMasterExcel.importFromFile(file, user);
+            await refreshAll();
+            alert(`Import 완료\n\nJobs: ${r.jobs}행 (신규 ${r.created}, 수정 ${r.updated}, CODE 변경 ${r.renamed})\nGroups: ${r.groups} · Equipment: ${r.equipment}`);
+        } catch (e) {
+            alert(e.message || e.code || 'Import failed');
+        }
+    }
+
     function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
 
     /** Reporter 표시 — full titles; legacy C/E etc. mapped via RBAC helper */
@@ -7865,6 +7919,7 @@ const TVC_App = (function () {
         updateOriginalPlanFromRunHours, approveWorkPlanFromHq,
         openOrigJobModify, openOrigJobAppend, saveOrigJobEditor, saveOrigJobInlineEdit, cancelOrigJobInlineEdit, deleteOrigJob,
         openOrigGroupAdd, openOrigGroupRename, deleteOrigGroup, saveGroupEditor,
+        exportPmsMasterExcel, triggerPmsMasterImport, importPmsMasterExcel,
         confirmPlanUpdate, closePlanUpdateModal, printTabList, printCurrentTab,
         doSubmit, doExecute, doApprove, doConfirm,
         handleLogin, handleLogout, handleExport, handleImport, handleHubImport, handleDefectImport, handlePostponeImport,

@@ -1,11 +1,10 @@
 #!/usr/bin/env node
-/** PMS group department rules — 24·25 → ENGINE, 28·29·30·33·35 → DECK, 26 split by job code */
+/** PMS group department rules — legacy 24·25 → ENGINE; legacy DECK catalog name+no → DECK; 26 split by job code */
 const fs = require('fs');
 const path = require('path');
 
 const SEED = path.join(__dirname, '..', 'data', 'pms-unified.json');
 const FORCE_ENGINE_GROUP_NOS = new Set([24, 25]);
-const FORCE_DECK_GROUP_NOS = new Set([28, 29, 30, 33, 35]);
 const JOB_DEPT_OVERRIDES = {
     '26-001': 'DECK',
     '26-002': 'DECK',
@@ -13,22 +12,49 @@ const JOB_DEPT_OVERRIDES = {
     '26-004': 'ENGINE',
 };
 
+const DECK_LEGACY_CATALOG = [
+    { legacy: 26, no: '01', name: 'CARGO TANK MONITORING SYSTEM' },
+    { legacy: 28, no: '02', name: 'LSA/FFE' },
+    { legacy: 29, no: '03', name: 'MOORING WINCH & WINDLASS' },
+    { legacy: 30, no: '04', name: 'HOSE HANDLING CRANE' },
+    { legacy: 31, no: '05', name: 'ODME & RELATED SYSTEM' },
+    { legacy: 32, no: '06', name: 'NAVIGATION & COMMUNICATION' },
+    { legacy: 33, no: '07', name: 'CARGO EQUIPMENTS' },
+    { legacy: 34, no: '08', name: 'PRESSURE TEST & HULL PARTS' },
+    { legacy: 35, no: '09', name: 'BWTS' },
+    { legacy: 36, no: '10', name: 'SAEFETY INSPECTION' },
+];
+const DECK_LEGACY_MAP = new Map(DECK_LEGACY_CATALOG.map(c => [c.legacy, c]));
+
+function norm(s) {
+    return String(s ?? '').replace(/\s+/g, ' ').trim();
+}
+
 function pmsGroupNoFromLabel(label) {
     const mm = String(label || '').trim().match(/^(\d+)\s*\./);
     return mm ? parseInt(mm[1], 10) : null;
 }
 
-function forceDeptForGroupNo(n) {
-    if (FORCE_ENGINE_GROUP_NOS.has(n)) return 'ENGINE';
-    if (FORCE_DECK_GROUP_NOS.has(n)) return 'DECK';
+function isLegacyDeckGroupLabel(groupLabel) {
+    const m = norm(groupLabel).match(/^(\d{1,2})\.\s*(.+)$/);
+    if (!m) return false;
+    const leg = parseInt(m[1], 10);
+    const hit = DECK_LEGACY_MAP.get(leg);
+    if (!hit) return false;
+    return norm(m[2]).toUpperCase() === norm(hit.name).toUpperCase();
+}
+
+function forceDeptForGroupLabel(label) {
+    const n = pmsGroupNoFromLabel(label);
+    if (n != null && FORCE_ENGINE_GROUP_NOS.has(n)) return 'ENGINE';
+    if (label && isLegacyDeckGroupLabel(label)) return 'DECK';
     return null;
 }
 
 function forceDeptForJob(job) {
     const code = String(job?.job_code || '').trim().toUpperCase();
     if (JOB_DEPT_OVERRIDES[code]) return JOB_DEPT_OVERRIDES[code];
-    const n = pmsGroupNoFromLabel(job?.group);
-    return n != null ? forceDeptForGroupNo(n) : null;
+    return forceDeptForGroupLabel(job?.group);
 }
 
 function forceDeptForGroup26Component(c) {
@@ -44,8 +70,7 @@ function forceDeptForComponent(c) {
     const fromSplit26 = forceDeptForGroup26Component(c);
     if (fromSplit26) return fromSplit26;
     const grpLabel = Array.isArray(c.path) ? c.path[1] : null;
-    const n = pmsGroupNoFromLabel(grpLabel);
-    return n != null ? forceDeptForGroupNo(n) : null;
+    return forceDeptForGroupLabel(grpLabel);
 }
 
 const raw = fs.readFileSync(SEED, 'utf8');
@@ -77,7 +102,7 @@ let groupN = 0;
 (data.maintenance_groups || []).forEach(g => {
     const n = pmsGroupNoFromLabel(g.label);
     if (n === 26) return;
-    const target = n != null ? forceDeptForGroupNo(n) : null;
+    const target = forceDeptForGroupLabel(g.label);
     if (!target || g.department === target) return;
     g.department = target;
     groupN++;

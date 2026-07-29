@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260728-deck-spare-tab';
+const CACHE_VERSION = 'tvc-pms-20260729-all-dept-sort';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -37,6 +37,7 @@ const PRECACHE_ASSETS = [
     '/js/auth.js',
     '/js/services/transaction.js',
     '/js/services/maintenancePlan.js',
+    '/js/services/pmsMasterExcel.js',
     '/js/services/defectCase.js',
     '/js/services/defectSync.js',
     '/js/services/postponeSync.js',

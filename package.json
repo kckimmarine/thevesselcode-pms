@@ -4,6 +4,7 @@
   "description": "THE VESSEL CODE — Unified PMS + SPICS (Offline-First)",
   "scripts": {
     "import-xlsx": "python scripts/import-pms-xlsx.py",
+    "export-pms-master-sample": "node scripts/export-pms-master-sample.mjs",
     "serve": "npx --yes serve . -p 3000",
     "start": "npx --yes serve . -p 3000",
     "vendor-sync": "node scripts/vendor-sync.mjs",

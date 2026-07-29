@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260728-rh-view-edit">
+    <link rel="stylesheet" href="css/app.css?v=20260728-fleet-imo">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260724-req-multi-action">
 </head>
 <body>
@@ -109,7 +109,7 @@
                     <strong id="cmaxsShipName" class="fld-value ship-name">—</strong>
                 </div>
                 <div class="ship-meta">
-                    <span><span class="fld-label">Code</span> <span id="cmaxsShipCode" class="fld-value">—</span></span>
+                    <span><span class="fld-label">IMO No</span> <span id="cmaxsShipCode" class="fld-value">—</span></span>
                     <span><span class="fld-label">Delivery</span> <span id="cmaxsShipDelivery" class="fld-value">—</span></span>
                     <span><span class="fld-label">User</span> <span class="userNameEl fld-value title-badge">—</span></span>
                     <span class="userBadgeEl pill ok">—</span>
@@ -151,12 +151,18 @@
                             <button class="fleet-view-btn" data-fview="selected" onclick="TVC_App.setFleetView('selected')">Selected</button>
                         </div>
                         <div class="fleet-search-bar">
-                            <input class="search-input" id="fleetSearch" placeholder="Search ship name / code…" oninput="TVC_App.setFleetSearch(this.value)">
+                            <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…" oninput="TVC_App.setFleetSearch(this.value)">
                         </div>
                         <div class="fleet-table-wrap">
                             <table class="fleet-table">
+                                <colgroup>
+                                    <col class="fleet-col-no">
+                                    <col class="fleet-col-name">
+                                    <col class="fleet-col-imo">
+                                    <col class="fleet-col-delivery">
+                                </colgroup>
                                 <thead><tr>
-                                    <th>No</th><th>Ship's Name</th><th>Code</th><th>Delivery</th>
+                                    <th>No</th><th>Ship's Name</th><th>IMO No</th><th>Delivery</th>
                                 </tr></thead>
                                 <tbody id="fleetTableBody"></tbody>
                             </table>
@@ -216,6 +222,9 @@
                         <button type="button" id="actModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">✏️ Modify</button>
                         <button type="button" id="actAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">➕ Append</button>
                         <button type="button" id="actDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">🗑 Delete</button>
+                        <button type="button" id="actPmsMasterExportBtn" class="btn btn-sm btn-excel hidden" onclick="TVC_App.exportPmsMasterExcel()" title="PMS Master Excel Export">📤 Master Export</button>
+                        <button type="button" id="actPmsMasterImportBtn" class="btn btn-sm hidden" onclick="TVC_App.triggerPmsMasterImport()" title="PMS Master Excel Import">📥 Master Import</button>
+                        <input type="file" id="pmsMasterImportFile" accept=".xlsx" class="hidden" onchange="TVC_App.importPmsMasterExcel(this.files[0]); this.value='';">
                         <div class="tab-toolbar-end">
                             <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', false)">🖨 Print</button>
                             <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', true)">👁 Preview</button>
@@ -572,20 +581,21 @@
 <script src="js/space.js?v=20260728-deck-spare-tab"></script>
 <script src="js/auth.js?v=20260728-data-xfer"></script>
 <script src="js/services/transaction.js?v=20260728-report-matrix"></script>
-<script src="js/services/maintenancePlan.js?v=20260726-job-code-edit"></script>
+<script src="js/services/maintenancePlan.js?v=20260729-pms-master"></script>
+<script src="js/services/pmsMasterExcel.js?v=20260729-pms-master"></script>
 <script src="js/services/defectCase.js?v=20260727-df-dc-reconcile"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
 <script src="js/services/postponeSync.js?v=20260727-postpone-critical"></script>
 <script src="js/services/sync.js?v=20260728-data-xfer"></script>
 <script src="js/services/stationSync.js?v=20260728-data-xfer"></script>
 <script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
-<script src="js/services/fleet.js?v=20260722-incheon-chemi"></script>
+<script src="js/services/fleet.js?v=20260728-fleet-imo"></script>
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260728-hq-postpone-hqonly"></script>
 <script src="js/ui/defectReport.js?v=20260728-report-matrix"></script>
 <script src="js/ui/outstandingTasks.js?v=20260727-unified-hist-defect"></script>
-<script src="js/app.js?v=20260728-pms-grp26-split"></script>
+<script src="js/app.js?v=20260729-pms-master"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

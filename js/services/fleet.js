@@ -9,7 +9,7 @@ const TVC_Fleet = (function () {
 
     /** 초기 Fleet — 파일럿 선박 1척 */
     const DEFAULT_FLEET = [
-        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '01', delivery: '2024-01-15' },
+        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '01', imo_no: '9297711', delivery: '2024-01-15' },
     ];
 
     /** 예전 테스트 Fleet — HQ 목록에서 제거 */
@@ -59,7 +59,7 @@ const TVC_Fleet = (function () {
         if (!id) return null;
         const hit = getAll().find(v => v.id === id);
         if (hit) return hit;
-        return { id, name: id.replace(/_/g, ' '), code: id.split('_').pop() || '—', delivery: '—' };
+        return { id, name: id.replace(/_/g, ' '), code: id.split('_').pop() || '—', imo_no: '—', delivery: '—' };
     }
 
     async function ensureFleet() {
@@ -77,6 +77,7 @@ const TVC_Fleet = (function () {
                 id: seedVessel,
                 name: resolveById(seedVessel)?.name || seedVessel.replace(/_/g, ' '),
                 code: seedVessel.split('_').pop() || '—',
+                imo_no: '—',
                 delivery: '—',
             });
             fleet = sortFleet(fleet);

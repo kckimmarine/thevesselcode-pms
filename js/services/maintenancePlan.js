@@ -67,7 +67,7 @@ const TVC_MaintenancePlan = (function () {
 
         if (p.job_code && p.job_code !== prevJobCode) {
             const dup = await TVC_DB.indexGetAll('maintenance_jobs', 'by_job_code', p.job_code);
-            if (dup.some(j => j.id !== jobId)) {
+            if (dup.some(j => j.id !== jobId && j.department === job.department)) {
                 throw Object.assign(new Error('JOB_CODE_EXISTS'), { code: 'DUPLICATE' });
             }
         }
@@ -94,7 +94,9 @@ const TVC_MaintenancePlan = (function () {
         if (!jobCode) throw Object.assign(new Error('JOB_CODE_REQUIRED'), { code: 'INVALID' });
 
         const dup = await TVC_DB.indexGetAll('maintenance_jobs', 'by_job_code', jobCode);
-        if (dup.length) throw Object.assign(new Error('JOB_CODE_EXISTS'), { code: 'DUPLICATE' });
+        if (dup.some(j => j.department === dept)) {
+            throw Object.assign(new Error('JOB_CODE_EXISTS'), { code: 'DUPLICATE' });
+        }
 
         const p = normalizePatch(data);
         const job = markLocal({
