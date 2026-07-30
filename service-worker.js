@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260729-all-dept-sort';
+const CACHE_VERSION = 'tvc-pms-20260731-vendor-pick-fix';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -26,12 +26,14 @@ const PRECACHE_ASSETS = [
     '/js/ui/modalDrag.js',
     '/js/ui/runHours.js',
     '/js/ui/outstandingTasks.js',
+    '/js/services/vendors.js',
     '/js/ui/spareMenu.js',
     '/js/ui/spareRequest.js',
     '/js/services/jobMeta.js',
     '/js/services/inventory.js',
     '/js/services/inventoryService.js',
     '/js/services/excel.js',
+    '/data/spare-parts-requisition-template.xlsx',
     '/js/core/pbkdf2-fallback.js',
     '/js/space.js',
     '/js/auth.js',
@@ -63,6 +65,7 @@ function isCacheableAsset(pathname) {
     if (pathname.startsWith('/js/')) return true;
     if (pathname.startsWith('/css/')) return true;
     if (pathname.startsWith('/icons/')) return true;
+    if (pathname.startsWith('/data/')) return true;
     if (pathname === '/manifest.json') return true;
     return OFFLINE_EXTENSIONS.some(ext => pathname.endsWith(ext));
 }

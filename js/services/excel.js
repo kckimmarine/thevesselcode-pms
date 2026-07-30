@@ -166,8 +166,9 @@ const TVC_Excel = (function () {
     const SPARE_LIST_COLS = [
         { header: 'Code', key: 'code', width: 14 },
         { header: 'Class', key: 'class', width: 10 },
-        { header: 'Item', key: 'item', width: 32 },
+        { header: 'Dwg No.', key: 'dwgNo', width: 12 },
         { header: 'Part No.', key: 'partNo', width: 18 },
+        { header: 'Items', key: 'item', width: 24 },
         { header: 'Unit', key: 'unit', width: 8 },
         { header: 'Work', key: 'working', width: 10 },
         { header: 'Std', key: 'standard', width: 10 },
@@ -232,5 +233,177 @@ const TVC_Excel = (function () {
         return true;
     }
 
-    return { available, exportRequisition, parseRequisitionFile, exportSparePartsList, COLS, SPARE_LIST_COLS };
+    const SPARE_REQ_PRINT_TEMPLATE = 'data/spare-parts-requisition-template.xlsx';
+    const SPARE_REQ_DATA_START_ROW = 16;
+    const SPARE_REQ_HEADER_ROW = 15;
+
+    function cloneCellStyle(src, dst) {
+        if (!src || !dst) return;
+        try {
+            if (src.style && Object.keys(src.style).length) dst.style = JSON.parse(JSON.stringify(src.style));
+        } catch (_) { /* ignore */ }
+        if (src.numFmt) dst.numFmt = src.numFmt;
+        if (src.alignment) dst.alignment = { ...src.alignment };
+        if (src.border) {
+            try { dst.border = JSON.parse(JSON.stringify(src.border)); } catch (_) { /* ignore */ }
+        }
+        if (src.fill) {
+            try { dst.fill = JSON.parse(JSON.stringify(src.fill)); } catch (_) { /* ignore */ }
+        }
+        if (src.font) {
+            try { dst.font = JSON.parse(JSON.stringify(src.font)); } catch (_) { /* ignore */ }
+        }
+    }
+
+    function cloneWorksheetFromTemplate(src, dst) {
+        (src.columns || []).forEach((col, idx) => {
+            if (col && col.width) dst.getColumn(idx + 1).width = col.width;
+        });
+        const maxRow = Math.max(src.rowCount || 0, 34);
+        for (let rn = 1; rn <= maxRow; rn++) {
+            const srcRow = src.getRow(rn);
+            const dstRow = dst.getRow(rn);
+            if (srcRow.height) dstRow.height = srcRow.height;
+            for (let colNumber = 1; colNumber <= 15; colNumber++) {
+                const srcCell = srcRow.getCell(colNumber);
+                const dstCell = dstRow.getCell(colNumber);
+                if (srcCell.value !== null && srcCell.value !== undefined) dstCell.value = srcCell.value;
+                cloneCellStyle(srcCell, dstCell);
+            }
+            dstRow.commit();
+        }
+        (src.model.merges || []).forEach((m) => {
+            try { dst.mergeCells(m); } catch (_) { /* ignore duplicate merge */ }
+        });
+        if (src.pageSetup) dst.pageSetup = { ...src.pageSetup };
+    }
+
+    function spareReqCellValue(v) {
+        if (v == null || v === '') return '';
+        if (v === '—') return '—';
+        const n = Number(v);
+        if (!Number.isNaN(n) && String(v).trim() !== '') return n;
+        return v;
+    }
+
+    function safeReqSheetName(name, index, used) {
+        let s = String(name || `Page${index + 1}`).replace(/[\\/*?:[\]]/g, '_').trim();
+        if (!s) s = `Page${index + 1}`;
+        if (s.length > 31) s = s.slice(0, 31);
+        let base = s;
+        let n = 1;
+        while (used.has(s)) {
+            const suffix = `_${n++}`;
+            s = base.slice(0, Math.max(1, 31 - suffix.length)) + suffix;
+        }
+        used.add(s);
+        return s;
+    }
+
+    function applySpareReqDataRowStyle(ws, rowNum, templateRowNum = SPARE_REQ_DATA_START_ROW) {
+        const tpl = ws.getRow(templateRowNum);
+        const row = ws.getRow(rowNum);
+        for (let c = 1; c <= 15; c++) cloneCellStyle(tpl.getCell(c), row.getCell(c));
+    }
+
+    function fillSpareReqPrintSheet(ws, req, vesselName, page, ctx) {
+        const fmt = typeof ctx.fmtDate === 'function' ? ctx.fmtDate : (d) => (d ? String(d).slice(0, 10) : '');
+        const typeLabel = ctx.typeLabel || req.priority || 'ROUTINE';
+        const dash = (v) => (v == null || v === '' ? '—' : v);
+
+        ws.getCell('C4').value = vesselName || '—';
+        ws.getCell('I4').value = `${page.pageIndex} / ${page.pageTotal}`;
+        ws.getCell('C5').value = req.req_no || '—';
+        ws.getCell('I5').value = typeLabel;
+        ws.getCell('C6').value = `${dash(fmt(req.deliver_date_from) || null)} ~ ${dash(fmt(req.deliver_date_to) || null)}`;
+        ws.getCell('I6').value = dash(fmt(req.made_on) || null);
+        ws.getCell('L6').value = req.made_by || '—';
+        ws.getCell('C7').value = req.deliver_port || '—';
+        ws.getCell('I7').value = dash(fmt(req.assessed_on) || null);
+        ws.getCell('L7').value = req.assessed_by || '—';
+
+        const h = page.header || {};
+        ws.getCell('A10').value = h.pmsGroupNo || page.groupKey || '—';
+        ws.getCell('A12').value = h.maker || '—';
+        ws.getCell('E12').value = h.modelType || '—';
+        ws.getCell('G12').value = h.capacity || '—';
+        ws.getCell('K12').value = h.serialNo || '—';
+        ws.getCell('A15').value = 'No.';
+
+        for (let rn = SPARE_REQ_DATA_START_ROW; rn <= 34; rn++) {
+            const row = ws.getRow(rn);
+            for (let c = 1; c <= 15; c++) row.getCell(c).value = null;
+        }
+
+        const rows = page.rows || [];
+        rows.forEach((r, idx) => {
+            const rowNum = SPARE_REQ_DATA_START_ROW + idx;
+            if (rowNum > 34) applySpareReqDataRowStyle(ws, rowNum);
+            const row = ws.getRow(rowNum);
+            row.getCell(1).value = r.lineNo;
+            row.getCell(2).value = r.code ?? '';
+            row.getCell(3).value = r.cls ?? '';
+            row.getCell(4).value = r.dwg ?? '';
+            row.getCell(5).value = r.pno ?? '';
+            row.getCell(6).value = r.item ?? '';
+            row.getCell(7).value = r.unit ?? '';
+            row.getCell(8).value = spareReqCellValue(r.working);
+            row.getCell(9).value = spareReqCellValue(r.std);
+            row.getCell(10).value = spareReqCellValue(r.stock);
+            row.getCell(11).value = spareReqCellValue(r.awaiting);
+            row.getCell(12).value = spareReqCellValue(r.need);
+            row.getCell(13).value = spareReqCellValue(r.request);
+            row.getCell(14).value = spareReqCellValue(r.assess);
+            row.getCell(15).value = spareReqCellValue(r.rcvd);
+            row.commit();
+        });
+
+        const lastRow = Math.max(34, SPARE_REQ_HEADER_ROW + rows.length);
+        ws.pageSetup = { ...(ws.pageSetup || {}), printArea: `A1:O${lastRow}` };
+        ws.pageSetup.orientation = 'landscape';
+        ws.pageSetup.scale = 85;
+        ws.pageSetup.fitToWidth = 1;
+        ws.pageSetup.fitToHeight = 1;
+    }
+
+    /**
+     * SPARE PARTS REQUISITION 인쇄 양식 → xlsx (Print/Preview와 동일 레이아웃)
+     * @param {{ req, vesselName, typeLabel?, fmtDate?, pages }} ctx
+     *   pages: [{ pageIndex, pageTotal, groupKey, header, rows }]
+     */
+    async function exportSparePartsRequisitionForm(ctx) {
+        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        const pages = ctx?.pages || [];
+        if (!pages.length) throw new Error('No items to export.');
+
+        const res = await fetch(SPARE_REQ_PRINT_TEMPLATE);
+        if (!res.ok) throw new Error('Requisition Excel template not found.');
+        const tplBuf = await res.arrayBuffer();
+
+        const outWb = new ExcelJS.Workbook();
+        outWb.creator = 'TVC-PMS';
+        outWb.created = new Date();
+        const usedNames = new Set();
+
+        for (let i = 0; i < pages.length; i++) {
+            const tmpWb = new ExcelJS.Workbook();
+            await tmpWb.xlsx.load(tplBuf);
+            const src = tmpWb.worksheets[0];
+            if (!src) throw new Error('Template worksheet missing.');
+            const sheetName = safeReqSheetName(pages[i].sheetName || pages[i].groupKey, i, usedNames);
+            const ws = outWb.addWorksheet(sheetName);
+            cloneWorksheetFromTemplate(src, ws);
+            fillSpareReqPrintSheet(ws, ctx.req, ctx.vesselName, pages[i], ctx);
+        }
+
+        const safeNo = String(ctx.req?.req_no || 'REQUISITION').replace(/[^\w\-]+/g, '_');
+        const buf = await outWb.xlsx.writeBuffer();
+        downloadBlob(buf, `${safeNo}-requisition.xlsx`);
+        return true;
+    }
+
+    return {
+        available, exportRequisition, parseRequisitionFile, exportSparePartsList,
+        exportSparePartsRequisitionForm, COLS, SPARE_LIST_COLS,
+    };
 })();

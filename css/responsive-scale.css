@@ -84,7 +84,6 @@ body {
 .sheet-table,
 .hist-table,
 .fleet-table,
-.spare-req-list-table,
 .spare-consume-log-table,
 .req-preview-items,
 .batch-report-modal table {
@@ -100,8 +99,6 @@ body {
 .hist-table td,
 .fleet-table th,
 .fleet-table td,
-.spare-req-list-table th,
-.spare-req-list-table td,
 .spare-consume-log-table th,
 .spare-consume-log-table td {
     padding: var(--table-cell-pad-y) var(--table-cell-pad-x);
@@ -109,6 +106,18 @@ body {
     text-overflow: ellipsis;
     vertical-align: middle;
     white-space: nowrap;
+}
+
+/* SPARE / Requisition item lists — match Work Plan (.vl-cells / .vl-head) typography */
+.spare-req-list-table,
+.spare-req-list-panel .spare-data-table.spare-req-list-table,
+.spare-req-hist-list-panel .spare-data-table.spare-req-list-table {
+    font-size: var(--list-item-font);
+}
+
+.spare-req-list-head-table thead th,
+.spare-req-list-head-table thead th.spare-req-list-th-sub {
+    font-size: var(--list-item-head-font);
 }
 
 /* SPARE virtual-list — keep header/body column sync; do not apply global table overrides */
@@ -126,22 +135,31 @@ body {
     width: var(--spare-table-w, 100%) !important;
     min-width: var(--spare-table-w, 100%) !important;
     max-width: var(--spare-table-w, 100%) !important;
-    font-size: calc(13px * var(--ui-scale));
+    font-size: var(--list-item-font);
 }
 
 #spareListScroll .spare-data-table td,
-#spareListHead .spare-data-table th,
 #reqWorkListScroll .spare-data-table td,
-#reqWorkListHead .spare-data-table th,
 #consumeListScroll .spare-data-table td,
-#consumeListHead .spare-data-table th,
 #receiveListScroll .spare-data-table td,
+#wrSpareListScroll .spare-data-table td {
+    padding: 0 5px !important;
+    height: var(--list-row-h, 40px);
+    font-size: var(--list-item-font);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+#spareListHead .spare-data-table th,
+#reqWorkListHead .spare-data-table th,
+#consumeListHead .spare-data-table th,
 #receiveListHead .spare-data-table th,
-#wrSpareListScroll .spare-data-table td,
 #wrSpareListHead .spare-data-table th {
     padding: 0 5px !important;
     height: var(--list-row-h, 40px);
-    font-size: calc(13px * var(--ui-scale));
+    font-size: var(--list-item-head-font);
     overflow: hidden;
     text-overflow: ellipsis;
     vertical-align: middle;
@@ -243,8 +261,9 @@ body {
 
 #reqWorkListHead .spare-data-head th,
 #consumeListHead .spare-data-head th,
-#receiveListHead .spare-data-head th {
-    font-size: calc(12px * var(--ui-scale));
+#receiveListHead .spare-data-head th,
+#wrSpareListHead .spare-data-head th {
+    font-size: var(--list-item-head-font);
 }
 
 .spare-req-work-title {
