@@ -1748,11 +1748,12 @@ const TVC_SpareMenu = (function () {
         const cls = el.classList;
         if (!cls) return false;
         if (cls.contains('spare-req-quote-vendor-trigger')
-            || cls.contains('spare-req-quote-cur-select')
+            || cls.contains('spare-req-quote-cur-trigger')
             || cls.contains('spare-req-quote-col-chk')
             || cls.contains('spare-req-quote-row-chk')
             || cls.contains('spare-req-quote-price-input')) return true;
-        return !!el.closest?.('.spare-req-quote-vendor-menu-portal');
+        return !!el.closest?.('.spare-req-quote-vendor-menu-portal')
+            || !!el.closest?.('.spare-req-quote-cur-menu-portal');
     }
 
     function reqWorkActiveColWidths() {
@@ -1850,10 +1851,6 @@ const TVC_SpareMenu = (function () {
         });
     }
 
-    function reqWorkQuoteCurrencyOptions(cur, slot) {
-        return REQ_QUOTE_CURRENCIES.map(c =>
-            `<option value="${c}"${c === cur ? ' selected' : ''}>${c}</option>`).join('');
-    }
 
     function spareReqQuoteTableHeadHtml(req) {
         const vendors = reqWorkQuoteVendors(req);
@@ -1861,8 +1858,9 @@ const TVC_SpareMenu = (function () {
         const metaVendorCells = vendors.map((v, slot) => {
             const total = fmtQuoteAmount(totals[slot], v.currency);
             return `<th class="c-quote-cur">
-                    <select class="spare-req-quote-cur-select" aria-label="Currency column ${slot + 1}"
-                        onclick="event.stopPropagation()" onchange="TVC_SpareMenu.reqWorkSetQuoteCurrency(${slot}, this.value)">${reqWorkQuoteCurrencyOptions(v.currency, slot)}</select>
+                    <button type="button" class="spare-req-quote-cur-trigger" data-quote-cur-slot="${slot}"
+                        aria-label="Currency column ${slot + 1}" title="Currency"
+                        onclick="event.stopPropagation();TVC_SpareMenu.toggleReqQuoteCurrencyPick(event, ${slot})">${esc(v.currency || 'USD')}</button>
                 </th>
                 <th class="c-quote-total" data-quote-total-slot="${slot}">${esc(total || '—')}</th>`;
         }).join('');
@@ -1940,6 +1938,7 @@ const TVC_SpareMenu = (function () {
 
     function refreshReqWorkQuoteHeadDom() {
         if (!reqWorkHqQuoteViewActive()) return;
+        closeReqQuoteCurrencyPick();
         const req = getReqWorkSession();
         if (!req) return;
         document.querySelectorAll('#reqWorkListHeadTrack .spare-data-table-req, .req-work-group-head .spare-data-table-req').forEach((table, idx) => {
@@ -1951,30 +1950,317 @@ const TVC_SpareMenu = (function () {
         applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
     }
 
+    function closeReqQuoteHeadPicks() {
+        closeReqQuoteVendorPick();
+        closeReqQuoteCurrencyPick();
+    }
+
+    let _reqQuoteCurrencyPickReposition = null;
+
+    function positionReqQuoteCurrencyPickMenu(slot) {
+        const menu = document.querySelector(`.spare-req-quote-cur-menu-portal[data-quote-cur-slot="${slot}"]`);
+        const trigger = document.querySelector(`.spare-req-quote-cur-trigger[data-quote-cur-slot="${slot}"]`);
+        if (!menu || !trigger) return;
+        const rect = trigger.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.left = `${Math.max(8, rect.left)}px`;
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.minWidth = `${Math.max(rect.width, 52)}px`;
+        menu.style.zIndex = '12000';
+    }
+
+    function unbindReqQuoteCurrencyPickReposition() {
+        if (!_reqQuoteCurrencyPickReposition) return;
+        const { onReposition, onClickClose } = _reqQuoteCurrencyPickReposition;
+        window.removeEventListener('scroll', onReposition, true);
+        window.removeEventListener('resize', onReposition);
+        if (onClickClose) document.removeEventListener('click', onClickClose);
+        _reqQuoteCurrencyPickReposition = null;
+    }
+
+    function bindReqQuoteCurrencyPickReposition(slot) {
+        unbindReqQuoteCurrencyPickReposition();
+        const onReposition = () => {
+            if (!document.querySelector(`.spare-req-quote-cur-menu-portal[data-quote-cur-slot="${slot}"]`)) {
+                unbindReqQuoteCurrencyPickReposition();
+                return;
+            }
+            positionReqQuoteCurrencyPickMenu(slot);
+        };
+        const onClickClose = (e) => {
+            const menu = document.querySelector(`.spare-req-quote-cur-menu-portal[data-quote-cur-slot="${slot}"]`);
+            const trigger = document.querySelector(`.spare-req-quote-cur-trigger[data-quote-cur-slot="${slot}"]`);
+            if (menu?.contains(e.target) || trigger?.contains(e.target)) return;
+            closeReqQuoteCurrencyPick();
+        };
+        _reqQuoteCurrencyPickReposition = { slot, onReposition, onClickClose };
+        setTimeout(() => {
+            document.addEventListener('click', onClickClose);
+            window.addEventListener('scroll', onReposition, true);
+            window.addEventListener('resize', onReposition);
+        }, 0);
+    }
+
+    function closeReqQuoteCurrencyPick() {
+        unbindReqQuoteCurrencyPickReposition();
+        document.querySelectorAll('.spare-req-quote-cur-menu-portal').forEach(el => el.remove());
+    }
+
+    function buildReqQuoteCurrencyPickHtml(current) {
+        const cur = String(current || 'USD').trim().toUpperCase();
+        return REQ_QUOTE_CURRENCIES.map(c =>
+            `<button type="button" class="spare-req-quote-cur-item${c === cur ? ' is-active' : ''}" data-currency="${c}">${c}</button>`).join('');
+    }
+
+    function toggleReqQuoteCurrencyPick(ev, slot) {
+        ev?.stopPropagation?.();
+        const trigger = ev?.currentTarget;
+        if (!trigger) return;
+        closeReqQuoteVendorPick();
+        const existing = document.querySelector(`.spare-req-quote-cur-menu-portal[data-quote-cur-slot="${slot}"]`);
+        if (existing) {
+            closeReqQuoteCurrencyPick();
+            return;
+        }
+        closeReqQuoteCurrencyPick();
+        const req = getReqWorkSession();
+        const current = reqWorkQuoteVendors(req)[slot]?.currency || 'USD';
+        const menu = document.createElement('div');
+        menu.className = 'spare-req-quote-cur-menu spare-req-quote-cur-menu-portal';
+        menu.setAttribute('data-quote-cur-slot', String(slot));
+        menu.innerHTML = buildReqQuoteCurrencyPickHtml(current);
+        menu.addEventListener('mousedown', (e) => e.stopPropagation());
+        menu.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const btn = e.target.closest('.spare-req-quote-cur-item');
+            if (btn) pickReqQuoteCurrency(slot, btn.dataset.currency);
+        });
+        document.body.appendChild(menu);
+        positionReqQuoteCurrencyPickMenu(slot);
+        bindReqQuoteCurrencyPickReposition(slot);
+    }
+
+    function pickReqQuoteCurrency(slot, currency) {
+        reqWorkSetQuoteCurrency(slot, currency);
+        closeReqQuoteCurrencyPick();
+    }
+
+    let _reqQuoteVendorPickReposition = null;
+
+    function positionReqQuoteVendorPickMenu(slot) {
+        const menu = document.querySelector(`.spare-req-quote-vendor-menu-portal[data-quote-vendor-slot="${slot}"]`);
+        const trigger = document.querySelector(`.spare-req-quote-vendor-trigger[data-quote-vendor-slot="${slot}"]`);
+        if (!menu || !trigger) return;
+        const rect = trigger.getBoundingClientRect();
+        menu.style.position = 'fixed';
+        menu.style.left = `${Math.max(8, rect.left)}px`;
+        menu.style.top = `${rect.bottom + 4}px`;
+        menu.style.minWidth = `${Math.max(rect.width, 180)}px`;
+        menu.style.zIndex = '12000';
+    }
+
+    function unbindReqQuoteVendorPickReposition() {
+        if (!_reqQuoteVendorPickReposition) return;
+        const { onReposition, onClickClose } = _reqQuoteVendorPickReposition;
+        window.removeEventListener('scroll', onReposition, true);
+        window.removeEventListener('resize', onReposition);
+        if (onClickClose) document.removeEventListener('click', onClickClose);
+        _reqQuoteVendorPickReposition = null;
+    }
+
+    function bindReqQuoteVendorPickReposition(slot) {
+        unbindReqQuoteVendorPickReposition();
+        const onReposition = () => {
+            if (!document.querySelector(`.spare-req-quote-vendor-menu-portal[data-quote-vendor-slot="${slot}"]`)) {
+                unbindReqQuoteVendorPickReposition();
+                return;
+            }
+            positionReqQuoteVendorPickMenu(slot);
+        };
+        const onClickClose = (e) => {
+            if (_reqQuoteVendorPickIgnoreClose) return;
+            const menu = document.querySelector(`.spare-req-quote-vendor-menu-portal[data-quote-vendor-slot="${slot}"]`);
+            const trigger = document.querySelector(`.spare-req-quote-vendor-trigger[data-quote-vendor-slot="${slot}"]`);
+            if (menu?.contains(e.target) || trigger?.contains(e.target)) return;
+            closeReqQuoteVendorPick();
+        };
+        _reqQuoteVendorPickReposition = { slot, onReposition, onClickClose };
+        setTimeout(() => {
+            document.addEventListener('click', onClickClose);
+            window.addEventListener('scroll', onReposition, true);
+            window.addEventListener('resize', onReposition);
+        }, 0);
+    }
+
     function closeReqQuoteVendorPick() {
+        unbindReqQuoteVendorPickReposition();
         document.querySelectorAll('.spare-req-quote-vendor-menu-portal').forEach(el => el.remove());
         document.querySelectorAll('.spare-req-quote-vendor-pick.is-open').forEach(el => el.classList.remove('is-open'));
     }
 
-    function buildReqQuoteVendorPickHtml(slot, picker) {
-        const item = (v, suggested = false) =>
-            `<button type="button" class="spare-req-quote-vendor-item${suggested ? ' is-suggested' : ''}"
-                onclick="TVC_SpareMenu.pickReqQuoteVendor(${slot}, '${escAttr(v.id || '')}', '${escAttr(v.name)}')">${esc(v.name)}${suggested ? ' *' : ''}</button>`;
-        const registered = (picker.registered || []).map(v => item(v)).join('');
-        const suggested = (picker.suggested || []).map(v => item(v, true)).join('');
+    let _reqQuoteVendorPickIgnoreClose = false;
+
+    function buildReqQuoteVendorRegisteredRows(vendors, highlightName = '') {
+        const hi = String(highlightName || '').trim().toLowerCase();
+        return (vendors || []).map(v => {
+            const vid = escAttr(v.id || '');
+            const vname = escAttr(v.name || '');
+            const isHi = hi && String(v.name || '').trim().toLowerCase() === hi;
+            return `<div class="spare-req-quote-vendor-row${isHi ? ' is-new' : ''}">
+                <button type="button" class="spare-req-quote-vendor-item"
+                    data-vendor-id="${vid}" data-vendor-name="${vname}">${esc(v.name)}</button>
+                <button type="button" class="spare-req-quote-vendor-act spare-req-quote-vendor-edit-btn"
+                    data-vendor-id="${vid}" data-vendor-name="${vname}" title="Edit vendor" aria-label="Edit vendor">✎</button>
+                <button type="button" class="spare-req-quote-vendor-act spare-req-quote-vendor-del-btn"
+                    data-vendor-id="${vid}" title="Delete vendor" aria-label="Delete vendor">×</button>
+            </div>`;
+        }).join('');
+    }
+
+    function reqQuoteVendorPickIndexValue(menu) {
+        return String(menu?.querySelector('.spare-req-quote-vendor-index-input')?.value || '').trim();
+    }
+
+    function reqQuoteVendorsFilteredByIndex(registered, indexFilter = '') {
+        const filter = String(indexFilter || '').trim().toLowerCase();
+        const list = registered || [];
+        if (!filter) return list;
+        return list.filter(v => String(v.name || '').toLowerCase().includes(filter));
+    }
+
+    function buildReqQuoteVendorPickHtml(slot, picker, highlightName = '', indexFilter = '') {
+        const filter = String(indexFilter || '').trim();
+        const registered = reqQuoteVendorsFilteredByIndex(picker.registered, filter);
+        const registeredHtml = registered.length
+            ? buildReqQuoteVendorRegisteredRows(registered, highlightName)
+            : `<div class="spare-req-quote-vendor-empty muted">${filter ? 'No matching vendors.' : 'No registered vendors yet.'}</div>`;
+        const showClear = filter.length > 0;
         return `<div class="spare-req-quote-vendor-head muted">Registered vendors</div>
-            ${registered || '<div class="spare-req-quote-vendor-empty muted">No registered vendors yet.</div>'}
-            ${suggested ? `<div class="spare-req-quote-vendor-head muted">Suggestions <span class="spare-req-quote-vendor-hint">(from spare maker)</span></div>${suggested}` : ''}
+            <div class="spare-req-quote-vendor-index-row">
+                <div class="spare-req-quote-vendor-index-wrap">
+                    <input type="text" class="spare-req-quote-vendor-index-input" placeholder="Search vendor" autocomplete="off"
+                        value="${escAttr(filter)}" onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
+                    <button type="button" class="spare-req-quote-vendor-index-clear spare-req-quote-vendor-act${showClear ? '' : ' is-hidden'}"
+                        title="Clear index" aria-label="Clear index">×</button>
+                </div>
+            </div>
+            <div class="spare-req-quote-vendor-registered">${registeredHtml}</div>
             <div class="spare-req-quote-vendor-add">
                 <div class="spare-req-quote-vendor-head muted">Add new vendor</div>
                 <div class="spare-req-quote-vendor-add-row">
                     <input type="text" class="spare-req-quote-vendor-add-input" placeholder="Company name" autocomplete="off"
-                        onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
-                        onkeydown="if(event.key==='Enter'){event.preventDefault();event.stopPropagation();TVC_SpareMenu.submitReqQuoteVendorAdd(${slot});}">
-                    <button type="button" class="btn btn-sm spare-req-quote-vendor-add-btn"
-                        onclick="event.stopPropagation();TVC_SpareMenu.submitReqQuoteVendorAdd(${slot})">Add</button>
+                        onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">
+                    <button type="button" class="btn btn-sm spare-req-quote-vendor-add-btn">Add</button>
                 </div>
             </div>`;
+    }
+
+    function refreshReqQuoteVendorRegisteredOnly(slot, highlightName = '') {
+        const menu = document.querySelector(`.spare-req-quote-vendor-menu-portal[data-quote-vendor-slot="${slot}"]`);
+        if (!menu) return;
+        const indexFilter = reqQuoteVendorPickIndexValue(menu);
+        const picker = reqQuoteVendorPickerData();
+        if (window.TVC_Vendors?.listAll) picker.registered = TVC_Vendors.listAll();
+        const registered = reqQuoteVendorsFilteredByIndex(picker.registered, indexFilter);
+        const listEl = menu.querySelector('.spare-req-quote-vendor-registered');
+        if (listEl) {
+            listEl.innerHTML = registered.length
+                ? buildReqQuoteVendorRegisteredRows(registered, highlightName)
+                : `<div class="spare-req-quote-vendor-empty muted">${indexFilter ? 'No matching vendors.' : 'No registered vendors yet.'}</div>`;
+        }
+        const clearBtn = menu.querySelector('.spare-req-quote-vendor-index-clear');
+        if (clearBtn) clearBtn.classList.toggle('is-hidden', !indexFilter);
+    }
+
+    function reqQuoteVendorPickerData() {
+        return window.TVC_Vendors?.listForPicker?.() || { registered: [] };
+    }
+
+    function refreshReqQuoteVendorPickMenu(slot, highlightName = '') {
+        const menu = document.querySelector(`.spare-req-quote-vendor-menu-portal[data-quote-vendor-slot="${slot}"]`);
+        if (!menu) return;
+        const indexFilter = reqQuoteVendorPickIndexValue(menu);
+        const picker = reqQuoteVendorPickerData();
+        if (window.TVC_Vendors?.listAll) picker.registered = TVC_Vendors.listAll();
+        menu.innerHTML = buildReqQuoteVendorPickHtml(slot, picker, highlightName, indexFilter);
+        bindReqQuoteVendorPickMenu(menu, slot);
+        positionReqQuoteVendorPickMenu(slot);
+        const indexInput = menu.querySelector('.spare-req-quote-vendor-index-input');
+        if (indexInput) {
+            indexInput.focus();
+            indexInput.setSelectionRange(indexInput.value.length, indexInput.value.length);
+        }
+    }
+
+    function bindReqQuoteVendorPickMenu(menu, slot) {
+        if (!menu || menu.dataset.reqQuotePickBound === '1') return;
+        menu.dataset.reqQuotePickBound = '1';
+        menu.addEventListener('mousedown', (e) => e.stopPropagation());
+        menu.addEventListener('input', (e) => {
+            if (e.target.matches('.spare-req-quote-vendor-index-input')) {
+                refreshReqQuoteVendorRegisteredOnly(slot);
+            }
+        });
+        menu.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (e.target.closest('.spare-req-quote-vendor-index-clear')) {
+                e.preventDefault();
+                const input = menu.querySelector('.spare-req-quote-vendor-index-input');
+                if (input) {
+                    input.value = '';
+                    input.focus();
+                }
+                refreshReqQuoteVendorRegisteredOnly(slot);
+                return;
+            }
+            if (e.target.closest('.spare-req-quote-vendor-add-btn')) {
+                e.preventDefault();
+                submitReqQuoteVendorAdd(slot, e);
+                return;
+            }
+            const editBtn = e.target.closest('.spare-req-quote-vendor-edit-btn');
+            if (editBtn) {
+                e.preventDefault();
+                editReqQuoteVendor(slot, editBtn.dataset.vendorId, editBtn.dataset.vendorName);
+                return;
+            }
+            const delBtn = e.target.closest('.spare-req-quote-vendor-del-btn');
+            if (delBtn) {
+                e.preventDefault();
+                deleteReqQuoteVendor(slot, delBtn.dataset.vendorId);
+                return;
+            }
+            const pickBtn = e.target.closest('.spare-req-quote-vendor-item');
+            if (pickBtn) {
+                e.preventDefault();
+                pickReqQuoteVendor(slot, pickBtn.dataset.vendorId, pickBtn.dataset.vendorName);
+            }
+        });
+        menu.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.matches('.spare-req-quote-vendor-add-input')) {
+                e.preventDefault();
+                e.stopPropagation();
+                submitReqQuoteVendorAdd(slot, e);
+            }
+        });
+    }
+
+    function applyReqQuoteVendorToSlot(slot, vendorId, vendorName) {
+        const req = getReqWorkSession();
+        if (!req) return;
+        const name = String(vendorName || '').trim();
+        if (!name) return;
+        let id = String(vendorId || '').trim();
+        if (!id && window.TVC_Vendors?.listAll) {
+            id = window.TVC_Vendors.listAll().find(v => v.name.toLowerCase() === name.toLowerCase())?.id || '';
+        }
+        const q = ensureReqWorkQuoteState(req);
+        const v = q.vendors[slot];
+        if (!v) return;
+        v.vendorId = id;
+        v.vendorName = name;
+        refreshReqWorkQuoteHeadDom();
+        syncReqWorkHqFlowBtns();
     }
 
     function toggleReqQuoteVendorPick(ev, slot) {
@@ -1987,34 +2273,25 @@ const TVC_SpareMenu = (function () {
             return;
         }
         closeReqQuoteVendorPick();
-        const st = getState();
-        const picker = window.TVC_Vendors?.listForPicker?.(st.spares || []) || { registered: [], suggested: [] };
+        closeReqQuoteCurrencyPick();
+        const picker = reqQuoteVendorPickerData();
         const menu = document.createElement('div');
         menu.className = 'spare-req-quote-vendor-menu spare-req-quote-vendor-menu-portal';
-        menu.dataset.quoteVendorSlot = String(slot);
+        menu.setAttribute('data-quote-vendor-slot', String(slot));
         menu.innerHTML = buildReqQuoteVendorPickHtml(slot, picker);
+        bindReqQuoteVendorPickMenu(menu, slot);
         document.body.appendChild(menu);
-        const rect = trigger.getBoundingClientRect();
-        menu.style.position = 'fixed';
-        menu.style.left = `${Math.max(8, rect.left)}px`;
-        menu.style.top = `${rect.bottom + 4}px`;
-        menu.style.minWidth = `${Math.max(rect.width, 180)}px`;
-        menu.style.zIndex = '12000';
-        const addInput = menu.querySelector('.spare-req-quote-vendor-add-input');
-        if (addInput) {
-            requestAnimationFrame(() => addInput.focus());
+        positionReqQuoteVendorPickMenu(slot);
+        bindReqQuoteVendorPickReposition(slot);
+        const indexInput = menu.querySelector('.spare-req-quote-vendor-index-input');
+        if (indexInput) {
+            requestAnimationFrame(() => indexInput.focus());
         }
-        setTimeout(() => {
-            const close = (e) => {
-                if (menu.contains(e.target) || trigger.contains(e.target)) return;
-                closeReqQuoteVendorPick();
-                document.removeEventListener('click', close);
-            };
-            document.addEventListener('click', close);
-        }, 0);
     }
 
-    function submitReqQuoteVendorAdd(slot) {
+    function submitReqQuoteVendorAdd(slot, ev) {
+        ev?.stopPropagation?.();
+        ev?.preventDefault?.();
         const menu = document.querySelector(`.spare-req-quote-vendor-menu-portal[data-quote-vendor-slot="${slot}"]`);
         const input = menu?.querySelector('.spare-req-quote-vendor-add-input');
         const name = String(input?.value || '').trim();
@@ -2022,27 +2299,87 @@ const TVC_SpareMenu = (function () {
             input?.focus();
             return;
         }
-        pickReqQuoteVendor(slot, '', name);
+        if (!window.TVC_Vendors?.register) {
+            alert('Vendor registry is not loaded. Please refresh the page (Ctrl+F5).');
+            showReqQuoteVendorAddStatus(slot, 'Vendor registry not loaded.', true);
+            return;
+        }
+        const entry = TVC_Vendors.register(name);
+        if (!entry) {
+            showReqQuoteVendorAddStatus(slot, 'Enter a valid company name (letters required).', true);
+            return;
+        }
+        applyReqQuoteVendorToSlot(slot, entry.id || '', entry.name || name);
+        _reqQuoteVendorPickIgnoreClose = true;
+        refreshReqQuoteVendorPickMenu(slot, entry.name || name);
+        showReqQuoteVendorAddStatus(slot, `Registered: ${entry.name || name}`);
+        setTimeout(() => { _reqQuoteVendorPickIgnoreClose = false; }, 0);
+    }
+
+    function showReqQuoteVendorAddStatus(slot, message, isError = false) {
+        const menu = document.querySelector(`.spare-req-quote-vendor-menu-portal[data-quote-vendor-slot="${slot}"]`);
+        if (!menu) return;
+        let el = menu.querySelector('.spare-req-quote-vendor-add-status');
+        if (!el) {
+            el = document.createElement('div');
+            el.className = 'spare-req-quote-vendor-add-status';
+            menu.querySelector('.spare-req-quote-vendor-add')?.appendChild(el);
+        }
+        el.className = `spare-req-quote-vendor-add-status${isError ? ' is-error' : ' is-ok'}`;
+        el.textContent = message;
     }
 
     function pickReqQuoteVendor(slot, vendorId, vendorName) {
-        const req = getReqWorkSession();
-        if (!req) return;
         const name = String(vendorName || '').trim();
         if (!name) return;
-        let id = String(vendorId || '').trim();
-        if (window.TVC_Vendors?.register) {
-            window.TVC_Vendors.register(name);
-            if (!id) id = window.TVC_Vendors.listAll?.().find(v => v.name.toLowerCase() === name.toLowerCase())?.id || '';
-        }
-        const q = ensureReqWorkQuoteState(req);
-        const v = q.vendors[slot];
-        if (!v) return;
-        v.vendorId = id;
-        v.vendorName = name;
+        const id = String(vendorId || '').trim();
+        applyReqQuoteVendorToSlot(slot, id, name);
         closeReqQuoteVendorPick();
+    }
+
+    function editReqQuoteVendor(slot, vendorId, currentName) {
+        if (!window.TVC_Vendors?.rename) return;
+        const next = prompt('Edit vendor name:', currentName || '');
+        if (next == null) return;
+        const updated = TVC_Vendors.rename(vendorId, next);
+        if (!updated) {
+            showReqQuoteVendorAddStatus(slot, 'Invalid vendor name.', true);
+            return;
+        }
+        const req = getReqWorkSession();
+        const q = req && ensureReqWorkQuoteState(req);
+        if (q) {
+            q.vendors.forEach(v => {
+                if (v.vendorId === vendorId) {
+                    v.vendorId = updated.id;
+                    v.vendorName = updated.name;
+                }
+            });
+        }
         refreshReqWorkQuoteHeadDom();
-        syncReqWorkHqFlowBtns();
+        refreshReqQuoteVendorPickMenu(slot, updated.name);
+        showReqQuoteVendorAddStatus(slot, `Updated: ${updated.name}`);
+    }
+
+    function deleteReqQuoteVendor(slot, vendorId) {
+        if (!window.TVC_Vendors?.remove) return;
+        const v = TVC_Vendors.findById(vendorId);
+        if (!v) return;
+        if (!confirm(`Remove vendor "${v.name}"?`)) return;
+        TVC_Vendors.remove(vendorId);
+        const req = getReqWorkSession();
+        const q = req && ensureReqWorkQuoteState(req);
+        if (q) {
+            q.vendors.forEach(vendor => {
+                if (vendor.vendorId === vendorId) {
+                    vendor.vendorId = '';
+                    vendor.vendorName = '';
+                }
+            });
+        }
+        refreshReqWorkQuoteHeadDom();
+        refreshReqQuoteVendorPickMenu(slot);
+        showReqQuoteVendorAddStatus(slot, `Removed: ${v.name}`);
     }
 
     function reqWorkSetQuoteCurrency(slot, currency) {
@@ -7002,9 +7339,66 @@ const TVC_SpareMenu = (function () {
         if (!reqWorkHqRequestQuoteEnabled(m)) return alert('Select a requisition first.');
         m.reqWorkHqQuoteView = !m.reqWorkHqQuoteView;
         if (m.reqWorkHqQuoteView) ensureReqWorkQuoteState(_reqWorkDraft);
-        else closeReqQuoteVendorPick();
+        else closeReqQuoteHeadPicks();
         await refreshReqWorkListUi();
         syncReqWorkHqFlowBtns();
+    }
+
+    function reqWorkQuoteExportFilename(reqNo, vendorName) {
+        const safeReq = String(reqNo || 'REQUISITION').replace(/[\\/:*?"<>|]/g, '_').trim();
+        const safeVendor = String(vendorName || 'VENDOR').replace(/[\\/:*?"<>|]/g, '_').trim();
+        return `${safeReq}_${safeVendor}.xlsx`;
+    }
+
+    function reqWorkQuoteExportTargets(req) {
+        const q = ensureReqWorkQuoteState(req);
+        const targets = [];
+        reqWorkQuoteVendors(req).forEach((v, slot) => {
+            const vendorName = String(v.vendorName || '').trim();
+            if (!vendorName) return;
+            const lines = (req.lines || []).filter((line) => {
+                const sid = reqWorkSpareIdKey(line.spare_part_id);
+                if (!sid) return false;
+                return !!q.rowChecks[reqWorkQuoteVendorKey(slot, sid)];
+            });
+            if (!lines.length) return;
+            targets.push({
+                slot,
+                vendorName,
+                currency: String(v.currency || 'USD').trim().toUpperCase() || 'USD',
+                lines,
+                filename: reqWorkQuoteExportFilename(req.req_no, vendorName),
+            });
+        });
+        return targets;
+    }
+
+    async function hqExportQuote() {
+        const m = modState(getState());
+        const { isHq } = await vesselScope();
+        if (!isHq || !reqWorkHqRequestQuoteEnabled(m)) return alert('Select a requisition first.');
+        const req = getReqWorkSession();
+        if (!req?.req_no) return alert('Requisition number is required.');
+        if (!TVC_Excel?.exportQuoteRequisition) return alert('Excel export is not available.');
+        ensureReqWorkQuoteState(req);
+        const targets = reqWorkQuoteExportTargets(req);
+        if (!targets.length) {
+            return alert('Select a vendor and check at least one item for each quote file.');
+        }
+        if (!window.confirm(`Export ${targets.length} quote file(s)?\n\n${targets.map(t => t.filename).join('\n')}`)) return;
+        try {
+            for (const t of targets) {
+                await TVC_Excel.exportQuoteRequisition(req, {
+                    vendorName: t.vendorName,
+                    currency: t.currency,
+                    lines: t.lines,
+                    filename: t.filename,
+                });
+            }
+            alert(`Exported ${targets.length} quote file(s).`);
+        } catch (e) {
+            alert(e.message || e);
+        }
     }
 
     function hqCheckQuotation() {
@@ -7697,6 +8091,7 @@ const TVC_SpareMenu = (function () {
         const reqQuoteCls = quoteViewActive ? ' spare-req-hq-flow-btn-active' : '';
         return `<div class="spare-req-hq-flow-actions" aria-label="HQ requisition workflow">
             ${btn('Request Quote', 'TVC_SpareMenu.hqRequestQuoteView()', reqQuoteEnabled, reqQuoteCls)}
+            ${btn('Export Quote', 'TVC_SpareMenu.hqExportQuote()', reqQuoteEnabled)}
             ${btn('Check Quote', 'TVC_SpareMenu.hqCheckQuotation()', isHq)}
             ${btn('Evaluation', 'TVC_SpareMenu.hqReplyCompanyAssessment()', isHq)}
             ${btn('Order', 'TVC_SpareMenu.hqPurchaseOrder()', isHq)}
@@ -8286,7 +8681,7 @@ const TVC_SpareMenu = (function () {
         m.reqWorkPreview = false;
         m.reqWorkListDocPreview = false;
         m.reqWorkHqQuoteView = false;
-        closeReqQuoteVendorPick();
+        closeReqQuoteHeadPicks();
         m.reqWorkShowSelectedOnly = !!opts.listMode;
         m.reqWorkCompleted = false;
         m.reqWorkLastSavedId = null;
@@ -8391,7 +8786,7 @@ const TVC_SpareMenu = (function () {
         m.reqWorkCompleted = false;
         m.reqWorkLastSavedId = null;
         m.reqWorkHqQuoteView = false;
-        closeReqQuoteVendorPick();
+        closeReqQuoteHeadPicks();
         st.requisitionDraft = [];
         _reqWorkDraft = null;
         setReqWorkHistOpen(false);
@@ -13505,8 +13900,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         reqSheetExport, reqSheetPrint, onReqSheetSearchInput,
         exportRequisitionData, exportDeliveryData, exportPartsList, exportPartsListXlsx, buildPrintBody,
         viewRequisitionList, openNewRequisition,
-        hqRequestQuotation, hqRequestQuoteView, hqCheckQuotation, hqReplyCompanyAssessment, hqPurchaseOrder, hqReviewReceivedParts,
-        toggleReqQuoteVendorPick, pickReqQuoteVendor, submitReqQuoteVendorAdd, reqWorkSetQuoteCurrency,
+        hqRequestQuotation, hqRequestQuoteView, hqExportQuote, hqCheckQuotation, hqReplyCompanyAssessment, hqPurchaseOrder, hqReviewReceivedParts,
+        toggleReqQuoteVendorPick, pickReqQuoteVendor, submitReqQuoteVendorAdd,
+        toggleReqQuoteCurrencyPick, pickReqQuoteCurrency,
+        editReqQuoteVendor, deleteReqQuoteVendor, reqWorkSetQuoteCurrency,
         reqWorkToggleQuoteColCheck, reqWorkToggleQuoteRowCheck, reqWorkSetQuotePrice,
         viewConsumedLog, openConsumeLogModal, closeConsumeLogModal,
         consumeLogNew, consumeLogModify, consumePreviewModify, consumePreviewOpenWorkReport, cleanupConsumeWorkReportOverlay,

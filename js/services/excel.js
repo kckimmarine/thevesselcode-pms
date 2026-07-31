@@ -100,7 +100,73 @@ const TVC_Excel = (function () {
         });
 
         const buf = await wb.xlsx.writeBuffer();
-        downloadBlob(buf, `${req.req_no || 'REQUISITION'}.xlsx`);
+        downloadBlob(buf, opts.filename || `${req.req_no || 'REQUISITION'}.xlsx`);
+        return true;
+    }
+
+    /**
+     * Request Quote — 업체별 견적 요청 xlsx (체크된 품목만, 통화 HQ 지정).
+     * @param req requisition 레cord
+     * @param opts { vendorName, currency, lines, filename }
+     */
+    async function exportQuoteRequisition(req, opts = {}) {
+        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        const vendorName = String(opts.vendorName || '').trim();
+        const currency = String(opts.currency || 'USD').trim().toUpperCase();
+        const lines = Array.isArray(opts.lines) ? opts.lines : [];
+        if (!vendorName) throw new Error('Vendor name is required.');
+        if (!lines.length) throw new Error('No items selected for quotation.');
+
+        const wb = new ExcelJS.Workbook();
+        wb.creator = 'TVC-PMS';
+        wb.created = new Date();
+        const ws = wb.addWorksheet(SHEET, { views: [{ state: 'frozen', ySplit: 4 }] });
+
+        ws.mergeCells('A1', `${String.fromCharCode(64 + COLS.length)}1`);
+        ws.getCell('A1').value = `QUOTATION REQUEST  ·  ${req.req_no || ''}`;
+        ws.getCell('A1').font = { bold: true, size: 14 };
+        ws.getCell('A2').value = `Vessel: ${req.vessel_id || '-'}    Vendor: ${vendorName}    Currency: ${currency}    Dept: ${req.department || '-'}`;
+        ws.getCell('A3').value = 'Please fill [Unit Price] and [Vendor Comment] only. Currency is fixed by HQ.';
+        ws.getCell('A3').font = { italic: true, color: { argb: 'FF9C4221' } };
+
+        const headerRow = ws.getRow(4);
+        COLS.forEach((c, i) => {
+            const cell = headerRow.getCell(i + 1);
+            cell.value = c.header;
+            cell.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3A5F' } };
+            cell.alignment = { horizontal: 'center', vertical: 'middle' };
+            cell.border = { bottom: { style: 'thin' } };
+        });
+        headerRow.commit();
+
+        lines.forEach((l, idx) => {
+            const r = ws.getRow(5 + idx);
+            const values = {
+                no: idx + 1, part_no: l.part_no, universal_code: l.universal_code, name: l.name,
+                maker: l.maker, model: l.model, unit: l.unit, qty_requested: l.qty_requested,
+                price: l.price, currency, vendor_comment: l.vendor_comment,
+                qty_approved: l.qty_approved, hq_comment: l.hq_comment,
+                qty_received: l.qty_received,
+            };
+            COLS.forEach((c, i) => {
+                const cell = r.getCell(i + 1);
+                cell.value = values[c.key] != null ? values[c.key] : '';
+                const editable = c.lock === false && ['price', 'vendor_comment'].includes(c.key);
+                cell.protection = { locked: !editable };
+                if (editable) cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } };
+                cell.border = { bottom: { style: 'hair' } };
+            });
+            r.commit();
+        });
+
+        await ws.protect('tvc-pms', {
+            selectLockedCells: true, selectUnlockedCells: true,
+            formatCells: false, insertRows: false, deleteRows: false,
+        });
+
+        const buf = await wb.xlsx.writeBuffer();
+        downloadBlob(buf, opts.filename || `${req.req_no || 'REQUISITION'}_${vendorName}.xlsx`);
         return true;
     }
 
@@ -403,7 +469,7 @@ const TVC_Excel = (function () {
     }
 
     return {
-        available, exportRequisition, parseRequisitionFile, exportSparePartsList,
+        available, exportRequisition, exportQuoteRequisition, parseRequisitionFile, exportSparePartsList,
         exportSparePartsRequisitionForm, COLS, SPARE_LIST_COLS,
     };
 })();
