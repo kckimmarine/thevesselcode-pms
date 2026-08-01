@@ -383,6 +383,44 @@ const TVC_SpareMenu = (function () {
         return node?.department || '';
     }
 
+    function spareTreeDeptCollapsed(dept, st) {
+        if ((st?.treeSearch || '').trim()) return false;
+        return !!(st?.collapsedTreeDepts?.[dept]);
+    }
+
+    function toggleSpareTreeDept(dept, ev) {
+        ev?.stopPropagation?.();
+        const st = getState();
+        if (!dept || !st) return;
+        if ((st.treeSearch || '').trim()) return;
+        if (!st.collapsedTreeDepts) st.collapsedTreeDepts = {};
+        if (st.collapsedTreeDepts[dept]) delete st.collapsedTreeDepts[dept];
+        else st.collapsedTreeDepts[dept] = true;
+        renderSpareGroupTree();
+        if (document.getElementById('actTree') && st.idx && TVC_App?.renderGroupTree) {
+            TVC_App.renderGroupTree('actTree');
+        }
+    }
+
+    function syncSpareGroupSelection() {
+        const st = getState();
+        _cachedList = filteredSpares(st);
+        renderSpareGroupTree();
+        if (vl) vl.refresh();
+        else mountVirtualList();
+        renderSpareFilterDashboard();
+        syncSpareToolbarUi();
+        syncSpareItemHistoryBtns();
+        updateSpareHeadCheckAll();
+        const m = modState(st);
+        if (m.panelOpen && getFocusedSpareId(st)) {
+            vesselScope().then(({ canRequisition, canModify }) =>
+                renderDetailPanel(getFocusedSpareId(st), canRequisition, canModify));
+        }
+        requestAnimationFrame(syncSpareHeadLayout);
+        TVC_App?.syncSpareItemToolbar?.();
+    }
+
     function spareGroupTreeIncludesDept(st, nodeOrDept) {
         const node = typeof nodeOrDept === 'object' && nodeOrDept ? nodeOrDept : null;
         const nodeDept = node ? node.department : nodeOrDept;
@@ -3135,12 +3173,16 @@ const TVC_SpareMenu = (function () {
         }
         DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
             const nodes = byDept.get(dept);
-            html += `<div class="tree-dept">${esc(dept)}</div>`;
-            mergeSpareTreeNodes(nodes).forEach(n => {
-                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="No job items">0</span>` : '';
-                const sel = st.selectedGroupKey === n.key ? ' selected' : '';
-                html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_App.selectGroup('${escAttr(n.key)}')"><span>${esc(safeTreeLabel(n.label))}</span>${emptyTag}</div>`;
-            });
+            const collapsed = spareTreeDeptCollapsed(dept, st);
+            const chevron = collapsed ? '▸' : '▾';
+            html += `<div class="tree-dept tree-dept-toggle" role="button" tabindex="0" onclick="TVC_SpareMenu.toggleSpareTreeDept('${escAttr(dept)}', event)"><span class="tree-dept-chevron" aria-hidden="true">${chevron}</span><span>${esc(dept)}</span></div>`;
+            if (!collapsed) {
+                mergeSpareTreeNodes(nodes).forEach(n => {
+                    const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="No job items">0</span>` : '';
+                    const sel = st.selectedGroupKey === n.key ? ' selected' : '';
+                    html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_App.selectGroup('${escAttr(n.key)}')"><span>${esc(safeTreeLabel(n.label))}</span>${emptyTag}</div>`;
+                });
+            }
         });
         root.innerHTML = html;
         const searchEl = document.getElementById('spareTreeSearch');
@@ -7537,16 +7579,21 @@ const TVC_SpareMenu = (function () {
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferPickMode('import')">Import</button>
                 </div>`;
         } else if (step === 'export-type') {
-            const reqExportBtn = isHq ? '' : `<button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReqExportList()">Requisition</button>`;
-            content = `
-                <p class="spare-sync-hint">Select the data type to export to Master PC.</p>
-                <div class="spare-sync-actions">
-                    ${reqExportBtn}
+            const hqExportBtns = `
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReqExportList()">Requisition</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenQuotationExportList()">Quotation</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReplyEvalExportList()">Reply Evaluation</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenPurchaseOrderExportList()">Purchase Order</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReceivedExportList()">Received</button>
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Spare Parts Inventory</button>
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Spare Parts Inventory</button>`;
+            const vesselExportBtns = `
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReqExportList()">Requisition</button>
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReceivedExportList()">Received</button>
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Spare Parts Inventory</button>`;
+            content = `
+                <p class="spare-sync-hint">Select the data type to export to Master PC.</p>
+                <div class="spare-sync-actions">
+                    ${isHq ? hqExportBtns : vesselExportBtns}
                 </div>`;
         } else if (step === 'import') {
             content = `
@@ -14587,7 +14634,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     return {
-        init, render, renderSpareGroupTree, refreshList, syncSpareToolbarUi, spareToolbarFlags, applySpareToolbarFlags,
+        init, render, renderSpareGroupTree, toggleSpareTreeDept, syncSpareGroupSelection, refreshList, syncSpareToolbarUi, spareToolbarFlags, applySpareToolbarFlags,
         setFilter, setSearch, clearSpareSearch, clearListFilters, toggleLowOnly, showLowStockOnly, setSpareFilter, toggleReqPanel,
         selectSpareRow, focusSpareRow, openSpareModify, openSpareAppend, deleteSpareItem, deleteSpareItems,
         openDetail, closeDetail, saveDetailGroup,

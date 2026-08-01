@@ -20,6 +20,7 @@ const TVC_App = (function () {
         idx: null,
         selectedGroupKey: null,
         treeSearch: '',
+        collapsedTreeDepts: {},
         actualFilter: 'total',        // total | overdue | due30 | postponed | critical
         actualPeriodFrom: '',         // YYYY-MM-DD Due date range (Work Plan)
         actualPeriodTo: '',
@@ -638,6 +639,11 @@ const TVC_App = (function () {
         }
         TVC_ListFilters?.closePopover();
         if (tab !== 'actual') state.actualSelectedOnly = false;
+        if (state.currentTab === 'history' && tab !== 'history' && state.listFilters.history) {
+            Object.assign(state.listFilters.history, {
+                groupKeys: [], type: 'all', openOnly: false, postponeAwaitingApproval: false,
+            });
+        }
         state.currentTab = tab;
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
         document.querySelectorAll('.tab-pane').forEach(p => p.classList.add('hidden'));
@@ -1436,7 +1442,7 @@ const TVC_App = (function () {
         state.focusedSpareId = null;
         if (modStateSpare()) modStateSpare().focusedId = null;
         if (state.currentTab === 'actual') renderActualPlan();
-        else if (state.currentTab === 'spare') TVC_SpareMenu.render();
+        else if (state.currentTab === 'spare') TVC_SpareMenu.syncSpareGroupSelection?.();
     }
 
     // ── Job table (Work Plan) ──────────────────────────────────────
@@ -1857,6 +1863,13 @@ const TVC_App = (function () {
         TVC_ListFilters?.syncBtn('history');
     }
 
+    function runningHoursMenuVisible() {
+        if (!state.user) return false;
+        if (TVC_RBAC.isHqAccount(state.user)) return state.department !== 'DECK';
+        const f = typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(state.user) : {};
+        return f.showRunningHours !== false;
+    }
+
     function menuModel() {
         const c = menuCounts();
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
@@ -1875,7 +1888,7 @@ const TVC_App = (function () {
 
         if (isHq) {
             const hqMonthlyItems = [
-                ...(state.department !== 'DECK' ? [{ label: 'Check Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" }] : []),
+                ...(runningHoursMenuVisible() ? [{ label: 'Check Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" }] : []),
                 { label: 'Approve Reports', tag: 'B', action: "TVC_App.menuAction('approveReports')", badge: c.reportsPending, badgeTone: 'amber' },
                 { label: 'Approve Work Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
             ];
@@ -3019,10 +3032,7 @@ const TVC_App = (function () {
             case 'approveReport': menuNavigate('history'); break;
             case 'hqConfirm': menuNavigate('history'); break;
             case 'runHour':
-                if (typeof TVC_Space !== 'undefined') {
-                    const rhF = TVC_Space.getUiFeatures(state.user);
-                    if (rhF.showRunningHours === false) break;
-                }
+                if (!runningHoursMenuVisible()) break;
                 openRunHoursModal();
                 break;
             case 'approveOriginalPlan':
@@ -4044,6 +4054,21 @@ const TVC_App = (function () {
         else openPlanUpdateModal();
     }
 
+    function isTreeDeptCollapsed(dept) {
+        if (state.treeSearch) return false;
+        return !!state.collapsedTreeDepts[dept];
+    }
+
+    function toggleTreeDept(dept) {
+        if (!dept) return;
+        if (state.collapsedTreeDepts[dept]) delete state.collapsedTreeDepts[dept];
+        else state.collapsedTreeDepts[dept] = true;
+        if (document.getElementById('actTree') && state.idx) renderGroupTree('actTree');
+        if (document.getElementById('spareGroupTree') && window.TVC_SpareMenu?.renderSpareGroupTree) {
+            TVC_SpareMenu.renderSpareGroupTree();
+        }
+    }
+
     function renderGroupTree(rootId) {
         const root = document.getElementById(rootId);
         if (!root || !state.idx) return;
@@ -4061,12 +4086,16 @@ const TVC_App = (function () {
         }
         DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
             const nodes = byDept.get(dept);
-            html += `<div class="tree-dept">${esc(dept)}</div>`;
-            nodes.forEach(n => {
-                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
-                const sel = state.selectedGroupKey === n.key ? ' selected' : '';
-                html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_App.selectGroup('${escAttr(n.key)}')"><span>${esc(n.label)}</span>${emptyTag}</div>`;
-            });
+            const collapsed = isTreeDeptCollapsed(dept);
+            const chevron = collapsed ? '▸' : '▾';
+            html += `<div class="tree-dept tree-dept-toggle" role="button" tabindex="0" onclick="TVC_App.toggleTreeDept('${escAttr(dept)}')"><span class="tree-dept-chevron" aria-hidden="true">${chevron}</span><span>${esc(dept)}</span></div>`;
+            if (!collapsed) {
+                nodes.forEach(n => {
+                    const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
+                    const sel = state.selectedGroupKey === n.key ? ' selected' : '';
+                    html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_App.selectGroup('${escAttr(n.key)}')"><span>${esc(n.label)}</span>${emptyTag}</div>`;
+                });
+            }
         });
         root.innerHTML = html;
         const searchId = rootId === 'actTree' ? 'actTreeSearch'
@@ -5553,10 +5582,7 @@ const TVC_App = (function () {
 
     // ── Running Hours modal (예측 정비 엔진 UI) ───────────────────────
     function openRunHoursModal() {
-        if (state.user && typeof TVC_Space !== 'undefined') {
-            const rhF = TVC_Space.getUiFeatures(state.user);
-            if (rhF.showRunningHours === false) return;
-        }
+        if (!runningHoursMenuVisible()) return;
         TVC_RunHours.resetInputEditMode();
         TVC_RunHours.render();
         showModal('runHoursModal');
@@ -7969,7 +7995,7 @@ const TVC_App = (function () {
         boot, switchTab, navigate,
         setDepartment, setCaptainView, setHistView, setHistTab, menuAction, resolveDeptPick,
         setFleetView, setFleetSearch, selectVessel,
-        setSearch, setTreeSearch, clearSearchField, updateSearchClearBtn, bindSearchClearInput, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, renderGroupTree,
+        setSearch, setTreeSearch, clearSearchField, updateSearchClearBtn, bindSearchClearInput, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, isTreeDeptCollapsed, toggleTreeDept, renderGroupTree,
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
         reportMatchesPostponeAwaitingApproval,
         getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs,

@@ -592,6 +592,17 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .tree-empty { padding: 12px 10px; font-size: 12px; text-align: center; }
 .tree-dept { font-size: 11px; font-weight: 700; color: #718096; padding: 8px 8px 2px; text-transform: uppercase; }
+.tree-dept-toggle {
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    border-radius: 4px;
+    margin: 2px 0 0;
+}
+.tree-dept-toggle:hover { color: #2c5282; background: #edf2f7; }
+.tree-dept-chevron { font-size: 10px; line-height: 1; color: #4a5568; width: 10px; flex-shrink: 0; }
 .tree-node { padding: 7px 10px; cursor: pointer; border-radius: 6px; font-size: 12px; display: flex; justify-content: space-between; align-items: center; margin: 1px 0; }
 .tree-node:hover { background: #ebf8ff; }
 .tree-node.selected { background: #bee3f8; font-weight: 600; }

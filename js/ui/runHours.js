@@ -79,11 +79,19 @@ const TVC_RunHours = (function () {
         if (ctx?.onRhToolbarChange) ctx.onRhToolbarChange();
     }
 
-    /** 시간 기반 관리 대상 장비 그룹만 추출 (부서 필터 반영) */
+    /** Running Hours는 Engine 전용. HQ All에서도 Engine만, Deck 부서에서는 비표시. */
+    function runningHoursDepartment(state) {
+        if (state?.department === 'DECK') return null;
+        return 'ENGINE';
+    }
+
+    /** 시간 기반 관리 대상 장비 그룹만 추출 (Engine 전용) */
     function trackedNodes(state) {
+        const dept = runningHoursDepartment(state);
+        if (!dept) return [];
         return (state.idx?.groupNodes || []).filter(n =>
             TVC_PMS.isTrackedGroup(n.label) &&
-            (!state.department || n.department === state.department)
+            n.department === dept
         );
     }
 
