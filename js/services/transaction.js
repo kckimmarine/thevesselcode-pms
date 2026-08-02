@@ -8,6 +8,25 @@ const TVC_Transaction = (function () {
         return entity;
     }
 
+    /** HQ에서 직접 작성한 Work Report — Work History 로드 조건(hq_synced + vessel_id)에 맞게 태깅 */
+    async function stampHqLocalReport(report, user) {
+        if (!report || !TVC_RBAC.isHqAccount(user)) return report;
+        report.hq_synced = true;
+        if (!report.vessel_id) {
+            let vesselId = '';
+            try {
+                if (typeof TVC_Sync !== 'undefined' && TVC_Sync.resolveExpectedVesselId) {
+                    vesselId = await TVC_Sync.resolveExpectedVesselId(user, true);
+                }
+            } catch (_) { /* ignore */ }
+            if (!vesselId && typeof TVC_Fleet !== 'undefined') {
+                vesselId = String(TVC_Fleet.getSelectedId?.() || '').trim();
+            }
+            if (vesselId) report.vessel_id = vesselId;
+        }
+        return report;
+    }
+
     async function logAudit(message) {
         await TVC_DB.put('audit_logs', { timestamp: new Date().toLocaleString(), log: message, sync_status: 'LOCAL' });
     }
@@ -159,7 +178,7 @@ const TVC_Transaction = (function () {
                 description: payload.description || job.job_detail || job.item_sort2,
                 reported_by: user.id,
                 reporter_name: TVC_RBAC.getReportedByLabel(user),
-                reporter_role: user.role,
+                reporter_role: TVC_RBAC.resolveUserRole(user) || user.role || '',
                 used_parts: payload.usedParts || [],
                 trouble_detail: payload.troubleDetail || null,
                 postpone_date: payload.postponeDate || null,
@@ -168,6 +187,7 @@ const TVC_Transaction = (function () {
                 created_at: now(),
             };
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
+            await stampHqLocalReport(report, user);
             if (report.work_type === 'POSTPONE') {
                 report.requires_company_approval = await jobRequiresCompanyPostponeApproval(api, job);
             }
@@ -216,7 +236,7 @@ const TVC_Transaction = (function () {
                 description: payload.description || `Batch report (${jobItems.length} jobs)`,
                 reported_by: user.id,
                 reporter_name: TVC_RBAC.getReportedByLabel(user),
-                reporter_role: user.role,
+                reporter_role: TVC_RBAC.resolveUserRole(user) || user.role || '',
                 used_parts: [],
                 trouble_detail: null,
                 postpone_date: null,
@@ -225,6 +245,7 @@ const TVC_Transaction = (function () {
                 created_at: now(),
             };
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
+            await stampHqLocalReport(report, user);
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             await api.put('daily_work_reports', report);
             await api.put('audit_logs', {
@@ -280,6 +301,7 @@ const TVC_Transaction = (function () {
                 }
             }
             report.status = TVC_WorkReport.aggregateStatus(report.job_items);
+            await stampHqLocalReport(report, user);
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             markPending(report);
             await api.put('daily_work_reports', report);
@@ -483,17 +505,24 @@ const TVC_Transaction = (function () {
         return confirmReport(user, report.id);
     }
 
-    /** HQ 공무감독: CONFIRMED → APPROVED + Lock */
+    /** HQ 공무감독: CONFIRMED → APPROVED + Lock (HQ 작성분은 REPORTED에서도 가능) */
     async function approveReport(user, reportId, companyComment, opts = {}) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.CONFIRM_REPORT);
         return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
             const report = await api.get('daily_work_reports', reportId);
             if (!report) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
             TVC_WorkReport.fromLegacy(report);
-            if (!TVC_RBAC.isConfirmedStatus(report.status, report.is_locked)) {
+            const hqDirect = TVC_RBAC.canHqDirectApprove(user, report)
+                && (TVC_RBAC.isReportedStatus(report.status, report.is_locked)
+                    || TVC_RBAC.isConfirmedStatus(report.status, report.is_locked));
+            if (!TVC_RBAC.isConfirmedStatus(report.status, report.is_locked) && !hqDirect) {
                 throw Object.assign(new Error('NOT_CONFIRMED'), { code: 'INVALID' });
             }
-            TVC_RBAC.assertReportTransition(user, 'CONFIRMED', 'APPROVED');
+            if (TVC_RBAC.isApprovedStatus(report.status, report.is_locked)) {
+                throw Object.assign(new Error('ALREADY_APPROVED'), { code: 'INVALID' });
+            }
+            const fromStatus = TVC_RBAC.isConfirmedStatus(report.status, report.is_locked) ? 'CONFIRMED' : 'REPORTED';
+            TVC_RBAC.assertReportTransition(user, fromStatus, 'APPROVED');
 
             const isCriticalPostpone = report.work_type === 'POSTPONE' && report.requires_company_approval;
             if (isCriticalPostpone) {

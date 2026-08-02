@@ -223,15 +223,20 @@ const TVC_RBAC = (function () {
     }
 
     function canTransitionReport(user, fromStatus, toStatus) {
+        const role = resolveUserRole(user) || user?.role;
         const from = normalizeReportStatus(fromStatus);
-        const to = normalizeReportStatus(toStatus);
+        // Company Approve 목표값은 APPROVED 유지 (unlocked APPROVED → CONFIRMED 레거시 정규화 회피)
+        const to = (toStatus === ReportStatus.APPROVED || toStatus === 'APPROVED')
+            ? ReportStatus.APPROVED
+            : normalizeReportStatus(toStatus);
         const transitions = {
             SHIP_OFFICER: { REPORTED: [] },
             SHIP_CAPTAIN: { REPORTED: ['CONFIRMED'] },
             SHIP_CHIEF: { REPORTED: ['CONFIRMED'] },
-            HQ_SUPERVISOR: { REPORTED: ['CONFIRMED'], CONFIRMED: ['APPROVED'] },
+            // HQ may Approve own drafts directly from Reported (skip Confirmed/Submitted)
+            HQ_SUPERVISOR: { REPORTED: ['CONFIRMED', 'APPROVED'], CONFIRMED: ['APPROVED'] },
         };
-        return (transitions[user.role]?.[from] || []).includes(to);
+        return (transitions[role]?.[from] || []).includes(to);
     }
 
     function assertReportTransition(user, fromStatus, toStatus) {
@@ -267,7 +272,63 @@ const TVC_RBAC = (function () {
 
     /** HQ 공무감독: Confirmed → Approved */
     function canApproveHqReport(user) {
-        return isHqAccount(user) && can(user, Action.CONFIRM_REPORT);
+        if (!isHqAccount(user)) return false;
+        const role = resolveUserRole(user);
+        const u = role && role !== user.role ? { ...user, role } : user;
+        return can(u, Action.CONFIRM_REPORT);
+    }
+
+    function isSuperintendentLabel(value) {
+        const n = normalizeReportedByLabel(value);
+        return !!n && String(n).toLowerCase() === 'superintendent';
+    }
+
+    /**
+     * Reported by = Superintendent (HQ 직접 작성) 인지.
+     * 이 경우 Status가 Reported만 있어도 Approve 가능 (Confirmed / Submitted 불필요).
+     */
+    function isHqAuthoredRecord(record) {
+        if (!record) return false;
+        if (record.reporter_role === Role.HQ_SUPERVISOR) return true;
+        if (record.creator_role === Role.HQ_SUPERVISOR) return true;
+        if (record.account_type === AccountType.HQ) return true;
+
+        // username / user id (work report는 reported_by = user.id → user-hq)
+        const ids = [record.reported_by, record.created_by, record.operator_id, record.creator_id]
+            .map(v => String(v || '').trim().toLowerCase())
+            .filter(Boolean);
+        for (const id of ids) {
+            if (id === 'hq' || id === 'user-hq') return true;
+            const title = ACCOUNT_TITLES[id];
+            if (title && String(title).toLowerCase() === 'superintendent') return true;
+        }
+
+        // UI Reported by / Made by 표시값
+        return [
+            record.made_by,
+            record.reporter_name,
+            record.creator_name,
+            record.reported_by,
+            record.operator_name,
+        ].some(isSuperintendentLabel);
+    }
+
+    /** HQ 작성분 — 아직 Approved가 아니면 바로 Approve 가능 */
+    function canHqDirectApprove(user, record) {
+        if (!canApproveHqReport(user) || !isHqAuthoredRecord(record)) return false;
+        if (record.approved_at || record.approved_by) return false;
+        if (record.list_status === 'APPROVED' || record.list_status === 'Approved') return false;
+        // Defect closed
+        if (String(record.status || '').toUpperCase() === 'CLOSED') return false;
+        // Work report: locked company approval
+        if (record.is_locked && isApprovedStatus(record.status, record.is_locked)) return false;
+        // list_status가 있으면 SPARE 워크플로 기준 (inventory status APPROVED와 혼동 금지)
+        if (record.list_status != null && String(record.list_status).trim() !== '') {
+            return true;
+        }
+        // Work / Defect — raw APPROVED without lock may be legacy ship-confirm
+        if (isApprovedStatus(record.status, record.is_locked)) return false;
+        return true;
     }
 
     /** @deprecated use canConfirmDepartment — ship-side confirm */
@@ -434,6 +495,7 @@ const TVC_RBAC = (function () {
         canModifySpareInventory, resolveUserRole,
         normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,
         getAccessibleDepartments, canAccessDepartment, canConfirmDepartment, canApproveDepartment, canApproveHqReport,
+        isHqAuthoredRecord, canHqDirectApprove,
     };
 })();
 if (typeof window !== 'undefined') window.TVC_RBAC = TVC_RBAC;

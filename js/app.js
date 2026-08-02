@@ -504,11 +504,31 @@ const TVC_App = (function () {
             state.jobs = allJobs;
             state.components = allComponents;
             state.groups = allGroups;
-            // HQ는 "선택한 선박"의 Import된 리포트만 확인 가능
-            //  (선박에서 Export → HQ가 해당 선박 ZIP을 Import → hq_synced=true, vessel_id 태깅)
+            // HQ: Import된 리포트(hq_synced) + HQ에서 직접 작성한 리포트도 Work History에 표시
+            //  (선박 Export → HQ Import 시 hq_synced/vessel_id 태깅; 로컬 HQ 작성분은 여기서 보정)
+            const hqRole = TVC_RBAC.Role?.HQ_SUPERVISOR || 'HQ_SUPERVISOR';
+            const hqRepair = [];
+            for (const r of allReports) {
+                const hqAuthored = r.reporter_role === hqRole;
+                if (!r.hq_synced && !hqAuthored) continue;
+                let changed = false;
+                if (r.hq_synced !== true && hqAuthored) {
+                    r.hq_synced = true;
+                    changed = true;
+                }
+                if (hqAuthored && !r.vessel_id && state.selectedVesselId) {
+                    r.vessel_id = state.selectedVesselId;
+                    changed = true;
+                }
+                if (changed) hqRepair.push(r);
+            }
+            if (hqRepair.length) {
+                Promise.all(hqRepair.map(r => TVC_DB.put('daily_work_reports', r).catch(() => {})));
+            }
             state.reports = allReports.filter(r =>
                 r.hq_synced === true &&
-                (!state.selectedVesselId || r.vessel_id === state.selectedVesselId)
+                (!state.selectedVesselId || r.vessel_id === state.selectedVesselId
+                    || (r.reporter_role === hqRole && !r.vessel_id))
             );
             state.defectCases = allDefects.filter(d =>
                 (d.hq_synced === true
@@ -1922,10 +1942,16 @@ const TVC_App = (function () {
     }
 
     function menuNecessaryItems() {
+        const role = state.user
+            ? (TVC_RBAC.resolveUserRole?.(state.user) || state.user.role)
+            : null;
+        const isAuthor = role === TVC_RBAC.Role.SHIP_OFFICER;
         return [
-                    { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
+            { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
             { label: 'Data Export & Import', tag: 'C', action: 'TVC_App.openMenuXferMenu()', feature: 'showDataXfer' },
-            { label: 'View Data History', tag: 'C', action: 'TVC_App.openMenuHistoryModal()' },
+            ...(isAuthor ? [] : [
+                { label: 'View Data History', tag: 'C', action: 'TVC_App.openMenuHistoryModal()' },
+            ]),
         ];
     }
 
@@ -4823,7 +4849,10 @@ const TVC_App = (function () {
         if (!TVC_RBAC.canApproveHqReport(state.user)) return false;
         const dc = entry.defect;
         if (dc.status === TVC_DefectCase.Status.CLOSED) return false;
-        return !!dc.confirmed_at && !dc.approved_at;
+        if (dc.approved_at || dc.approved_by) return false;
+        // HQ 작성분: Reported만 있어도 Approve 가능
+        if (TVC_RBAC.canHqDirectApprove(state.user, dc)) return true;
+        return !!dc.confirmed_at;
     }
 
     function isHistRowHqApprovable(entry) {
@@ -4831,9 +4860,15 @@ const TVC_App = (function () {
         if (isHistDefectEntry(entry)) return isHistDefectRowHqApprovable(entry);
         const { report: r, item } = entry;
         if (!r || reportIsApproved(r) || r.is_locked) return false;
-        if (!TVC_RBAC.isConfirmedStatus(r.status, r.is_locked)) return false;
-        if (itemSt(item) !== 'CONFIRMED') return false;
-        if (r.work_type === 'POSTPONE') return postponeRequiresCompanyApproval(r);
+        const hqDirect = TVC_RBAC.canHqDirectApprove(state.user, r)
+            && (itemSt(item) === 'REPORTED' || itemSt(item) === 'CONFIRMED'
+                || TVC_RBAC.isReportedStatus(r.status, r.is_locked)
+                || TVC_RBAC.isConfirmedStatus(r.status, r.is_locked));
+        if (!hqDirect) {
+            if (!TVC_RBAC.isConfirmedStatus(r.status, r.is_locked)) return false;
+            if (itemSt(item) !== 'CONFIRMED') return false;
+            if (r.work_type === 'POSTPONE') return postponeRequiresCompanyApproval(r);
+        }
         return true;
     }
 
@@ -5187,16 +5222,23 @@ const TVC_App = (function () {
         setVis('histBtnModify', modifiableStatus);
         setDis('histBtnModify', !entry || !canModifyHistEntry(entry));
         setDis('histBtnDelete', !entry || !canDeleteHistEntry(entry));
+        const isHq = TVC_RBAC.isHqAccount(state.user);
+        const role = state.user
+            ? (TVC_RBAC.resolveUserRole?.(state.user) || state.user.role)
+            : null;
+        // 작성자(engineer/officer)·HQ: Report Confirm 숨김 (확인자 ce/captain만 표시)
+        const showReportConfirm = !isHq && role !== TVC_RBAC.Role.SHIP_OFFICER;
+        setVis('histBtnApprove', showReportConfirm);
         setDis('histBtnApprove', !canConfirm);
         const approveBtn = document.getElementById('histBtnApprove');
-        if (approveBtn) {
+        if (approveBtn && showReportConfirm) {
             approveBtn.textContent = checkedApprovableCount >= 1
                 ? `Report Confirm (${checkedApprovableCount})`
                 : 'Report Confirm';
         }
         const hqApproveBtn = document.getElementById('histBtnHqApprove');
         if (hqApproveBtn) {
-            hqApproveBtn.classList.toggle('hidden', !TVC_RBAC.isHqAccount(state.user));
+            hqApproveBtn.classList.toggle('hidden', !isHq);
             setDis('histBtnHqApprove', !canHqApprove);
             hqApproveBtn.textContent = checkedHqApproveCount >= 1
                 ? `Approve (${checkedHqApproveCount})`
@@ -5983,6 +6025,18 @@ const TVC_App = (function () {
         postpone: 'Postpone',
     };
 
+    /** Existing Work Report → tab must match saved work_type (no cross-switch) */
+    function workReportTabForType(workType) {
+        return workType === 'POSTPONE' ? 'postpone' : 'repair';
+    }
+
+    function currentWorkReportLockedTab() {
+        if (!state._wrReportId) return null;
+        const rep = state.reports.find(r => r.id === state._wrReportId);
+        if (!rep) return null;
+        return workReportTabForType(rep.work_type);
+    }
+
     /** Original / Work Plan → Report Input: CMAXS 스타일 Work Report 화면 */
     function openWorkReport(jobId, tab) {
         const job = state.idx.jobById.get(jobId);
@@ -6062,7 +6116,8 @@ const TVC_App = (function () {
         state._wrUsedParts = enrichUsedParts(item?.used_parts || rep.used_parts || []);
         state._wrPage = '1';
         state._wrSpareSearch = '';
-        state._wrTab = opts.keepTab || (rep.work_type === 'POSTPONE' ? 'postpone' : 'repair');
+        // Always open on the report's own type — never keep the opposite tab
+        state._wrTab = workReportTabForType(rep.work_type);
         if (!opts.skipRender) renderWorkReportModal();
         if (opts.swapHide) swapHistoryModals('workReportModal', opts.swapHide);
         else showModal('workReportModal');
@@ -6203,6 +6258,8 @@ const TVC_App = (function () {
     function setWorkReportTab(tab) {
         if (state._batchMode && tab !== 'repair') return;
         if (!WR_TABS[tab]) tab = 'repair';
+        const lockedTab = currentWorkReportLockedTab();
+        if (lockedTab && tab !== lockedTab) return;
         if (state._batchMode) captureBatchJobDraft();
         else {
             captureWorkReportForm();
@@ -6974,21 +7031,26 @@ const TVC_App = (function () {
         if (!WR_TABS[state._wrTab]) state._wrTab = 'repair';
         const today = new Date().toISOString().slice(0, 10);
         const ro = !!state._wrReadonly;
-        const tabBtns = Object.entries(WR_TABS).map(([k, label]) =>
-            `<label class="wr-radio${state._wrTab === k ? ' active' : ''}">
-                <input type="radio" name="wrTab" ${state._wrTab === k ? 'checked' : ''} onclick="TVC_App.setWorkReportTab('${k}')"> ${esc(label)}
-            </label>`).join('');
-
         // 승인/확정 워크플로 — Work History에서 리포트를 열었을 때만 활성
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
+        const lockedTab = rep ? workReportTabForType(rep.work_type) : null;
+        if (lockedTab) state._wrTab = lockedTab;
+        const tabBtns = Object.entries(WR_TABS).map(([k, label]) => {
+            const tabLocked = !!(lockedTab && k !== lockedTab);
+            return `<label class="wr-radio${state._wrTab === k ? ' active' : ''}${tabLocked ? ' locked' : ''}"${tabLocked ? ' title="This report type cannot be changed"' : ''}>
+                <input type="radio" name="wrTab" ${state._wrTab === k ? 'checked' : ''}${tabLocked ? ' disabled' : ''} onclick="TVC_App.setWorkReportTab('${k}')"> ${esc(label)}
+            </label>`;
+        }).join('');
         const isCriticalPostpone = state._wrTab === 'postpone' && (
             rep ? postponeRequiresCompanyApproval(rep) : jobShowsCriticalEquipmentMark(job)
         );
         const isRepConfirmed = !!rep && TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked);
         const isRepApproved = !!rep && reportIsApproved(rep);
         const canConfirmNow = !!rep && TVC_RBAC.isReportedStatus(rep.status, rep.is_locked) && TVC_RBAC.canConfirmDepartment(state.user, job.department);
-        const canApproveNow = !!rep && isRepConfirmed && !isRepApproved && TVC_RBAC.canApproveHqReport(state.user)
-            && (state._wrTab !== 'postpone' || isCriticalPostpone);
+        const hqDirectApprove = !!rep && !isRepApproved && TVC_RBAC.canHqDirectApprove(state.user, rep);
+        const canApproveNow = !!rep && !isRepApproved && TVC_RBAC.canApproveHqReport(state.user)
+            && (isRepConfirmed || hqDirectApprove)
+            && (state._wrTab !== 'postpone' || isCriticalPostpone || hqDirectApprove);
         const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getReportedByLabel(state.user);
         const confirmedByVal = isRepConfirmed
             ? (TVC_RBAC.getDepartmentConfirmLabel(job.department) || rep?.confirmed_by || '')
@@ -7167,7 +7229,10 @@ const TVC_App = (function () {
                 return alert(msg);
             } catch (e) { return alert(e.message || e.code); }
         }
-        if (user && rep && TVC_RBAC.isConfirmedStatus(rep.status) && apCb && !apCb.disabled && apCb.checked) {
+        const canApproveFromUi = !!rep && apCb && !apCb.disabled && apCb.checked
+            && (TVC_RBAC.isConfirmedStatus(rep.status)
+                || (TVC_RBAC.canHqDirectApprove(user, rep) && TVC_RBAC.isReportedStatus(rep.status)));
+        if (user && canApproveFromUi) {
             try {
                 const approvedPostponeDate = document.getElementById('wrApprovedPostponeDate')?.value
                     || rep.approved_postpone_date || rep.postpone_date || '';
@@ -7296,6 +7361,9 @@ const TVC_App = (function () {
                         reportDate: form.reportDate || payload.reportDate,
                         workDate: form.workDate || payload.workDate,
                         shipComments: form.spareShipComments || '',
+                        fileNo: form.fileNo || '',
+                        voyNo: form.voyNo || '',
+                        place: form.place || '',
                     };
                     const syncResult = await TVC_SpareMenu.syncConsumeLogFromWorkReport({
                         report,

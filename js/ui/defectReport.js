@@ -1713,8 +1713,9 @@ const TVC_DefectReport = (function () {
         const isConfirmed = !!(row.confirmed_at || row.confirmed_by);
         const isApproved = !!(row.approved_at || row.approved_by);
         const canConfirmNow = isDefectReportConfirmable(row);
-        const canApproveNow = isConfirmed && !isApproved
-            && !!user && TVC_RBAC.isHqAccount(user);
+        // HQ 작성분: Reported만 있어도 Approve 가능 (Confirmed/Submitted 불필요)
+        const canApproveNow = !isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
+            && (isConfirmed || TVC_RBAC.canHqDirectApprove(user, row));
         return {
             isConfirmed,
             isApproved,

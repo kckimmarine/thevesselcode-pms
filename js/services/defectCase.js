@@ -91,6 +91,7 @@ const TVC_DefectCaseService = (function () {
             Object.assign(row, payload, {
                 vessel_id: vesselId || row.vessel_id,
                 reported_by: user?.username || row.reported_by,
+                reporter_role: (user && TVC_RBAC.resolveUserRole(user)) || user?.role || row.reporter_role || '',
             });
             mergeDefectScheduleFields(row, payload);
             if (await persistDefectWithJobSchedule(row, `✏️ [Defect/MODIFIED] ${row.case_no}`)) {
@@ -109,6 +110,7 @@ const TVC_DefectCaseService = (function () {
             row = TVC_DefectCase.blank({
                 vessel_id: vesselId,
                 reported_by: user?.username || '',
+                reporter_role: (user && TVC_RBAC.resolveUserRole(user)) || user?.role || '',
                 department: payload.department || user?.department || '',
             });
             row.case_no = await nextCaseNo(vesselId);
@@ -116,6 +118,7 @@ const TVC_DefectCaseService = (function () {
         Object.assign(row, payload, {
             vessel_id: vesselId || row.vessel_id,
             reported_by: user?.username || row.reported_by,
+            reporter_role: (user && TVC_RBAC.resolveUserRole(user)) || user?.role || row.reporter_role || '',
             status: row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
                 ? row.status
                 : TVC_DefectCase.Status.DRAFT,
@@ -313,8 +316,14 @@ const TVC_DefectCaseService = (function () {
             if (!TVC_RBAC.isHqAccount(user)) {
                 throw Object.assign(new Error('HQ approval only.'), { code: 'FORBIDDEN' });
             }
-            if (!row.confirmed_at) {
+            const hqDirect = TVC_RBAC.canHqDirectApprove(user, row);
+            if (!row.confirmed_at && !hqDirect) {
                 throw Object.assign(new Error('Confirm required before Approve.'), { code: 'INVALID_STATUS' });
+            }
+            // HQ 작성분: Confirmed 없이 Approve — 표시 일관성을 위해 Confirmed도 함께 기록
+            if (!row.confirmed_at && hqDirect) {
+                row.confirmed_by = TVC_RBAC.getRankLabel(user);
+                row.confirmed_at = today;
             }
             row.approved_by = TVC_RBAC.getRankLabel(user);
             row.approved_at = today;

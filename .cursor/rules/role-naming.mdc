@@ -1,0 +1,58 @@
+---
+description: TVC-PMS 역할·워크플로 명명 규칙 (작성자/확인자/승인자)
+alwaysApply: true
+---
+
+# 역할 명명 규칙 (TVC-PMS)
+
+Cursor 작업·UI·주석·기획 시 아래 3단계 용어를 사용한다.
+
+## 1. 작성자 (Author)
+
+- **계정**: Engineer (`engineer`), Officer (`officer`)
+- **코드 역할**: `SHIP_OFFICER`
+- **역할**: 보고·청구·결함 등 **최초 작성** (Reported / Draft)
+
+## 2. 확인자 (Confirmer)
+
+- **계정**: Chief Engineer (`ce`), Captain (`captain`)
+- **코드 역할**: `SHIP_CHIEF`, `SHIP_CAPTAIN`
+- **역할**: 선박 단위 **확인** (Confirmed)
+- **작성자 역할 겸용 가능** — 확인자도 직접 작성(Reported)할 수 있다.
+
+## 3. 승인자 (Approver)
+
+- **계정**: HQ (`hq`)
+- **코드 역할**: `HQ_SUPERVISOR`
+- **역할**: 본사 **최종 승인** (Approved)
+- **작성자 역할 겸용 가능** — 승인자도 직접 작성할 수 있다.
+
+## 워크플로 대응
+
+| 단계 | 한글 | 상태 (코드) | 담당 |
+|------|------|-------------|------|
+| 작성 | Reported | `REPORTED` | 작성자 |
+| 확인 | Confirmed | `CONFIRMED` | 확인자 |
+| 승인 | Approved | `APPROVED` | 승인자 |
+
+## 코드 참조
+
+- RBAC: `js/rbac.js` — `Role`, `APPROVER_ROLES`, `ReportStatus`
+- 계정: `js/auth.js` — `DEFAULT_USERS`, demo password `0000`
+- 계정 표시명: `TVC_RBAC.ACCOUNT_TITLES` (Engineer, Officer, Chief engineer, Captain, Superintendent)
+
+## UI·주석 작성 시
+
+- "승인"이 선박 확인(Confirmed)이면 → **확인자**
+- "승인"이 본사 최종(Approved)이면 → **승인자**
+- Requisition meta의 Confirmed / Approved 행은 각각 **확인자** / **승인자** 기준으로 해석
+
+## SPARE 화면 권한 (작성자)
+
+작성자(`SHIP_OFFICER`)도 다음 SPARE 버튼 사용 가능:
+
+- View Consumption List (`DEDUCT_INVENTORY`)
+- Make Consumption Report (`DEDUCT_INVENTORY`)
+- Input Received Spare Parts (`SUPPLY_PARTS`)
+
+재고 마스터 수정·그룹 편집·Confirm 등은 **확인자** 권한 유지.

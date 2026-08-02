@@ -4,7 +4,7 @@ const TVC_ListFilters = (function () {
         ENGINE: ['C/E', '1/E', '2/E', '3/E'],
         DECK: ['Captain', 'C/O', '2/O(A)', '2/O(B)', '3/O'],
     };
-    const TYPE_LABELS = { all: 'All', m: 'M', p: 'P', d: 'D' };
+    const TYPE_LABELS = { all: 'All', m: 'M', p: 'P', d: 'D', c: 'C' };
     let _openTab = null;
     let _groupSearch = '';
 
@@ -21,8 +21,28 @@ const TVC_ListFilters = (function () {
     function filterBtnId(tab) {
         if (tab === 'actual') return 'actListFilterBtn';
         if (tab === 'history') return 'histListFilterBtn';
+        if (tab === 'consumeLog') return 'consumeLogListFilterBtn';
+        if (tab === 'reqList') {
+            const histBtn = document.getElementById('reqHistListFilterBtn');
+            if (histBtn && histBtn.getClientRects().length > 0) return 'reqHistListFilterBtn';
+            return 'reqListFilterBtn';
+        }
         return null;
     }
+
+    function consumeLogFilterState() {
+        return typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.getConsumeLogListFilters
+            ? TVC_SpareMenu.getConsumeLogListFilters()
+            : { groupKeys: [], type: 'all' };
+    }
+
+    function reqListFilterState() {
+        return typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.getReqListFilters
+            ? TVC_SpareMenu.getReqListFilters()
+            : { groupKeys: [], type: 'all' };
+    }
+
+    const REQ_TYPE_LABELS = { all: 'All', routine: 'Routine', urgent: 'Urgent', dock: 'Dock' };
 
     function isHqMode() {
         const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser?.() : null;
@@ -42,6 +62,12 @@ const TVC_ListFilters = (function () {
         if (tab === 'history') {
             let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0) + (postponeAwaitingActive(f) ? 1 : 0);
             return n;
+        }
+        if (tab === 'consumeLog') {
+            return (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0);
+        }
+        if (tab === 'reqList') {
+            return (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0);
         }
         return 0;
     }
@@ -195,8 +221,16 @@ const TVC_ListFilters = (function () {
     function syncBtn(tab) {
         const btnId = filterBtnId(tab);
         const btn = btnId ? document.getElementById(btnId) : null;
-        if (!btn || !TVC_App?.getListFilterState) return;
-        const n = activeCount(tab, { listFilters: TVC_App.getListFilterState() });
+        if (!btn) return;
+        let n = 0;
+        if (tab === 'consumeLog') {
+            n = activeCount('consumeLog', { listFilters: { consumeLog: consumeLogFilterState() } });
+        } else if (tab === 'reqList') {
+            n = activeCount('reqList', { listFilters: { reqList: reqListFilterState() } });
+        } else {
+            if (!TVC_App?.getListFilterState) return;
+            n = activeCount(tab, { listFilters: TVC_App.getListFilterState() });
+        }
         btn.classList.toggle('list-filter-btn-active', n > 0);
         btn.textContent = n > 0 ? `Filter · ${n}` : 'Filter';
     }
@@ -235,17 +269,19 @@ const TVC_ListFilters = (function () {
         const pop = getPopover();
         const btnId = filterBtnId(tab);
         const btn = btnId ? document.getElementById(btnId) : null;
-        if (!pop || !btn || !TVC_App?.getListFilterState) return;
-        pop.classList.toggle('list-filter-pop-history', tab === 'history');
+        if (!pop || !btn) return;
+        if (tab !== 'consumeLog' && tab !== 'reqList' && !TVC_App?.getListFilterState) return;
+        pop.classList.toggle('list-filter-pop-history', tab === 'history' || tab === 'consumeLog' || tab === 'reqList');
         const state = {
-            listFilters: TVC_App.getListFilterState(),
-            department: TVC_App.getAppDepartment?.(),
-            userDepartment: TVC_App.getAppUserDepartment?.(),
-            selectedGroupKey: TVC_App.getSelectedGroupKey?.(),
-            idx: TVC_App.getAppIdx?.(),
-            jobs: TVC_App.getAppJobs?.(),
+            listFilters: TVC_App?.getListFilterState?.() || {},
+            department: TVC_App?.getAppDepartment?.(),
+            userDepartment: TVC_App?.getAppUserDepartment?.(),
+            selectedGroupKey: TVC_App?.getSelectedGroupKey?.(),
+            idx: TVC_App?.getAppIdx?.(),
+            jobs: TVC_App?.getAppJobs?.(),
         };
-        const f = filters(state, tab);
+        const f = tab === 'consumeLog' ? consumeLogFilterState()
+            : (tab === 'reqList' ? reqListFilterState() : filters(state, tab));
 
         if (tab === 'actual') {
             const sections = workPlanPicSections(state);
@@ -264,6 +300,40 @@ const TVC_ListFilters = (function () {
                     ${single ? '<div class="list-filter-section-title">P.I.C</div>' : ''}
                     ${picChecks}
                     <label class="list-filter-check"><input type="checkbox" id="actFilterUnassigned"${f.unassigned ? ' checked' : ''}> Unassigned</label>
+                </div>
+                <div class="list-filter-actions">
+                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
+                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
+                </div>`;
+        } else if (tab === 'consumeLog') {
+            const types = ['all', 'm', 'd', 'c'];
+            const curType = f.type || 'all';
+            pop.innerHTML = `
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Report type</div>
+                    <div class="list-filter-type-seg">
+                        ${types.map(t => `<button type="button" class="list-filter-type-btn${curType === t ? ' active' : ''}" data-hist-type="${t}">${TYPE_LABELS[t]}</button>`).join('')}
+                    </div>
+                </div>
+                ${renderGroupPanel(f, tab)}
+                <div class="list-filter-actions">
+                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
+                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
+                </div>`;
+        } else if (tab === 'reqList') {
+            const types = ['all', 'routine', 'urgent', 'dock'];
+            const curType = f.type || 'all';
+            pop.innerHTML = `
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Report type</div>
+                    <div class="list-filter-type-seg">
+                        ${types.map(t => `<button type="button" class="list-filter-type-btn${curType === t ? ' active' : ''}" data-hist-type="${t}">${REQ_TYPE_LABELS[t]}</button>`).join('')}
+                    </div>
+                </div>
+                ${renderGroupPanel(f, tab)}
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Status</div>
+                    <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="reqListFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open <span class="muted">(not Received, or Received with O/S &gt; 0)</span></label>
                 </div>
                 <div class="list-filter-actions">
                     <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
@@ -372,7 +442,7 @@ const TVC_ListFilters = (function () {
 
     function resetPopoverForm(tab, pop) {
         pop.querySelectorAll('input[type="checkbox"]').forEach(el => { el.checked = false; });
-        if (tab === 'history') {
+        if (tab === 'history' || tab === 'consumeLog' || tab === 'reqList') {
             pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
             pop.querySelector('[data-hist-type="all"]')?.classList.add('active');
         }
@@ -381,9 +451,9 @@ const TVC_ListFilters = (function () {
             gs.value = '';
             _groupSearch = '';
             const list = pop.querySelector('.list-filter-group-list');
-            if (list && TVC_App?.getListFilterState) {
+            if (list && TVC_App?.getAppIdx) {
                 const state = {
-                    listFilters: TVC_App.getListFilterState(),
+                    listFilters: TVC_App.getListFilterState?.() || {},
                     department: TVC_App.getAppDepartment?.(),
                     idx: TVC_App.getAppIdx?.(),
                 };
@@ -397,6 +467,17 @@ const TVC_ListFilters = (function () {
             const pics = [...pop.querySelectorAll('[data-pic]:checked')].map(el => el.dataset.pic);
             const unassigned = !!pop.querySelector('#actFilterUnassigned')?.checked;
             TVC_App.setListFilters('actual', { pics, unassigned });
+        } else if (tab === 'consumeLog') {
+            const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
+            const typeBtn = pop.querySelector('[data-hist-type].active');
+            const type = typeBtn?.dataset.histType || 'all';
+            TVC_SpareMenu?.setConsumeLogListFilters?.({ groupKeys, type });
+        } else if (tab === 'reqList') {
+            const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
+            const typeBtn = pop.querySelector('[data-hist-type].active');
+            const type = typeBtn?.dataset.histType || 'all';
+            const openOnly = !!pop.querySelector('#reqListFilterOpenOnly')?.checked;
+            TVC_SpareMenu?.setReqListFilters?.({ groupKeys, type, openOnly });
         } else {
             const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
             const openOnly = !!pop.querySelector('#histFilterOpenOnly')?.checked;
@@ -451,16 +532,20 @@ const TVC_ListFilters = (function () {
     }
 
     function describeFilters(tab, state) {
-        const f = filters(state, tab);
+        const f = tab === 'reqList' ? reqListFilterState()
+            : (tab === 'consumeLog' ? consumeLogFilterState() : filters(state, tab));
         const parts = [];
         if (tab === 'actual') {
             if (f.pics?.length) parts.push(`PIC: ${f.pics.join(', ')}`);
             if (f.unassigned) parts.push('PIC: Unassigned');
         }
-        if (tab === 'history') {
-            if (f.type && f.type !== 'all') parts.push(`Type: ${TYPE_LABELS[f.type]}`);
-            if (f.openOnly) parts.push('Open only');
-            if (postponeAwaitingActive(f)) parts.push('Awaiting company approval');
+        if (tab === 'history' || tab === 'consumeLog' || tab === 'reqList') {
+            if (f.type && f.type !== 'all') {
+                parts.push(`Type: ${tab === 'reqList' ? (REQ_TYPE_LABELS[f.type] || f.type) : TYPE_LABELS[f.type]}`);
+            }
+            if (tab === 'history' && f.openOnly) parts.push('Open only');
+            if (tab === 'reqList' && f.openOnly) parts.push('Open');
+            if (tab === 'history' && postponeAwaitingActive(f)) parts.push('Awaiting company approval');
             if (f.groupKeys?.length) parts.push(`Group: ${f.groupKeys.length} selected`);
         }
         return parts;
