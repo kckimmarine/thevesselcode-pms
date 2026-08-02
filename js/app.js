@@ -4214,6 +4214,7 @@ const TVC_App = (function () {
             troublePoint: '',
             outline: '',
             shipComments: '',
+            spareShipComments: '',
             handHours: '0',
             handMembers: '0',
             rhAfterLastMaint: '',
@@ -6280,7 +6281,7 @@ const TVC_App = (function () {
             sort1: job?.item_sort1 || '',
             sort2: job?.item_sort2 || '',
             jobDetail: job?.job_detail || '',
-            shipComments: wf('shipComments', ''),
+            spareShipComments: wf('spareShipComments', ''),
             jobItems: buildWrPage2JobItems(job),
             allowAdd: false,
         };
@@ -7294,7 +7295,7 @@ const TVC_App = (function () {
                     const consumeForm = {
                         reportDate: form.reportDate || payload.reportDate,
                         workDate: form.workDate || payload.workDate,
-                        shipComments: form.shipComments || '',
+                        shipComments: form.spareShipComments || '',
                     };
                     const syncResult = await TVC_SpareMenu.syncConsumeLogFromWorkReport({
                         report,
@@ -8003,7 +8004,7 @@ const TVC_App = (function () {
         openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab,
         enterWorkProcedureEdit, cancelWorkProcedureEdit, saveWorkProcedure, uploadWorkProcedureAttachment, removeWorkProcedureAttachment,
         openProcedureHistory, openProcedureHistoryByCode,
-        openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport,
+        openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport, captureWorkReportForm,
         uploadWrAttachment, removeWrAttachment,
         toggleWrGroupPick, toggleWrJobPick, pickWrGroup, pickWrJob, wrGroupPickSearch, wrJobPickSearch,
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,

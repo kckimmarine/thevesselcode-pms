@@ -8,6 +8,7 @@ const TVC_SpareMenu = (function () {
     let vl = null;
     let vlReqWork = null;
     let _reqWorkHistOpen = false;
+    let _consumeLogHistOpen = false;
     let _closeOsReqId = null;
     let _reqListReturnAfterSave = false;
     let _consumeListReturnAfterSave = false;
@@ -1357,6 +1358,8 @@ const TVC_SpareMenu = (function () {
             consumeShowSelectedOnly: false,
             consumeEditMode: false,
             consumePreview: false,
+            consumeLogListMode: false,
+            consumeLogListEditing: false,
             consumeLastSavedLogId: null,
             receiveOpen: false,
             receiveFocusedId: null,
@@ -5159,6 +5162,64 @@ const TVC_SpareMenu = (function () {
         requestAnimationFrame(syncReqListHeadPad);
     }
 
+    /* ── Consumed Log List window (consumeLogListMode) — mirrors Requisition List ── */
+
+    function isConsumedLogWindow(m) {
+        const s = m?.consumeLogListMode !== undefined ? m : modState(getState());
+        return !!s.consumeOpen && !!s.consumeLogListMode;
+    }
+
+    function consumeLogHistPickBtnLabel(listMode) {
+        return listMode ? 'Select File No.' : 'Consumed Log';
+    }
+
+    function consumeLogListHasDisplayedLog(m) {
+        const s = m?.consumeLogListMode !== undefined ? m : modState(getState());
+        if (!isConsumedLogWindow(s)) return false;
+        const draft = _consumeDraft;
+        if (!draft) return false;
+        if (draft.log_id) return true;
+        const fileNo = String(draft.file_no || document.getElementById('consumeFileNo')?.value || '').trim();
+        const hasLines = (draft.lines || []).length > 0;
+        return !!(fileNo && hasLines);
+    }
+
+    function consumeLogFormLocked() {
+        const m = modState(getState());
+        if (m.consumePreview) return true;
+        return isConsumedLogWindow(m) && !m.consumeLogListEditing;
+    }
+
+    function applyConsumeLogScrollLock(body) {
+        const scroll = body?.querySelector?.('.spare-req-work-scroll');
+        if (!scroll) return;
+        const locked = consumeLogFormLocked();
+        scroll.classList.toggle('is-req-locked', locked);
+        const keepActive = new Set(['consumeLogHistBtn']);
+        scroll.querySelectorAll('input, select, textarea, button').forEach(el => {
+            if (keepActive.has(el.id)) return;
+            if (locked) el.setAttribute('disabled', 'disabled');
+            else el.removeAttribute('disabled');
+        });
+        if (!locked) syncSpareToolbarUi();
+    }
+
+    function syncConsumeLogListWindowHeadButtons() {
+        const m = modState(getState());
+        if (!isConsumedLogWindow(m)) return;
+        const head = document.querySelector('#spareConsumeBody .spare-req-work-head');
+        if (!head) return;
+        const hasDisplayed = consumeLogListHasDisplayedLog(m);
+        const modifyBtn = document.getElementById('consumeLogHeadModifyBtn');
+        const newBtn = document.getElementById('consumeLogHeadNewBtn');
+        const saveBtn = document.getElementById('consumeLogSaveBtn');
+        if (modifyBtn) modifyBtn.disabled = !hasDisplayed || m.consumeLogListEditing;
+        if (newBtn) newBtn.disabled = m.consumeLogListEditing || !canCreateConsume(getState());
+        if (saveBtn) saveBtn.disabled = !m.consumeLogListEditing;
+        setSpareListToolbarBtnDisabled(head, 'consumeLogPrintPreview', !hasDisplayed);
+        setSpareListToolbarBtnDisabled(head, 'consumeLogWindowDocPreview', !hasDisplayed);
+    }
+
     function clearConsumeLogUiState(m) {
         m.consumeLogCheckedIds = {};
         m.selectedConsumeLogId = null;
@@ -5235,6 +5296,49 @@ const TVC_SpareMenu = (function () {
             && !!user && TVC_RBAC.canConfirmDepartment(user, log.department || st.department);
     }
 
+    function consumeLogCanApprove(st, log) {
+        if (!log) return false;
+        const user = spareInventoryUser(st);
+        if (!user || !TVC_RBAC.canApproveHqReport(user)) return false;
+        const status = spareListStatus(log);
+        const isConfirmed = status === SPARE_LIST_STATUS.CONFIRMED || status === SPARE_LIST_STATUS.APPROVED
+            || !!(log?.confirmed_by || log?.confirmed_at);
+        const isApproved = status === SPARE_LIST_STATUS.APPROVED || !!(log?.approved_by || log?.approved_at);
+        return isConfirmed && !isApproved;
+    }
+
+    function consumeLogCheckedConfirmableIds(m, allLogs, st) {
+        const map = m.consumeLogCheckedIds || {};
+        return Object.keys(map).filter(id => {
+            if (!map[id]) return false;
+            const log = allLogs.find(l => l.id === id);
+            return consumeLogCanConfirm(st, log);
+        });
+    }
+
+    function consumeLogCheckedApprovableIds(m, allLogs, st) {
+        const map = m.consumeLogCheckedIds || {};
+        return Object.keys(map).filter(id => {
+            if (!map[id]) return false;
+            const log = allLogs.find(l => l.id === id);
+            return consumeLogCanApprove(st, log);
+        });
+    }
+
+    function consumeLogAnyCheckedCanConfirm(m, allLogs, st) {
+        return consumeLogCheckedConfirmableIds(m, allLogs, st).length > 0;
+    }
+
+    function consumeLogAnyCheckedCanApprove(m, allLogs, st) {
+        return consumeLogCheckedApprovableIds(m, allLogs, st).length > 0;
+    }
+
+    function consumeLogCanDeleteSelection(m, st) {
+        if (!canCreateConsume(st)) return false;
+        return Object.keys(m.consumeLogCheckedIds || {}).some(k => m.consumeLogCheckedIds[k])
+            || !!m.selectedConsumeLogId;
+    }
+
     function syncConsumeLogFilterUi(st) {
         const m = modState(st);
         const fromEl = document.getElementById('consumeLogPeriodFrom');
@@ -5252,7 +5356,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         m.consumeLogPeriodFrom = document.getElementById('consumeLogPeriodFrom')?.value || '';
         m.consumeLogPeriodTo = document.getElementById('consumeLogPeriodTo')?.value || '';
-        renderConsumeLogModal();
+        refreshConsumeLogListUi();
     }
 
     function consumeLogClearPeriod() {
@@ -5260,20 +5364,20 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         m.consumeLogPeriodFrom = '';
         m.consumeLogPeriodTo = '';
-        renderConsumeLogModal();
+        refreshConsumeLogListUi();
     }
 
     function consumeLogSetSearch(v) {
         modState(getState()).consumeLogSearch = v;
         clearTimeout(_consumeLogSearchT);
-        _consumeLogSearchT = setTimeout(() => renderConsumeLogModal(), 150);
+        _consumeLogSearchT = setTimeout(() => refreshConsumeLogListUi(), 150);
     }
 
     function consumeLogClearSearch() {
         modState(getState()).consumeLogSearch = '';
         const el = document.getElementById('consumeLogSearch');
         if (el) el.value = '';
-        renderConsumeLogModal();
+        refreshConsumeLogListUi();
     }
 
     let _consumeLogSearchT = null;
@@ -5296,6 +5400,9 @@ const TVC_SpareMenu = (function () {
             consumed_date: log.consumed_date || '',
             made_on: log.made_on || '',
             made_by: log.made_by || '',
+            file_no: log.file_no || '',
+            voy_no: log.voy_no || '',
+            place: log.place || '',
             spare_group_key: log.pms_group_key || '',
             spare_group_label: log.pms_group_no || '',
             job_code: log.job_code || '',
@@ -5372,6 +5479,260 @@ const TVC_SpareMenu = (function () {
         head.style.paddingRight = sb > 0 ? `${sb}px` : '';
     }
 
+    function syncConsumeLogHistHeadPad() {
+        const scroll = document.getElementById('consumeLogHistListScroll');
+        const head = document.getElementById('consumeLogHistListHead');
+        if (!scroll || !head) return;
+        const sb = scroll.offsetWidth - scroll.clientWidth;
+        head.style.paddingRight = sb > 0 ? `${sb}px` : '';
+    }
+
+    async function refreshConsumeLogListUi() {
+        if (_consumeLogHistOpen) {
+            await refreshConsumeLogHistList();
+            return;
+        }
+        const modal = document.getElementById('spareConsumeLogModal');
+        if (modal && !modal.classList.contains('hidden')) {
+            await renderConsumeLogModal();
+        }
+    }
+
+    async function syncConsumeLogHistPopoverToolbar() {
+        const panel = document.getElementById('consumeLogHistPanel');
+        if (!panel || panel.classList.contains('hidden')) return;
+        const m = modState(getState());
+        if (!isConsumedLogWindow(m)) return;
+        const { st, vesselId } = await vesselScope();
+        const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const canConfirm = consumeLogAnyCheckedCanConfirm(m, allLogs, st);
+        const canApprove = consumeLogAnyCheckedCanApprove(m, allLogs, st);
+        const canDelete = consumeLogCanDeleteSelection(m, st);
+        setSpareListToolbarBtnDisabled(panel, 'consumeLogReportConfirm', !canConfirm);
+        setSpareListToolbarBtnDisabled(panel, 'consumeLogReportApprove', !canApprove);
+        setSpareListToolbarBtnDisabled(panel, 'consumeLogDelete', !canDelete);
+    }
+
+    function positionConsumeLogHistPopover() {
+        const btn = document.getElementById('consumeLogHistBtn');
+        const panel = document.getElementById('consumeLogHistPanel');
+        const meta = document.querySelector('#spareConsumeBody .spare-consume-meta-form');
+        if (!btn || !panel || !meta || panel.classList.contains('hidden')) return;
+        const top = btn.getBoundingClientRect().bottom - meta.getBoundingClientRect().top + 6;
+        panel.style.top = `${Math.max(top, 0)}px`;
+    }
+
+    function setConsumeLogHistOpen(open, opts = {}) {
+        _consumeLogHistOpen = open;
+        if (!open || opts.reset) clearConsumeLogUiState(modState(getState()));
+        const panel = document.getElementById('consumeLogHistPanel');
+        const btn = document.getElementById('consumeLogHistBtn');
+        const meta = document.querySelector('#spareConsumeBody .spare-consume-meta-form');
+        if (panel) {
+            panel.classList.toggle('hidden', !open);
+            panel.setAttribute('aria-hidden', open ? 'false' : 'true');
+        }
+        if (btn) btn.classList.toggle('is-open', open);
+        if (meta) meta.classList.toggle('is-consume-hist-open', open);
+        if (open) {
+            requestAnimationFrame(() => {
+                positionConsumeLogHistPopover();
+                syncConsumeLogHistHeadPad();
+            });
+        }
+    }
+
+    async function refreshConsumeLogHistList() {
+        const panel = document.getElementById('consumeLogHistPanel');
+        if (!panel) return;
+        const { st, vesselId } = await vesselScope();
+        const m = modState(st);
+        const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const logs = filterConsumeLogs(allLogs, st);
+        const rows = buildConsumeLogRowsHtml(logs);
+        const canConfirm = consumeLogAnyCheckedCanConfirm(m, allLogs, st);
+        const canApprove = consumeLogAnyCheckedCanApprove(m, allLogs, st);
+        const canDelete = consumeLogCanDeleteSelection(m, st);
+        const countLabel = `${logs.length}${logs.length !== allLogs.length ? ` / ${allLogs.length}` : ''} item(s)`;
+        const headHtml = `<div class="spare-req-list-head spare-req-hist-popover-head spare-consume-log-toolbar">
+                <h3 class="spare-req-work-title">📋 Consumed Log
+                    <span class="muted spare-req-list-count">${countLabel}</span>
+                </h3>
+                <span class="spare-req-work-head-spacer"></span>
+                ${consumeLogToolbarBtn('Confirm', 'TVC_SpareMenu.consumeLogReportConfirm()', !canConfirm, 'btn-green')}
+                ${consumeLogToolbarBtn('Approve', 'TVC_SpareMenu.consumeLogReportApprove()', !canApprove, 'btn-green')}
+                ${consumeLogToolbarBtn('Delete', 'TVC_SpareMenu.consumeLogDelete()', !canDelete, 'btn-red')}
+                <span class="orig-toolbar-sep" aria-hidden="true"></span>
+                ${consumeLogToolbarBtn('Print', 'TVC_SpareMenu.consumeLogPrint()')}
+                ${consumeLogToolbarBtn('Preview', 'TVC_SpareMenu.consumeLogDocPreview()')}
+                <button type="button" class="modal-x" onclick="TVC_SpareMenu.toggleConsumeLogHistList()" title="Close">×</button>
+            </div>
+            <div class="hist-toolbar hist-toolbar-filters filter-bar spare-list-search-bar spare-consume-log-filters">
+                <div id="consumeLogPeriodFilter" class="act-period-filter" title="Filter by Reported Date">
+                    <span class="act-period-label">Period</span>
+                    <input type="text" id="consumeLogPeriodFrom" class="act-period-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" aria-label="Period from"
+                        value="${escAttr(m.consumeLogPeriodFrom || '')}" onchange="TVC_SpareMenu.consumeLogSetPeriod()">
+                    <span class="act-period-sep">~</span>
+                    <input type="text" id="consumeLogPeriodTo" class="act-period-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" aria-label="Period to"
+                        value="${escAttr(m.consumeLogPeriodTo || '')}" onchange="TVC_SpareMenu.consumeLogSetPeriod()">
+                    <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.consumeLogClearPeriod()">Clear</button>
+                </div>
+                <div class="search-field-wrap">
+                    <input class="search-input" id="consumeLogSearch" placeholder="Search JOB CODE / SORT / DETAIL / STATUS…"
+                        value="${esc(m.consumeLogSearch || '')}" oninput="TVC_SpareMenu.consumeLogSetSearch(this.value)">
+                    <button type="button" class="search-clear-btn${m.consumeLogSearch ? '' : ' hidden'}" title="Clear search" aria-label="Clear search"
+                        onclick="TVC_SpareMenu.consumeLogClearSearch()">×</button>
+                </div>
+            </div>`;
+        panel.innerHTML = `${headHtml}
+            <div class="spare-req-list-panel-wrap spare-req-hist-panel-wrap">
+                <div class="panel spare-req-list-panel spare-consume-log-panel spare-req-hist-list-panel">
+                  <div class="spare-req-list-head-wrap" id="consumeLogHistListHead">
+                    <table class="spare-data-table spare-req-list-table spare-consume-log-table spare-req-list-head-table spare-consume-log-head-table">${CONSUME_LOG_COLGROUP}${consumeLogTableHeadHtml('consumeLogHistHeadChkAll')}</table>
+                  </div>
+                  <div class="spare-req-hist-list-scroll" id="consumeLogHistListScroll">
+                    <table class="spare-data-table spare-req-list-table spare-consume-log-table spare-req-list-body-table spare-consume-log-body-table">${CONSUME_LOG_COLGROUP}<tbody>${rows}</tbody></table>
+                  </div>
+                </div>
+            </div>
+            <p class="spare-req-list-hint spare-req-hist-hint muted">Click a row to load consumption log.</p>`;
+        updateConsumeLogHeadCheckAll(logs);
+        syncConsumeLogFilterUi(st);
+        syncSpareDateInputs(panel);
+        positionConsumeLogHistPopover();
+        requestAnimationFrame(() => {
+            positionConsumeLogHistPopover();
+            syncConsumeLogHistHeadPad();
+        });
+    }
+
+    async function toggleConsumeLogHistList() {
+        if (_consumeLogHistOpen) {
+            setConsumeLogHistOpen(false);
+            return;
+        }
+        setConsumeLogHistOpen(true, { reset: true });
+        await refreshConsumeLogHistList();
+    }
+
+    function syncConsumeLogApprovalSection(draft) {
+        const meta = document.querySelector('#spareConsumeBody .spare-consume-meta-form');
+        if (!meta || !draft || !isConsumedLogWindow(modState(getState()))) return;
+        const st = getState();
+        const m = modState(st);
+        const html = renderConsumeLogApprovalRow(draft, {
+            prefix: 'consumeLog',
+            department: st.department,
+            listMode: true,
+            listEditing: m.consumeLogListEditing,
+        });
+        const existing = meta.querySelector('.spare-req-approval-row');
+        if (existing) existing.outerHTML = html;
+        else meta.insertAdjacentHTML('afterbegin', html);
+    }
+
+    function applyConsumeMetaFromSession(draft) {
+        if (!draft) return;
+        const setVal = (id, val) => {
+            const el = document.getElementById(id);
+            if (el) el.value = val ?? '';
+        };
+        setVal('consumeFileNo', draft.file_no || '');
+        setVal('consumeVoyNo', draft.voy_no || '');
+        setVal('consumePlace', draft.place || '');
+        setVal('consumeDate', fmtSpareDate(draft.consumed_date || ''));
+        setVal('consumeMadeOn', fmtSpareDate(draft.made_on || ''));
+        setVal('consumeMadeBy', resolveSpareReportedBy(draft, spareInventoryUser(getState())));
+        setVal('consumeShipComments', draft.ships_comments || '');
+        renderConsumeJobRowsSection();
+    }
+
+    async function loadConsumeLogIntoListWindow(logId, opts = {}) {
+        closeAllConsumeMetaPicks();
+        const log = await TVC_Inventory.getConsumeLog(logId);
+        if (!log) {
+            alert('Consumption log not found.');
+            return false;
+        }
+        _consumeDraft = consumeDraftFromLog(log);
+        syncConsumeLineMap();
+        const st = getState();
+        const m = modState(st);
+        applyConsumeLogSelection(m, log.id);
+        m.consumeLogListEditing = false;
+        m.consumeShowSelectedOnly = true;
+        m.consumeLastSavedLogId = log.id;
+        st.selectedGroupKey = null;
+        st.treeSearch = '';
+        m.partNo = '';
+        m.description = '';
+        st.spareSearch = '';
+        const preserveHist = opts.preserveHistPopover !== false
+            && _consumeLogHistOpen
+            && isConsumedLogWindow(m);
+        if (preserveHist) {
+            const histScroll = document.getElementById('consumeLogHistListScroll');
+            const histScrollTop = histScroll?.scrollTop ?? 0;
+            applyConsumeMetaFromSession(_consumeDraft);
+            syncConsumeLogApprovalSection(_consumeDraft);
+            updateConsumeHeadStats();
+            syncConsumeLogListWindowHeadButtons();
+            refreshConsumeListUi();
+            await syncConsumeLogHistPopoverToolbar();
+            applyConsumeLogScrollLock(document.getElementById('spareConsumeBody'));
+            if (histScroll) histScroll.scrollTop = histScrollTop;
+            return true;
+        }
+        await renderConsumeModal();
+        return true;
+    }
+
+    async function startConsumeLogListSession(opts = {}) {
+        const { st } = await vesselScope();
+        const user = spareInventoryUser(st);
+        if (!user) return alert('Login required.');
+        _consumeDraft = newConsumeDraft(st, user);
+        syncConsumeLineMap();
+        const m = modState(st);
+        m.consumeOpen = true;
+        m.consumeLogListMode = true;
+        m.consumeLogListEditing = false;
+        m.consumeEditMode = false;
+        m.consumePreview = false;
+        m.consumeLastSavedLogId = null;
+        m.consumeFocusedId = null;
+        m.consumeShowSelectedOnly = true;
+        m.consumeTreeOpen = false;
+        m.partNo = '';
+        m.description = '';
+        st.spareSearch = '';
+        st.treeSearch = '';
+        st.selectedGroupKey = null;
+        _consumeGroupPickSearch = '';
+        _consumeJobPickSearch = '';
+        closeAllConsumeMetaPicks();
+        if (opts.openSelectList) setConsumeLogHistOpen(true, { reset: true });
+        else setConsumeLogHistOpen(false);
+        await renderConsumeModal();
+        showSpicsModal('spareConsumeModal');
+    }
+
+    async function consumeLogEnterListEdit() {
+        const st = getState();
+        const m = modState(st);
+        if (!isConsumedLogWindow(m)) return;
+        if (!canCreateConsume(st)) {
+            alert('No permission to modify consumption logs.');
+            return;
+        }
+        if (!consumeLogListHasDisplayedLog(m)) {
+            return alert('Select a consumption log from the list first.');
+        }
+        if (m.consumeLogListEditing) return;
+        m.consumeLogListEditing = true;
+        await renderConsumeModal();
+    }
+
     function buildConsumeLogRowsHtml(logs) {
         if (!logs.length) {
             return `<tr><td colspan="8" class="spare-req-list-empty">
@@ -5424,14 +5785,12 @@ const TVC_SpareMenu = (function () {
         if (!body) return;
         const { st, vesselId } = await vesselScope();
         const m = modState(st);
-        const canConsume = canCreateConsume(st);
         const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
         const logs = filterConsumeLogs(allLogs, st);
         const rows = buildConsumeLogRowsHtml(logs);
-        const selId = m.selectedConsumeLogId;
-        const selLog = selId ? allLogs.find(l => l.id === selId) : null;
-        const hasSel = !!selLog;
-        const canConfirm = consumeLogCanConfirm(st, selLog);
+        const canConfirm = consumeLogAnyCheckedCanConfirm(m, allLogs, st);
+        const canApprove = consumeLogAnyCheckedCanApprove(m, allLogs, st);
+        const canDelete = consumeLogCanDeleteSelection(m, st);
 
         body.innerHTML = `
             <div class="spare-req-list-wrap spare-consume-log-wrap">
@@ -5440,12 +5799,9 @@ const TVC_SpareMenu = (function () {
                   <span class="muted spare-req-list-count">${logs.length}${logs.length !== allLogs.length ? ` / ${allLogs.length}` : ''} item(s)</span>
                 </h3>
                 <span class="spare-req-work-head-spacer"></span>
-                ${consumeLogToolbarBtn('Detail Report', 'TVC_SpareMenu.consumeLogDetailReport()', !hasSel)}
-                ${consumeLogToolbarBtn('Report Confirm', 'TVC_SpareMenu.consumeLogReportConfirm()', !canConfirm, 'btn-green')}
-                <span class="orig-toolbar-sep" aria-hidden="true"></span>
-                ${consumeLogToolbarBtn('New', 'TVC_SpareMenu.consumeLogNew()', !canConsume, 'btn-green')}
-                ${consumeLogToolbarBtn('Modify', 'TVC_SpareMenu.consumeLogModify()', !canConsume || !hasSel)}
-                ${consumeLogToolbarBtn('Delete', 'TVC_SpareMenu.consumeLogDelete()', !canConsume || !hasSel, 'btn-red')}
+                ${consumeLogToolbarBtn('Confirm', 'TVC_SpareMenu.consumeLogReportConfirm()', !canConfirm, 'btn-green')}
+                ${consumeLogToolbarBtn('Approve', 'TVC_SpareMenu.consumeLogReportApprove()', !canApprove, 'btn-green')}
+                ${consumeLogToolbarBtn('Delete', 'TVC_SpareMenu.consumeLogDelete()', !canDelete, 'btn-red')}
                 <span class="orig-toolbar-sep" aria-hidden="true"></span>
                 ${consumeLogToolbarBtn('Print', 'TVC_SpareMenu.consumeLogPrint()')}
                 ${consumeLogToolbarBtn('Preview', 'TVC_SpareMenu.consumeLogDocPreview()')}
@@ -5499,14 +5855,22 @@ const TVC_SpareMenu = (function () {
     }
 
     function viewConsumedLog() {
-        openConsumeLogModal();
+        openConsumedLogWindow();
+    }
+
+    async function openConsumedLogWindow() {
+        clearConsumeLogUiState(modState(getState()));
+        await startConsumeLogListSession({ openSelectList: true });
     }
 
     async function consumeLogSelectRow(id) {
         const m = modState(getState());
-        // 행 클릭은 하이라이트(선택)만 — Requisition List와 동일
         m.selectedConsumeLogId = id;
-        await renderConsumeLogModal();
+        if (isConsumedLogWindow(m)) {
+            await loadConsumeLogIntoListWindow(id, { preserveHistPopover: true });
+            return;
+        }
+        await refreshConsumeLogListUi();
     }
 
     async function consumeLogToggleRow(id, checked) {
@@ -5519,7 +5883,7 @@ const TVC_SpareMenu = (function () {
             delete map[id];
             if (m.selectedConsumeLogId === id) m.selectedConsumeLogId = null;
         }
-        await renderConsumeLogModal();
+        await refreshConsumeLogListUi();
     }
 
     async function consumeLogToggleAll(checked) {
@@ -5535,25 +5899,89 @@ const TVC_SpareMenu = (function () {
             m.consumeLogCheckedIds = {};
             m.selectedConsumeLogId = null;
         }
-        await renderConsumeLogModal();
+        await refreshConsumeLogListUi();
     }
 
     async function consumeLogReportConfirm() {
         const st = getState();
-        const id = modState(st).selectedConsumeLogId;
-        if (!id) return alert('Select a consumption log.');
-        const log = await TVC_Inventory.getConsumeLog(id);
-        if (!log) return alert('Consumption log not found.');
-        if (!consumeLogCanConfirm(st, log)) {
-            return alert('Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
+        const m = modState(st);
+        const { vesselId } = await vesselScope();
+        const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const checkedIds = Object.keys(m.consumeLogCheckedIds || {}).filter(k => m.consumeLogCheckedIds[k]);
+        const idsToConfirm = checkedIds.length
+            ? consumeLogCheckedConfirmableIds(m, allLogs, st)
+            : [];
+        if (!idsToConfirm.length) {
+            if (checkedIds.length) {
+                return alert('None of the selected logs can be confirmed. Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
+            }
+            return alert('Check one or more Reported logs to confirm.');
         }
-        const user = spareInventoryUser(st);
-        log.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(log.department || st.department) || TVC_RBAC.getRankLabel(user);
-        log.confirmed_at = new Date().toISOString();
-        log.list_status = SPARE_LIST_STATUS.CONFIRMED;
-        await TVC_Inventory.saveConsumeLog(log);
-        await renderConsumeLogModal();
-        alert('Report confirmed.');
+        const loadedId = _consumeDraft?.log_id || m.selectedConsumeLogId;
+        let confirmed = 0;
+        let needReload = false;
+        for (const id of idsToConfirm) {
+            const log = await TVC_Inventory.getConsumeLog(id);
+            if (!log || !consumeLogCanConfirm(st, log)) continue;
+            const user = spareInventoryUser(st);
+            log.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(log.department || st.department) || TVC_RBAC.getRankLabel(user);
+            log.confirmed_at = new Date().toISOString();
+            log.list_status = SPARE_LIST_STATUS.CONFIRMED;
+            await TVC_Inventory.saveConsumeLog(log);
+            confirmed++;
+            if (loadedId === id) needReload = true;
+        }
+        if (needReload && isConsumedLogWindow(m)) {
+            await loadConsumeLogIntoListWindow(loadedId, { preserveHistPopover: true });
+        }
+        await refreshConsumeLogListUi();
+        const skipped = checkedIds.length - confirmed;
+        if (skipped > 0) {
+            alert(`Confirmed ${confirmed} log(s). Skipped ${skipped} (not Reported or no permission).`);
+        } else {
+            alert(`Confirmed ${confirmed} log(s).`);
+        }
+    }
+
+    async function consumeLogReportApprove() {
+        const st = getState();
+        const m = modState(st);
+        const { vesselId } = await vesselScope();
+        const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
+        const checkedIds = Object.keys(m.consumeLogCheckedIds || {}).filter(k => m.consumeLogCheckedIds[k]);
+        const idsToApprove = checkedIds.length
+            ? consumeLogCheckedApprovableIds(m, allLogs, st)
+            : [];
+        if (!idsToApprove.length) {
+            if (checkedIds.length) {
+                return alert('None of the selected logs can be approved. Only Confirmed logs can be approved, and you need HQ Superintendent permission.');
+            }
+            return alert('Check one or more Confirmed logs to approve.');
+        }
+        const loadedId = _consumeDraft?.log_id || m.selectedConsumeLogId;
+        let approved = 0;
+        let needReload = false;
+        const now = new Date().toISOString();
+        for (const id of idsToApprove) {
+            const log = await TVC_Inventory.getConsumeLog(id);
+            if (!log || !consumeLogCanApprove(st, log)) continue;
+            log.approved_by = 'Company';
+            log.approved_at = now;
+            log.list_status = SPARE_LIST_STATUS.APPROVED;
+            await TVC_Inventory.saveConsumeLog(log);
+            approved++;
+            if (loadedId === id) needReload = true;
+        }
+        if (needReload && isConsumedLogWindow(m)) {
+            await loadConsumeLogIntoListWindow(loadedId, { preserveHistPopover: true });
+        }
+        await refreshConsumeLogListUi();
+        const skipped = checkedIds.length - approved;
+        if (skipped > 0) {
+            alert(`Approved ${approved} log(s). Skipped ${skipped} (not Confirmed or no permission).`);
+        } else {
+            alert(`Approved ${approved} log(s).`);
+        }
     }
 
     async function consumeLogDetailReport() {
@@ -5569,6 +5997,15 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         if (!canCreateConsume(st)) {
             alert('No permission to enter consumption records.');
+            return;
+        }
+        const m = modState(st);
+        if (isConsumedLogWindow(m)) {
+            if (m.consumeLogListEditing) return;
+            m.consumeLogListMode = false;
+            m.consumeLogListEditing = false;
+            setConsumeLogHistOpen(false);
+            await startConsumeSession();
             return;
         }
         closeConsumeLogModal();
@@ -5644,6 +6081,15 @@ const TVC_SpareMenu = (function () {
         const log = await TVC_Inventory.getConsumeLog(m.selectedConsumeLogId);
         if (!log) return alert('Consumption log not found.');
         if (!(log.lines || []).length) return alert('No parts to edit.');
+        if (isConsumedLogWindow(m)) {
+            if (!consumeLogListHasDisplayedLog(m)) {
+                return alert('Select a consumption log from the list first.');
+            }
+            if (m.consumeLogListEditing) return;
+            m.consumeLogListEditing = true;
+            await renderConsumeModal();
+            return;
+        }
         const logId = m.selectedConsumeLogId;
         closeConsumeLogModal();
         _consumeListReturnAfterSave = true;
@@ -5682,7 +6128,7 @@ const TVC_SpareMenu = (function () {
         m.selectedConsumeLogId = null;
         m.consumeLogCheckedIds = {};
         await refresh();
-        await renderConsumeLogModal();
+        await refreshConsumeLogListUi();
     }
 
     async function consumeLogPreview() {
@@ -5741,7 +6187,7 @@ const TVC_SpareMenu = (function () {
             <div class="req-preview-doc-title">CONSUMED SPARE PARTS LOG</div>
             <table class="req-preview-meta">
                 <tbody>
-                    <tr><th>Vessel Name</th><td>${esc(vesselName)}</td><th>Consumed Date</th><td>${esc(log.consumed_date || '—')}</td></tr>
+                    <tr><th>Vessel Name</th><td>${esc(vesselName)}</td><th>Work Date</th><td>${esc(log.consumed_date || '—')}</td></tr>
                     ${buildConsumeLogJobMetaRowsHtml(log)}
                     <tr><th>Ship's Comments</th><td colspan="3">${esc(comments || '—')}</td></tr>
                 </tbody>
@@ -5783,7 +6229,7 @@ const TVC_SpareMenu = (function () {
 
     async function consumeLogPrintPreview() {
         const m = modState(getState());
-        const id = m.consumeLastSavedLogId;
+        const id = _consumeDraft?.log_id || m.consumeLastSavedLogId || m.selectedConsumeLogId;
         if (!id) return alert('Consumption log not found.');
         const html = await buildConsumeLogPrintDocument(id);
         if (!html) return alert('Consumption log not found.');
@@ -5796,11 +6242,32 @@ const TVC_SpareMenu = (function () {
         w.print();
     }
 
+    async function consumeLogWindowDocPreview() {
+        const m = modState(getState());
+        const id = _consumeDraft?.log_id || m.consumeLastSavedLogId || m.selectedConsumeLogId;
+        if (!id || !consumeLogListHasDisplayedLog(m)) {
+            return alert('Select a consumption log from the list first.');
+        }
+        const html = await buildConsumeLogPrintDocument(id);
+        if (!html) return alert('Consumption log not found.');
+        const w = window.open('', '_blank', 'width=980,height=760');
+        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return; }
+        w.document.write(`<!DOCTYPE html><html><head><title>Consumed Spare Parts Log</title>
+            <style>${reqPreviewPrintStyles()}</style></head><body>${html}</body></html>`);
+        w.document.close();
+        w.focus();
+    }
+
     async function consumeLogOpenList() {
         const m = modState(getState());
+        if (isConsumedLogWindow(m)) {
+            await toggleConsumeLogHistList();
+            return;
+        }
         const selectId = m.consumeLastSavedLogId || null;
-        closeConsumeModal();
-        await openConsumeLogModal(selectId ? { selectId } : {});
+        closeConsumeModal({ skipConfirm: true });
+        await openConsumedLogWindow();
+        if (selectId) await loadConsumeLogIntoListWindow(selectId, { preserveHistPopover: true });
     }
 
     async function renderReqDetail(reqId, isHq, canRequisition, detailId = 'spareReqListDetail') {
@@ -8829,13 +9296,54 @@ const TVC_SpareMenu = (function () {
         return `<div class="spare-req-approval-row">${renderSpareApprovalSection(req, opts)}</div>`;
     }
 
+    function consumeLogApprovalState(record, department, opts = {}) {
+        const st = getState();
+        const dept = department || spareRecordDepartment(record, st);
+        const status = spareListStatus(record);
+        const isConfirmed = status === SPARE_LIST_STATUS.CONFIRMED || status === SPARE_LIST_STATUS.APPROVED
+            || !!(record?.confirmed_by || record?.confirmed_at);
+        const isApproved = status === SPARE_LIST_STATUS.APPROVED || !!(record?.approved_by || record?.approved_at);
+        const hasKey = !!(record?.log_id || record?.id);
+        const listMode = !!opts.listMode;
+        const listEditing = !!opts.listEditing;
+        const isHq = isReqListHqUser(st);
+        const canConfirmNow = hasKey && consumeLogCanConfirm(st, { ...record, department: dept })
+            && (!listMode || listEditing);
+        const canApproveNow = hasKey && consumeLogCanApprove(st, { ...record, department: dept })
+            && (!listMode || listEditing || isHq);
+        return {
+            isConfirmed,
+            isApproved,
+            canConfirmNow,
+            canApproveNow,
+            confirmedByVal: isConfirmed
+                ? (record?.confirmed_by || requisitionConfirmByLabel(st, record))
+                : '',
+            approvedByVal: isApproved ? 'Company' : '',
+        };
+    }
+
+    function renderConsumeLogApprovalRow(record, opts = {}) {
+        const approval = consumeLogApprovalState(record, opts.department, opts);
+        return `<div class="spare-req-approval-row">${renderSpareApprovalHtml({
+            prefix: opts.prefix || 'consumeLog',
+            canConfirmNow: approval.canConfirmNow,
+            canApproveNow: approval.canApproveNow,
+            isRepConfirmed: approval.isConfirmed,
+            isRepApproved: approval.isApproved,
+            confirmedByVal: approval.confirmedByVal,
+            approvedByVal: approval.approvedByVal,
+        })}</div>`;
+    }
+
     function spareConfirmedByToggle(prefix) {
         const cb = document.getElementById(`${prefix}ConfirmedBy`);
         if (!cb || cb.disabled) return;
         const input = cb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
         if (!input) return;
         const st = getState();
-        const record = prefix === 'reqWork' ? _reqWorkDraft : null;
+        const record = prefix === 'reqWork' ? _reqWorkDraft
+            : (prefix === 'consumeLog' ? _consumeDraft : null);
         if (cb.checked) {
             if (prefix === 'closeOs') {
                 input.value = requisitionConfirmByLabel(st, { department: st.department });
@@ -8862,6 +9370,8 @@ const TVC_SpareMenu = (function () {
         let changed = false;
         const canConfirm = prefix === 'reqWork'
             ? canConfirmRequisition(st, record)
+            : (prefix === 'consumeLog' || prefix === 'consume')
+            ? consumeLogCanConfirm(st, { ...record, department: dept })
             : TVC_RBAC.canConfirmDepartment(user, dept);
         if (cfCb?.checked && !cfCb.disabled && canConfirm) {
             if (!record.confirmed_by && !record.confirmed_at) {
@@ -8889,7 +9399,10 @@ const TVC_SpareMenu = (function () {
         const key = kind === 'consume' ? record.log_id : record.id;
         if (!key) return false;
         const before = spareListStatus(record);
-        if (!applySpareApprovalFromUi(record, kind === 'consume' ? 'consume' : 'reqWork', department)) return false;
+        const prefix = kind === 'consume'
+            ? (isConsumedLogWindow() ? 'consumeLog' : 'consume')
+            : 'reqWork';
+        if (!applySpareApprovalFromUi(record, prefix, department)) return false;
         const after = spareListStatus(record);
         if (after === before) return false;
         if (kind === 'consume') {
@@ -8907,6 +9420,7 @@ const TVC_SpareMenu = (function () {
     function captureReqWorkMeta() {
         const req = _reqWorkDraft;
         if (!req) return;
+        const st = getState();
         const g = (id) => document.getElementById(id)?.value ?? '';
         reqApplyTypeKind(req, document.querySelector('input[name="reqWorkPriority"]:checked')?.value || 'ROUTINE');
         req.deliver_date_from = g('reqWorkDelFrom');
@@ -8916,9 +9430,11 @@ const TVC_SpareMenu = (function () {
         req.vendor_comments = g('reqWorkVendorComments');
         req.req_no = g('reqWorkReqNo').trim();
         req.made_on = g('reqWorkMadeOn');
-        req.made_by = resolveSpareReportedBy(req, spareInventoryUser(getState()));
-        req.assessed_on = g('reqWorkAssessedOn');
-        req.assessed_by = g('reqWorkAssessedBy');
+        req.made_by = resolveSpareReportedBy(req, spareInventoryUser(st));
+        if (isReqListHqUser(st)) {
+            req.assessed_on = g('reqWorkAssessedOn');
+            req.assessed_by = g('reqWorkAssessedBy');
+        }
         updateReqWorkHeadStats();
     }
 
@@ -8927,6 +9443,16 @@ const TVC_SpareMenu = (function () {
         const preview = !!opts.preview;
         const docPreview = !!opts.docPreview;
         const st = getState();
+        const isHq = isReqListHqUser(st);
+        const listMode = !!opts.listMode;
+        const listEditing = !!modState(st).reqWorkListEditing;
+        const evalEditable = isHq && !preview && !docPreview;
+        const evalOnChange = evalEditable ? ' onchange="TVC_SpareMenu.captureReqWorkMeta()"' : '';
+        const evalRo = evalEditable ? '' : ' readonly disabled tabindex="-1"';
+        const evalRoClass = evalEditable ? '' : ' wr-ro';
+        const commentsEditable = !preview && !docPreview && (!listMode || listEditing);
+        const commentsRo = commentsEditable ? '' : ' disabled readonly tabindex="-1"';
+        const commentsOnInput = commentsEditable ? ' oninput="TVC_SpareMenu.captureReqWorkMeta()"' : '';
         const reportedByVal = resolveSpareReportedBy(req, spareInventoryUser(st));
         const today = new Date().toISOString().slice(0, 10);
         const reqType = reqListTypeKind(req);
@@ -8976,20 +9502,6 @@ const TVC_SpareMenu = (function () {
                             <input type="text" id="reqWorkDelPort" class="spare-req-meta-input" value="${esc(req.deliver_port || '')}" placeholder="Required port" onchange="TVC_SpareMenu.captureReqWorkMeta()">
                         </div>
                     </div>
-                    ${!opts.listMode ? `<div class="spare-req-meta-row spare-req-meta-row-comments">
-                        <label class="spare-req-meta-label" for="reqWorkShipComments">SHIP'S COMMENTS</label>
-                        <div class="spare-req-meta-field">
-                            <textarea id="reqWorkShipComments" class="spare-req-meta-input spare-req-meta-textarea" rows="2"
-                                placeholder="Enter ship-side remarks for this requisition…"${preview || docPreview ? ' disabled readonly tabindex="-1"' : ' oninput="TVC_SpareMenu.captureReqWorkMeta()"'}>${esc(req.ships_comments || '')}</textarea>
-                        </div>
-                    </div>
-                    <div class="spare-req-meta-row spare-req-meta-row-comments">
-                        <label class="spare-req-meta-label" for="reqWorkVendorComments">VENDOR'S COMMENTS</label>
-                        <div class="spare-req-meta-field">
-                            <textarea id="reqWorkVendorComments" class="spare-req-meta-input spare-req-meta-textarea" rows="2"
-                                placeholder="Enter vendor remarks for this requisition…"${preview || docPreview ? ' disabled readonly tabindex="-1"' : ' oninput="TVC_SpareMenu.captureReqWorkMeta()"'}>${esc(req.vendor_comments || '')}</textarea>
-                        </div>
-                    </div>` : ''}
                 </div>
                 <div class="spare-req-meta-col spare-req-meta-col-right">
                     <div class="spare-req-meta-row spare-req-meta-row-priority">
@@ -9011,10 +9523,22 @@ const TVC_SpareMenu = (function () {
                     <div class="spare-req-meta-row spare-req-meta-row-audit">
                         <span class="spare-req-meta-label">Evaluated Date</span>
                         <div class="spare-req-meta-field spare-req-meta-audit">
-                            <input type="text" id="reqWorkAssessedOn" class="spare-req-meta-input spare-req-meta-date tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.assessed_on || ''))}" onchange="TVC_SpareMenu.captureReqWorkMeta()">
+                            <input type="text" id="reqWorkAssessedOn" class="spare-req-meta-input spare-req-meta-date tvc-date-input${evalRoClass}" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.assessed_on || ''))}"${evalRo}${evalOnChange}>
                             <span class="spare-req-meta-by">by</span>
-                            <input type="text" id="reqWorkAssessedBy" class="spare-req-meta-input spare-req-meta-by-name" value="${esc(req.assessed_by || '')}" placeholder="Superintendent" onchange="TVC_SpareMenu.captureReqWorkMeta()">
+                            <input type="text" id="reqWorkAssessedBy" class="spare-req-meta-input spare-req-meta-by-name${evalRoClass}" value="${esc(req.assessed_by || '')}" placeholder="Superintendent"${evalRo}${evalOnChange}>
                         </div>
+                    </div>
+                </div>
+                <div class="spare-req-meta-comments-row">
+                    <div class="spare-consume-meta-comments">
+                        <label class="spare-consume-meta-col-head" for="reqWorkShipComments">Ship's Comments (If any)</label>
+                        <textarea id="reqWorkShipComments" class="spare-req-meta-input spare-consume-meta-textarea spare-req-meta-comments-textarea" rows="4"
+                            placeholder="Enter ship-side remarks for this requisition…"${commentsRo}${commentsOnInput}>${esc(req.ships_comments || '')}</textarea>
+                    </div>
+                    <div class="spare-consume-meta-comments">
+                        <label class="spare-consume-meta-col-head" for="reqWorkVendorComments">Vendor's Comments</label>
+                        <textarea id="reqWorkVendorComments" class="spare-req-meta-input spare-consume-meta-textarea spare-req-meta-comments-textarea" rows="4"
+                            placeholder="Enter vendor remarks for this requisition…"${commentsRo}${commentsOnInput}>${esc(req.vendor_comments || '')}</textarea>
                     </div>
                 </div>
             </div>
@@ -10307,6 +10831,9 @@ const TVC_SpareMenu = (function () {
             consumed_date: today,
             made_on: today,
             made_by: spareReportedByForUser(user),
+            file_no: '',
+            voy_no: '',
+            place: '',
             list_status: SPARE_LIST_STATUS.DRAFT,
             confirmed_by: '',
             confirmed_at: '',
@@ -10462,6 +10989,9 @@ const TVC_SpareMenu = (function () {
         draft.consumed_date = g('consumeDate');
         draft.made_on = g('consumeMadeOn');
         draft.made_by = resolveSpareReportedBy(draft, spareInventoryUser(getState()));
+        draft.file_no = g('consumeFileNo');
+        draft.voy_no = g('consumeVoyNo');
+        draft.place = g('consumePlace');
         draft.ships_comments = g('consumeShipComments');
         const rowEls = document.querySelectorAll('[data-consume-job-row]');
         if (rowEls.length) {
@@ -10513,6 +11043,9 @@ const TVC_SpareMenu = (function () {
         set('consumeDate', fmtSpareDate(draft.consumed_date));
         set('consumeMadeOn', fmtSpareDate(draft.made_on));
         set('consumeMadeBy', resolveSpareReportedBy(draft, spareInventoryUser(getState())));
+        set('consumeFileNo', draft.file_no || '');
+        set('consumeVoyNo', draft.voy_no || '');
+        set('consumePlace', draft.place || '');
         set('consumeShipComments', draft.ships_comments);
         const groupText = document.getElementById('consumeGroupPickText');
         if (groupText) {
@@ -10523,7 +11056,45 @@ const TVC_SpareMenu = (function () {
         renderConsumeJobRowsSection();
     }
 
+    function renderConsumeMaintJobRowHtml(row, idx, opts = {}) {
+        const ro = !!opts.readonly;
+        const batch = !!opts.batch;
+        const jobDisabled = !opts.groupKey;
+        const fld = (label, inner) => `<div class="wr-maint-field"><label>${label}</label>${inner}</div>`;
+        const roInp = (val, field) => field
+            ? `<input class="wr-ro" data-field="${field}" value="${esc(val || '')}" readonly tabindex="-1">`
+            : `<input class="wr-ro" value="${esc(val || '')}" readonly tabindex="-1">`;
+        let jobInner;
+        if (ro) {
+            jobInner = roInp(row.job_code, 'job_code');
+        } else {
+            jobInner = `<button type="button" id="consumeJobPickTrigger-${idx}" class="wr-maint-job-pick spare-consume-job-pick-trigger"${jobDisabled ? ' disabled' : ''} onclick="TVC_SpareMenu.toggleConsumeJobPick(event, ${idx})">
+                    <span class="spare-consume-pick-text">${esc(row.job_code || '— Select JOB CODE —')}</span>
+                    <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
+                </button>
+                <input type="hidden" data-field="job_code" value="${escAttr(row.job_code || '')}">`;
+        }
+        const sort1Inner = roInp(row.sort1, 'sort1');
+        const sort2Inner = roInp(row.sort2, 'sort2');
+        const detailInner = ro
+            ? roInp(row.job_detail, 'job_detail')
+            : `<input type="text" id="consumeJobDetail-${idx}" data-field="job_detail" value="${esc(row.job_detail || '')}" onchange="TVC_SpareMenu.captureConsumeMeta()">`;
+        const actCol = batch && !ro && (opts.rowCount || 0) > 1
+            ? `<div class="wr-maint-field wr-page2-job-row-act"><label aria-hidden="true">&nbsp;</label><button type="button" class="btn btn-sm spare-consume-job-row-rm" onclick="TVC_SpareMenu.removeConsumeJobRow(${idx})" title="Remove job row" aria-label="Remove job row">×</button></div>`
+            : '';
+        const gapCls = idx === 0 ? ' wr-maint-grid-gap' : '';
+        const gridCols = actCol ? ' wr-maint-grid-4 wr-page2-job-grid-batch' : ' wr-maint-grid-4';
+        return `<div class="wr-maint-grid${gridCols}${gapCls} wr-page2-job-row" data-consume-job-row="${idx}">
+                ${fld('Job Code', jobInner)}
+                ${fld('SORT-1', sort1Inner)}
+                ${fld('SORT-2', sort2Inner)}
+                ${fld('Job Detail', detailInner)}
+                ${actCol}
+            </div>`;
+    }
+
     function renderConsumeJobRowFieldHtml(row, idx, opts = {}) {
+        if (opts.maintStyle) return renderConsumeMaintJobRowHtml(row, idx, opts);
         const ro = !!opts.readonly;
         const batch = !!opts.batch;
         const roAttr = ro ? ' readonly disabled' : '';
@@ -10571,6 +11142,7 @@ const TVC_SpareMenu = (function () {
             batch,
             groupKey: draft.spare_group_key,
             rowCount: items.length,
+            maintStyle: !!opts.maintStyle,
         })).join('');
         const addBtn = batch
             ? `<div class="spare-consume-meta-job-add">
@@ -10585,7 +11157,8 @@ const TVC_SpareMenu = (function () {
         const container = document.getElementById('consumeJobRows');
         if (!container || !draft) return;
         const ro = container.dataset.readonly === '1';
-        container.innerHTML = renderConsumeJobRowsInner(draft, { readonly: ro });
+        const maintStyle = container.dataset.maintStyle === '1';
+        container.innerHTML = renderConsumeJobRowsInner(draft, { readonly: ro, maintStyle });
         document.querySelectorAll(`[id^="consumeJobPickTrigger-"]`).forEach(el => {
             el.disabled = !draft.spare_group_key;
         });
@@ -11157,16 +11730,36 @@ const TVC_SpareMenu = (function () {
 
     function renderConsumeMetaHtml(draft, opts = {}) {
         if (!draft) return '';
-        const ro = !!opts.readonly;
-        const roAttr = ro ? ' readonly disabled' : '';
-        const reportedByVal = resolveSpareReportedBy(draft, spareInventoryUser(getState()));
+        const st = getState();
+        const listMode = !!opts.listMode;
+        const listEditing = !!modState(st).consumeLogListEditing;
+        const ro = !!opts.readonly || (listMode && !listEditing);
+        const roAttr = ro ? ' readonly disabled tabindex="-1"' : '';
+        const reportedByVal = resolveSpareReportedBy(draft, spareInventoryUser(st));
         const today = new Date().toISOString().slice(0, 10);
-        const groupLabel = draft.spare_group_label ? safeTreeLabel(draft.spare_group_label) : '—';
+        const groupLabel = draft.spare_group_label ? safeTreeLabel(draft.spare_group_label) : '';
         const batch = consumeJobBatchEnabled(draft, ro);
-        const pmsField = ro
-            ? `<input type="text" class="spare-req-meta-input spare-consume-meta-input wr-spare-meta-pms" value="${esc(groupLabel)}"${roAttr}>`
-            : `<div class="spare-consume-meta-pick" id="consumeGroupPick">
-                    <button type="button" id="consumeGroupPickTrigger" class="spare-consume-pick-trigger" onclick="TVC_SpareMenu.toggleConsumeGroupPick(event)">
+        const fld = (label, inner, extraCls = '') =>
+            `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}"><label>${label}</label>${inner}</div>`;
+        const dateInp = (id, val, extra = '') =>
+            `<input type="text" id="${id}" class="tvc-date-input${ro ? ' wr-ro' : ''}" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(val))}"${roAttr}${extra}>`;
+        const txtInp = (id, val) => ro
+            ? `<input class="wr-ro" value="${esc(val || '')}" readonly tabindex="-1">`
+            : `<input type="text" id="${id}" value="${esc(val || '')}" onchange="TVC_SpareMenu.captureConsumeMeta()">`;
+        const fileNoInner = listMode
+            ? `<div class="spare-req-no-wrap">
+                    <input type="text" id="consumeFileNo" class="spare-req-meta-input" value="${esc(draft.file_no || '')}" placeholder="File No." oninput="TVC_SpareMenu.captureConsumeMeta()" onchange="TVC_SpareMenu.captureConsumeMeta()">
+                    <span class="spare-req-hist-anchor">
+                        <button type="button" id="consumeLogHistBtn" class="btn btn-sm spare-req-hist-btn" onclick="TVC_SpareMenu.toggleConsumeLogHistList()">${consumeLogHistPickBtnLabel(true)}</button>
+                    </span>
+               </div>`
+            : txtInp('consumeFileNo', draft.file_no || '');
+        let pmsInner;
+        if (ro) {
+            pmsInner = `<input class="wr-ro" value="${esc(groupLabel || '—')}" readonly tabindex="-1">`;
+        } else {
+            pmsInner = `<div class="spare-consume-meta-pick" id="consumeGroupPick">
+                    <button type="button" id="consumeGroupPickTrigger" class="wr-maint-job-pick spare-consume-pick-trigger" onclick="TVC_SpareMenu.toggleConsumeGroupPick(event)">
                         <span class="spare-consume-pick-text" id="consumeGroupPickText">${esc(groupLabel || '— Select PMS Group —')}</span>
                         <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
                     </button>
@@ -11179,35 +11772,40 @@ const TVC_SpareMenu = (function () {
                         <div class="spare-consume-pick-scroll" id="consumeGroupPickList"></div>
                     </div>
                 </div>`;
-        return `<section class="spare-consume-meta-form${ro ? ' wr-spare-meta-form' : ''}" aria-label="Consumed spare parts information">
-            ${renderSpareApprovalSection(draft, { prefix: 'consume', department: opts.department })}
-            <div class="spare-consume-meta-row-top">
-                <div class="spare-consume-meta-field spare-consume-meta-field-date">
-                    <label class="spare-consume-meta-inline-label" for="consumeDate">Consumed Date</label>
-                    <input type="text" id="consumeDate" class="spare-req-meta-input spare-consume-meta-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(draft.consumed_date || today))}"${roAttr}${ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'}>
-                </div>
-                <div class="spare-consume-meta-field spare-consume-meta-field-made">
-                    <label class="spare-consume-meta-inline-label" for="consumeMadeOn">Reported Date</label>
-                    <input type="text" id="consumeMadeOn" class="spare-req-meta-input spare-consume-meta-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(draft.made_on || ''))}"${roAttr}${ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'}>
-                </div>
-                <div class="spare-consume-meta-field spare-consume-meta-field-by">
-                    <label class="spare-consume-meta-inline-label" for="consumeMadeBy">Reported by</label>
-                    <input type="text" id="consumeMadeBy" class="spare-req-meta-input spare-consume-meta-input wr-ro" value="${esc(reportedByVal)}" readonly disabled tabindex="-1">
-                </div>
+        }
+        const commentsDis = ro ? ' readonly disabled tabindex="-1"' : '';
+        const commentsCls = ro ? ' wr-ro' : '';
+        const commentsOnInput = ro ? '' : ' oninput="TVC_SpareMenu.captureConsumeMeta()"';
+        const approvalSection = listMode
+            ? renderConsumeLogApprovalRow(draft, {
+                prefix: 'consumeLog',
+                department: opts.department || st.department,
+                listMode: true,
+                listEditing,
+            })
+            : '';
+        const histPanel = listMode
+            ? `<div id="consumeLogHistPanel" class="spare-req-hist-popover hidden" aria-hidden="true"></div>`
+            : '';
+        return `<section class="wr-maint-card wr-maint-body wr-spare-meta-form spare-consume-meta-form" aria-label="Consumed spare parts information">
+            ${approvalSection}
+            <div class="wr-maint-grid wr-maint-grid-3">
+                ${fld('File No.', fileNoInner)}
+                ${fld('Voy. No.', txtInp('consumeVoyNo', draft.voy_no || ''))}
+                ${fld('Place', txtInp('consumePlace', draft.place || ''))}
             </div>
-            <div class="spare-consume-meta-row spare-consume-meta-row-pms">
-                <label class="spare-consume-meta-label" for="consumeGroupPickTrigger">PMS Group No.</label>
-                ${pmsField}
+            <div class="wr-maint-grid wr-maint-grid-3">
+                ${fld('Work Date', dateInp('consumeDate', draft.consumed_date || today, ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
+                ${fld('Reported Date', dateInp('consumeMadeOn', draft.made_on || '', ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
+                ${fld('Reported by', `<input type="text" id="consumeMadeBy" class="wr-ro" value="${esc(reportedByVal)}" readonly disabled tabindex="-1">`)}
+                ${fld('PMS Group No.', pmsInner, 'wr-maint-span-all')}
             </div>
-            <div class="spare-consume-meta-jobs" id="consumeJobRows" data-readonly="${ro ? '1' : '0'}" data-batch="${batch ? '1' : '0'}">
-                ${renderConsumeJobRowsInner(draft, { readonly: ro })}
+            <div class="wr-page2-job-rows" id="consumeJobRows" data-maint-style="1" data-readonly="${ro ? '1' : '0'}" data-batch="${batch ? '1' : '0'}">
+                ${renderConsumeJobRowsInner(draft, { readonly: ro, maintStyle: true })}
             </div>
             ${ro ? '' : renderConsumeJobPickMenuHtml()}
-            <div class="spare-consume-meta-comments">
-                <label class="spare-consume-meta-col-head" for="consumeShipComments">Ship's Comments</label>
-                <textarea id="consumeShipComments" class="spare-req-meta-input spare-consume-meta-textarea" rows="2"
-                    placeholder="Enter remarks for this consumption record…"${roAttr}${ro ? '' : ' oninput="TVC_SpareMenu.captureConsumeMeta()"'}>${esc(draft.ships_comments || '')}</textarea>
-            </div>
+            ${fld("SHIP'S COMMENTS (IF ANY)", `<textarea id="consumeShipComments" class="wr-maint-textarea${commentsCls}" rows="3" placeholder="Enter remarks for this consumption record…"${commentsDis}${commentsOnInput}>${esc(draft.ships_comments || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+            ${histPanel}
         </section>`;
     }
 
@@ -11452,7 +12050,9 @@ const TVC_SpareMenu = (function () {
 
     function consumeListEditable() {
         const m = modState(getState());
-        return !!(m.consumeOpen && !m.consumePreview);
+        if (m.consumePreview) return false;
+        if (isConsumedLogWindow(m)) return !!m.consumeLogListEditing;
+        return !!m.consumeOpen;
     }
 
     function syncConsumeGroupHeader(st) {
@@ -11650,7 +12250,13 @@ const TVC_SpareMenu = (function () {
                 ${renderPage2JobRowsInner(getPage2JobContext(), { readonly: ro || !allowAdd, allowAdd, maintStyle: true })}
             </div>
             ${allowAdd && !ro ? renderPage2JobPickMenuHtml() : ''}
-            ${fld("Ship's Comments &amp; Desired Articles", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly disabled>${esc(meta.shipComments || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+            ${(() => {
+                const spareComments = meta.spareShipComments ?? meta.shipComments ?? '';
+                const commentsDis = ro ? ' readonly disabled tabindex="-1"' : '';
+                const commentsCls = ro ? ' wr-ro' : '';
+                const commentsInput = ro ? '' : ' oninput="TVC_App.captureWorkReportForm()"';
+                return fld("SHIP'S COMMENTS (IF ANY)", `<textarea id="wrSpareShipComments" class="wr-maint-textarea${commentsCls}" data-wf="spareShipComments" rows="3"${commentsDis}${commentsInput}>${esc(spareComments)}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap');
+            })()}
         </section>`;
     }
 
@@ -12199,10 +12805,26 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         updateWrSpareTreeToggleUi();
         updateWrSpareHeadStats();
         syncSpareItemHistoryBtns();
+        hydrateWrSpareShipCommentsFromConsumeLog(st);
         requestAnimationFrame(() => {
             syncWrSpareHeadLayout();
             requestAnimationFrame(syncWrSpareHeadLayout);
         });
+    }
+
+    async function hydrateWrSpareShipCommentsFromConsumeLog(st) {
+        if (!st?._wrReportId) return;
+        st._wrForm = st._wrForm || {};
+        if (String(st._wrForm.spareShipComments ?? '').trim()) return;
+        const rep = (st.reports || []).find(r => r.id === st._wrReportId);
+        if (!rep?.consume_log_id) return;
+        try {
+            const log = await TVC_Inventory.getConsumeLog(rep.consume_log_id);
+            if (log?.ships_comments == null) return;
+            st._wrForm.spareShipComments = log.ships_comments;
+            const ta = document.getElementById('wrSpareShipComments');
+            if (ta) ta.value = log.ships_comments;
+        } catch (_) { /* ignore */ }
     }
 
     function teardownWrSparePage2() {
@@ -12240,21 +12862,36 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         _consumeCachedList = filteredConsumeSpares(st);
         if (isPreview) _consumeCachedList = _consumeCachedList.filter(s => consumeRowChecked(s));
         const lineCount = (draft?.lines || []).length;
+        const listMode = !!m.consumeLogListMode;
+        const hasDisplayedLog = consumeLogListHasDisplayedLog(m);
+        const listViewLocked = listMode && !m.consumeLogListEditing;
         const titleSuffix = m.consumeEditMode ? ' <span class="muted">(Modify)</span>'
             : (isPreview ? ' <span class="muted">(Preview)</span>' : '');
         const editBlock = `<div id="consumeEditBlock">${renderConsumeGroupHeaderHtml(st)}</div>`;
         const wrReportId = draft?.work_report_id || resolveConsumeDraftWorkReportId(draft, st);
+        const headTitle = listMode ? '📋 Consumed Log' : `Consumed Spare Parts${titleSuffix}`;
 
-        const headActions = isPreview
-            ? `<button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumePreviewOpenWorkReport()"${wrReportId ? '' : ' disabled'} title="${wrReportId ? 'View linked Work Report' : 'Not created from Work Report'}">Work Report</button>
+        let headActions;
+        if (isPreview) {
+            headActions = `<button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumePreviewOpenWorkReport()"${wrReportId ? '' : ' disabled'} title="${wrReportId ? 'View linked Work Report' : 'Not created from Work Report'}">Work Report</button>
                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumePreviewModify()"${canConsume ? '' : ' disabled'}>Modify</button>
                <button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.consumeLogPrintPreview()">🖨 Print</button>
                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumeLogOpenList()">List</button>
                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeConsumeModal()">Close</button>
-               <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeConsumeModal()" title="Close">×</button>`
-            : `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.saveConsume()">Save</button>
+               <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeConsumeModal()" title="Close">×</button>`;
+        } else if (listMode) {
+            headActions = `<button type="button" id="consumeLogHeadNewBtn" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.consumeLogNew()"${!canConsume || m.consumeLogListEditing ? ' disabled' : ''} title="${m.consumeLogListEditing ? 'Finish editing first' : (!canConsume ? 'No permission' : 'New consumption record')}">New</button>
+               <button type="button" id="consumeLogHeadModifyBtn" class="btn btn-sm" onclick="TVC_SpareMenu.consumeLogEnterListEdit()"${!hasDisplayedLog || m.consumeLogListEditing ? ' disabled' : ''} title="${hasDisplayedLog ? 'Enable editing' : 'Select a log from the list first'}">Modify</button>
+               <button type="button" id="consumeLogSaveBtn" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.saveConsume()"${listViewLocked ? ' disabled' : ''}>Save</button>
+               <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumeLogPrintPreview()"${!hasDisplayedLog ? ' disabled' : ''} title="${hasDisplayedLog ? 'Print consumption log' : 'Select a log from the list first'}">Print</button>
+               <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.consumeLogWindowDocPreview()"${!hasDisplayedLog ? ' disabled' : ''} title="${hasDisplayedLog ? 'Preview consumption log' : 'Select a log from the list first'}">Preview</button>
                <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeConsumeModal()">Close</button>
-               <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeConsumeModal()">×</button>`;
+               <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeConsumeModal()" title="Close">×</button>`;
+        } else {
+            headActions = `<button type="button" class="btn btn-sm btn-green" onclick="TVC_SpareMenu.saveConsume()">Save</button>
+               <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeConsumeModal()">Close</button>
+               <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeConsumeModal()" title="Close">×</button>`;
+        }
 
         const listToolbar = isPreview ? '' : (() => {
             const selBtn = consumeSelectedBtnMeta(st);
@@ -12289,13 +12926,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         body.innerHTML = `
         <div class="spare-req-work-wrap">
           <div class="spare-req-work-head">
-            <h3 class="spare-req-work-title">Consumed Spare Parts${titleSuffix}
+            <h3 class="spare-req-work-title">${headTitle}
               <span class="muted spare-consume-lines">${lineCount} line(s)</span></h3>
             <span class="spare-req-work-head-spacer"></span>
             ${headActions}
           </div>
           <div class="spare-req-work-scroll">
-          ${renderConsumeMetaHtml(draft, { readonly: isPreview, department: st.department })}
+          ${renderConsumeMetaHtml(draft, { readonly: isPreview, department: st.department, listMode })}
           <div class="${layoutCls}">
             <main class="panel spare-main">
               ${listToolbar}
@@ -12323,6 +12960,14 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             syncSpareItemHistoryBtns();
             bindConsumeListKeyboard();
         }
+        if (listMode && !isPreview) {
+            applyConsumeLogScrollLock(body);
+            syncConsumeLogListWindowHeadButtons();
+        }
+        if (_consumeLogHistOpen) {
+            setConsumeLogHistOpen(true);
+            await refreshConsumeLogHistList();
+        }
         requestAnimationFrame(() => {
             syncConsumeHeadLayout();
             requestAnimationFrame(syncConsumeHeadLayout);
@@ -12340,8 +12985,11 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         syncConsumeLineMap();
         const m = modState(st);
         m.consumeOpen = true;
+        m.consumeLogListMode = false;
+        m.consumeLogListEditing = false;
         m.consumeEditMode = false;
         m.consumePreview = false;
+        setConsumeLogHistOpen(false);
         m.consumeLastSavedLogId = null;
         m.consumeFocusedId = null;
         m.consumeShowSelectedOnly = false;
@@ -12369,8 +13017,11 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         syncConsumeLineMap();
         const m = modState(st);
         m.consumeOpen = true;
+        m.consumeLogListMode = false;
+        m.consumeLogListEditing = false;
         m.consumeEditMode = true;
         m.consumePreview = false;
+        setConsumeLogHistOpen(false);
         m.consumeLastSavedLogId = logId;
         m.selectedConsumeLogId = logId;
         m.consumeFocusedId = null;
@@ -12403,8 +13054,11 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         syncConsumeLineMap();
         const m = modState(st);
         m.consumeOpen = true;
+        m.consumeLogListMode = false;
+        m.consumeLogListEditing = false;
         m.consumeEditMode = false;
         m.consumePreview = true;
+        setConsumeLogHistOpen(false);
         m.consumeLastSavedLogId = logId;
         m.selectedConsumeLogId = logId;
         m.consumeFocusedId = null;
@@ -12426,7 +13080,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function closeConsumeModal(opts = {}) {
         const st = getState();
         const m = modState(st);
-        if (!opts.skipConfirm && !m.consumePreview) {
+        if (!opts.skipConfirm && !m.consumePreview && !(isConsumedLogWindow(m) && !m.consumeLogListEditing)) {
             if (!confirm('작성을 취소하시겠습니까?')) return;
         }
         const draft = getConsumeSession();
@@ -12437,12 +13091,15 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const returnToList = _consumeListReturnAfterSave;
         const selectId = m.consumeLastSavedLogId || m.selectedConsumeLogId || null;
         m.consumeOpen = false;
+        m.consumeLogListMode = false;
+        m.consumeLogListEditing = false;
         m.consumeEditMode = false;
         m.consumePreview = false;
         m.consumeLastSavedLogId = null;
         m.consumeFocusedId = null;
         m.consumeShowSelectedOnly = false;
         m.consumeTreeOpen = false;
+        setConsumeLogHistOpen(false);
         const consumeModal = document.getElementById('spareConsumeModal');
         if (consumeModal) consumeModal._consumeKeyBound = false;
         _consumeDraft = null;
@@ -12456,7 +13113,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         closeSpicsModal('spareConsumeModal');
         if (st.currentTab === 'spare') render();
         if (returnToList) {
-            openConsumeLogModal(selectId ? { selectId } : {});
+            await openConsumedLogWindow();
+            if (selectId) await loadConsumeLogIntoListWindow(selectId, { preserveHistPopover: true });
         }
     }
 
@@ -12487,6 +13145,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             vessel_id: vesselId,
             department: department || st.department || '',
             consumed_date: draft.consumed_date || '',
+            file_no: draft.file_no || '',
+            voy_no: draft.voy_no || '',
+            place: draft.place || '',
             pms_group_no: draft.spare_group_label ? safeTreeLabel(draft.spare_group_label) : '',
             pms_group_key: draft.spare_group_key || '',
             job_code: draft.job_code || '',
@@ -12815,13 +13476,20 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             });
             draft.log_id = saved.id;
             draft.list_status = spareListStatus(draft);
-            if (applySpareApprovalFromUi(draft, 'consume', st.department)) {
+            const approvalPrefix = isConsumedLogWindow(m) ? 'consumeLog' : 'consume';
+            if (applySpareApprovalFromUi(draft, approvalPrefix, st.department)) {
                 await persistConsumeLogFromDraft(draft, { st, user, vesselId });
             }
             m.consumeLastSavedLogId = saved.id;
+            m.selectedConsumeLogId = saved.id;
             await reloadSparesCache();
             await refresh();
             alert(`Consumption log updated — ${lines.length} line(s).`);
+            if (isConsumedLogWindow(m)) {
+                m.consumeLogListEditing = false;
+                await renderConsumeModal();
+                return;
+            }
             if (_consumeListReturnAfterSave) {
                 await closeConsumeModal({ skipConfirm: true });
             } else {
@@ -14184,6 +14852,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     function captureReqSheetForm() {
+        const st = getState();
+        const isHq = isReqListHqUser(st);
         const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
         _reqSheet.form = {
             code_no: g('reqCodeNo'),
@@ -14192,8 +14862,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             deliver_date_to: g('reqDelTo'),
             deliver_port: g('reqDelPort'),
             made_on: g('reqMadeOn'),
-            assessed_on: g('reqAssessedOn'),
-            assessed_by: g('reqAssessedBy'),
+            ...(isHq ? {
+                assessed_on: g('reqAssessedOn'),
+                assessed_by: g('reqAssessedBy'),
+            } : {}),
         };
         reqApplyTypeKind(_reqSheet.form, document.querySelector('input[name="reqPriority"]:checked')?.value || 'ROUTINE');
         _reqSheet.form.made_by = resolveSpareReportedBy(
@@ -14488,6 +15160,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             `<span class="req-flow-step${step === n ? ' active' : ''}" data-step="${n}" onclick="TVC_SpareMenu.reqSheetSetStep(${n})">${label}</span>`;
 
         const reqType = reqListTypeKind(req);
+        const evalRo = isHq ? '' : ' readonly disabled tabindex="-1"';
+        const evalRoClass = isHq ? '' : ' wr-ro';
         host.innerHTML = `
         <div class="req-sheet" id="reqSheetPrintArea">
             <div class="req-sheet-titlebar">
@@ -14534,8 +15208,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 <div class="req-form-row req-form-track">
                     <label>Requested Date<input type="text" id="reqMadeOn" class="tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.made_on || ''))}"></label>
                     <label>by<input type="text" id="reqMadeBy" class="wr-ro" value="${esc(reportedByVal)}" readonly disabled tabindex="-1"></label>
-                    <label>Evaluated Date<input type="text" id="reqAssessedOn" class="tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.assessed_on || ''))}"></label>
-                    <label>by<input type="text" id="reqAssessedBy" value="${esc(req.assessed_by || '')}"></label>
+                    <label>Evaluated Date<input type="text" id="reqAssessedOn" class="tvc-date-input${evalRoClass}" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.assessed_on || ''))}"${evalRo}></label>
+                    <label>by<input type="text" id="reqAssessedBy" class="${isHq ? '' : 'wr-ro'}" value="${esc(req.assessed_by || '')}" placeholder="Superintendent"${evalRo}></label>
                 </div>
             </div>
             <div class="req-flow-bar">
@@ -14686,12 +15360,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         toggleReqQuoteCurrencyPick, pickReqQuoteCurrency,
         editReqQuoteVendor, deleteReqQuoteVendor, reqWorkSetQuoteCurrency,
         reqWorkToggleQuoteColCheck, reqWorkToggleQuoteRowCheck, reqWorkSetQuotePrice,
-        viewConsumedLog, openConsumeLogModal, closeConsumeLogModal,
+        viewConsumedLog, openConsumedLogWindow, openConsumeLogModal, closeConsumeLogModal,
         consumeLogNew, consumeLogModify, consumePreviewModify, consumePreviewOpenWorkReport, cleanupConsumeWorkReportOverlay,
-        consumeLogDelete, consumeLogPreview, consumeLogDetailReport, consumeLogReportConfirm, consumeLogDocPreview, consumeLogPrint,
-        consumeLogPrintPreview, consumeLogOpenList,
+        consumeLogDelete, consumeLogPreview, consumeLogDetailReport, consumeLogReportConfirm, consumeLogReportApprove, consumeLogDocPreview, consumeLogPrint,
+        consumeLogPrintPreview, consumeLogWindowDocPreview, consumeLogOpenList,
         consumeLogSelectRow, consumeLogToggleRow, consumeLogToggleAll,
         consumeLogSetPeriod, consumeLogClearPeriod, consumeLogSetSearch, consumeLogClearSearch,
+        toggleConsumeLogHistList, consumeLogEnterListEdit, loadConsumeLogIntoListWindow,
         closeReqWorkModal, reqWorkComplete, reqWorkSave, reqWorkSwitchToNew, reqWorkEnterListEdit, reqWorkOpenList, reqWorkPrint, reqWorkDocPreview, reqWorkDocPreviewPrint, reqWorkExitDocPreview, reqWorkExitPreview, reqWorkEnterPreview, reqWorkPrintPreview, reqWorkExportExcel, reqWorkAddSpare, addToRequisition, reqWorkAddChecked, captureReqWorkMeta,
         toggleReqWorkHistList, reqWorkPickReqNo,
         reqWorkSetRequestQty, reqWorkSetEvalQty, reqWorkEvalQtyKeydown, reqWorkSetReceivedQty,

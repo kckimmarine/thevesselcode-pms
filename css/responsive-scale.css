@@ -259,6 +259,38 @@ body {
     font-size: calc(14px * var(--ui-scale));
 }
 
+/* New Requisition — match Work Report typography */
+.spare-req-work-meta .spare-req-meta-label {
+    font-size: calc(10px * var(--ui-scale));
+}
+
+.spare-req-work-meta .spare-req-meta-input,
+.spare-req-work-meta textarea.spare-req-meta-input {
+    font-size: calc(11px * var(--ui-scale));
+}
+
+.spare-req-work-meta .spare-req-meta-comments-row .spare-consume-meta-col-head,
+.spare-req-work-meta .spare-req-meta-by {
+    font-size: calc(10px * var(--ui-scale));
+}
+
+.spare-req-work-meta .spare-req-priority-opt {
+    font-size: calc(11px * var(--ui-scale));
+}
+
+/* Consumed Spare Parts meta — match New Requisition typography */
+.spare-consume-meta-form .spare-consume-meta-inline-label,
+.spare-consume-meta-form .spare-consume-meta-label,
+.spare-consume-meta-form .spare-consume-meta-col-head {
+    font-size: calc(10px * var(--ui-scale));
+}
+
+.spare-consume-meta-form .spare-req-meta-input,
+.spare-consume-meta-form textarea.spare-req-meta-input,
+.spare-consume-meta-form .spare-consume-pick-trigger {
+    font-size: calc(11px * var(--ui-scale));
+}
+
 #reqWorkListHead .spare-data-head th,
 #consumeListHead .spare-data-head th,
 #receiveListHead .spare-data-head th,
