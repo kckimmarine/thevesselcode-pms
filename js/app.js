@@ -1987,13 +1987,22 @@ const TVC_App = (function () {
     }
 
     function resetMenuXfer() {
-        _menuXfer = { step: 'mode' };
+        _menuXfer = {
+            step: 'mode',
+            importType: null, // defect | postpone | monthly
+        };
         const body = document.getElementById('menuXferBody');
         if (body) {
             body._menuXferDefectBound = false;
             body._menuXferPostponeBound = false;
         }
     }
+
+    const MENU_IMPORT_TYPES = [
+        { key: 'defect', label: 'Defect Report' },
+        { key: 'postpone', label: 'Postpone Report' },
+        { key: 'monthly', label: 'Monthly Report' },
+    ];
 
     function menuXferStationContext(user) {
         if (!user || typeof TVC_Space === 'undefined') return null;
@@ -2476,11 +2485,20 @@ const TVC_App = (function () {
                     : ctx === 'hq'
                         ? 'Import vessel company report ZIP received by email (Ship → HQ). Select vessel in fleet list first.'
                         : 'Select a PMS sync ZIP from Master or Company.';
+            const importType = _menuXfer.importType || '';
+            const typeBtns = MENU_IMPORT_TYPES.map(t => `
+                <button type="button" class="btn spare-sync-btn spare-sync-check-btn${importType === t.key ? ' is-checked' : ''}"
+                    aria-pressed="${importType === t.key ? 'true' : 'false'}"
+                    onclick="TVC_App.menuXferSelectImportType('${t.key}')">${esc(t.label)}${importType === t.key ? ' ✓' : ''}</button>`).join('');
             content = `
-                <p class="spare-sync-hint">${esc(importHint)}</p>
-                <p class="spare-sync-note muted">Supported: PMS sync ZIP (Monthly Report), Defect package ZIP, Postpone package ZIP. File type is detected automatically.</p>
+                <p class="spare-sync-hint">Select import type, then open the file.</p>
+                <p class="spare-sync-note muted">${esc(importHint)}</p>
+                <p class="spare-sync-note muted">Defect / Postpone: <strong>.zip</strong> · Monthly: <strong>.zip / .json / .csv</strong></p>
                 <div class="spare-sync-actions">
-                    <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferTriggerImport()">Open file…</button>
+                    ${typeBtns}
+                    <button type="button" class="btn btn-green spare-sync-btn"
+                        onclick="TVC_App.menuXferTriggerImport()"
+                        ${importType ? '' : ' disabled title="Select import type first"'}>Open file…</button>
                 </div>`;
         }
         const backBtn = step !== 'mode'
@@ -2524,6 +2542,7 @@ const TVC_App = (function () {
     function menuXferPickMode(mode) {
         _menuXfer.mode = mode;
         _menuXfer.step = mode === 'export' ? 'export-type' : 'import';
+        if (mode === 'import') _menuXfer.importType = null;
         renderMenuXferModal();
     }
 
@@ -2536,7 +2555,15 @@ const TVC_App = (function () {
             delete _menuXfer.postponeSearch;
         } else if (_menuXfer.step === 'export-type' || _menuXfer.step === 'import') {
             _menuXfer.step = 'mode';
+            _menuXfer.importType = null;
         }
+        renderMenuXferModal();
+    }
+
+    function menuXferSelectImportType(key) {
+        const k = String(key || '');
+        if (!MENU_IMPORT_TYPES.some(t => t.key === k)) return;
+        _menuXfer.importType = _menuXfer.importType === k ? null : k;
         renderMenuXferModal();
     }
 
@@ -2735,7 +2762,20 @@ const TVC_App = (function () {
     }
 
     function menuXferTriggerImport() {
-        document.getElementById('menuXferImportFile')?.click();
+        if (!_menuXfer.importType) {
+            alert('Import 유형을 먼저 선택하세요.');
+            return;
+        }
+        const fi = document.getElementById('menuXferImportFile');
+        if (!fi) return;
+        const mode = _menuXfer.importType;
+        if (mode === 'monthly') {
+            fi.setAttribute('accept', '.zip,.json,.csv,application/zip,application/json,text/csv');
+        } else {
+            fi.setAttribute('accept', '.zip,application/zip');
+        }
+        fi.value = '';
+        fi.click();
     }
 
     async function detectMenuImportType(file) {
@@ -2800,11 +2840,23 @@ const TVC_App = (function () {
 
     async function onMenuXferImportFile(file) {
         if (!file) return;
+        const selected = _menuXfer.importType || '';
+        if (!selected) {
+            alert('Import 유형을 먼저 선택하세요.');
+            return;
+        }
         try {
-            const kind = await detectMenuImportType(file);
-            if (kind === 'DEFECT') {
+            const detected = await detectMenuImportType(file);
+            const expected = { defect: 'DEFECT', postpone: 'POSTPONE', monthly: 'MONTHLY' }[selected];
+            if (expected && detected !== expected) {
+                const labels = { DEFECT: 'Defect Report', POSTPONE: 'Postpone Report', MONTHLY: 'Monthly Report' };
+                throw new Error(
+                    `선택한 유형(${labels[expected]})과 파일 유형(${labels[detected] || detected})이 일치하지 않습니다.`
+                );
+            }
+            if (selected === 'defect') {
                 await handleDefectImport(file);
-            } else if (kind === 'POSTPONE') {
+            } else if (selected === 'postpone') {
                 await handlePostponeImport(file);
             } else {
                 await menuXferImportMonthly(file);
@@ -8361,11 +8413,11 @@ const TVC_App = (function () {
         handleLogin, handleLogout, handleExport, handleImport, handleHubImport, handleDefectImport, handlePostponeImport,
         urgentExportDefect, exportDefectCompletion, loadSeedFile,
         openMenuXferMenu, closeMenuXferMenu, menuXferPickMode, menuXferBack, menuXferTriggerImport,
-        menuXferPickExportType,
+        menuXferSelectImportType, menuXferPickExportType,
         menuXferConfirmDefectExport, menuXferConfirmPostponeExport, menuXferConfirmMonthlyExport,
         menuXferTryOnlineSync,
         menuXferExportDefect, menuXferExportPostpone, menuXferExportMonthly, onMenuXferImportFile,
-        openMenuHistoryModal, closeMenuHistoryModal, setMenuHistCategory,
+        openMenuHistoryModal, closeMenuHistoryModal, setMenuHistCategory, menuHistPeerLabel,
         openMasterBackupModal, closeMasterBackupModal, runMasterBackup, triggerMasterRestore, onMasterRestoreFile,
         uploadAttachment, saveDetailReport, closeModal, showModal, swapHistoryModals, dismissSpicsAlerts, openSpicsRequisition,
     };

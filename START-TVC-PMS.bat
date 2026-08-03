@@ -14,8 +14,8 @@ echo.
 echo  (이 창을 닫으면 서버가 종료됩니다)
 echo.
 
-REM 서버 기동 후 Chrome 앱 모드로 브라우저 열기 (2초 대기)
-start /min cmd /c "ping -n 3 127.0.0.1>nul && start chrome --app=http://localhost:3000 --window-size=1200,800"
+REM 서버 기동 후 Chrome/Edge 앱 모드 — 화면 작업영역의 약 78%% × 88%%, 가운데 정렬
+start /min powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0scripts\open-tvc-window.ps1"
 
 npx --yes serve . -p 3000
 
