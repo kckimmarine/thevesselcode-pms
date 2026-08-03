@@ -6718,6 +6718,10 @@ label.spare-file-pick input[type=file] { display: none; }
     gap: 6px;
     margin: 0 0 12px;
 }
+.menu-hist-cats.menu-hist-cats-hq .menu-hist-cat {
+    padding: 6px 10px;
+    font-size: 11px;
+}
 .menu-hist-cat {
     border: 1px solid #e2e8f0;
     background: #fff;

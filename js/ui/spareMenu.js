@@ -33,7 +33,7 @@ const TVC_SpareMenu = (function () {
     let _receiveLineBySpareId = null;
     let _wrSpareCachedList = [];
     let _spareXfer = { step: 'mode' };
-    let _spareHistCategory = 'requisition'; // requisition | received | inventory
+    let _spareHistCategory = 'requisition'; // HQ: requisition|quotation|evaluation|order|received|inventory · Vessel: requisition|evaluation|received|inventory
     let _reqListXferExportKind = null; // null | requisition | quotation | reply-evaluation | purchase-order | received
     /** Where export list Back returns: 'sync' (Data Export modal) | 'req-work' (requisition list window) */
     let _reqListXferExportReturn = null;
@@ -8649,9 +8649,9 @@ const TVC_SpareMenu = (function () {
     function resetSpareXfer() {
         _spareXfer = {
             step: 'mode',
-            evaluationSelected: false,
             importKind: 'general',
             hqImportType: null, // requisition | quotation | received | inventory
+            vesselImportType: null, // evaluation | inventory
         };
     }
 
@@ -8659,6 +8659,11 @@ const TVC_SpareMenu = (function () {
         { key: 'requisition', label: 'Requisition' },
         { key: 'quotation', label: 'Quotation' },
         { key: 'received', label: 'Received' },
+        { key: 'inventory', label: 'Inventory' },
+    ];
+
+    const VESSEL_IMPORT_TYPES = [
+        { key: 'evaluation', label: 'Evaluation' },
         { key: 'inventory', label: 'Inventory' },
     ];
 
@@ -8713,19 +8718,40 @@ const TVC_SpareMenu = (function () {
         return map[cat] || cat || '—';
     }
 
-    function spareHistCategoryKey(row) {
+    function spareHistCategoryKey(row, { hq = false } = {}) {
         const c = String(row?.category || '').toUpperCase();
         if (c === 'RECEIVED') return 'received';
         if (c === 'INVENTORY') return 'inventory';
+        if (c === 'REPLY_EVALUATION' || c === 'ASSESSMENT') return 'evaluation';
+        if (hq) {
+            if (c === 'QUOTATION') return 'quotation';
+            if (c === 'PURCHASE_ORDER') return 'order';
+        }
+        // Vessel: Quotation / Order 이력은 Requisition 탭에 포함
         return 'requisition';
     }
 
     function spareHistCategoryLabel(key) {
         return {
             requisition: 'Requisition',
+            quotation: 'Quotation',
+            evaluation: 'Evaluation',
+            order: 'Order',
             received: 'Received',
-            inventory: 'Spare Parts Inventory',
+            inventory: 'Inventory',
         }[key] || 'Requisition';
+    }
+
+    function spareHistTabsForUser(user) {
+        if (window.TVC_RBAC?.isHqAccount?.(user)) {
+            return ['requisition', 'quotation', 'evaluation', 'order', 'received', 'inventory'];
+        }
+        return ['requisition', 'evaluation', 'received', 'inventory'];
+    }
+
+    function spareHistNormalizeCategory(key, user) {
+        const tabs = spareHistTabsForUser(user);
+        return tabs.includes(key) ? key : tabs[0];
     }
 
     function spareHistEventDate(row) {
@@ -8789,14 +8815,15 @@ const TVC_SpareMenu = (function () {
         } else if (step === 'export-type') {
             const hqExportBtns = `
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenQuotationExportList()">Quotation</button>
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReplyEvalExportList()">Reply Evaluation</button>
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenPurchaseOrderExportList()">Purchase Order</button>`;
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReplyEvalExportList()">Evaluation</button>
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenPurchaseOrderExportList()">Order</button>
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Inventory</button>`;
             const vesselExportBtns = `
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReqExportList()">Requisition</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReceivedExportList()">Received</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Inventory</button>`;
             content = `
-                <p class="spare-sync-hint">Select the data type to export to Master PC.</p>
+                <p class="spare-sync-hint">${isHq ? 'Select the data type to export.' : 'Select the data type to export to Master PC.'}</p>
                 <div class="spare-sync-actions">
                     ${isHq ? hqExportBtns : vesselExportBtns}
                 </div>`;
@@ -8817,17 +8844,19 @@ const TVC_SpareMenu = (function () {
                         ${hqType ? '' : ' disabled title="Select import type first"'}>Open file…</button>
                 </div>`;
             } else {
-                const evalOn = !!_spareXfer.evaluationSelected;
+                const vesselType = _spareXfer.vesselImportType || '';
+                const typeBtns = VESSEL_IMPORT_TYPES.map(t => `
+                    <button type="button" class="btn spare-sync-btn spare-sync-check-btn${vesselType === t.key ? ' is-checked' : ''}"
+                        aria-pressed="${vesselType === t.key ? 'true' : 'false'}"
+                        onclick="TVC_SpareMenu.spareXferSelectVesselImportType('${t.key}')">${esc(t.label)}${vesselType === t.key ? ' ✓' : ''}</button>`).join('');
                 content = `
-                <p class="spare-sync-hint">Select <strong>Evaluation</strong>, then open the Evaluation file.</p>
-                <p class="spare-sync-note muted">Open file… accepts Evaluation only: <strong>*_EVAL_REPLY.xlsx</strong> / <strong>*EVAL*.xlsx</strong> or Assessment <strong>.json</strong>.</p>
+                <p class="spare-sync-hint">Select import type, then open the file.</p>
+                <p class="spare-sync-note muted">Evaluation: <strong>*_EVAL_REPLY.xlsx</strong> / <strong>*EVAL*.xlsx</strong> or Assessment <strong>.json</strong> · Inventory: <strong>.xls / .xlsx / .csv</strong></p>
                 <div class="spare-sync-actions">
-                    <button type="button" class="btn spare-sync-btn spare-sync-check-btn${evalOn ? ' is-checked' : ''}"
-                        aria-pressed="${evalOn ? 'true' : 'false'}"
-                        onclick="TVC_SpareMenu.spareXferToggleEvaluation()">Evaluation${evalOn ? ' ✓' : ''}</button>
+                    ${typeBtns}
                     <button type="button" class="btn btn-green spare-sync-btn"
-                        onclick="TVC_SpareMenu.spareXferTriggerImport('evaluation')"
-                        ${evalOn ? '' : ' disabled title="Select Evaluation first"'}>Open file…</button>
+                        onclick="TVC_SpareMenu.spareXferTriggerImport('vessel')"
+                        ${vesselType ? '' : ' disabled title="Select import type first"'}>Open file…</button>
                 </div>`;
             }
         }
@@ -8862,8 +8891,8 @@ const TVC_SpareMenu = (function () {
         _spareXfer.mode = mode;
         _spareXfer.step = mode === 'export' ? 'export-type' : 'import';
         if (mode === 'import') {
-            _spareXfer.evaluationSelected = false;
             _spareXfer.hqImportType = null;
+            _spareXfer.vesselImportType = null;
         }
         renderSpareXferModal();
     }
@@ -8871,14 +8900,16 @@ const TVC_SpareMenu = (function () {
     function spareXferBack() {
         if (_spareXfer.step === 'export-type' || _spareXfer.step === 'import') {
             _spareXfer.step = 'mode';
-            _spareXfer.evaluationSelected = false;
             _spareXfer.hqImportType = null;
+            _spareXfer.vesselImportType = null;
         }
         renderSpareXferModal();
     }
 
-    function spareXferToggleEvaluation() {
-        _spareXfer.evaluationSelected = !_spareXfer.evaluationSelected;
+    function spareXferSelectVesselImportType(key) {
+        const k = String(key || '');
+        if (!VESSEL_IMPORT_TYPES.some(t => t.key === k)) return;
+        _spareXfer.vesselImportType = _spareXfer.vesselImportType === k ? null : k;
         renderSpareXferModal();
     }
 
@@ -8900,13 +8931,13 @@ const TVC_SpareMenu = (function () {
     function spareXferTriggerImport(kind = 'general') {
         const st = getState();
         const isHq = !!(window.TVC_RBAC?.isHqAccount?.(st.user));
-        // Vessel Import: Evaluation 체크(누름) 후에만 Open file → Evaluation 파일만
+        // Vessel Import: Evaluation / Inventory 선택 후 Open file
         if (!isHq && _spareXfer.step === 'import') {
-            if (!_spareXfer.evaluationSelected) {
-                alert('Evaluation을 먼저 선택(누름)하세요.');
+            if (!_spareXfer.vesselImportType) {
+                alert('Import 유형을 먼저 선택하세요.');
                 return;
             }
-            kind = 'evaluation';
+            kind = _spareXfer.vesselImportType;
         }
         // HQ Import: 유형 선택 후 Open file
         if (isHq && _spareXfer.step === 'import') {
@@ -15721,7 +15752,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     async function openHistoryModal() {
-        if (!_spareHistCategory) _spareHistCategory = 'requisition';
+        const st = getState();
+        _spareHistCategory = spareHistNormalizeCategory(_spareHistCategory, st.user);
         await renderSpareHistoryModal();
         showSpicsModal('spareHistoryModal');
     }
@@ -15729,7 +15761,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     function closeHistoryModal() { closeSpicsModal('spareHistoryModal'); }
 
     async function setSpareHistCategory(key) {
-        _spareHistCategory = key === 'received' || key === 'inventory' ? key : 'requisition';
+        const st = getState();
+        _spareHistCategory = spareHistNormalizeCategory(key, st.user);
         await renderSpareHistoryModal();
     }
 
@@ -15738,10 +15771,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!body) return;
         const st = getState();
         const user = st.user;
+        const isHq = !!(window.TVC_RBAC?.isHqAccount?.(user));
         const all = await listSpareDataXferHistory(120);
-        const cat = _spareHistCategory || 'requisition';
-        const rows = all.filter(r => spareHistCategoryKey(r) === cat);
-        const tabs = ['requisition', 'received', 'inventory'].map(key => `
+        const tabKeys = spareHistTabsForUser(user);
+        const cat = spareHistNormalizeCategory(_spareHistCategory, user);
+        _spareHistCategory = cat;
+        const rows = all.filter(r => spareHistCategoryKey(r, { hq: isHq }) === cat);
+        const tabs = tabKeys.map(key => `
             <button type="button" class="menu-hist-cat${cat === key ? ' active' : ''}"
                 onclick="TVC_SpareMenu.setSpareHistCategory('${key}')">${esc(spareHistCategoryLabel(key))}</button>`).join('');
         const tbody = rows.map(r => {
@@ -15759,7 +15795,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeHistoryModal()">×</button>
             <h3 class="spare-sync-title">Data Export &amp; Import History</h3>
             <p class="spare-hist-sub muted">${esc(spareHistAccountHint(user))}</p>
-            <div class="menu-hist-cats" role="tablist">${tabs}</div>
+            <div class="menu-hist-cats${isHq ? ' menu-hist-cats-hq' : ''}" role="tablist">${tabs}</div>
             <div class="spics-tx-lines-wrap menu-hist-table-wrap">
                 <table class="spics-tx-table spics-hist-table menu-hist-table">
                     <thead><tr>
@@ -16341,7 +16377,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         refreshWrSpareJobContext,
         onTxSearchInput, addTxLine, removeTxLine,
         openHqImportModal, onHqImportFile, openAssessmentModal, closeAssessmentModal, applyHqAssessment,
-        openSpareSyncMenu, closeSpareSyncMenu, spareXferPickMode, spareXferBack, spareXferToggleEvaluation, spareXferSelectHqImportType, spareXferTriggerImport,
+        openSpareSyncMenu, closeSpareSyncMenu, spareXferPickMode, spareXferBack, spareXferSelectVesselImportType, spareXferSelectHqImportType, spareXferTriggerImport,
         spareXferOpenReqExportList, spareXferOpenQuotationExportList, spareXferOpenReplyEvalExportList, spareXferOpenPurchaseOrderExportList,
         spareXferOpenReceivedExportList, spareXferExportRequisitions, spareXferExportReceived, spareXferExportInventory,
         reqListXferExportBack,
