@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
     <link rel="apple-touch-icon" href="icons/icon.svg">
-    <link rel="stylesheet" href="css/app.css?v=20260802-wr-tab-lock">
+    <link rel="stylesheet" href="css/app.css?v=20260803-menu-hist-grid">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260802-req-list-filter">
 </head>
 <body>
@@ -414,6 +414,23 @@
 <div id="menuHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeMenuHistoryModal()">
     <div class="modal-box wide" onclick="event.stopPropagation()"><div id="menuHistoryBody"></div></div>
 </div>
+<div id="masterBackupModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeMasterBackupModal()">
+    <div class="modal-box spare-sync-modal" onclick="event.stopPropagation()">
+        <button type="button" class="modal-x" onclick="TVC_App.closeMasterBackupModal()" aria-label="Close">×</button>
+        <h3 class="spare-sync-title">Database Backup &amp; Restore</h3>
+        <p class="spare-sync-hint" id="masterBackupHint">Back up or restore Master Data for this tab.</p>
+        <p class="spare-sync-note muted" id="masterBackupNote"></p>
+        <div class="spare-sync-actions">
+            <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.runMasterBackup()">Backup</button>
+            <button type="button" class="btn spare-sync-btn" onclick="TVC_App.triggerMasterRestore()">Restore</button>
+        </div>
+        <input type="file" id="masterBackupRestoreFile" class="hidden" accept=".zip,.json,application/zip,application/json"
+            onchange="TVC_App.onMasterRestoreFile(this.files &amp;&amp; this.files[0]); this.value='';">
+        <div class="spare-sync-footer">
+            <button type="button" class="btn" onclick="TVC_App.closeMasterBackupModal()">Close</button>
+        </div>
+    </div>
+</div>
 <div id="runHoursModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeRunHoursModal()">
     <div class="modal-box runhrs-modal" onclick="event.stopPropagation()">
         <button type="button" class="modal-x" onclick="TVC_App.closeRunHoursModal()" aria-label="Close">×</button>
@@ -564,15 +581,15 @@
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/rbac.js?v=20260803-hq-reported-by"></script>
 <script src="js/core/schema.js?v=20260727-df-schedule-wp-hist"></script>
-<script src="js/core/db.js?v=20260727-tx-getall"></script>
+<script src="js/core/db.js?v=20260803-master-backup"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260721-stock-ledger"></script>
 <script src="js/ui/viewportScale.js?v=20260723-readability"></script>
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js"></script>
-<script src="js/ui/runHours.js?v=20260728-rh-view-edit"></script>
+<script src="js/ui/runHours.js?v=20260803-rh-after-plan"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
-<script src="js/ui/spareMenu.js?v=20260803-author-hide-confirm"></script>
+<script src="js/ui/spareMenu.js?v=20260803-hq-no-req-export"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -587,16 +604,17 @@
 <script src="js/services/defectCase.js?v=20260803-hq-reported-by"></script>
 <script src="js/services/defectSync.js?v=20260715-defect-v3"></script>
 <script src="js/services/postponeSync.js?v=20260727-postpone-critical"></script>
-<script src="js/services/sync.js?v=20260728-data-xfer"></script>
+<script src="js/services/sync.js?v=20260803-menu-hist"></script>
+<script src="js/services/masterBackup.js?v=20260803-master-backup"></script>
 <script src="js/services/stationSync.js?v=20260728-data-xfer"></script>
 <script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
 <script src="js/services/fleet.js?v=20260728-fleet-imo"></script>
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
-<script src="js/ui/listFilters.js?v=20260802-req-list-filter"></script>
+<script src="js/ui/listFilters.js?v=20260803-act-critical"></script>
 <script src="js/ui/defectReport.js?v=20260802-hq-direct-approve"></script>
-<script src="js/ui/outstandingTasks.js?v=20260727-unified-hist-defect"></script>
-<script src="js/app.js?v=20260803-hide-author-confirm"></script>
+<script src="js/ui/outstandingTasks.js?v=20260803-ot-pms-matrix"></script>
+<script src="js/app.js?v=20260803-menu-hist"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

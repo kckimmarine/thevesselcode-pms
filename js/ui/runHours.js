@@ -68,7 +68,7 @@ const TVC_RunHours = (function () {
             } else if (revertSnapshot) {
                 updateBtn.title = 'Running Hours Update가 완료되었습니다. Revert 후 다시 Update할 수 있습니다.';
             } else if (!inputEditMode && ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
-                updateBtn.title = 'Work History의 모든 항목이 Confirm된 후 Update할 수 있습니다.';
+                updateBtn.title = 'Work History: Maintenance·Postpone Confirm, Critical Postpone는 Submitted까지 완료 후 Update 가능합니다. (Defect 제외)';
             } else if (inputEditMode) {
                 updateBtn.title = '입력 후 Apply Update를 눌러 저장합니다.';
             } else {
@@ -184,14 +184,19 @@ const TVC_RunHours = (function () {
 
         if (!inputEditMode) {
             if (ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
-                const entries = ctx.workHistoryEntriesRaw ? ctx.workHistoryEntriesRaw() : [];
-                const isConfirmed = ctx.isWorkHistoryEntryConfirmed;
-                const unconfirmed = isConfirmed
-                    ? entries.filter(e => !isConfirmed(e)).length
-                    : entries.length;
+                const pending = typeof ctx.getMonthlyRhGatePendingEntries === 'function'
+                    ? ctx.getMonthlyRhGatePendingEntries()
+                    : [];
+                const unconfirmed = pending.length
+                    || (ctx.workHistoryEntriesRaw
+                        ? ctx.workHistoryEntriesRaw().filter(e => ctx.isWorkHistoryEntryConfirmed && !ctx.isWorkHistoryEntryConfirmed(e)).length
+                        : 0);
                 alert(
-                    `Work History에 Confirm되지 않은 항목이 ${unconfirmed}건 있습니다.\n` +
-                    '모든 Work History 항목이 Confirm(또는 Approved/Submitted)된 후 Running Hours Update를 진행하세요.'
+                    `Monthly 준비: Work History 미완료 ${unconfirmed}건\n` +
+                    '· Maintenance / non-critical Postpone → Confirm\n' +
+                    '· Critical Postpone → Confirm 후 Submitted (Export)\n' +
+                    '· Defect는 별도 (RH 조건 아님)\n' +
+                    '완료 후 Running Hours Update를 진행하세요.'
                 );
                 return;
             }
@@ -280,8 +285,22 @@ const TVC_RunHours = (function () {
         inputEditMode = false;
     }
 
+    /**
+     * Work Plan Update 확정 후 호출.
+     * RH→Plan 구간의 Revert 세션만 종료하고, 저장된 Running Hours 값은 유지한다.
+     * (확정 후에도 Update가 Revert 때문에 계속 막히는 문제 방지)
+     */
+    function clearRevertAfterPlanLock() {
+        revertSnapshot = null;
+        inputEditMode = false;
+        syncRhToolbarUi();
+    }
+
     /** @deprecated per-row save — use updateAll */
     async function save(i) { return updateAll(); }
 
-    return { init, render, preview, totalEdit, updateAll, revert, save, hasPendingRevert, syncRhToolbarUi, resetInputEditMode };
+    return {
+        init, render, preview, totalEdit, updateAll, revert, save,
+        hasPendingRevert, syncRhToolbarUi, resetInputEditMode, clearRevertAfterPlanLock,
+    };
 })();

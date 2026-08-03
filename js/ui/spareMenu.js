@@ -3346,6 +3346,7 @@ const TVC_SpareMenu = (function () {
         const sf = f.spareFilter || (f.showLowOnly ? 'lowStock' : 'total');
         if (sf === 'lowStock' && !TVC_Inventory.isLowStock(s)) return false;
         if (sf === 'legal' && spareClass(s) !== 'L') return false;
+        if (sf === 'legalLowStock' && !(TVC_Inventory.isLowStock(s) && spareClass(s) === 'L')) return false;
         return true;
     }
 
@@ -3456,12 +3457,24 @@ const TVC_SpareMenu = (function () {
     function spareDashboardCounts(st) {
         const scope = spareScopeSpares(st);
         let lowStock = 0;
+        let legalLowStock = 0;
         let legal = 0;
         scope.forEach(s => {
-            if (TVC_Inventory.isLowStock(s)) lowStock++;
-            if (spareClass(s) === 'L') legal++;
+            const low = TVC_Inventory.isLowStock(s);
+            const isLegal = spareClass(s) === 'L';
+            if (low) lowStock++;
+            if (low && isLegal) legalLowStock++;
+            if (isLegal) legal++;
         });
-        return { total: scope.length, lowStock, legal };
+        return { total: scope.length, lowStock, legalLowStock, legal };
+    }
+
+    function spareDashBtn(b, activeKey) {
+        return `<button type="button" class="act-dash-btn ${b.cls}${activeKey === b.key ? ' active' : ''}" data-sfilter="${b.key}"
+                onclick="TVC_SpareMenu.setSpareFilter('${b.key}')">
+                <span class="act-dash-count">${b.count}</span>
+                <span class="act-dash-label">${esc(b.label)}</span>
+            </button>`;
     }
 
     function renderSpareFilterDashboard() {
@@ -3472,25 +3485,19 @@ const TVC_SpareMenu = (function () {
         if (m.spareFilter === 'major') m.spareFilter = 'total';
         const c = spareDashboardCounts(st);
         const f = m.spareFilter || 'total';
-        const items = [
-            { key: 'lowStock', label: 'Low Stock', count: c.lowStock, cls: 'act-dash-overdue' },
-            { key: 'legal', label: 'Legal Spare', count: c.legal, cls: 'act-dash-pending' },
+        const left = [
+            { key: 'lowStock', label: 'Low Stock', count: c.lowStock, cls: 'act-dash-due30' },
+            { key: 'legalLowStock', label: 'Legal Low Stock', count: c.legalLowStock, cls: 'act-dash-critical' },
         ];
-        const btnHtml = items.map(b => `
-            <button type="button" class="act-dash-btn ${b.cls}${f === b.key ? ' active' : ''}" data-sfilter="${b.key}"
-                onclick="TVC_SpareMenu.setSpareFilter('${b.key}')">
-                <span class="act-dash-count">${b.count}</span>
-                <span class="act-dash-label">${esc(b.label)}</span>
-            </button>`).join('');
+        const right = [
+            { key: 'legal', label: 'Legal Spare', count: c.legal, cls: 'act-dash-pending' },
+            { key: 'total', label: 'Total', count: c.total, cls: 'act-dash-total' },
+        ];
         host.innerHTML = `
             <div class="act-filter-dashboard-inner">
-                ${btnHtml}
+                ${left.map(b => spareDashBtn(b, f)).join('')}
                 <span class="act-dash-sep" aria-hidden="true"></span>
-                <button type="button" class="act-dash-btn act-dash-total${f === 'total' ? ' active' : ''}" data-sfilter="total"
-                    onclick="TVC_SpareMenu.setSpareFilter('total')">
-                    <span class="act-dash-count">${c.total}</span>
-                    <span class="act-dash-label">Total</span>
-                </button>
+                ${right.map(b => spareDashBtn(b, f)).join('')}
             </div>`;
         bindSpareDashLayoutSync(host);
         requestAnimationFrame(() => {
@@ -3510,7 +3517,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         m.spareFilter = filter || 'total';
-        m.showLowOnly = m.spareFilter === 'lowStock';
+        m.showLowOnly = m.spareFilter === 'lowStock' || m.spareFilter === 'legalLowStock';
         renderSpareFilterDashboard();
         applySpareListFilter();
     }
@@ -3518,6 +3525,7 @@ const TVC_SpareMenu = (function () {
     function spareActiveFilterLabel(m) {
         const f = m.spareFilter || (m.showLowOnly ? 'lowStock' : 'total');
         if (f === 'lowStock') return 'Low stock';
+        if (f === 'legalLowStock') return 'Legal Low Stock';
         if (f === 'legal') return 'Legal Spare';
         return '';
     }
@@ -3587,10 +3595,6 @@ const TVC_SpareMenu = (function () {
                 <button type="button" id="spareDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteSpareItem()"${tb.deleteEnabled ? '' : ' disabled'} title="${esc(tb.deleteTitle)}">🗑 Delete</button>
                 <span class="orig-toolbar-sep"></span>
                 ${spareItemHistoryBtnHtml()}
-                <span class="orig-toolbar-sep"></span>
-                <button type="button" class="btn btn-sm btn-excel" onclick="TVC_SpareMenu.exportPartsListXlsx()" title="Export Excel (.xlsx)">
-                    <span class="btn-excel-icon" aria-hidden="true">X</span> Export XLS
-                </button>
                 <div class="tab-toolbar-end">
                     <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('spare', false)">🖨 Print</button>
                     <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('spare', true)">👁 Preview</button>
@@ -7060,6 +7064,10 @@ const TVC_SpareMenu = (function () {
         setSpareFilter('lowStock');
     }
 
+    function showLegalLowStockOnly() {
+        setSpareFilter('legalLowStock');
+    }
+
     function toggleReqPanel() {
         const modal = document.getElementById('spareReqListModal');
         if (modal && !modal.classList.contains('hidden')) closeReqListModal();
@@ -8696,7 +8704,6 @@ const TVC_SpareMenu = (function () {
                 </div>`;
         } else if (step === 'export-type') {
             const hqExportBtns = `
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReqExportList()">Requisition</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenQuotationExportList()">Quotation</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReplyEvalExportList()">Reply Evaluation</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenPurchaseOrderExportList()">Purchase Order</button>
@@ -8989,11 +8996,10 @@ const TVC_SpareMenu = (function () {
           </section>`;
         const author = isSpareAuthorAccount(user);
         const buttons = [
-            item('Database Backup & Restore', "TVC_App.menuAction('backup')", true),
+            item('Database Backup & Restore', "TVC_App.openMasterBackupModal('spare')", true),
             ...(author ? [] : [
                 item('Data Export & Import', 'TVC_SpareMenu.openSpareSyncMenu()', true),
                 item('View Data History', 'TVC_SpareMenu.openHistoryModal()', true),
-                item('Update Spare Parts Inventory', 'TVC_SpareMenu.triggerInventoryImport()', canModify),
             ]),
         ];
         return col('necessary', 'If Necessary', buttons.join(''));
@@ -16034,7 +16040,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
     return {
         init, render, renderSpareGroupTree, toggleSpareTreeDept, syncSpareGroupSelection, refreshList, syncSpareToolbarUi, spareToolbarFlags, applySpareToolbarFlags,
-        setFilter, setSearch, clearSpareSearch, clearListFilters, toggleLowOnly, showLowStockOnly, setSpareFilter, toggleReqPanel,
+        setFilter, setSearch, clearSpareSearch, clearListFilters, toggleLowOnly, showLowStockOnly, showLegalLowStockOnly, setSpareFilter, toggleReqPanel,
         selectSpareRow, focusSpareRow, openSpareModify, openSpareAppend, deleteSpareItem, deleteSpareItems,
         openDetail, closeDetail, saveDetailGroup,
         createRequisition, assignToTask, suggestRequisition,

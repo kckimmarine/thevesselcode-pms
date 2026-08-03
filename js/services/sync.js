@@ -161,6 +161,10 @@ const TVC_Sync = (function () {
             record_count: recordCount,
             status: 'SUCCESS',
             space: spaceOf(user),
+            station_id: stationId || null,
+            peer: direction === 'STATION_TO_HUB'
+                ? 'Master'
+                : (direction === 'SHIP_TO_HQ' || direction === 'HQ_TO_SHIP' ? 'Company' : null),
         });
         return payload;
     }
@@ -289,15 +293,20 @@ const TVC_Sync = (function () {
             log: `📥 [Import/${dept}] ${payload.export_meta?.direction || 'UNKNOWN'} from ${payload.export_meta?.export_date || '?'}`,
             sync_status: 'LOCAL',
         });
+        const importDir = payload.export_meta?.direction || 'UNKNOWN';
         await recordSyncHistory({
             type: 'IMPORT',
-            direction: payload.export_meta?.direction || 'UNKNOWN',
+            direction: importDir,
             department: dept,
             vessel_id: payload.export_meta?.vessel_id || '—',
             filename: file.name || '(uploaded)',
             record_count: recordCount,
             status,
             space: spaceOf(user),
+            station_id: payload.export_meta?.station_id || null,
+            peer: isHubMerge && importDir === 'STATION_TO_HUB'
+                ? (dept === 'ENGINE' ? 'Engine' : (dept === 'DECK' ? 'Deck' : 'Station'))
+                : (importDir === 'HQ_TO_SHIP' || importDir === 'SHIP_TO_HQ' ? (isHq ? null : 'Company') : null),
         });
         return payload;
     }
@@ -506,6 +515,10 @@ const TVC_Sync = (function () {
             record_count: recordCount,
             status: 'SUCCESS',
             space: spaceOf(user),
+            station_id: payload.export_meta?.station_id || null,
+            peer: fileDirection === 'STATION_TO_HUB'
+                ? (dept === 'ENGINE' ? 'Engine' : (dept === 'DECK' ? 'Deck' : 'Station'))
+                : (fileDirection === 'HQ_TO_SHIP' || fileDirection === 'SHIP_TO_HQ' ? 'Company' : null),
         });
         return payload;
     }

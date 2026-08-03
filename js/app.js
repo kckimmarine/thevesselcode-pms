@@ -10,6 +10,7 @@ const TVC_App = (function () {
     let _planRowRefreshTimer = null;
     let _planRowLastTap = { id: null, t: 0 };
     let _menuXfer = { step: 'mode' };
+    let _menuHistCategory = 'defect'; // defect | postpone | monthly
 
     function repSt(r) { return TVC_RBAC.normalizeReportStatus(r?.status, !!r?.is_locked); }
     function itemSt(item) { return TVC_RBAC.normalizeReportStatus(item?.status); }
@@ -27,7 +28,7 @@ const TVC_App = (function () {
         reportPeriodFrom: '',         // YYYY-MM-DD Reported Date (Defect · Work History)
         reportPeriodTo: '',
         listFilters: {
-            actual: { pics: [], unassigned: false },
+            actual: { pics: [], unassigned: false, criticalOnly: false },
             history: { groupKeys: [], type: 'all', openOnly: false, postponeAwaitingApproval: false },
         },
         jobSort: { field: 'job_code', asc: true },
@@ -192,7 +193,8 @@ const TVC_App = (function () {
                     getState: () => state,
                     refresh: refreshAll,
                     allWorkHistoryConfirmed,
-                    isWorkHistoryEntryConfirmed,
+                    isWorkHistoryEntryConfirmed: isMonthlyRhGateEntryReady,
+                    getMonthlyRhGatePendingEntries,
                     workHistoryEntriesRaw,
                     canUpdateRunningHours,
                     canEditRunningHours: canEditRunningHoursPerm,
@@ -214,7 +216,15 @@ const TVC_App = (function () {
                     deptJobs,
                     jobMatchesActualFilter,
                     jobActualStatusKind,
+                    jobShowsCriticalEquipmentMark,
                     menuNavigate,
+                    menuAction,
+                    rhUpdateGateApplies,
+                    isRhUpdateCommitted,
+                    isOriginalPlanUpdateLocked,
+                    getPlanLockDept,
+                    getMonthlyRhGatePendingEntries,
+                    monthlyRhGatePendingReason,
                 });
             } catch (e) { console.error('[TVC] OutstandingTasks init', e); }
             window.addEventListener('tvc:spics-requisition-suggest', (e) => {
@@ -1919,26 +1929,40 @@ const TVC_App = (function () {
             ];
         }
 
+        const shipMonthly = shipMonthlyReportItems(c);
+
         if (isMaster) {
-            const monthlyCore = [
-                { label: 'Update Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
-                { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true, feature: 'showUpdateWorkPlan' },
-            ];
             return [
                 { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
-                { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: monthlyCore },
+                { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: shipMonthly },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
         }
 
         return [
             { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
-            { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [
-                { label: 'Update Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
-                { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true, feature: 'showUpdateWorkPlan' },
-            ] },
+            { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: shipMonthly },
             { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
         ];
+    }
+
+    /** Confirmer (CE / Captain) Monthly Report: guide text + RH + Work Plan */
+    function shipMonthlyReportItems(c) {
+        const items = [];
+        const isShipConfirmer = state.user
+            && TVC_RBAC.isApprover(state.user)
+            && !TVC_RBAC.isHqAccount(state.user);
+        if (isShipConfirmer) {
+            items.push({
+                label: 'Check Work History (for Report Confirm)',
+                textOnly: true,
+            });
+        }
+        items.push(
+            { label: 'Update Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')", feature: 'showRunningHours' },
+            { label: 'Update Work Plan', tag: 'B', action: "TVC_App.menuAction('originalPlan')", badge: c.dueMonth, badgeTone: 'blue', planLock: true, feature: 'showUpdateWorkPlan' },
+        );
+        return items;
     }
 
     function menuNecessaryItems() {
@@ -2794,26 +2818,88 @@ const TVC_App = (function () {
         }
     }
 
+    function menuHistViewerKind(user) {
+        if (!user) return 'ship';
+        if (TVC_RBAC.isHqAccount(user)) return 'hq';
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) return 'hub';
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user)) return 'station';
+        if (TVC_RBAC.isApprover(user)) return 'station';
+        return 'ship';
+    }
+
+    function menuHistAccountHint(user) {
+        const kind = menuHistViewerKind(user);
+        if (kind === 'hq') return 'HQ Mode — vessel(Master)과 Export / Import 이력을 표시합니다.';
+        if (kind === 'hub') return 'Hub (Captain) — Engine/Deck Station · Company(HQ)와 Export / Import 이력을 표시합니다.';
+        if (kind === 'station') {
+            return '확인자 — 주로 Master와 Export / Import합니다. Master PC 장애 시 Company(HQ) 패키지도 기록됩니다.';
+        }
+        return 'Data Export & Import History';
+    }
+
+    /** 이력 행의 상대방(Direction) 표시 — 계정 역할 기준 */
+    function menuHistPeerLabel(row, user) {
+        if (row?.peer) return row.peer;
+        const kind = menuHistViewerKind(user);
+        const d = String(row?.direction || '');
+        const dept = String(row?.department || '').toUpperCase();
+        const station = String(row?.station_id || '').toUpperCase();
+
+        const stationPeer = () => {
+            if (dept === 'ENGINE' || station === 'ECR') return 'Engine';
+            if (dept === 'DECK' || station === 'CCR') return 'Deck';
+            if (dept === 'ENGINE') return 'Engine';
+            if (dept === 'DECK') return 'Deck';
+            return 'Station';
+        };
+
+        const isCompanyDir = () =>
+            d === 'SHIP_TO_HQ' || d === 'HQ_TO_SHIP'
+            || /TO_HQ|HQ_TO|REPLY_HQ|CLOSE_HQ|COMPANY/i.test(d);
+
+        const isStationDir = () =>
+            d === 'STATION_TO_HUB' || d === 'HUB_MERGE' || /STATION/i.test(d);
+
+        if (kind === 'hq') {
+            const vid = row?.vessel_id;
+            if (vid && vid !== '—') {
+                const fleet = typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.resolveById?.(vid) : null;
+                return fleet?.name || vid;
+            }
+            return 'Vessel';
+        }
+
+        if (kind === 'hub') {
+            if (isStationDir()) return stationPeer();
+            if (isCompanyDir()) return 'Company';
+            // Monthly / Defect / Postpone 기본: Company, Station 패키지만 Engine/Deck
+            if (d === 'STATION_TO_HUB') return stationPeer();
+            return 'Company';
+        }
+
+        // Station confirmer (CE / CO): Master 기본, HQ 직송은 Company
+        if (isCompanyDir() && !isStationDir()) return 'Company';
+        return 'Master';
+    }
+
+    function menuHistCategoryKey(row) {
+        const label = menuXferCategoryFromRow(row);
+        if (label === 'Defect Report') return 'defect';
+        if (label === 'Postpone Report') return 'postpone';
+        return 'monthly';
+    }
+
+    function menuHistCategoryLabel(key) {
+        return {
+            defect: 'Defect Report',
+            postpone: 'Postpone Report',
+            monthly: 'Monthly Report',
+        }[key] || 'Monthly Report';
+    }
+
     async function openMenuHistoryModal() {
-        const body = document.getElementById('menuHistoryBody');
-        if (!body) return;
-        const rows = await loadSyncHistoryRows();
-        body.innerHTML = `
-            <button type="button" class="modal-x" onclick="TVC_App.closeMenuHistoryModal()">×</button>
-            <h3 class="spare-sync-title">Data Export / Import History</h3>
-            <p class="spare-hist-sub muted">Defect Report, Postpone Report, and Monthly Report sync activity.</p>
-            <div class="spics-tx-lines-wrap"><table class="spics-tx-table spics-hist-table"><thead><tr>
-                <th>Date</th><th>Direction</th><th>Type</th><th>Department</th><th>File</th><th>Status</th>
-            </tr></thead><tbody>${rows.map(r => `<tr>
-                <td>${esc(histEventDate(r))}</td>
-                <td><span class="pill ${r.type === 'EXPORT' ? 'ok' : 'warn'}">${esc(r.type || '—')}</span></td>
-                <td>${esc(menuXferCategoryFromRow(r))}</td>
-                <td>${esc(r.department || '—')}</td>
-                <td>${esc(r.filename || '—')}</td>
-                <td>${esc(r.status || '—')}</td>
-            </tr>`).join('') || '<tr><td colspan="6" class="muted" style="text-align:center">No export/import history yet.</td></tr>'}
-            </tbody></table></div>
-            <div class="modal-actions"><button type="button" class="btn" onclick="TVC_App.closeMenuHistoryModal()">Close</button></div>`;
+        if (!_menuHistCategory) _menuHistCategory = 'defect';
+        await renderMenuHistoryModal();
         showModal('menuHistoryModal');
     }
 
@@ -2821,10 +2907,59 @@ const TVC_App = (function () {
         closeModal('menuHistoryModal');
     }
 
+    async function setMenuHistCategory(key) {
+        _menuHistCategory = key === 'postpone' || key === 'monthly' ? key : 'defect';
+        await renderMenuHistoryModal();
+    }
+
+    async function renderMenuHistoryModal() {
+        const body = document.getElementById('menuHistoryBody');
+        if (!body) return;
+        const user = state.user;
+        const all = await loadSyncHistoryRows();
+        const cat = _menuHistCategory || 'defect';
+        const rows = all.filter(r => menuHistCategoryKey(r) === cat);
+        const tabs = ['defect', 'postpone', 'monthly'].map(key => `
+            <button type="button" class="menu-hist-cat${cat === key ? ' active' : ''}"
+                onclick="TVC_App.setMenuHistCategory('${key}')">${esc(menuHistCategoryLabel(key))}</button>`).join('');
+        const tbody = rows.map(r => {
+            const dt = histEventDate(r);
+            const isExport = String(r.type || '').toUpperCase() === 'EXPORT';
+            const peer = menuHistPeerLabel(r, user);
+            return `<tr>
+                <td class="menu-hist-exp">${isExport ? esc(dt) : ''}</td>
+                <td class="menu-hist-imp">${isExport ? '' : esc(dt)}</td>
+                <td class="menu-hist-dir">${esc(peer)}</td>
+            </tr>`;
+        }).join('') || `<tr><td colspan="3" class="muted" style="text-align:center">No ${esc(menuHistCategoryLabel(cat))} history yet.</td></tr>`;
+
+        body.innerHTML = `
+            <button type="button" class="modal-x" onclick="TVC_App.closeMenuHistoryModal()">×</button>
+            <h3 class="spare-sync-title">Data Export &amp; Import History</h3>
+            <p class="spare-hist-sub muted">${esc(menuHistAccountHint(user))}</p>
+            <div class="menu-hist-cats" role="tablist">${tabs}</div>
+            <div class="spics-tx-lines-wrap menu-hist-table-wrap">
+                <table class="spics-tx-table spics-hist-table menu-hist-table">
+                    <thead><tr>
+                        <th>Export</th>
+                        <th>Import</th>
+                        <th>Direction</th>
+                    </tr></thead>
+                    <tbody>${tbody}</tbody>
+                </table>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn" onclick="TVC_App.closeMenuHistoryModal()">Close</button>
+            </div>`;
+    }
+
     function renderMenuFlowItem(it, f, opts = {}) {
         if (it.feature && !f[it.feature]) return '';
-                    const badge = (it.badge != null && it.badge > 0)
-                        ? `<span class="mi-badge mi-${it.badgeTone || 'blue'}">${it.badge}</span>` : '';
+        if (it.textOnly) {
+            return `<p class="spare-flow-note">${esc(it.label)}</p>`;
+        }
+        const badge = (it.badge != null && it.badge > 0)
+            ? `<span class="mi-badge mi-${it.badgeTone || 'blue'}">${it.badge}</span>` : '';
         const label = `<span class="mi-label">${esc(it.label)}</span>`;
         if (opts.locked) {
             const tip = esc(opts.disabledTitle || 'Original Plan Update는 현재 사용할 수 없습니다.');
@@ -3097,7 +3232,7 @@ const TVC_App = (function () {
                     document.getElementById('importZip').click();
                 });
                 break;
-            case 'backup': handleExport(); break;
+            case 'backup': openMasterBackupModal('pms'); break;
             case 'defectReport':
                 if (state.selectedJobId) TVC_DefectReport.openNewFromJob(state.selectedJobId);
                 else TVC_DefectReport.openNewBlank();
@@ -3966,6 +4101,8 @@ const TVC_App = (function () {
             }));
             await lockOriginalPlanUpdate(dept, shipCode, stats);
             _planUpdateSnapshot = null;
+            // Plan 확정 후 RH Revert 세션 종료 → Update 버튼이 계속 비활성인 상태 해제
+            TVC_RunHours.clearRevertAfterPlanLock?.();
             state._planCalcMsg = `Original Plan Update 확정 (${shipCode}) — Status On ${stats?.statusDate || ''}. 본사 Import 전까지 재변경 불가.`;
             syncPlanUpdateUi();
             if (state.currentTab === 'menu') renderMainMenu();
@@ -4742,7 +4879,7 @@ const TVC_App = (function () {
     }
 
     function clearListFilters(tab) {
-        if (tab === 'actual') setListFilters('actual', { pics: [], unassigned: false });
+        if (tab === 'actual') setListFilters('actual', { pics: [], unassigned: false, criticalOnly: false });
         else if (tab === 'history') setListFilters('history', { groupKeys: [], type: 'all', openOnly: false, postponeAwaitingApproval: false });
     }
 
@@ -4776,10 +4913,56 @@ const TVC_App = (function () {
         return WORK_HISTORY_CONFIRMED_LABELS.has(label);
     }
 
+    /**
+     * Engine Monthly → Update Running Hours 게이트.
+     * - Defect: 제외 (별도 관리)
+     * - Maintenance / non-critical Postpone: Confirmed+
+     * - Critical Postpone: Submitted+ (HQ Approve는 Monthly 회신까지 대기 가능)
+     */
+    function isMonthlyRhGateEntryReady(entry) {
+        if (!entry || isHistDefectEntry(entry)) return true;
+        const report = entry.report;
+        if (!report) return false;
+        TVC_WorkReport.fromLegacy(report);
+        const label = workReportListWorkflowStatus(report);
+        if (postponeRequiresCompanyApproval(report)) {
+            return label === 'Submitted' || label === 'Approved';
+        }
+        if (label !== 'Confirmed' && label !== 'Submitted' && label !== 'Approved') return false;
+        const itemSt = entry.item
+            ? TVC_RBAC.normalizeReportStatus(entry.item.status, report.is_locked)
+            : null;
+        if (itemSt === 'REPORTED') return false;
+        return true;
+    }
+
+    function monthlyRhGatePendingReason(entry) {
+        if (!entry || isHistDefectEntry(entry)) return '';
+        const report = entry.report;
+        if (!report) return 'Missing report';
+        TVC_WorkReport.fromLegacy(report);
+        const label = workReportListWorkflowStatus(report);
+        const critical = postponeRequiresCompanyApproval(report);
+        if (critical) {
+            if (label === 'Reported') return 'Critical Postpone — Confirm, then Export (Submitted)';
+            if (label === 'Confirmed') return 'Critical Postpone — Export to Submitted (Approve can wait)';
+            return '';
+        }
+        if (label === 'Reported' || (entry.item && TVC_RBAC.normalizeReportStatus(entry.item.status, report.is_locked) === 'REPORTED')) {
+            return report.work_type === 'POSTPONE'
+                ? 'Postpone — Confirm required'
+                : 'Maintenance — Confirm required';
+        }
+        return '';
+    }
+
+    function getMonthlyRhGatePendingEntries() {
+        return workHistoryEntriesRaw().filter(e => !isHistDefectEntry(e) && !isMonthlyRhGateEntryReady(e));
+    }
+
     function allWorkHistoryConfirmed() {
-        const entries = workHistoryEntriesRaw();
-        if (!entries.length) return true;
-        return entries.every(isWorkHistoryEntryConfirmed);
+        // RH gate: monthly readiness (excludes Defect; Critical Postpone needs Submitted)
+        return getMonthlyRhGatePendingEntries().length === 0;
     }
 
     function isRhUpdateCommitted() {
@@ -7983,6 +8166,84 @@ const TVC_App = (function () {
         alert(`Loaded ${state.jobs.length} jobs`);
     }
 
+    // ── Database Backup & Restore (Menu PMS · SPARE Master Data) ─────
+    let _masterBackupScope = 'pms';
+
+    function masterBackupOpts() {
+        return {
+            selectedVesselId: state.selectedVesselId || null,
+            vesselId: TVC_RBAC.isHqAccount(state.user) ? (state.selectedVesselId || null) : null,
+        };
+    }
+
+    function openMasterBackupModal(scope = 'pms') {
+        if (!state.user) return;
+        if (typeof TVC_MasterBackup === 'undefined') {
+            alert('Backup 모듈을 사용할 수 없습니다.');
+            return;
+        }
+        _masterBackupScope = scope === 'spare' ? 'spare' : 'pms';
+        const label = TVC_MasterBackup.scopeLabel(_masterBackupScope);
+        const hint = document.getElementById('masterBackupHint');
+        const note = document.getElementById('masterBackupNote');
+        if (hint) {
+            hint.textContent = _masterBackupScope === 'spare'
+                ? 'SPARE 탭 Master Data(Spare Parts · Catalog)를 백업하거나 복구합니다.'
+                : 'Menu(PMS) Master Data(Jobs · Groups · Equipment · BOM · Running Hours)를 백업하거나 복구합니다.';
+        }
+        if (note) {
+            note.textContent = `${label} · Backup은 ZIP 저장, Restore는 선택한 백업으로 현재 Master Data를 교체합니다.`;
+        }
+        showModal('masterBackupModal');
+    }
+
+    function closeMasterBackupModal() {
+        closeModal('masterBackupModal');
+    }
+
+    async function runMasterBackup() {
+        const user = state.user || TVC_Auth.getCurrentUser();
+        if (!user) return;
+        if (typeof TVC_MasterBackup === 'undefined') return alert('Backup 모듈을 사용할 수 없습니다.');
+        try {
+            const r = await TVC_MasterBackup.exportBackup(_masterBackupScope, user, masterBackupOpts());
+            const parts = Object.entries(r.counts || {}).map(([k, n]) => `${k}: ${n}`).join(', ');
+            alert(`${TVC_MasterBackup.scopeLabel(r.scope)} Backup 완료\n${r.filename}\n${parts}`);
+        } catch (e) {
+            alert(e.message || String(e));
+        }
+    }
+
+    function triggerMasterRestore() {
+        if (!state.user) return;
+        document.getElementById('masterBackupRestoreFile')?.click();
+    }
+
+    async function onMasterRestoreFile(file) {
+        if (!file) return;
+        const user = state.user || TVC_Auth.getCurrentUser();
+        if (!user) return;
+        if (typeof TVC_MasterBackup === 'undefined') return alert('Backup 모듈을 사용할 수 없습니다.');
+        const label = TVC_MasterBackup.scopeLabel(_masterBackupScope);
+        if (!window.confirm(
+            `${label}를 선택한 백업 파일로 교체합니다.\n` +
+            '현재 Master Data는 덮어씌워집니다. 계속할까요?'
+        )) return;
+        try {
+            const r = await TVC_MasterBackup.restoreBackup(_masterBackupScope, file, user, masterBackupOpts());
+            closeMasterBackupModal();
+            await refreshAll();
+            if (_masterBackupScope === 'spare' && typeof TVC_SpareMenu !== 'undefined') {
+                await TVC_SpareMenu.render?.();
+            }
+            const parts = Object.entries(r.counts || {}).map(([k, n]) => `${k}: ${n}`).join(', ');
+            alert(`${label} Restore 완료\nVessel: ${r.vesselId || '—'}\n${parts}`);
+        } catch (e) {
+            if (e?.message === '복구가 취소되었습니다.') return;
+            alert(e.message || String(e));
+        }
+    }
+
     // ── Utils ────────────────────────────────────────────────────────
     function showModal(id, opts = {}) {
         const el = document.getElementById(id);
@@ -8066,6 +8327,7 @@ const TVC_App = (function () {
         setFleetView, setFleetSearch, selectVessel,
         setSearch, setTreeSearch, clearSearchField, updateSearchClearBtn, bindSearchClearInput, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, isTreeDeptCollapsed, toggleTreeDept, renderGroupTree,
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
+        jobShowsCriticalEquipmentMark,
         reportMatchesPostponeAwaitingApproval,
         getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs,
         renderSectionCard,
@@ -8103,7 +8365,8 @@ const TVC_App = (function () {
         menuXferConfirmDefectExport, menuXferConfirmPostponeExport, menuXferConfirmMonthlyExport,
         menuXferTryOnlineSync,
         menuXferExportDefect, menuXferExportPostpone, menuXferExportMonthly, onMenuXferImportFile,
-        openMenuHistoryModal, closeMenuHistoryModal,
+        openMenuHistoryModal, closeMenuHistoryModal, setMenuHistCategory,
+        openMasterBackupModal, closeMasterBackupModal, runMasterBackup, triggerMasterRestore, onMasterRestoreFile,
         uploadAttachment, saveDetailReport, closeModal, showModal, swapHistoryModals, dismissSpicsAlerts, openSpicsRequisition,
     };
 })();

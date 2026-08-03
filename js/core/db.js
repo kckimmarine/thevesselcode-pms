@@ -505,6 +505,19 @@ const TVC_DB = (function () {
         });
     }
 
+    async function clearStore(storeName) {
+        await open();
+        if (!TVC_SCHEMA.STORES[storeName]) {
+            throw new Error(`Unknown store: ${storeName}`);
+        }
+        return new Promise((resolve, reject) => {
+            const t = tx(storeName, 'readwrite');
+            t.objectStore(storeName).clear();
+            t.oncomplete = () => resolve();
+            t.onerror = () => reject(t.error);
+        });
+    }
+
     // ── SparePart CRUD (SPICS) ────────────────────────────────────────
     const SparePart = (function () {
         const STORE = 'spare_parts';
@@ -1002,7 +1015,7 @@ const TVC_DB = (function () {
     };
 
     return {
-        open, getAll, get, put, del, bulkPut, getMeta, setMeta, indexGetAll, runTransaction, clearAll,
+        open, getAll, get, put, del, bulkPut, getMeta, setMeta, indexGetAll, runTransaction, clearAll, clearStore,
         SparePart, InventoryHistory, SpareInventoryParser: TVC_SpareInventoryParser, InventoryDB,
         loadSpareInventory,
         importSpareInventory, importSpareInventoryFile,

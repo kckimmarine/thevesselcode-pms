@@ -44,19 +44,14 @@ const TVC_ListFilters = (function () {
 
     const REQ_TYPE_LABELS = { all: 'All', routine: 'Routine', urgent: 'Urgent', dock: 'Dock' };
 
-    function isHqMode() {
-        const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser?.() : null;
-        return typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isHqAccount?.(user);
-    }
-
     function postponeAwaitingActive(f) {
-        return isHqMode() && !!f?.postponeAwaitingApproval;
+        return !!f?.postponeAwaitingApproval;
     }
 
     function activeCount(tab, state) {
         const f = filters(state, tab);
         if (tab === 'actual') {
-            let n = (f.pics?.length || 0) + (f.unassigned ? 1 : 0);
+            let n = (f.pics?.length || 0) + (f.unassigned ? 1 : 0) + (f.criticalOnly ? 1 : 0);
             return n;
         }
         if (tab === 'history') {
@@ -148,6 +143,12 @@ const TVC_ListFilters = (function () {
 
     function matchActualJob(job, f) {
         if (!job) return false;
+        if (f.criticalOnly) {
+            const isCrit = typeof TVC_App?.jobShowsCriticalEquipmentMark === 'function'
+                ? TVC_App.jobShowsCriticalEquipmentMark(job)
+                : job.is_critical_equipment === true;
+            if (!isCrit) return false;
+        }
         const hasPic = (f.pics?.length || 0) > 0 || f.unassigned;
         if (!hasPic) return true;
         const pic = String(job.pic || '').trim();
@@ -265,6 +266,10 @@ const TVC_ListFilters = (function () {
         _groupSearch = '';
     }
 
+    function popCloseBtnHtml() {
+        return `<button type="button" class="modal-x list-filter-pop-close" data-filter-close title="Close" aria-label="Close">×</button>`;
+    }
+
     function renderPopover(tab) {
         const pop = getPopover();
         const btnId = filterBtnId(tab);
@@ -296,10 +301,15 @@ const TVC_ListFilters = (function () {
                 return title + checks;
             }).join('');
             pop.innerHTML = `
+                ${popCloseBtnHtml()}
                 <div class="list-filter-section">
                     ${single ? '<div class="list-filter-section-title">P.I.C</div>' : ''}
                     ${picChecks}
                     <label class="list-filter-check"><input type="checkbox" id="actFilterUnassigned"${f.unassigned ? ' checked' : ''}> Unassigned</label>
+                </div>
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Critical Equipment</div>
+                    <label class="list-filter-check"><input type="checkbox" id="actFilterCriticalOnly"${f.criticalOnly ? ' checked' : ''}> Critical Equipment only</label>
                 </div>
                 <div class="list-filter-actions">
                     <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
@@ -309,6 +319,7 @@ const TVC_ListFilters = (function () {
             const types = ['all', 'm', 'd', 'c'];
             const curType = f.type || 'all';
             pop.innerHTML = `
+                ${popCloseBtnHtml()}
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Report type</div>
                     <div class="list-filter-type-seg">
@@ -324,6 +335,7 @@ const TVC_ListFilters = (function () {
             const types = ['all', 'routine', 'urgent', 'dock'];
             const curType = f.type || 'all';
             pop.innerHTML = `
+                ${popCloseBtnHtml()}
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Report type</div>
                     <div class="list-filter-type-seg">
@@ -342,13 +354,8 @@ const TVC_ListFilters = (function () {
         } else {
             const types = ['all', 'm', 'p', 'd'];
             const histType = effectiveHistType(f);
-            const hqMode = isHqMode();
-            const postponeSection = hqMode ? `
-                <div class="list-filter-section">
-                    <div class="list-filter-section-title">Postpone Report</div>
-                    <label class="list-filter-check list-filter-postpone-awaiting"><input type="checkbox" id="histFilterPostponeAwaiting"${postponeAwaitingActive(f) ? ' checked' : ''}> Awaiting company approval <span class="muted">(Confirmed · Submitted · not Approved)</span></label>
-                </div>` : '';
             pop.innerHTML = `
+                ${popCloseBtnHtml()}
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Report type</div>
                     <div class="list-filter-type-seg">
@@ -360,13 +367,20 @@ const TVC_ListFilters = (function () {
                     <div class="list-filter-section-title">Defect Report</div>
                     <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="histFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open only <span class="muted">(DC unchecked)</span></label>
                 </div>
-                ${postponeSection}
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Postpone Report</div>
+                    <label class="list-filter-check list-filter-postpone-awaiting"><input type="checkbox" id="histFilterPostponeAwaiting"${postponeAwaitingActive(f) ? ' checked' : ''}> Awaiting company approval <span class="muted">(Confirmed · Submitted · not Approved)</span></label>
+                </div>
                 <div class="list-filter-actions">
                     <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
                     <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
                 </div>`;
         }
 
+        pop.querySelector('[data-filter-close]')?.addEventListener('click', (ev) => {
+            ev.stopPropagation();
+            closePopover();
+        });
         pop.querySelector('[data-filter-apply]')?.addEventListener('click', () => applyFromPopover(tab, pop));
         pop.querySelector('[data-filter-clear]')?.addEventListener('click', (ev) => {
             ev.stopPropagation();
@@ -380,13 +394,15 @@ const TVC_ListFilters = (function () {
         });
         pop.querySelector('#histFilterOpenOnly')?.addEventListener('change', (ev) => {
             if (!ev.target.checked) return;
-            pop.querySelector('#histFilterPostponeAwaiting').checked = false;
+            const postponeCb = pop.querySelector('#histFilterPostponeAwaiting');
+            if (postponeCb) postponeCb.checked = false;
             pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
             pop.querySelector('[data-hist-type="d"]')?.classList.add('active');
         });
         pop.querySelector('#histFilterPostponeAwaiting')?.addEventListener('change', (ev) => {
             if (!ev.target.checked) return;
-            pop.querySelector('#histFilterOpenOnly').checked = false;
+            const openCb = pop.querySelector('#histFilterOpenOnly');
+            if (openCb) openCb.checked = false;
             pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
             pop.querySelector('[data-hist-type="p"]')?.classList.add('active');
         });
@@ -466,7 +482,8 @@ const TVC_ListFilters = (function () {
         if (tab === 'actual') {
             const pics = [...pop.querySelectorAll('[data-pic]:checked')].map(el => el.dataset.pic);
             const unassigned = !!pop.querySelector('#actFilterUnassigned')?.checked;
-            TVC_App.setListFilters('actual', { pics, unassigned });
+            const criticalOnly = !!pop.querySelector('#actFilterCriticalOnly')?.checked;
+            TVC_App.setListFilters('actual', { pics, unassigned, criticalOnly });
         } else if (tab === 'consumeLog') {
             const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
             const typeBtn = pop.querySelector('[data-hist-type].active');
@@ -481,7 +498,7 @@ const TVC_ListFilters = (function () {
         } else {
             const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
             const openOnly = !!pop.querySelector('#histFilterOpenOnly')?.checked;
-            const postponeAwaitingApproval = isHqMode() && !!pop.querySelector('#histFilterPostponeAwaiting')?.checked;
+            const postponeAwaitingApproval = !!pop.querySelector('#histFilterPostponeAwaiting')?.checked;
             const typeBtn = pop.querySelector('[data-hist-type].active');
             let type = typeBtn?.dataset.histType || 'all';
             if (openOnly) type = 'd';
@@ -538,6 +555,7 @@ const TVC_ListFilters = (function () {
         if (tab === 'actual') {
             if (f.pics?.length) parts.push(`PIC: ${f.pics.join(', ')}`);
             if (f.unassigned) parts.push('PIC: Unassigned');
+            if (f.criticalOnly) parts.push('Critical Equipment');
         }
         if (tab === 'history' || tab === 'consumeLog' || tab === 'reqList') {
             if (f.type && f.type !== 'all') {
