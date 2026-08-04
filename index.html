@@ -219,8 +219,8 @@
                         <button type="button" id="actModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">✏️ Modify</button>
                         <button type="button" id="actAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">➕ Append</button>
                         <button type="button" id="actDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">🗑 Delete</button>
-                        <button type="button" id="actPmsMasterExportBtn" class="btn btn-sm btn-excel hidden" onclick="TVC_App.exportPmsMasterExcel()" title="PMS Master Excel Export">📤 Master Export</button>
-                        <button type="button" id="actPmsMasterImportBtn" class="btn btn-sm hidden" onclick="TVC_App.triggerPmsMasterImport()" title="PMS Master Excel Import">📥 Master Import</button>
+                        <button type="button" id="actPmsMasterExportBtn" class="btn btn-sm btn-excel hidden" onclick="TVC_App.exportPmsMasterExcel()" title="Export PMS Master Excel (incheonchemi_pms_master_YYYYMMDD_001.xlsx)">📤 Master Export</button>
+                        <button type="button" id="actPmsMasterImportBtn" class="btn btn-sm hidden" onclick="TVC_App.triggerPmsMasterImport()" title="Import PMS Master Excel (incheonchemi_pms_master_YYYYMMDD_001.xlsx)">📥 Master Import</button>
                         <input type="file" id="pmsMasterImportFile" accept=".xlsx" class="hidden" onchange="TVC_App.importPmsMasterExcel(this.files[0]); this.value='';">
                         <div class="tab-toolbar-end">
                             <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', false)">🖨 Print</button>
@@ -622,9 +622,9 @@
 <script src="js/ui/dialog.js?v=20260804-dialog"></script>
 <script src="js/ui/runHours.js?v=20260804-dialog"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
-<script src="js/core/filename.js?v=20260804-spare-filename"></script>
+<script src="js/core/filename.js?v=20260804-pms-master-seq"></script>
 <script src="js/services/spareSync.js?v=20260804-spare-import-fix"></script>
-<script src="js/ui/spareMenu.js?v=20260804-spare-import-fix"></script>
+<script src="js/ui/spareMenu.js?v=20260804-spare-show-27"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -637,7 +637,8 @@
 <script src="js/auth.js?v=20260804-dialog"></script>
 <script src="js/services/transaction.js?v=20260803-hq-reported-by"></script>
 <script src="js/services/maintenancePlan.js?v=20260729-pms-master"></script>
-<script src="js/services/pmsMasterExcel.js?v=20260729-pms-master"></script>
+<script src="js/services/pmsMasterExcel.js?v=20260804-pms-master-seq"></script>
+<script src="js/services/spareMasterExcel.js?v=20260804-spare-export-live"></script>
 <script src="js/services/defectCase.js?v=20260803-hq-reported-by"></script>
 <script src="js/services/defectSync.js?v=20260804-hist-filename"></script>
 <script src="js/services/postponeSync.js?v=20260804-hist-filename"></script>
@@ -652,7 +653,7 @@
 <script src="js/ui/defectReport.js?v=20260804-dialog"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260804-pms-scope"></script>
-<script src="js/app.js?v=20260804-save-fix"></script>
+<script src="js/app.js?v=20260804-pms-master-seq"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

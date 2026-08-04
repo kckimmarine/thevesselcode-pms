@@ -50,6 +50,20 @@ const TVC_Filename = (function () {
     }
 
     /**
+     * 4-token (no scope): {vessel}_{type}_{YYYYMMDD}_{seq}.{ext}
+     * e.g. incheonchemi_pms_master_20260804_001.xlsx
+     */
+    async function buildFlat(opts = {}) {
+        const vessel = vesselSlug(opts.vesselId);
+        const type = String(opts.type || 'export').toLowerCase();
+        const dateTag = opts.dateTag || todayTag();
+        const ext = String(opts.ext || 'xlsx').replace(/^\./, '');
+        const prefix = `${vessel}_${type}_${dateTag}_`;
+        const seq = await nextSeq(prefix);
+        return `${prefix}${seq}.${ext}`;
+    }
+
+    /**
      * @param {{ vesselId?: string, type: string, scope?: string, department?: string, isHq?: boolean, ext?: string, dateTag?: string }} opts
      */
     async function build(opts = {}) {
@@ -70,5 +84,6 @@ const TVC_Filename = (function () {
         todayTag,
         nextSeq,
         build,
+        buildFlat,
     };
 })();

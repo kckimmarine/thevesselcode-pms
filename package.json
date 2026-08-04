@@ -7,6 +7,7 @@
   "scripts": {
     "import-xlsx": "python scripts/import-pms-xlsx.py",
     "export-pms-master-sample": "node scripts/export-pms-master-sample.mjs",
+    "export-spare-master-sample": "node scripts/export-spare-master-sample.mjs",
     "serve": "npx --yes serve . -p 3000",
     "start": "npx --yes serve . -p 3000",
     "electron": "node scripts/run-electron.mjs HQ_OFFICE",

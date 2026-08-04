@@ -151,6 +151,15 @@ const TVC_PmsMasterExcel = (function () {
         await TVC_FileExport.save(blob, filename);
     }
 
+    async function masterExcelFilename(vesselId) {
+        if (typeof TVC_Filename !== 'undefined') {
+            return TVC_Filename.buildFlat({ vesselId, type: 'pms_master', ext: 'xlsx' });
+        }
+        const slug = String(vesselId || 'vessel').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'vessel';
+        const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+        return `${slug}_pms_master_${dateTag}_001.xlsx`;
+    }
+
     /** Renumber DECK job codes on export (26-001 → 01-001). ENGINE codes unchanged. */
     function renumberJobsForExport(jobs) {
         const engine = [];
@@ -345,9 +354,19 @@ const TVC_PmsMasterExcel = (function () {
     async function exportToFile(opts = {}) {
         const wb = await exportToWorkbook(opts);
         const vesselId = opts.vesselId || (await loadExportData()).vesselId;
-        const stamp = new Date().toISOString().slice(0, 10);
         const buf = await wb.xlsx.writeBuffer();
-        await downloadBlob(buf, `${vesselId}_PMS_MASTER_${stamp}.xlsx`);
+        const filename = await masterExcelFilename(vesselId);
+        await downloadBlob(buf, filename);
+        if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
+            await TVC_Sync.recordSyncHistory({
+                type: 'EXPORT',
+                direction: 'PMS_MASTER',
+                scope: 'PMS',
+                filename,
+                file_name: filename,
+                vessel_id: vesselId,
+            });
+        }
         return true;
     }
 
@@ -558,9 +577,6 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     async function importFromWorkbook(wb, user) {
-        if (!TVC_RBAC.isHqAccount(user)) {
-            throw Object.assign(new Error('PMS Master Import는 HQ Mode (Superintendent)만 사용할 수 있습니다.'), { code: 'PERMISSION_DENIED' });
-        }
         TVC_RBAC.assertModifyOriginalPlan(user);
         const wsG = wb.getWorksheet('Group Headers');
         const wsE = wb.getWorksheet('Equipment Headers');
@@ -696,6 +712,7 @@ const TVC_PmsMasterExcel = (function () {
         exportToFile, exportToWorkbook, importFromFile, importFromWorkbook,
         buildGroupLabel, splitGroupLabel, resolveGroup, renumberJobsForExport,
         isLegacyDeckGroupLabel, pruneEmptyGroupDefs,
+        masterExcelFilename,
         DECK_LEGACY_CATALOG,
     };
 })();

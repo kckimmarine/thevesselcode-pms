@@ -503,9 +503,9 @@ const TVC_SpareMenu = (function () {
         return `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="${selectAllAction}"><span>📋 All Groups</span></div>`;
     }
 
-    /** SPARE GROUP Tree — 03/04/05 Generator Engine 통합 노드 */
+    /** SPARE GROUP Tree — 03/04/05 Generator Engine → 03. GENERATOR ENGINE (SPARE 통합) */
     const MERGED_GEN_ENGINE_KEY = '__SPARE_MERGE_03_05_GENERATOR__';
-    const MERGED_GEN_ENGINE_LABEL = '03~05. GENERATOR ENGINE';
+    const MERGED_GEN_ENGINE_LABEL = '03. GENERATOR ENGINE';
     const MERGED_GEN_ENGINE_PREFIXES = new Set(['03.', '04.', '05.']);
     /** inline Append — Modify와 동일 UI */
     const NEW_SPARE_EDIT_ID = '__NEW_SPARE__';
@@ -518,6 +518,7 @@ const TVC_SpareMenu = (function () {
     function isGeneratorEngineGroupLabel(label) {
         const s = String(label || '').trim();
         if (/^03\s*~\s*05/i.test(s) && /GENERATOR\s+ENGINE/i.test(s)) return true;
+        if (normalizeGroupLabel(s) === normalizeGroupLabel(MERGED_GEN_ENGINE_LABEL)) return true;
         const prefix = spareGroupPrefix(label);
         if (!MERGED_GEN_ENGINE_PREFIXES.has(prefix)) return false;
         return /GENERATOR\s+ENGINE/i.test(s);
@@ -578,7 +579,7 @@ const TVC_SpareMenu = (function () {
     function groupLabelsForPmsGroup(pmsGroupNo, st, groupKey) {
         const labels = [pmsGroupNo].filter(Boolean);
         if (groupKey === MERGED_GEN_ENGINE_KEY || isGeneratorEngineGroupLabel(pmsGroupNo)) {
-            labels.push(MERGED_GEN_ENGINE_LABEL, '03~05        GENERATOR ENGINE', '03~05 GENERATOR ENGINE');
+            labels.push(MERGED_GEN_ENGINE_LABEL, '03~05. GENERATOR ENGINE', '03~05        GENERATOR ENGINE', '03~05 GENERATOR ENGINE');
             (st?.idx?.groupNodes || []).forEach(n => {
                 if (isGeneratorEngineGroupLabel(n.label)) labels.push(n.label);
             });
@@ -1093,7 +1094,7 @@ const TVC_SpareMenu = (function () {
 
     // SPARE GROUP Tree에서 숨길 그룹 번호 (부서별)
     const SPARE_HIDDEN_GROUPS_BY_DEPT = {
-        ENGINE: new Set([27, 36]),
+        ENGINE: new Set([36]),
         DECK: new Set([34, 36]),
     };
     function isHiddenSpareGroup(label, department) {
@@ -1109,8 +1110,8 @@ const TVC_SpareMenu = (function () {
         }
         ensureSpareGroupNodes(st);
         // GROUP Tree와 동일한 목록을 노출한다:
-        //  - 부서 필터 + 숨김 그룹(예: ENGINE 27/36, DECK 34/36) 제외
-        //  - 03~05 GENERATOR ENGINE 은 하나로 병합
+        //  - 부서 필터 + 숨김 그룹(예: ENGINE 36, DECK 34/36) 제외
+        //  - 03/04/05 GENERATOR ENGINE(PMS) → SPARE: 03. GENERATOR ENGINE
         //  - 라벨 기준 동일 정렬
         const seen = new Set();
         const nodes = (st.idx?.groupNodes || [])
@@ -3636,6 +3637,8 @@ const TVC_SpareMenu = (function () {
                 <button type="button" id="spareModifyBtn" class="btn btn-sm" onclick="TVC_App.openSpareModify()"${tb.modifyEnabled ? '' : ' disabled'} title="${esc(tb.modifyTitle)}">✏️ Modify</button>
                 <button type="button" id="spareAppendBtn" class="btn btn-sm" onclick="TVC_App.openSpareAppend()"${tb.appendEnabled ? '' : ' disabled'} title="${esc(tb.appendTitle)}">➕ Append</button>
                 <button type="button" id="spareDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteSpareItem()"${tb.deleteEnabled ? '' : ' disabled'} title="${esc(tb.deleteTitle)}">🗑 Delete</button>
+                <button type="button" id="actSpareMasterExportBtn" class="btn btn-sm btn-excel hidden" onclick="TVC_App.exportSpareMasterExcel()" title="Export SPARE Master Excel (incheonchemi_spare_master_YYYYMMDD_001.xlsx)">📤 Master Export</button>
+                <button type="button" id="actSpareMasterImportBtn" class="btn btn-sm hidden" onclick="TVC_App.triggerSpareMasterImport()" title="Import SPARE Master Excel (incheonchemi_spare_master_YYYYMMDD_001.xlsx)">📥 Master Import</button>
                 <span class="orig-toolbar-sep"></span>
                 ${spareItemHistoryBtnHtml()}
                 <div class="tab-toolbar-end">
@@ -3675,7 +3678,8 @@ const TVC_SpareMenu = (function () {
         <input type="file" id="srCsvUploadFile" accept=".csv" class="hidden">
         <input type="file" id="srInventoryImportFile" accept=".csv,.xls,.xlsx" class="hidden">
         <input type="file" id="spareHqImportFile" accept=".json" class="hidden">
-        <input type="file" id="spareXferImportFile" accept=".json,.xlsx,.xls,.csv" class="hidden">`;
+        <input type="file" id="spareXferImportFile" accept=".json,.xlsx,.xls,.csv" class="hidden">
+        <input type="file" id="spareMasterImportFile" accept=".xlsx" class="hidden" onchange="TVC_App.importSpareMasterExcel(this.files[0]); this.value='';">`;
 
         renderSpareGroupTree();
         const treeScrollEl = document.getElementById('spareGroupTree');
@@ -3771,6 +3775,25 @@ const TVC_SpareMenu = (function () {
         setBtn('spareAppendBtn', tb.appendEnabled, tb.appendTitle);
         setBtn('spareModifyBtn', tb.modifyEnabled, tb.modifyTitle);
         setBtn('spareDeleteBtn', tb.deleteEnabled, tb.deleteTitle);
+        const canMaster = typeof TVC_App?.canSpareMasterExcel === 'function' && TVC_App.canSpareMasterExcel();
+        ['actSpareMasterExportBtn', 'actSpareMasterImportBtn'].forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.classList.toggle('hidden', !canMaster);
+        });
+        const spareEx = document.getElementById('actSpareMasterExportBtn');
+        const spareIm = document.getElementById('actSpareMasterImportBtn');
+        if (spareEx) {
+            spareEx.disabled = !canMaster;
+            spareEx.title = canMaster
+                ? 'SPARE Master Excel Export → incheonchemi_spare_master_YYYYMMDD_001.xlsx'
+                : (typeof TVC_App?.spareMasterExcelDeniedMessage === 'function' ? TVC_App.spareMasterExcelDeniedMessage() : '');
+        }
+        if (spareIm) {
+            spareIm.disabled = !canMaster;
+            spareIm.title = canMaster
+                ? 'SPARE Master Excel Import (incheonchemi_spare_master_YYYYMMDD_001.xlsx)'
+                : (typeof TVC_App?.spareMasterExcelDeniedMessage === 'function' ? TVC_App.spareMasterExcelDeniedMessage() : '');
+        }
         const m = modState(getState());
         const listLocked = isReqWorkListViewLocked();
         if (isRequisitionListWindow(m)) {
@@ -16599,6 +16622,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         isGroupCriticalEquipmentYes,
         CRITICAL_GROUP_KEY,
         MERGED_GEN_ENGINE_KEY,
+        MERGED_GEN_ENGINE_LABEL,
+        isGeneratorEngineGroupLabel,
         wrSpareSelectGroup, wrSpareSetTreeSearch, wrSpareSetSearch, wrSpareToggleLowOnly,
         wrSpareToggleGroupTree, wrSpareToggleSelectedOnly, wrSpareFocusRow, wrSpareToggleRow, wrSpareToggleAll, wrSpareSetQty,
         refreshWrSpareJobContext,

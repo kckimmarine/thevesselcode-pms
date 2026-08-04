@@ -3564,11 +3564,21 @@ const TVC_App = (function () {
     }
 
     function canPmsMasterExcel() {
-        return canEditOriginalPlanGroups();
+        return canEditOriginalPlanItems();
+    }
+
+    function canSpareMasterExcel() {
+        if (!state.user) return false;
+        if (TVC_RBAC.isHqAccount(state.user)) return canEditOriginalPlanItems();
+        return TVC_RBAC.isMaintPlanEditor(state.user) && TVC_RBAC.canModifySpareInventory(state.user);
     }
 
     function pmsMasterExcelDeniedMessage() {
-        return 'PMS Master Export · Import는 HQ Mode (Superintendent)만 사용할 수 있습니다.';
+        return 'PMS Master Export · Import는 Chief Engineer, Chief Officer, Captain(Master), 또는 HQ Superintendent만 사용할 수 있습니다.';
+    }
+
+    function spareMasterExcelDeniedMessage() {
+        return 'SPARE Master Export · Import는 Chief Engineer, Chief Officer, Captain(Master), 또는 HQ Superintendent만 사용할 수 있습니다.';
     }
 
     function selectedGroupNode() {
@@ -3735,11 +3745,11 @@ const TVC_App = (function () {
         }
         if (pmsEx) {
             pmsEx.disabled = !canMaster;
-            pmsEx.title = canMaster ? 'PMS Master Excel Export (Group · Equipment · Jobs)' : pmsMasterExcelDeniedMessage();
+            pmsEx.title = canMaster ? 'PMS Master Excel Export → incheonchemi_pms_master_YYYYMMDD_001.xlsx' : pmsMasterExcelDeniedMessage();
         }
         if (pmsIm) {
             pmsIm.disabled = !canMaster;
-            pmsIm.title = canMaster ? 'PMS Master Excel Import' : pmsMasterExcelDeniedMessage();
+            pmsIm.title = canMaster ? 'PMS Master Excel Import (incheonchemi_pms_master_YYYYMMDD_001.xlsx)' : pmsMasterExcelDeniedMessage();
         }
     }
 
@@ -8647,6 +8657,38 @@ const TVC_App = (function () {
         }
     }
 
+    async function exportSpareMasterExcel() {
+        if (!canSpareMasterExcel()) await TVC_Dialog.alert(spareMasterExcelDeniedMessage());
+        if (typeof TVC_SpareMasterExcel === 'undefined') await TVC_Dialog.alert('SPARE Master Export를 사용할 수 없습니다.');
+        try {
+            await TVC_SpareMasterExcel.exportToFile();
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || 'Export failed');
+        }
+    }
+
+    async function triggerSpareMasterImport() {
+        if (!canSpareMasterExcel()) await TVC_Dialog.alert(spareMasterExcelDeniedMessage());
+        document.getElementById('spareMasterImportFile')?.click();
+    }
+
+    async function importSpareMasterExcel(file) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !canSpareMasterExcel()) await TVC_Dialog.alert(spareMasterExcelDeniedMessage());
+        if (!file) return;
+        if (typeof TVC_SpareMasterExcel === 'undefined') await TVC_Dialog.alert('SPARE Master Import를 사용할 수 없습니다.');
+        const backupHint = '권장: Import 전 If Necessary → Database Backup & Restore로 SPARE 백업을 먼저 수행하세요.';
+        if (!await TVC_Dialog.confirm({ message: `Import SPARE Master Excel?\n\n${file.name}\n\nGroup Headers, Equipment Headers, and Spare Parts will be updated.\n${backupHint}\n\nContinue?` })) return;
+        try {
+            const r = await TVC_SpareMasterExcel.importFromFile(file, user);
+            if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache();
+            await refreshAll();
+            await TVC_Dialog.alert(`Import 완료\n\nSpare Parts: ${r.parts}행 (신규 ${r.created}, 수정 ${r.updated})\nGroups: ${r.groups} · Equipment: ${r.equipment}`);
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || e.code || 'Import failed');
+        }
+    }
+
     function esc(s) { return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;'); }
 
     /** Reporter 표시 — full titles; legacy C/E etc. mapped via RBAC helper */
@@ -8691,6 +8733,8 @@ const TVC_App = (function () {
         openOrigJobModify, openOrigJobAppend, saveOrigJobEditor, saveOrigJobInlineEdit, cancelOrigJobInlineEdit, deleteOrigJob,
         openOrigGroupAdd, openOrigGroupRename, deleteOrigGroup, saveGroupEditor,
         exportPmsMasterExcel, triggerPmsMasterImport, importPmsMasterExcel,
+        canSpareMasterExcel, spareMasterExcelDeniedMessage,
+        exportSpareMasterExcel, triggerSpareMasterImport, importSpareMasterExcel,
         confirmPlanUpdate, closePlanUpdateModal, printTabList, printCurrentTab,
         doSubmit, doExecute, doApprove, doConfirm,
         handleLogin, handleLogout, handleExport, handleImport, handleHubImport, handleDefectImport, handlePostponeImport,
