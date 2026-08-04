@@ -1,8 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="96" fill="#1a365d"/>
-  <circle cx="256" cy="256" r="200" stroke="#2b6cb0" stroke-width="8" opacity="0.45"/>
-  <path d="M256 120v272M120 256h272" stroke="#2b6cb0" stroke-width="4" opacity="0.25"/>
-  <path d="M148 310c28-56 68-84 108-84s80 28 108 84" stroke="#ffffff" stroke-width="28" stroke-linecap="round"/>
-  <path d="M256 168v48M232 192h48" stroke="#ffffff" stroke-width="20" stroke-linecap="round"/>
-  <text x="256" y="420" text-anchor="middle" fill="#cbd5e0" font-family="system-ui,sans-serif" font-size="48" font-weight="700" letter-spacing="4">TVC</text>
+  <!-- THE VESSEL CODE — brand mark (login + desktop) -->
+  <rect width="512" height="512" rx="112" fill="#1a365d"/>
+  <circle cx="256" cy="256" r="188" stroke="rgba(255,255,255,0.35)" stroke-width="10"/>
+  <path d="M256 96v320M96 256h320" stroke="rgba(255,255,255,0.18)" stroke-width="4"/>
+  <!-- hull -->
+  <path d="M140 318c36-72 78-108 116-108s80 36 116 108"
+        stroke="#ffffff" stroke-width="28" stroke-linecap="round" fill="none"/>
+  <!-- mast cross -->
+  <path d="M256 168v56M228 196h56"
+        stroke="#ffffff" stroke-width="22" stroke-linecap="round"/>
 </svg>

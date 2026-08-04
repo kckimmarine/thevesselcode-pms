@@ -235,7 +235,7 @@ const TVC_PWA = (function () {
             }
             if (!added.length) return;
             clearTimeout(timer);
-            timer = setTimeout(() => processAdded(added), 40);
+            timer = setTimeout(() => processAdded(added), 0);
         });
         window._tvcDateFmtObs.observe(document.body, { childList: true, subtree: true });
     }

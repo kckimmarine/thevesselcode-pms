@@ -3,14 +3,6 @@ const TVC_PostponeSync = (function () {
     const SCHEMA_VERSION = '1.0';
     const now = () => new Date().toISOString();
 
-    function downloadBlob(blob, filename) {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
-    }
-
     function esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     }
@@ -100,6 +92,7 @@ const TVC_PostponeSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
                 export_date: now().slice(0, 10),
                 direction: 'POSTPONE_REQUEST_TO_HQ',
                 package_type: 'POSTPONE_REPORT',
@@ -119,6 +112,7 @@ const TVC_PostponeSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
                 export_date: now().slice(0, 10),
                 direction: 'POSTPONE_REPLY_HQ_TO_SHIP',
                 package_type: 'POSTPONE_REPORT_REPLY',
@@ -163,7 +157,7 @@ const TVC_PostponeSync = (function () {
 
         const filename = `${payload.export_meta.vessel_id}_POSTPONE_REQUEST_${jobCode}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
 
         row.sync_status = 'SYNCED';
         row.submitted_to_company_at = now();
@@ -181,6 +175,7 @@ const TVC_PostponeSync = (function () {
                 department: payload.export_meta.department,
                 vessel_id: payload.export_meta.vessel_id,
                 filename,
+                job_code: reportJobCode(row),
                 record_count: 1,
                 status: 'SUCCESS',
                 space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
@@ -208,7 +203,7 @@ const TVC_PostponeSync = (function () {
 
         const filename = `${payload.export_meta.vessel_id}_POSTPONE_REPLY_${jobCode}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
 
         row.sync_status = 'SYNCED';
         row.last_synced_at = now();
@@ -220,6 +215,7 @@ const TVC_PostponeSync = (function () {
                 department: row.department || job?.department || 'ALL',
                 vessel_id: payload.export_meta.vessel_id,
                 filename,
+                job_code: reportJobCode(row),
                 record_count: 1,
                 status: 'SUCCESS',
                 space: 'HQ',
@@ -252,6 +248,9 @@ const TVC_PostponeSync = (function () {
         const importVesselId = payload.export_meta?.vessel_id;
         const vCheck = TVC_Sync.validateImportVesselId(expectedVesselId, importVesselId, isHq);
         if (!vCheck.ok) throw new Error(vCheck.message);
+        const companyId = payload.export_meta?.company_id || TVC_Sync.licensedCompanyId();
+        const lic = TVC_Sync.assertLicenseForPackage(importVesselId, companyId);
+        if (!lic.ok) throw new Error(lic.error || 'License does not allow this import.');
 
         await TVC_Sync.mergePayload(payload, null, isHq, importVesselId, { importAuthoritative: true });
 

@@ -4,7 +4,8 @@ const TVC_Fleet = (function () {
     const SELECTED_KEY = 'tvc_fleet_selected';
     const LEGACY_VESSEL_ID = 'DM_CHEMICAL_01';
 
-    /** INCHEON CHEMI — Export/Sync ZIP 파일명·DB vessel_id·Fleet 표시명 공통 */
+    /** Pilot company / vessel — license & Export/Sync ZIP 공통 */
+    const COMPANY_ID = 'DAEMYUNG';
     const PILOT_VESSEL_ID = 'INCHEON CHEMI';
 
     /** 초기 Fleet — 파일럿 선박 1척 */
@@ -133,6 +134,6 @@ const TVC_Fleet = (function () {
 
     return {
         ensureFleet, getAll, getSelected, getSelectedId, select, upsert, remove, resolveById,
-        PILOT_VESSEL_ID, LEGACY_VESSEL_ID, DEFAULT_FLEET,
+        COMPANY_ID, PILOT_VESSEL_ID, LEGACY_VESSEL_ID, DEFAULT_FLEET,
     };
 })();

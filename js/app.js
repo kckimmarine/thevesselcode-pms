@@ -101,7 +101,7 @@ const TVC_App = (function () {
             showLogin();
             const errEl = document.getElementById('loginErr');
             if (errEl && !errEl.textContent) {
-                errEl.textContent = '시스템 준비가 지연되고 있습니다. 잠시 후 다시 로그인하거나 Ctrl+Shift+R 로 새로고침하세요.';
+                errEl.textContent = 'System startup is delayed. Sign in again shortly or refresh with Ctrl+Shift+R.';
             }
         }, ms);
     }
@@ -173,10 +173,31 @@ const TVC_App = (function () {
     async function boot() {
         bootReady = false;
         bootReadyPromise = new Promise(resolve => { bootReadyResolve = resolve; });
-        setLoginBusy(true, '시스템 준비 중…');
+        setLoginBusy(true, 'Preparing system…');
         startBootWatchdog();
         try {
+            if (typeof TVC_License !== 'undefined') {
+                try {
+                    const lic = await TVC_License.refresh();
+                    if (lic?.enforced && lic.ok) {
+                        const badge = document.getElementById('loginLicenseBadge');
+                        if (badge) {
+                            badge.classList.remove('hidden');
+                            badge.textContent = `${lic.skuLabel || lic.sku}`
+                                + (lic.vesselId ? ` · ${lic.vesselId}` : '')
+                                + (lic.expiresAt ? ` · until ${String(lic.expiresAt).slice(0, 10)}` : '');
+                        }
+                    }
+                } catch (e) { console.warn('[TVC_License]', e); }
+            }
             await TVC_DB.open();
+            // Vessel SKU: pin DB vessel_id to licensed vessel
+            try {
+                const lic = typeof TVC_License !== 'undefined' ? TVC_License.statusSync() : null;
+                if (lic?.enforced && lic.ok && lic.vesselId) {
+                    await TVC_DB.setMeta(TVC_META_KEYS.VESSEL_ID, lic.vesselId);
+                }
+            } catch (e) { console.warn('[TVC] license vessel pin', e); }
             await TVC_Auth.initUsers();
 
             ['loginUser', 'loginPass', 'loginDept'].forEach(id => {
@@ -250,7 +271,7 @@ const TVC_App = (function () {
                     state.user = null;
                     showLogin();
                     const errEl = document.getElementById('loginErr');
-                    if (errEl) errEl.textContent = e.message || '자동 로그인에 실패했습니다. 다시 로그인하세요.';
+                    if (errEl) errEl.textContent = e.message || 'Auto sign-in failed. Please sign in again.';
                 });
             } else {
                 showLogin();
@@ -854,12 +875,12 @@ const TVC_App = (function () {
         if (cb) cb(dept);
     }
 
-    function setDepartment(dept) {
+    async function setDepartment(dept) {
         const canSwitch = state.user && (typeof TVC_Space !== 'undefined'
             ? TVC_Space.canSwitchDepartmentView(state.user)
             : TVC_RBAC.isHqAccount(state.user));
         if (state.user && !canSwitch && dept !== state.user.department) {
-            alert('이 계정은 ' + TVC_RBAC.getDeptLabel(state.user.department) + ' 부서 전용입니다.');
+            await TVC_Dialog.alert('This account is restricted to the ' + TVC_RBAC.getDeptLabel(state.user.department) + ' department.');
             return;
         }
         state.department = dept;
@@ -1405,13 +1426,13 @@ const TVC_App = (function () {
         renderActualPlan();
     }
 
-    function onActualPeriodChange() {
+    async function onActualPeriodChange() {
         const fromEl = document.getElementById('actPeriodFrom');
         const toEl = document.getElementById('actPeriodTo');
         const from = fromEl?.value || '';
         const to = toEl?.value || '';
         if (from && to && from > to) {
-            alert('시작일은 종료일보다 늦을 수 없습니다.');
+            await TVC_Dialog.alert('Start date cannot be after end date.');
             if (fromEl) fromEl.value = state.actualPeriodFrom || '';
             if (toEl) toEl.value = state.actualPeriodTo || '';
             return;
@@ -1427,13 +1448,13 @@ const TVC_App = (function () {
         renderActualPlan();
     }
 
-    function onReportPeriodChange() {
+    async function onReportPeriodChange() {
         const fromEl = document.getElementById('histPeriodFrom');
         const toEl = document.getElementById('histPeriodTo');
         const from = fromEl?.value || '';
         const to = toEl?.value || '';
         if (from && to && from > to) {
-            alert('시작일은 종료일보다 늦을 수 없습니다.');
+            await TVC_Dialog.alert('Start date cannot be after end date.');
             syncReportPeriodInputs();
             return;
         }
@@ -1540,9 +1561,9 @@ const TVC_App = (function () {
         if (state.currentTab === 'actual') syncPlanItemUi();
     }
 
-    function openPlanWorkProcedure() {
+    async function openPlanWorkProcedure() {
         const job = getPlanFocusJob();
-        if (!job) return alert('Work Plan에서 작업을 선택하세요.');
+        if (!job) await TVC_Dialog.alert('Select a job in Work Plan.');
         openWorkProcedure(job.id);
     }
 
@@ -1861,10 +1882,10 @@ const TVC_App = (function () {
         TVC_ListFilters?.syncBtn('history');
     }
 
-    function openHqApproveDefectReport() {
+    async function openHqApproveDefectReport() {
         if (!TVC_RBAC.isHqAccount(state.user)) return;
         if (!TVC_RBAC.can(state.user, TVC_RBAC.Action.REPLY_DEFECT_REPORT)) {
-            return alert('Defect Report 승인 권한이 없습니다.');
+            await TVC_Dialog.alert('No permission to approve Defect Report.');
         }
         state.listFilters.history = {
             ...state.listFilters.history,
@@ -1877,10 +1898,10 @@ const TVC_App = (function () {
         TVC_ListFilters?.syncBtn('history');
     }
 
-    function openHqApprovePostponeReport() {
+    async function openHqApprovePostponeReport() {
         if (!TVC_RBAC.isHqAccount(state.user)) return;
         if (!TVC_RBAC.canApproveHqReport(state.user)) {
-            return alert('Postpone Report 승인 권한이 없습니다.');
+            await TVC_Dialog.alert('No permission to approve Postpone Report.');
         }
         state.listFilters.history = {
             ...state.listFilters.history,
@@ -2041,11 +2062,11 @@ const TVC_App = (function () {
         try {
             const vesselId = TVC_RBAC.isHqAccount(user) ? state.selectedVesselId : undefined;
             const result = await TVC_OnlineSync.syncNow(user, direction, { vesselId });
-            alert(result.message || (result.status === 'SCAFFOLD'
+            await TVC_Dialog.alert(result.message || (result.status === 'SCAFFOLD'
                 ? 'Online sync is scaffolded — use offline ZIP for now.'
                 : 'Online sync request completed.'));
         } catch (e) {
-            alert(e.message || String(e));
+            await TVC_Dialog.alert(e.message || String(e));
         }
     }
 
@@ -2124,6 +2145,7 @@ const TVC_App = (function () {
     function menuXferDefectSelectHtml() {
         const rows = menuXferDefectExportRows();
         const sel = _menuXfer.selectedDefectIds || {};
+        const lookup = _menuXfer.exportFilenameLookup || {};
         const selectable = rows.filter(menuXferDefectRowSelectable);
         const selectedCount = selectable.filter(r => sel[r.id]).length;
         const allChecked = selectable.length > 0 && selectable.every(r => sel[r.id]);
@@ -2142,9 +2164,9 @@ const TVC_App = (function () {
             : rows;
         let tableBody = '';
         if (!rows.length) {
-            tableBody = `<tr><td colspan="8" class="muted menu-xfer-empty">No defect reports in scope for ${esc(dest)}.</td></tr>`;
+            tableBody = `<tr><td colspan="9" class="muted menu-xfer-empty">No defect reports in scope for ${esc(dest)}.</td></tr>`;
         } else if (!filteredRows.length) {
-            tableBody = `<tr><td colspan="8" class="muted menu-xfer-empty">No matches for search.</td></tr>`;
+            tableBody = `<tr><td colspan="9" class="muted menu-xfer-empty">No matches for search.</td></tr>`;
         } else {
             tableBody = filteredRows.map(row => {
                 const cols = defectHistoryColumns(row);
@@ -2165,6 +2187,7 @@ const TVC_App = (function () {
                     <td>${histCellHtml(cols.sort1)}</td>
                     <td class="hist-status">${esc(st)}</td>
                     <td>${esc(dt || '—')}</td>
+                    <td class="menu-xfer-file">${menuXferRowExportFilename(row, lookup, 'defect')}</td>
                 </tr>`;
             }).join('');
         }
@@ -2179,6 +2202,7 @@ const TVC_App = (function () {
                     <thead><tr>
                         <th class="menu-xfer-chk"><input type="checkbox" id="menuXferDefectSelectAll"${allChecked ? ' checked' : ''}${selectable.length ? '' : ' disabled'}></th>
                         <th>File No</th><th>Type</th><th>⚠</th><th>Job Code</th><th>SORT-1</th><th>Status</th><th>Reported Date</th>
+                        <th class="menu-xfer-file-h">File Name</th>
                     </tr></thead>
                     <tbody>${tableBody}</tbody>
                 </table>
@@ -2317,6 +2341,7 @@ const TVC_App = (function () {
     function menuXferPostponeSelectHtml() {
         const rows = menuXferPostponeExportRows();
         const sel = _menuXfer.selectedPostponeIds || {};
+        const lookup = _menuXfer.exportFilenameLookup || {};
         const selectable = rows.filter(menuXferPostponeRowSelectable);
         const selectedCount = selectable.filter(r => sel[r.id]).length;
         const allChecked = selectable.length > 0 && selectable.every(r => sel[r.id]);
@@ -2336,9 +2361,9 @@ const TVC_App = (function () {
             : rows;
         let tableBody = '';
         if (!rows.length) {
-            tableBody = `<tr><td colspan="8" class="muted menu-xfer-empty">No critical postpone reports in scope for ${esc(dest)}.</td></tr>`;
+            tableBody = `<tr><td colspan="9" class="muted menu-xfer-empty">No critical postpone reports in scope for ${esc(dest)}.</td></tr>`;
         } else if (!filteredRows.length) {
-            tableBody = `<tr><td colspan="8" class="muted menu-xfer-empty">No matches for search.</td></tr>`;
+            tableBody = `<tr><td colspan="9" class="muted menu-xfer-empty">No matches for search.</td></tr>`;
         } else {
             tableBody = filteredRows.map(row => {
                 const cols = postponeHistoryColumns(row);
@@ -2360,6 +2385,7 @@ const TVC_App = (function () {
                     <td>${histCellHtml(cols.sort1)}</td>
                     <td class="hist-status">${esc(st)}</td>
                     <td>${esc(dt || '—')}</td>
+                    <td class="menu-xfer-file">${menuXferRowExportFilename(row, lookup, 'postpone')}</td>
                 </tr>`;
             }).join('');
         }
@@ -2380,6 +2406,7 @@ const TVC_App = (function () {
                     <thead><tr>
                         <th class="menu-xfer-chk"><input type="checkbox" id="menuXferPostponeSelectAll"${allChecked ? ' checked' : ''}${selectable.length ? '' : ' disabled'}></th>
                         <th>File No</th><th>Type</th><th>⚠</th><th>Job Code</th><th>SORT-1</th><th>Status</th><th>Reported Date</th>
+                        <th class="menu-xfer-file-h">File Name</th>
                     </tr></thead>
                     <tbody>${tableBody}</tbody>
                 </table>
@@ -2522,12 +2549,12 @@ const TVC_App = (function () {
         if (step === 'export-postpone-select') bindMenuXferPostponeTableEvents();
     }
 
-    function openMenuXferMenu() {
+    async function openMenuXferMenu() {
         const f = state.user
             ? (typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(state.user) : TVC_RBAC.getUiFeatures(state.user))
             : {};
         if (!f.showDataXfer && !f.showExportHq && !f.showImportHq) {
-            return alert('Data Export & Import 권한이 없습니다.');
+            await TVC_Dialog.alert('No permission for Data Export & Import.');
         }
         resetMenuXfer();
         renderMenuXferModal();
@@ -2567,55 +2594,58 @@ const TVC_App = (function () {
         renderMenuXferModal();
     }
 
-    function menuXferPickExportType(type) {
+    async function menuXferPickExportType(type) {
         _menuXfer.exportType = type;
         if (type === 'defect') {
             _menuXfer.step = 'export-defect-select';
             _menuXfer.selectedDefectIds = {};
             _menuXfer.defectSearch = '';
+            _menuXfer.exportFilenameLookup = await buildMenuXferExportFilenameLookup('defect');
         } else if (type === 'postpone') {
             _menuXfer.step = 'export-postpone-select';
             _menuXfer.selectedPostponeIds = {};
             _menuXfer.postponeSearch = '';
+            _menuXfer.exportFilenameLookup = await buildMenuXferExportFilenameLookup('postpone');
         } else {
             _menuXfer.step = 'export-monthly-ready';
+            delete _menuXfer.exportFilenameLookup;
         }
         renderMenuXferModal();
     }
 
     async function menuXferConfirmDefectExport() {
         const ids = Object.keys(_menuXfer.selectedDefectIds || {}).filter(id => _menuXfer.selectedDefectIds[id]);
-        if (!ids.length) return alert('Select at least one Confirmed defect to export.');
+        if (!ids.length) await TVC_Dialog.alert('Select at least one Confirmed defect to export.');
         const selectable = new Set(menuXferDefectExportRows().filter(menuXferDefectRowSelectable).map(r => r.id));
         const scopedIds = ids.filter(id => selectable.has(id));
-        if (!scopedIds.length) return alert('No selected defect reports are exportable (Confirmed, not yet Submitted).');
+        if (!scopedIds.length) await TVC_Dialog.alert('No selected defect reports are exportable (Confirmed, not yet Submitted).');
         const target = menuXferResolveExportTarget(state.user, 'defect');
         if (!target || !menuXferCanExportTarget(state.user, target)) {
-            return alert('No permission to export defect reports.');
+            await TVC_Dialog.alert('No permission to export defect reports.');
         }
         const destLabel = menuXferExportTargetLabel(target);
-        if (!confirm(`Export ${scopedIds.length} defect report(s) to ${destLabel}?`)) return;
+        if (!await TVC_Dialog.confirm({ kind: 'confirm', message: `Export ${scopedIds.length} defect report(s) to ${destLabel}?` })) return;
         closeMenuXferMenu();
         try {
             await menuXferExportDefect(target, scopedIds);
-        } catch (e) { alert(e.message || e); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e); }
     }
 
     async function menuXferConfirmMonthlyExport() {
         const dept = getPlanLockDept();
         if (!TVC_RBAC.isHqAccount(state.user) && !isOriginalPlanUpdateLocked(dept)) {
-            return alert('Update Work Plan must be completed first.');
+            await TVC_Dialog.alert('Update Work Plan must be completed first.');
         }
         const target = menuXferResolveExportTarget(state.user, 'monthly');
         if (!target || !menuXferCanExportTarget(state.user, target)) {
-            return alert('No permission to export monthly report.');
+            await TVC_Dialog.alert('No permission to export monthly report.');
         }
         const destLabel = menuXferExportTargetLabel(target);
-        if (!confirm(`Export Monthly Report to ${destLabel}?`)) return;
+        if (!await TVC_Dialog.confirm({ message: `Export Monthly Report to ${destLabel}?` })) return;
         closeMenuXferMenu();
         try {
             await menuXferExportMonthly(target);
-        } catch (e) { alert(e.message || e); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e); }
     }
 
     function defectCasesForExportTarget(cases, target) {
@@ -2645,7 +2675,7 @@ const TVC_App = (function () {
         await TVC_Sync.exportZip(user, direction, dept);
         await refreshAll();
         if (state.currentTab === 'menu') renderSyncHistory();
-        alert(`${TVC_RBAC.getDeptLabel(dept)} Monthly Report exported.`);
+        await TVC_Dialog.alert(`${TVC_RBAC.getDeptLabel(dept)} Monthly Report exported.`);
     }
 
     async function exportSelectedDefectCase(user, caseRow) {
@@ -2697,26 +2727,26 @@ const TVC_App = (function () {
         }
         if (state.currentTab === 'history') renderWorkHistory();
         const dest = target === 'COMPANY' ? 'Company' : TVC_RBAC.getDeptLabel(target);
-        alert(`Exported ${exported} defect package(s) → ${dest}.`);
+        await TVC_Dialog.alert(`Exported ${exported} defect package(s) → ${dest}.`);
     }
 
     async function menuXferConfirmPostponeExport() {
         const ids = Object.keys(_menuXfer.selectedPostponeIds || {}).filter(id => _menuXfer.selectedPostponeIds[id]);
-        if (!ids.length) return alert('Select at least one exportable postpone report.');
+        if (!ids.length) await TVC_Dialog.alert('Select at least one exportable postpone report.');
         const selectable = new Set(menuXferPostponeExportRows().filter(menuXferPostponeRowSelectable).map(r => r.id));
         const scopedIds = ids.filter(id => selectable.has(id));
-        if (!scopedIds.length) return alert('No selected postpone reports are exportable.');
+        if (!scopedIds.length) await TVC_Dialog.alert('No selected postpone reports are exportable.');
         const target = menuXferResolveExportTarget(state.user, 'postpone');
         if (!target || !menuXferCanExportTarget(state.user, target)) {
-            return alert('No permission to export postpone reports.');
+            await TVC_Dialog.alert('No permission to export postpone reports.');
         }
         const destLabel = menuXferExportTargetLabel(target);
         const action = TVC_RBAC.isHqAccount(state.user) ? 'reply export' : 'export';
-        if (!confirm(`${action} ${scopedIds.length} postpone report(s) to ${destLabel}?`)) return;
+        if (!await TVC_Dialog.confirm({ message: `${action} ${scopedIds.length} postpone report(s) to ${destLabel}?` })) return;
         closeMenuXferMenu();
         try {
             await menuXferExportPostpone(target, scopedIds);
-        } catch (e) { alert(e.message || e); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e); }
     }
 
     async function exportSelectedPostponeReport(user, reportRow) {
@@ -2758,12 +2788,12 @@ const TVC_App = (function () {
         if (state.currentTab === 'history') renderWorkHistory();
         const dest = target === 'COMPANY' ? 'Company' : TVC_RBAC.getDeptLabel(target);
         const kind = TVC_RBAC.isHqAccount(user) ? 'reply' : 'request';
-        alert(`Exported ${exported} postpone ${kind} package(s) → ${dest}.`);
+        await TVC_Dialog.alert(`Exported ${exported} postpone ${kind} package(s) → ${dest}.`);
     }
 
-    function menuXferTriggerImport() {
+    async function menuXferTriggerImport() {
         if (!_menuXfer.importType) {
-            alert('Import 유형을 먼저 선택하세요.');
+            await TVC_Dialog.alert('Select an import type first.');
             return;
         }
         const fi = document.getElementById('menuXferImportFile');
@@ -2842,7 +2872,7 @@ const TVC_App = (function () {
         if (!file) return;
         const selected = _menuXfer.importType || '';
         if (!selected) {
-            alert('Import 유형을 먼저 선택하세요.');
+            await TVC_Dialog.alert('Select an import type first.');
             return;
         }
         try {
@@ -2863,7 +2893,7 @@ const TVC_App = (function () {
             }
             closeMenuXferMenu();
         } catch (e) {
-            alert('Import failed: ' + (e.message || e));
+            await TVC_Dialog.alert('Import failed: ' + (e.message || e));
         } finally {
             const fi = document.getElementById('menuXferImportFile');
             if (fi) fi.value = '';
@@ -2978,12 +3008,14 @@ const TVC_App = (function () {
             const dt = histEventDate(r);
             const isExport = String(r.type || '').toUpperCase() === 'EXPORT';
             const peer = menuHistPeerLabel(r, user);
+            const fileCell = histFilenameCellHtml(histSyncFilename(r));
             return `<tr>
                 <td class="menu-hist-exp">${isExport ? esc(dt) : ''}</td>
                 <td class="menu-hist-imp">${isExport ? '' : esc(dt)}</td>
                 <td class="menu-hist-dir">${esc(peer)}</td>
+                <td class="menu-hist-file">${fileCell}</td>
             </tr>`;
-        }).join('') || `<tr><td colspan="3" class="muted" style="text-align:center">No ${esc(menuHistCategoryLabel(cat))} history yet.</td></tr>`;
+        }).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">No ${esc(menuHistCategoryLabel(cat))} history yet.</td></tr>`;
 
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeMenuHistoryModal()">×</button>
@@ -2996,6 +3028,7 @@ const TVC_App = (function () {
                         <th>Export</th>
                         <th>Import</th>
                         <th>Direction</th>
+                        <th class="menu-hist-file-h">File Name</th>
                     </tr></thead>
                     <tbody>${tbody}</tbody>
                 </table>
@@ -3144,6 +3177,72 @@ const TVC_App = (function () {
         setHistView(map[tab] || 'workReport');
     }
 
+    function histSyncFilename(row) {
+        return String(row?.filename || row?.file_name || '').trim();
+    }
+
+    function histFilenameCellHtml(name) {
+        const n = String(name || '').trim();
+        if (!n) return '<span class="muted">—</span>';
+        return `<span class="menu-hist-file" title="${escAttr(n)}">${esc(n)}</span>`;
+    }
+
+    function parseDefectFilenameRef(filename) {
+        const m = String(filename || '').match(/_DEFECT_(?:URGENT|COMPLETION|REPLY|CLOSE)_([^_]+)_/i);
+        return m ? m[1] : '';
+    }
+
+    function parsePostponeFilenameRef(filename) {
+        const m = String(filename || '').match(/_POSTPONE_(?:REQUEST|REPLY)_([^_]+)_/i);
+        return m ? m[1] : '';
+    }
+
+    function xferFilenameLookupKey(code) {
+        const s = String(code || '').trim();
+        if (!s) return [];
+        return [s.toUpperCase(), s.replace(/[^\w.-]+/g, '_').toUpperCase()];
+    }
+
+    async function buildMenuXferExportFilenameLookup(category) {
+        let rows = [];
+        try { rows = await TVC_Sync.getHistory(200); } catch (_) {}
+        const map = {};
+        const sorted = rows.slice().sort((a, b) => (a.at || '').localeCompare(b.at || ''));
+        for (const r of sorted) {
+            if (String(r.type || '').toUpperCase() !== 'EXPORT') continue;
+            const fn = histSyncFilename(r);
+            if (!fn) continue;
+            const d = String(r.direction || '');
+            if (category === 'defect') {
+                if (!d.startsWith('DEFECT_')) continue;
+                const ref = r.case_no || r.ref_key || parseDefectFilenameRef(fn);
+                xferFilenameLookupKey(ref).forEach(k => { map[k] = fn; });
+            } else if (category === 'postpone') {
+                if (!d.startsWith('POSTPONE_')) continue;
+                const ref = r.job_code || r.ref_key || parsePostponeFilenameRef(fn);
+                xferFilenameLookupKey(ref).forEach(k => { map[k] = fn; });
+            }
+        }
+        return map;
+    }
+
+    function menuXferRowExportFilename(row, lookup, kind) {
+        const st = kind === 'defect'
+            ? TVC_DefectCase.listWorkflowStatus(row)
+            : workReportListWorkflowStatus(row);
+        const exported = kind === 'defect'
+            ? (st === 'Submitted' || row.sync_status === 'SYNCED')
+            : (row.sync_status === 'SYNCED' || st === 'Submitted');
+        if (!exported) return histFilenameCellHtml('');
+        const ref = kind === 'defect'
+            ? String(row.case_no || '').trim()
+            : String(postponeHistoryColumns(row).jobCode || '').trim();
+        if (!ref) return histFilenameCellHtml('');
+        const keys = xferFilenameLookupKey(ref);
+        const fn = keys.map(k => lookup?.[k]).find(Boolean) || '';
+        return histFilenameCellHtml(fn);
+    }
+
     function histEventDate(row) {
         if (row.at) return row.at.slice(0, 10);
         const raw = String(row.date || '');
@@ -3237,7 +3336,7 @@ const TVC_App = (function () {
         if (opts.actualFilter && state.currentTab === 'actual') updateActualFilterUI();
     }
 
-    function menuAction(action) {
+    async function menuAction(action) {
         switch (action) {
             case 'checkPlan': menuNavigate('actual', { actualFilter: 'overdue' }); break;
             case 'checkCritical': menuNavigate('actual', { actualFilter: 'critical' }); break;
@@ -3253,15 +3352,15 @@ const TVC_App = (function () {
                 break;
             case 'originalPlan':
                 if (typeof TVC_Space !== 'undefined' && !TVC_Space.getUiFeatures(state.user).showUpdateWorkPlan) {
-                    alert('Update Work Plan은 확인자(Chief engineer / Chief officer / Captain)만 사용할 수 있습니다.');
+                    await TVC_Dialog.alert('Update Work Plan requires Chief Engineer, Chief Officer, or Captain permission.');
                     return;
                 }
                 if (rhUpdateGateApplies() && !isRhUpdateCommitted()) {
-                    alert('Running Hours Update를 먼저 완료하세요.');
+                    await TVC_Dialog.alert('Complete Running Hours Update first.');
                     return;
                 }
                 if (!canPerformOriginalPlanUpdate()) {
-                    alert(getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.');
+                    await TVC_Dialog.alert(getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.');
                     return;
                 }
                 updateOriginalPlanFromRunHours({ fromMenu: true });
@@ -3269,7 +3368,7 @@ const TVC_App = (function () {
             case 'companyComment': menuNavigate('actual'); break;
             case 'modifyItem':
                 if (!canEditOriginalPlanItems()) {
-                    alert(origPlanEditDeniedMessage());
+                    await TVC_Dialog.alert(origPlanEditDeniedMessage());
                     return;
                 }
                 menuNavigate('actual', { actualFilter: 'total' });
@@ -3304,8 +3403,8 @@ const TVC_App = (function () {
             case 'defectImport':
                 document.getElementById('importDefectUrgent')?.click();
                 break;
-            case 'password': alert('Password 변경은 관리자(A) 권한 콘솔에서 제공됩니다.'); break;
-            case 'control': alert('Control(권한) 변경은 관리자(B) 승인 후 적용됩니다.'); break;
+            case 'password': TVC_Settings.open('password'); break;
+            case 'control': await TVC_Dialog.alert('Control (permission) changes apply after administrator approval.'); break;
             default: break;
         }
     }
@@ -3392,7 +3491,7 @@ const TVC_App = (function () {
 
     function getPlanMenuLockMessage() {
         if (rhUpdateGateApplies() && !isRhUpdateCommitted()) {
-            return 'Running Hours Update를 먼저 완료하세요.';
+            return 'Complete Running Hours Update first.';
         }
         return getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.';
     }
@@ -3415,7 +3514,7 @@ const TVC_App = (function () {
             if (planLocked) {
                 updateBtn.title = getOriginalPlanLockMessage(dept);
             } else if (rhLocked) {
-                updateBtn.title = 'Running Hours Update를 먼저 완료하세요.';
+                updateBtn.title = 'Complete Running Hours Update first.';
             } else {
                 updateBtn.title = '';
             }
@@ -3423,20 +3522,20 @@ const TVC_App = (function () {
         if (approveBtn && isHq) {
             const canApprove = TVC_RBAC.can(state.user, TVC_RBAC.Action.APPROVE_ORIGINAL_PLAN) && !!dept;
             approveBtn.disabled = !canApprove;
-            approveBtn.title = !dept ? '부서(Deck / Engine)를 선택하세요.' : '';
+            approveBtn.title = !dept ? 'Select a department (Deck / Engine).' : '';
         }
         syncPlanItemUi();
         const msgEl = document.getElementById('actPlanCalcMsg');
         if (msgEl && locked && !state._planCalcMsg) {
             msgEl.textContent = rhLocked
-                ? 'Running Hours Update를 먼저 완료하세요.'
+                ? 'Complete Running Hours Update first.'
                 : getOriginalPlanLockMessage(dept);
             msgEl.classList.remove('hidden');
         }
     }
 
     function origPlanEditDeniedMessage() {
-        return 'Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.';
+        return 'Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.';
     }
 
     function canEditOriginalPlanItems() {
@@ -3530,40 +3629,40 @@ const TVC_App = (function () {
         state._groupEditMode = mode;
     }
 
-    function openOrigGroupAdd() {
-        if (!canEditPlanGroupHeader()) return alert('Chief Engineer / Captain permission required.');
+    async function openOrigGroupAdd() {
+        if (!canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
         renderGroupEditor('add');
         showModal('groupEditorModal');
     }
 
-    function openOrigGroupRename() {
-        if (!canEditPlanGroupHeader()) return alert('Chief Engineer / Captain permission required.');
+    async function openOrigGroupRename() {
+        if (!canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
         const node = selectedGroupNode();
-        if (!node) return alert('Select a group in PMS GROUP Tree.');
+        if (!node) await TVC_Dialog.alert('Select a group in PMS GROUP Tree.');
         renderGroupEditor('rename');
         showModal('groupEditorModal');
     }
 
     async function deleteOrigGroup() {
         const user = TVC_Auth.getCurrentUser();
-        if (!user || !canEditPlanGroupHeader()) return alert('Chief Engineer / Captain permission required.');
+        if (!user || !canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
         const node = selectedGroupNode();
-        if (!node) return alert('Select a group to delete.');
+        if (!node) await TVC_Dialog.alert('Select a group to delete.');
         if (state.selectedGroupKey === CRITICAL_GROUP_KEY
             || state.selectedGroupKey === TVC_SpareMenu?.MERGED_GEN_ENGINE_KEY) {
-            return alert('This group cannot be deleted.');
+            await TVC_Dialog.alert('This group cannot be deleted.');
         }
-        if (!confirm(`Delete GROUP "${node.label}"?\n\nOnly empty groups (no jobs, no spare parts) can be deleted.`)) return;
+        if (!await TVC_Dialog.confirm({ message: `Delete GROUP "${node.label}"?\n\nOnly empty groups (no jobs, no spare parts) can be deleted.` })) return;
         try {
             await TVC_MaintenancePlan.deleteGroup(user, node.department, node.label);
             state.selectedGroupKey = null;
             await refreshAll();
-            alert('Group deleted.');
+            await TVC_Dialog.alert('Group deleted.');
         } catch (e) {
             const code = e.code || '';
-            if (code === 'HAS_JOBS') return alert(`Cannot delete: ${e.count || ''} maintenance job(s) in this group.`);
-            if (code === 'HAS_SPARES') return alert(`Cannot delete: spare parts exist in this group.`);
-            alert(e.message || code || 'Delete failed');
+            if (code === 'HAS_JOBS') await TVC_Dialog.alert(`Cannot delete: ${e.count || ''} maintenance job(s) in this group.`);
+            if (code === 'HAS_SPARES') await TVC_Dialog.alert(`Cannot delete: spare parts exist in this group.`);
+            await TVC_Dialog.alert(e.message || code || 'Delete failed');
         }
     }
 
@@ -3574,28 +3673,28 @@ const TVC_App = (function () {
         if (!form) return;
         const fd = new FormData(form);
         const label = String(fd.get('label') || '').trim();
-        if (!label) return alert('GROUP 이름을 입력하세요.');
+        if (!label) await TVC_Dialog.alert('Enter a GROUP name.');
         try {
             if (state._groupEditMode === 'rename') {
                 const node = selectedGroupNode();
-                if (!node) return alert('GROUP을 선택하세요.');
+                if (!node) await TVC_Dialog.alert('Select a GROUP.');
                 const { newKey } = await TVC_MaintenancePlan.renameGroup(user, node.department, node.label, label);
                 closeModal('groupEditorModal');
                 await refreshAll();
                 state.selectedGroupKey = newKey;
-                alert(`GROUP 이름이 "${label}"(으)로 변경되었습니다.`);
+                await TVC_Dialog.alert(`GROUP renamed to "${label}".`);
             } else {
                 const dept = String(fd.get('department') || state.department || 'ENGINE').trim();
                 const row = await TVC_MaintenancePlan.createGroup(user, dept, label);
                 closeModal('groupEditorModal');
                 await refreshAll();
                 state.selectedGroupKey = TVC_MaintenancePlan.groupKeyOf(row.department, row.label);
-                alert(`GROUP "${label}"이(가) 추가되었습니다.`);
+                await TVC_Dialog.alert(`GROUP "${label}" was added.`);
             }
         } catch (e) {
             const code = e.code || '';
-            if (code === 'DUPLICATE') return alert('같은 부서에 동일한 GROUP 이름이 이미 있습니다.');
-            alert(e.message || code || '저장 실패');
+            if (code === 'DUPLICATE') await TVC_Dialog.alert('A GROUP with the same name already exists in this department.');
+            await TVC_Dialog.alert(e.message || code || 'Save failed');
         }
     }
 
@@ -3852,8 +3951,8 @@ const TVC_App = (function () {
         if (!user || !canEditOriginalPlanItems()) return;
         const m = origJobInlineState();
         const data = readOrigJobInlineForm();
-        if (!data.job_code) return alert('Job Code를 입력하세요.');
-        if (!data.group) return alert('GROUP을 선택하세요.');
+        if (!data.job_code) await TVC_Dialog.alert('Enter Job Code.');
+        if (!data.group) await TVC_Dialog.alert('Select a GROUP.');
         try {
             state._actScrollRestore = captureActListScroll();
             if (m.mode === 'append') {
@@ -3863,22 +3962,22 @@ const TVC_App = (function () {
                     department: ctx.dept,
                     is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
                 });
-                alert(`${data.job_code} 항목이 추가되었습니다.`);
+                await TVC_Dialog.alert(`${data.job_code} Item added.`);
             } else {
                 await TVC_MaintenancePlan.updateJob(user, m.editId, {
                     ...data,
                     is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
                 });
-                alert(`${data.job_code} 항목이 수정되었습니다.`);
+                await TVC_Dialog.alert(`${data.job_code} Item updated.`);
             }
             cancelOrigJobInlineEdit({ restoreScroll: false });
             await refreshAll();
         } catch (e) {
             state._actScrollRestore = null;
-            const msg = e.code === 'DUPLICATE' ? '동일한 Job Code가 이미 존재합니다.'
-                : e.code === 'FORBIDDEN' ? '타 부서 항목은 편집할 수 없습니다.'
+            const msg = e.code === 'DUPLICATE' ? 'Job Code already exists.'
+                : e.code === 'FORBIDDEN' ? 'Cannot edit items from another department.'
                 : (e.message || e.code);
-            alert(msg);
+            await TVC_Dialog.alert(msg);
         }
     }
 
@@ -3947,17 +4046,17 @@ const TVC_App = (function () {
             </form>`;
     }
 
-    function openOrigJobModify() {
-        if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+    async function openOrigJobModify() {
+        if (!canEditOriginalPlanItems()) await TVC_Dialog.alert(origPlanEditDeniedMessage());
         if (isOrigJobInlineEditing()) return saveOrigJobInlineEdit();
-        if (!state.selectedJobId) return alert('수정할 작업 행을 선택하세요.');
+        if (!state.selectedJobId) await TVC_Dialog.alert('Select a job row to modify.');
         const job = state.idx?.jobById.get(state.selectedJobId);
-        if (!job) return alert('작업 항목을 찾을 수 없습니다.');
+        if (!job) await TVC_Dialog.alert('Job item not found.');
         startOrigJobInlineEdit(job);
     }
 
-    function openOrigJobAppend() {
-        if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
+    async function openOrigJobAppend() {
+        if (!canEditOriginalPlanItems()) await TVC_Dialog.alert(origPlanEditDeniedMessage());
         if (isOrigJobInlineEditing()) return saveOrigJobInlineEdit();
         startOrigJobInlineAppend();
     }
@@ -3975,7 +4074,7 @@ const TVC_App = (function () {
         const user = TVC_Auth.getCurrentUser();
         if (!user || !canEditOriginalPlanItems()) return;
         const data = readOrigJobForm();
-        if (!data?.job_code) return alert('Job Code를 입력하세요.');
+        if (!data?.job_code) await TVC_Dialog.alert('Enter Job Code.');
         try {
             if (state._origJobEditMode === 'append') {
                 const ctx = defaultAppendContext();
@@ -3983,39 +4082,39 @@ const TVC_App = (function () {
                     ...data,
                     department: ctx.dept,
                 });
-                alert(`${data.job_code} 항목이 추가되었습니다.`);
+                await TVC_Dialog.alert(`${data.job_code} Item added.`);
             } else {
                 await TVC_MaintenancePlan.updateJob(user, state._origJobEditId, data);
-                alert(`${data.job_code} 항목이 수정되었습니다.`);
+                await TVC_Dialog.alert(`${data.job_code} Item updated.`);
             }
             closeModal('origJobEditorModal');
             await refreshAll();
         } catch (e) {
-            const msg = e.code === 'DUPLICATE' ? '동일한 Job Code가 이미 존재합니다.'
-                : e.code === 'FORBIDDEN' ? '타 부서 항목은 편집할 수 없습니다.'
+            const msg = e.code === 'DUPLICATE' ? 'Job Code already exists.'
+                : e.code === 'FORBIDDEN' ? 'Cannot edit items from another department.'
                 : (e.message || e.code);
-            alert(msg);
+            await TVC_Dialog.alert(msg);
         }
     }
 
     async function deleteOrigJob() {
-        if (!canEditOriginalPlanItems()) return alert(origPlanEditDeniedMessage());
-        if (!state.selectedJobId) return alert('삭제할 작업 행을 선택하세요.');
+        if (!canEditOriginalPlanItems()) await TVC_Dialog.alert(origPlanEditDeniedMessage());
+        if (!state.selectedJobId) await TVC_Dialog.alert('Select a job row to delete.');
         const job = state.idx?.jobById.get(state.selectedJobId);
         if (!job) return;
-        if (!confirm(`${job.job_code} — "${job.job_detail || job.item_sort2 || ''}"\n\n이 작업 항목을 삭제하시겠습니까?`)) return;
+        if (!await TVC_Dialog.confirm({ message: `${job.job_code} — "${job.job_detail || job.item_sort2 || ''}"\n\nDelete this maintenance item?` })) return;
         const user = TVC_Auth.getCurrentUser();
         if (!user) return;
         try {
             await TVC_MaintenancePlan.deleteJob(user, job.id, state.reports);
             state.selectedJobId = null;
-            alert(`${job.job_code} 항목이 삭제되었습니다.`);
+            await TVC_Dialog.alert(`${job.job_code} item deleted.`);
             await refreshAll();
         } catch (e) {
             const msg = e.code === 'LINKED' ? 'Work Report가 연결된 항목은 삭제할 수 없습니다.'
                 : e.code === 'FORBIDDEN' ? '타 부서 항목은 삭제할 수 없습니다.'
                 : (e.message || e.code);
-            alert(msg);
+            await TVC_Dialog.alert(msg);
         }
     }
 
@@ -4141,7 +4240,7 @@ const TVC_App = (function () {
                 await TVC_PMS.updateMaintenanceSchedule(state, { persist: true });
             } catch (e) {
                 console.error('[TVC] confirmPlanUpdate persist', e);
-                alert(e.message || 'Original Plan 저장 중 오류가 발생했습니다.');
+                await TVC_Dialog.alert(e.message || 'An error occurred while saving Original Plan.');
                 await revertPlanUpdateSnapshot();
                 return;
             }
@@ -4177,11 +4276,11 @@ const TVC_App = (function () {
     async function approveWorkPlanFromHq() {
         if (!TVC_RBAC.isHqAccount(state.user)) return;
         if (!TVC_RBAC.can(state.user, TVC_RBAC.Action.APPROVE_ORIGINAL_PLAN)) {
-            alert('Approve Work Plan 권한이 없습니다.');
+            await TVC_Dialog.alert('No permission to approve Work Plan.');
             return;
         }
         if (!getPlanLockDept()) {
-            alert('부서(Deck / Engine)를 선택하세요.');
+            await TVC_Dialog.alert('Select a department (Deck / Engine).');
             return;
         }
         await updateOriginalPlanFromRunHours({ hqApprove: true });
@@ -4199,7 +4298,7 @@ const TVC_App = (function () {
         if (stats.pendingReports > 0) {
             msg += `\n\n미완료 Work Report ${stats.pendingReports}건 — Cancel 선택 후 Work Plan에서 입력하세요.`;
         }
-        await confirmPlanUpdate(confirm(msg));
+        await confirmPlanUpdate(await TVC_Dialog.confirm({ message: msg }));
     }
 
     /** Menu → Update Original Plan: Run-hour 입력값으로 H 주기 Due Date 재계산 (CMAXS Calculation) */
@@ -4207,15 +4306,15 @@ const TVC_App = (function () {
         const isHqApprove = opts.hqApprove === true;
         const skipUi = shouldSkipPlanUpdateUi(opts);
         if (!isHqApprove && typeof TVC_Space !== 'undefined' && !TVC_Space.getUiFeatures(state.user).showUpdateWorkPlan) {
-            alert('Update Work Plan은 확인자(Chief engineer / Chief officer / Captain)만 사용할 수 있습니다.');
+            await TVC_Dialog.alert('Update Work Plan requires Chief Engineer, Chief Officer, or Captain permission.');
             return;
         }
         if (!isHqApprove && rhUpdateGateApplies() && !isRhUpdateCommitted()) {
-            alert('Running Hours Update를 먼저 완료하세요.');
+            await TVC_Dialog.alert('Complete Running Hours Update first.');
             return;
         }
         if (!canPerformOriginalPlanUpdate()) {
-            alert(getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.');
+            await TVC_Dialog.alert(getOriginalPlanLockMessage(getPlanLockDept()) || 'Original Plan Update는 현재 사용할 수 없습니다.');
             return;
         }
         menuNavigate('actual', { actualFilter: 'total' });
@@ -4260,7 +4359,7 @@ const TVC_App = (function () {
             console.error('[TVC] updateOriginalPlanFromRunHours', calcError);
             await revertPlanUpdateSnapshot();
             _planUpdateSnapshot = null;
-            alert(calcError.message || 'Original Plan 계산 중 오류가 발생했습니다.');
+            await TVC_Dialog.alert(calcError.message || 'An error occurred while calculating Original Plan.');
             return;
         }
 
@@ -4465,12 +4564,12 @@ const TVC_App = (function () {
         if (state.currentTab === 'actual') renderSidePanel();
     }
 
-    function togglePlanSelectedOnly() {
+    async function togglePlanSelectedOnly() {
         if (state.currentTab !== 'actual') return;
         if (state.actualSelectedOnly) {
             state.actualSelectedOnly = false;
         } else {
-            if (!batchSelectedCount()) return alert('선택된 작업이 없습니다.');
+            if (!batchSelectedCount()) await TVC_Dialog.alert('No jobs selected.');
             state.actualSelectedOnly = true;
         }
         renderActualPlan();
@@ -4490,7 +4589,7 @@ const TVC_App = (function () {
             state._batchDraft.items[id] = {
                 form: {
                     ...defaultWrForm(today),
-                    lastMaintDate: today,
+                    lastMaintDate: job.last_done || '',
                     pmsGroupNo: hdr.pmsGroupNo || '',
                     maker: hdr.maker || '',
                     modelType: hdr.modelType || '',
@@ -4555,23 +4654,23 @@ const TVC_App = (function () {
         return `<div class="batch-job-picker">${rows}</div>`;
     }
 
-    function openWorkReportInput(explicitJobId) {
+    async function openWorkReportInput(explicitJobId) {
         const jobIds = batchSelectedJobIds();
         if (jobIds.length >= 2) return openBatchReport();
         const jobId = jobIds.length === 1 ? jobIds[0] : (explicitJobId || state.selectedJobId);
-        if (!jobId) return alert('작업을 선택하거나 체크(ㅁ)로 1개 이상 선택하세요.');
+        if (!jobId) await TVC_Dialog.alert('Select a job or check one or more rows.');
         return openWorkReport(jobId);
     }
 
-    function openBatchReport() {
+    async function openBatchReport() {
         const jobIds = batchSelectedJobIds();
-        if (jobIds.length < 2) return alert('Batch Report는 2개 이상의 작업을 선택하세요.');
+        if (jobIds.length < 2) await TVC_Dialog.alert('Select at least 2 jobs for Batch Report.');
         if (state.user?.department) {
             const bad = jobIds.some(id => {
                 const j = state.idx?.jobById.get(id);
                 return j && j.department !== state.user.department;
             });
-            if (bad) return alert('타 부서 항목은 Batch Report에 포함할 수 없습니다.');
+            if (bad) await TVC_Dialog.alert('Items from another department cannot be included in Batch Report.');
         }
         state._batchMode = true;
         state._batchJobIds = [...jobIds];
@@ -4602,7 +4701,7 @@ const TVC_App = (function () {
         captureBatchJobDraft();
         const draft = state._batchDraft;
         if (!draft || !state._batchJobIds.length) return;
-        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.CREATE_DAILY_REPORT);
+        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.CREATE_DAILY_REPORT);
         if (!user) return;
         const tab = state._wrTab || 'repair';
         const workType = 'MAINTENANCE';
@@ -4625,7 +4724,7 @@ const TVC_App = (function () {
             };
         }).filter(Boolean);
 
-        if (!entries.length) return alert('저장할 작업이 없습니다.');
+        if (!entries.length) await TVC_Dialog.alert('No jobs to save.');
 
         const firstForm = draft.items[state._batchJobIds[0]]?.form || {};
         try {
@@ -4649,9 +4748,9 @@ const TVC_App = (function () {
             state._batchDraft = null;
             resetAndCloseWorkReport();
             await refreshAll();
-            alert(`Batch Work Report 저장 완료 (${entries.length} jobs, REPORTED)`);
+            await TVC_Dialog.alert(`Batch Work Report saved (${entries.length} jobs, REPORTED)`);
         } catch (e) {
-            alert(e.message || e.code || 'Batch Report 저장 실패');
+            await TVC_Dialog.alert(e.message || e.code || 'Batch Report Save failed');
         }
     }
 
@@ -5132,7 +5231,7 @@ const TVC_App = (function () {
     function histCheckDisabledTitle(entry) {
         if (isHistDefectEntry(entry)) {
             const dc = entry.defect;
-            if (!state.user) return '로그인 필요';
+            if (!state.user) return 'Sign in required';
             if (TVC_RBAC.isHqAccount(state.user)) {
                 if (dc.approved_at) return '승인 완료';
                 if (dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Report Confirm 또는 Approve 대상';
@@ -5145,17 +5244,17 @@ const TVC_App = (function () {
             if (!TVC_DefectReport.isDefectReportConfirmable(dc)) {
                 return 'Confirm 권한 없음 (Engine · C/E · Deck · C/O · Master · Captain · HQ)';
             }
-            return '선택 불가';
+            return 'Not selectable';
         }
         const { report: r, item } = entry;
-        if (!state.user) return '로그인 필요';
+        if (!state.user) return 'Sign in required';
         if (r.is_locked || reportIsApproved(r)) return '승인 완료된 리포트';
         if (itemSt(item) !== 'REPORTED' && !isHistRowHqApprovable(entry)) return 'REPORTED · Confirmed 항목만 선택 가능';
             if (!TVC_RBAC.canConfirmDepartment(state.user, reportDept(r)) && !isHistRowHqApprovable(entry)) {
             return 'Confirm 권한 없음 (Engine · C/E · Deck · C/O · Master · Captain · HQ)';
         }
         if (TVC_RBAC.isConfirmedStatus(r.status) && !isHistRowHqApprovable(entry)) return '이미 Confirm 됨';
-        return '선택 불가';
+        return 'Not selectable';
     }
 
     function pruneHistChecked() {
@@ -5557,20 +5656,20 @@ const TVC_App = (function () {
     }
 
     /** Work History 목록 전체(Work Report + Defect) 순서로 Previous / Next */
-    function navWorkHistoryEntry(dir) {
+    async function navWorkHistoryEntry(dir) {
         const list = workHistoryEntries();
         if (!list.length) return;
         let i = findCurrentWorkHistoryNavIndex(list);
         if (i < 0) i = 0;
         else i += dir;
-        if (i < 0) { alert('첫 번째 항목입니다.'); return; }
-        if (i >= list.length) { alert('마지막 항목입니다.'); return; }
+        if (i < 0) { await TVC_Dialog.alert('This is the first item.'); return; }
+        if (i >= list.length) { await TVC_Dialog.alert('This is the last item.'); return; }
         openWorkHistoryEntry(list[i], { preserveWrMode: true, keepTab: state._wrTab });
     }
 
-    function histDetailWorkReport() {
+    async function histDetailWorkReport() {
         const entry = getSelectedHistEntry();
-        if (!entry) return alert('Work History에서 항목을 선택하세요.');
+        if (!entry) await TVC_Dialog.alert('Select an item from Work History.');
         if (isHistDefectEntry(entry)) {
             openDefectFromHistory(entry.defect.id);
             return;
@@ -5578,16 +5677,16 @@ const TVC_App = (function () {
         openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id, { fromHistory: true, view: true });
     }
 
-    function histModifyReport() {
+    async function histModifyReport() {
         const entry = getSelectedHistEntry();
-        if (!entry) return alert('Work History에서 항목을 선택하세요.');
+        if (!entry) await TVC_Dialog.alert('Select an item from Work History.');
         if (isHistDefectEntry(entry)) {
             return TVC_DefectReport.dfModifyCase(entry.defect.id, 'history', { swapHide: 'workReportModal' });
         }
         if (!canModifyHistEntry(entry)) {
             const st = workReportListWorkflowStatus(entry.report);
-            if (st === 'Confirmed') return alert('Confirmed 상태는 Captain / Chief Engineer만 수정할 수 있습니다.');
-            return alert('Approved · Submitted 상태는 수정할 수 없습니다.');
+            if (st === 'Confirmed') await TVC_Dialog.alert('Only Captain / Chief Engineer can modify Confirmed items.');
+            await TVC_Dialog.alert('Cannot modify Approved or Submitted items.');
         }
         openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id, { fromHistory: true, edit: true });
     }
@@ -5598,13 +5697,13 @@ const TVC_App = (function () {
         );
         const confirmCandidates = getHistConfirmCandidates();
         if (!confirmCandidates.length) {
-            return alert('Confirm할 REPORTED 항목의 체크박스(ㅁ)를 선택하세요.');
+            await TVC_Dialog.alert('Check one or more REPORTED items to confirm.');
         }
         if (checkedEntries.length && confirmCandidates.length !== checkedEntries.filter(isHistRowApprovable).length) {
-            return alert('선택한 항목 중 Confirm할 수 없는 항목이 있습니다.\nEngine(C/E) · Deck(C/O) · Master(Captain) · HQ 권한을 확인하세요.');
+            await TVC_Dialog.alert('Some selected items cannot be confirmed.\nCheck Engine (C/E), Deck (C/O), Master (Captain), or HQ permission.');
         }
 
-        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.APPROVE_DAILY_REPORT);
+        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.APPROVE_DAILY_REPORT);
         if (!user) return;
 
         const defectEntries = confirmCandidates.filter(isHistDefectEntry);
@@ -5623,24 +5722,24 @@ const TVC_App = (function () {
         const reportIds = [...new Set(workEntries.map(e => e.report.id))];
         for (const id of reportIds) {
             const rep = state.reports.find(r => r.id === id);
-            if (!rep) return alert('리포트를 찾을 수 없습니다.');
+            if (!rep) await TVC_Dialog.alert('Report not found.');
             const hasReported = TVC_WorkReport.getJobItems(rep).some(i => itemSt(i) === 'REPORTED');
-            if (!hasReported) return alert(`${rep.job_code}: Confirm할 수 없는 상태입니다.`);
+            if (!hasReported) await TVC_Dialog.alert(`${rep.job_code}: Cannot confirm in this status.`);
             const dept = reportDept(rep);
             if (!TVC_RBAC.canConfirmDepartment(user, dept)) {
-                return alert(`타 부서(${dept || '?'}) 리포트는 Confirm할 수 없습니다: ${rep.job_code}`);
+                await TVC_Dialog.alert(`Other department (${dept || '?'}) report cannot be confirmed: ${rep.job_code}`);
             }
         }
 
         const defectToConfirm = defectEntries.filter(e => TVC_DefectReport.isDefectReportConfirmable(e.defect));
         const totalCount = reportIds.length + defectToConfirm.length;
-        if (!totalCount) return alert('Confirm할 수 있는 항목이 없습니다.');
+        if (!totalCount) await TVC_Dialog.alert('No items available to confirm.');
 
         const parts = [];
         if (reportIds.length) parts.push(`${reportIds.length}건의 Work Report`);
         if (defectToConfirm.length) parts.push(`${defectToConfirm.length}건의 Defect Report`);
-        const wrNote = reportIds.length ? '\n(재고 차감 · LAST DONE / NEXT DATE 갱신)' : '';
-        if (!confirm(`${parts.join(' · ')}를 Confirm하시겠습니까?${wrNote}`)) return;
+        const wrNote = reportIds.length ? '\n((Stock deduction · LAST DONE / NEXT DATE update))' : '';
+        if (!await TVC_Dialog.confirm({ message: `${parts.join(' · ')}를 Confirm selected item(s)?${wrNote}` })) return;
 
         let ok = 0;
         for (const id of reportIds) {
@@ -5648,7 +5747,7 @@ const TVC_App = (function () {
                 await TVC_Transaction.confirmReport(user, id);
                 ok++;
             } catch (e) {
-                alert(`${id}: ${e.message || e.code || 'Confirm 실패'}`);
+                await TVC_Dialog.alert(`${id}: ${e.message || e.code || 'Confirm failed'}`);
                 break;
             }
         }
@@ -5657,13 +5756,13 @@ const TVC_App = (function () {
                 await TVC_DefectCaseService.saveApprovalMeta(user, entry.defect.id, { confirm: true });
                 ok++;
             } catch (e) {
-                alert(`${entry.defect.case_no || entry.defect.id}: ${e.message || e.code || 'Confirm failed'}`);
+                await TVC_Dialog.alert(`${entry.defect.case_no || entry.defect.id}: ${e.message || e.code || 'Confirm failed'}`);
                 break;
             }
         }
         state._histChecked = {};
         await refreshAll();
-        if (ok) alert(`${ok}건 Confirm 완료`);
+        if (ok) await TVC_Dialog.alert(`${ok} item(s) confirmed`);
     }
 
     async function histHqReportApproval() {
@@ -5673,13 +5772,13 @@ const TVC_App = (function () {
         );
         const approveCandidates = getHistHqApproveCandidates();
         if (!approveCandidates.length) {
-            return alert('Approve할 Confirmed 항목의 체크박스(ㅁ)를 선택하세요.');
+            await TVC_Dialog.alert('Check one or more Confirmed items to approve.');
         }
         if (checkedEntries.length && approveCandidates.length !== checkedEntries.filter(isHistRowHqApprovable).length) {
-            return alert('선택한 항목 중 Approve할 수 없는 항목이 있습니다.\nConfirmed 상태 · HQ 승인 권한을 확인하세요.');
+            await TVC_Dialog.alert('Some selected items cannot be approved.\nCheck Confirmed status and HQ approval permission.');
         }
 
-        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.CONFIRM_REPORT);
+        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.CONFIRM_REPORT);
         if (!user) return;
 
         const defectEntries = approveCandidates.filter(isHistDefectEntry);
@@ -5693,26 +5792,26 @@ const TVC_App = (function () {
 
         for (const id of reportIds) {
             const rep = state.reports.find(r => r.id === id);
-            if (!rep) return alert('리포트를 찾을 수 없습니다.');
+            if (!rep) await TVC_Dialog.alert('Report not found.');
             if (!TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked)) {
-                return alert(`${rep.job_code}: Confirmed 상태만 Approve할 수 있습니다.`);
+                await TVC_Dialog.alert(`${rep.job_code}: Only Confirmed items can be approved.`);
             }
             if (reportIsApproved(rep)) {
-                return alert(`${rep.job_code}: 이미 Approved 되었습니다.`);
+                await TVC_Dialog.alert(`${rep.job_code}: Already approved.`);
             }
             if (rep.work_type === 'POSTPONE' && postponeRequiresCompanyApproval(rep) && !hqApprovePostponeDate(rep)) {
-                return alert(`${rep.job_code}: Approved Postpone Date가 필요합니다. Work Report에서 확인하세요.`);
+                await TVC_Dialog.alert(`${rep.job_code}: Approved Postpone Date is required. Check the Work Report.`);
             }
         }
 
         const totalCount = reportIds.length + defectEntries.length;
-        if (!totalCount) return alert('Approve할 수 있는 항목이 없습니다.');
+        if (!totalCount) await TVC_Dialog.alert('No items available to approve.');
 
         const parts = [];
         if (maintenanceIds.length) parts.push(`${maintenanceIds.length}건의 Work Report`);
         if (postponeIds.length) parts.push(`${postponeIds.length}건의 Postpone Report`);
         if (defectEntries.length) parts.push(`${defectEntries.length}건의 Defect Report`);
-        if (!confirm(`${parts.join(' · ')}를 Approve하시겠습니까?`)) return;
+        if (!await TVC_Dialog.confirm({ message: `${parts.join(' · ')} — approve selected item(s)?` })) return;
 
         let ok = 0;
         for (const id of reportIds) {
@@ -5724,7 +5823,7 @@ const TVC_App = (function () {
                 await TVC_Transaction.approveReport(user, id, '', opts);
                 ok++;
             } catch (e) {
-                alert(`${id}: ${e.message || e.code || 'Approve 실패'}`);
+                await TVC_Dialog.alert(`${id}: ${e.message || e.code || 'Approve 실패'}`);
                 break;
             }
         }
@@ -5733,26 +5832,26 @@ const TVC_App = (function () {
                 await TVC_DefectCaseService.saveApprovalMeta(user, entry.defect.id, { approve: true });
                 ok++;
             } catch (e) {
-                alert(`${entry.defect.case_no || entry.defect.id}: ${e.message || e.code || 'Approve failed'}`);
+                await TVC_Dialog.alert(`${entry.defect.case_no || entry.defect.id}: ${e.message || e.code || 'Approve failed'}`);
                 break;
             }
         }
         state._histChecked = {};
         await refreshAll();
-        if (ok) alert(`${ok}건 Approve 완료`);
+        if (ok) await TVC_Dialog.alert(`${ok} item(s) approved`);
     }
 
     async function histDeleteReport() {
         const entry = getSelectedHistEntry();
-        if (!entry) return alert('Work History에서 항목을 선택하세요.');
+        if (!entry) await TVC_Dialog.alert('Select an item from Work History.');
         if (isHistDefectEntry(entry)) {
             return TVC_DefectReport.dfDeleteByIds([entry.defect.id], { clearHistSelection: true });
         }
         if (!canDeleteHistEntry(entry)) {
             if (reportIsApproved(entry.report) || entry.report.is_locked) {
-                return alert('본사 승인(APPROVED)된 리포트는 삭제할 수 없습니다.');
+                await TVC_Dialog.alert('본사 승인(APPROVED)된 리포트는 삭제할 수 없습니다.');
             }
-            return alert('Confirm 완료된 리포트는 Captain / Chief Engineer만 삭제할 수 있습니다.');
+            await TVC_Dialog.alert('Confirm 완료된 리포트는 Captain / Chief Engineer만 삭제할 수 있습니다.');
         }
         state._wrReportId = entry.report.id;
         state._wrBatchItemId = entry.item.maintenance_job_id;
@@ -5989,26 +6088,26 @@ const TVC_App = (function () {
         });
     }
 
-    function openSpareAppend() {
-        if (!canEditSpareItems()) return alert('Chief Engineer / Captain 권한이 필요합니다.');
+    async function openSpareAppend() {
+        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer / Captain 권한이 필요합니다.');
         TVC_SpareMenu.append();
     }
 
-    function openSpareModify() {
+    async function openSpareModify() {
         if (state.spareModule?.inlineEditId) {
             return TVC_SpareMenu.saveInlineEdit();
         }
         const ids = spareActionIds('modify');
-        if (!ids.length) return alert('수정할 부품을 선택하세요 (행 클릭 또는 ㅁ 체크).');
-        if (batchSelectedSpareIds().length > 1) return alert('수정은 한 건만 선택할 수 있습니다.');
-        if (!canEditSpareItems()) return alert('Chief Engineer / Captain 권한이 필요합니다.');
+        if (!ids.length) await TVC_Dialog.alert('수정할 부품을 선택하세요 (행 클릭 또는 ㅁ 체크).');
+        if (batchSelectedSpareIds().length > 1) await TVC_Dialog.alert('수정은 한 건만 선택할 수 있습니다.');
+        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer / Captain 권한이 필요합니다.');
         TVC_SpareMenu.edit(ids[0]);
     }
 
-    function deleteSpareItem() {
+    async function deleteSpareItem() {
         const ids = spareActionIds('delete');
-        if (!ids.length) return alert('삭제할 부품을 선택하세요 (행 클릭 또는 ㅁ 체크).');
-        if (!canEditSpareItems()) return alert('Chief Engineer / Captain 권한이 필요합니다.');
+        if (!ids.length) await TVC_Dialog.alert('삭제할 부품을 선택하세요 (행 클릭 또는 ㅁ 체크).');
+        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer / Captain 권한이 필요합니다.');
         TVC_SpareMenu.deleteSpareItems(ids);
     }
 
@@ -6033,9 +6132,9 @@ const TVC_App = (function () {
 
     // ── Job detail / procedure modals ────────────────────────────────
     /** Original / Work Plan: 더블 클릭 — CMAXS Work Procedure / Work History 모달 */
-    function openWorkProcedure(jobId, tab) {
+    async function openWorkProcedure(jobId, tab) {
         const job = resolveJobById(jobId);
-        if (!job) return alert('작업을 찾을 수 없습니다.');
+        if (!job) await TVC_Dialog.alert('작업을 찾을 수 없습니다.');
         clearPlanRowRefreshTimer();
         _planRowLastTap = { id: null, t: 0 };
         if (state._wpJobId !== job.id) {
@@ -6060,19 +6159,19 @@ const TVC_App = (function () {
         renderSidePanel();
     }
 
-    function setWorkProcedureTab(tab) {
+    async function setWorkProcedureTab(tab) {
         state._wpTab = tab;
         if (tab !== 'procedure') state._wpEditing = false;
         try {
             renderWorkProcedureModal();
         } catch (err) {
             console.error('[WorkProcedure tab]', err);
-            alert('Work History 화면을 불러오지 못했습니다.');
+            await TVC_Dialog.alert('Work History 화면을 불러오지 못했습니다.');
         }
     }
 
-    function enterWorkProcedureEdit() {
-        if (!canEditWorkProcedure()) return alert(workProcedureEditDeniedMessage());
+    async function enterWorkProcedureEdit() {
+        if (!canEditWorkProcedure()) await TVC_Dialog.alert(workProcedureEditDeniedMessage());
         state._wpEditing = true;
         renderWorkProcedureModal();
         requestAnimationFrame(() => document.getElementById('wpProcedureInput')?.focus());
@@ -6083,10 +6182,10 @@ const TVC_App = (function () {
         renderWorkProcedureModal();
     }
 
-    function saveWorkProcedure() {
+    async function saveWorkProcedure() {
         const job = resolveJobById(state._wpJobId);
         if (!job) return;
-        if (!canEditWorkProcedure()) return alert(workProcedureEditDeniedMessage());
+        if (!canEditWorkProcedure()) await TVC_Dialog.alert(workProcedureEditDeniedMessage());
         const text = String(document.getElementById('wpProcedureInput')?.value ?? '').trim();
         TVC_JobMeta.setProcedure(job.job_code, text);
         TVC_JobMeta.addHistory(job.job_code, {
@@ -6096,7 +6195,7 @@ const TVC_App = (function () {
         });
         state._wpEditing = false;
         renderWorkProcedureModal();
-        alert('Work Procedure saved.');
+        await TVC_Dialog.success('Work Procedure saved.');
     }
 
     function renderWpAttachmentList(attachments, canRemove) {
@@ -6195,8 +6294,10 @@ const TVC_App = (function () {
         const canEditProc = canEditWorkProcedure();
         const editingProc = state._wpTab === 'procedure' && !!state._wpEditing;
         const procEditTip = escAttr(workProcedureEditDeniedMessage());
-        const canAttach = editingProc;
-        const attachTip = escAttr(canAttach ? 'Attach files to this Work Procedure' : 'Modify 상태에서만 첨부할 수 있습니다.');
+        const canAttach = canEditProc && state._wpTab === 'procedure';
+        const attachTip = escAttr(canAttach
+            ? 'Attach files to this Work Procedure'
+            : workProcedureEditDeniedMessage());
         let procEditBtns = '';
         if (state._wpTab === 'procedure') {
             procEditBtns = editingProc
@@ -6237,7 +6338,7 @@ const TVC_App = (function () {
     }
 
     async function uploadWorkProcedureAttachment() {
-        if (!state._wpEditing || state._wpTab !== 'procedure') return;
+        if (!canEditWorkProcedure() || state._wpTab !== 'procedure') return;
         const job = resolveJobById(state._wpJobId);
         const input = document.getElementById('wpAttachInput');
         if (!job || !input?.files?.length) return;
@@ -6247,7 +6348,7 @@ const TVC_App = (function () {
     }
 
     function removeWorkProcedureAttachment(attachmentId) {
-        if (!state._wpEditing || state._wpTab !== 'procedure') return;
+        if (!canEditWorkProcedure() || state._wpTab !== 'procedure') return;
         const job = resolveJobById(state._wpJobId);
         if (!job) return;
         TVC_JobMeta.removeAttachment(job.job_code, attachmentId);
@@ -6273,21 +6374,21 @@ const TVC_App = (function () {
     }
 
     /** Original / Work Plan → Report Input: CMAXS 스타일 Work Report 화면 */
-    function openWorkReport(jobId, tab) {
+    async function openWorkReport(jobId, tab) {
         const job = state.idx.jobById.get(jobId);
         if (!job) return;
         if (state.user.department && state.user.department !== job.department) {
-            return alert('타 부서 항목은 보고할 수 없습니다.');
+            await TVC_Dialog.alert('타 부서 항목은 보고할 수 없습니다.');
         }
         state._batchMode = false;
         state._batchJobIds = [];
         state._batchDraft = null;
-        if (state._wrJobId !== jobId) {
+        if (state._wrJobId !== jobId || !state._wrReportId) {
             const today = new Date().toISOString().slice(0, 10);
             state._wrForm = defaultWrForm(today);
             const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
             Object.assign(state._wrForm, {
-                lastMaintDate: today,
+                lastMaintDate: job.last_done || '',
                 pmsGroupNo: hdr.pmsGroupNo || '',
                 pmsGroupKey: `${job.department}|${String(job.group || '').trim()}`,
                 maker: hdr.maker || '',
@@ -6315,7 +6416,7 @@ const TVC_App = (function () {
     }
 
     /** Work History: 더블 클릭 — 저장된 Work Report를 그대로 재현(읽기 전용, Modify 가능) */
-    function openWorkReportFromHistory(reportId, jobId, opts = {}) {
+    async function openWorkReportFromHistory(reportId, jobId, opts = {}) {
         const rep = state.reports.find(r => r.id === reportId);
         if (!rep) return;
         TVC_WorkReport.fromLegacy(rep);
@@ -6324,7 +6425,7 @@ const TVC_App = (function () {
             : TVC_WorkReport.getJobItems(rep)[0];
         const job = state.idx?.jobById.get(item?.maintenance_job_id || rep.maintenance_job_id)
             || state.jobs.find(j => j.job_code === (item?.job_code || rep.job_code));
-        if (!job) return alert('해당 작업 항목을 찾을 수 없습니다.');
+        if (!job) { await TVC_Dialog.alert('Job item not found.'); return; }
         state._wrJobId = job.id;
         state.selectedJobId = job.id;
         state._wrReportId = reportId;
@@ -6422,16 +6523,16 @@ const TVC_App = (function () {
         const isHqApproved = rep && reportIsApproved(rep);
 
         if (isHqApproved) {
-            return alert('본사 승인(APPROVED)된 리포트는 삭제할 수 없습니다.');
+            await TVC_Dialog.alert('본사 승인(APPROVED)된 리포트는 삭제할 수 없습니다.');
         }
         if (isShipConfirmed && !TVC_RBAC.isApprover(user)) {
-            return alert('Confirm 완료된 리포트는 Captain / Chief Engineer만 삭제할 수 있습니다.');
+            await TVC_Dialog.alert('Confirm 완료된 리포트는 Captain / Chief Engineer만 삭제할 수 있습니다.');
         }
 
         const msg = isShipConfirmed
             ? 'Confirm 완료된 Work Report를 삭제합니다.\n\n차감된 재고와 LAST DONE / NEXT DATE가 Confirm 이전 상태로 자동 복구됩니다. 계속하시겠습니까?'
-            : '이 Work Report를 삭제하시겠습니까? 되돌릴 수 없습니다.';
-        if (!confirm(msg)) return;
+            : '이 Work Report를 Delete this item? 되돌릴 수 없습니다.';
+        if (!await TVC_Dialog.confirm({ message: msg })) return;
 
         try {
             if (rep?.consume_log_id) {
@@ -6450,14 +6551,14 @@ const TVC_App = (function () {
             state._histChecked = {};
             closeModal('workReportModal');
             await refreshAll();
-            alert(isShipConfirmed
+            await TVC_Dialog.alert(isShipConfirmed
                 ? 'Work Report가 삭제되고 재고·일자가 원상복구되었습니다.'
                 : 'Work Report가 삭제되었습니다.');
         } catch (e) {
             const code = e.code || '';
-            if (code === 'LOCKED') return alert('본사 확정된 리포트는 삭제할 수 없습니다.');
-            if (code === 'FORBIDDEN') return alert('타 부서 리포트는 삭제할 수 없습니다.');
-            alert(e.message || code);
+            if (code === 'LOCKED') await TVC_Dialog.alert('본사 확정된 리포트는 삭제할 수 없습니다.');
+            if (code === 'FORBIDDEN') await TVC_Dialog.alert('타 부서 리포트는 삭제할 수 없습니다.');
+            await TVC_Dialog.alert(e.message || code);
         }
     }
 
@@ -6647,16 +6748,202 @@ const TVC_App = (function () {
         });
     }
 
+    function cleanupOrphanPickMenus() {
+        closeAllWrPicks();
+        document.querySelectorAll('body > .spare-consume-pick-menu-portal').forEach(el => el.remove());
+    }
+
+    function renderFileNoPickPanelHtml(target = 'wr') {
+        const id = target === 'df' ? 'dfFileNoPickPanel' : 'wrFileNoPickPanel';
+        return `<div id="${id}" class="wr-file-no-popover spare-req-hist-popover hidden" aria-hidden="true"></div>`;
+    }
+
+    function renderFileNoInputHtml(opts = {}) {
+        const {
+            fieldKey = 'fileNo',
+            dataAttr = 'data-wf',
+            value = '',
+            ro = false,
+            pickTarget = 'wr',
+        } = opts;
+        const btnId = pickTarget === 'df' ? 'dfFileNoPickBtn' : 'wrFileNoPickBtn';
+        const dis = ro ? ' disabled' : '';
+        return `<div class="wr-file-no-row">
+            <input ${dataAttr}="${fieldKey}" value="${esc(value)}"${dis}>
+            <button type="button" id="${btnId}" class="btn btn-sm wr-file-no-pick-btn" onclick="TVC_App.openFileNoPickModal('${pickTarget}')"${dis} title="Browse Work History for File No. reference">Select File No.</button>
+        </div>`;
+    }
+
+    function buildFileNoPickRows() {
+        return workHistoryEntries().map(entry => {
+            const m = histTypeMarker(entry);
+            let fileNo, jobCode, sort1, date;
+            if (isHistDefectEntry(entry)) {
+                const dc = entry.defect;
+                fileNo = String(dc.file_no || '').trim();
+                jobCode = dc.job_code || dc.job_items?.[0]?.job_code || '—';
+                sort1 = dc.item_sort1 || dc.job_items?.[0]?.item_sort1 || '—';
+                date = formatCmaxsHistDate(dc.report_date || dc.created_at);
+            } else {
+                const { report: r, item } = entry;
+                const f = item.form || wrReportForm(r);
+                fileNo = String(f.fileNo || '').trim();
+                const job = state.idx?.jobById.get(item.maintenance_job_id);
+                jobCode = item.job_code || '—';
+                sort1 = job?.item_sort1 || '—';
+                date = formatCmaxsHistDate(listReportedDateStr(r));
+            }
+            return {
+                fileNo,
+                letter: m.letter,
+                typeTitle: m.title,
+                typeCls: m.cls,
+                jobCode,
+                sort1,
+                date,
+                rowKey: histEntryRowKey(entry),
+            };
+        });
+    }
+
+    function renderFileNoPickPopoverInner() {
+        const q = String(state._fileNoPickSearch || '').trim().toLowerCase();
+        const rows = buildFileNoPickRows().filter(row => {
+            if (!q) return true;
+            const hay = [row.fileNo, row.letter, row.typeTitle, row.jobCode, row.sort1, row.date].join(' ').toLowerCase();
+            return hay.includes(q);
+        });
+        if (!rows.length) {
+            return '<p class="muted file-no-pick-empty">No matching Work History entries.</p>';
+        }
+        return `<div class="search-field-wrap file-no-pick-search">
+                <input type="search" class="search-input" id="fileNoPickSearch" placeholder="Search File No / Job Code / SORT…"
+                    value="${escAttr(state._fileNoPickSearch || '')}" oninput="TVC_App.fileNoPickSearch(this.value)">
+            </div>
+            <div class="file-no-pick-table-wrap">
+                <table class="file-no-pick-table">
+                    <thead><tr>
+                        <th>File No</th><th class="hist-type-h">Type</th><th>Job Code</th><th>SORT-1</th><th>Reported Date</th>
+                    </tr></thead>
+                    <tbody>${rows.map(row => `<tr class="file-no-pick-row" onclick="TVC_App.applyFileNoPick('${escAttr(row.fileNo)}')">
+                        <td>${esc(row.fileNo || '—')}</td>
+                        <td class="hist-type ${esc(row.typeCls)}" title="${escAttr(row.typeTitle)}"><span class="hist-type-mark">${esc(row.letter)}</span></td>
+                        <td>${esc(row.jobCode)}</td>
+                        <td>${esc(row.sort1)}</td>
+                        <td>${esc(row.date || '—')}</td>
+                    </tr>`).join('')}</tbody>
+                </table>
+            </div>`;
+    }
+
+    function renderFileNoPickPopoverBody() {
+        const rows = buildFileNoPickRows();
+        const q = String(state._fileNoPickSearch || '').trim().toLowerCase();
+        const shown = q
+            ? rows.filter(row => [row.fileNo, row.letter, row.typeTitle, row.jobCode, row.sort1, row.date].join(' ').toLowerCase().includes(q))
+            : rows;
+        const countLabel = `${shown.length}${shown.length !== rows.length ? ` / ${rows.length}` : ''} item(s)`;
+        return `<div class="spare-req-hist-popover-head wr-file-no-popover-head">Select File No.
+                <span class="muted spare-req-list-count">${countLabel}</span>
+                <button type="button" class="modal-x" onclick="TVC_App.closeFileNoPickModal()" title="Close">×</button>
+            </div>
+            ${renderFileNoPickPopoverInner()}
+            <p class="spare-req-list-hint spare-req-hist-hint muted">Click a row to apply File No.</p>`;
+    }
+
+    function fileNoPickPanelId(target) {
+        return target === 'df' ? 'dfFileNoPickPanel' : 'wrFileNoPickPanel';
+    }
+
+    function fileNoPickBtnId(target) {
+        return target === 'df' ? 'dfFileNoPickBtn' : 'wrFileNoPickBtn';
+    }
+
+    function positionFileNoPickPopover(target) {
+        const btn = document.getElementById(fileNoPickBtnId(target));
+        const panel = document.getElementById(fileNoPickPanelId(target));
+        const anchor = panel?.closest('.wr-file-no-anchor');
+        if (!btn || !panel || !anchor || panel.classList.contains('hidden')) return;
+        const top = btn.getBoundingClientRect().bottom - anchor.getBoundingClientRect().top + 6;
+        panel.style.top = `${Math.max(top, 0)}px`;
+    }
+
+    function closeFileNoPickPopover() {
+        ['wr', 'df'].forEach(target => {
+            const panel = document.getElementById(fileNoPickPanelId(target));
+            const btn = document.getElementById(fileNoPickBtnId(target));
+            const anchor = panel?.closest('.wr-file-no-anchor');
+            if (panel) {
+                panel.classList.add('hidden');
+                panel.setAttribute('aria-hidden', 'true');
+                panel.innerHTML = '';
+                panel.style.top = '';
+            }
+            btn?.classList.remove('is-open');
+            anchor?.classList.remove('is-file-no-pick-open');
+        });
+        state._fileNoPickOpen = false;
+    }
+
+    function openFileNoPickModal(target) {
+        const nextTarget = target || 'wr';
+        const panel = document.getElementById(fileNoPickPanelId(nextTarget));
+        if (!panel) return;
+        const alreadyOpen = state._fileNoPickOpen && state._fileNoPickTarget === nextTarget
+            && !panel.classList.contains('hidden');
+        if (alreadyOpen) {
+            closeFileNoPickPopover();
+            return;
+        }
+        closeFileNoPickPopover();
+        state._fileNoPickTarget = nextTarget;
+        state._fileNoPickSearch = '';
+        state._fileNoPickOpen = true;
+        if (nextTarget === 'wr') captureWorkReportForm();
+        else TVC_DefectReport.captureDfFormFields?.();
+        panel.innerHTML = renderFileNoPickPopoverBody();
+        panel.classList.remove('hidden');
+        panel.setAttribute('aria-hidden', 'false');
+        const anchor = panel.closest('.wr-file-no-anchor');
+        anchor?.classList.add('is-file-no-pick-open');
+        document.getElementById(fileNoPickBtnId(nextTarget))?.classList.add('is-open');
+        positionFileNoPickPopover(nextTarget);
+        requestAnimationFrame(() => positionFileNoPickPopover(nextTarget));
+    }
+
+    function closeFileNoPickModal() {
+        closeFileNoPickPopover();
+    }
+
+    function fileNoPickSearch(v) {
+        state._fileNoPickSearch = v || '';
+        const target = state._fileNoPickTarget || 'wr';
+        const panel = document.getElementById(fileNoPickPanelId(target));
+        if (!panel || panel.classList.contains('hidden')) return;
+        panel.innerHTML = renderFileNoPickPopoverBody();
+        positionFileNoPickPopover(target);
+    }
+
+    function applyFileNoPick(fileNo) {
+        const val = String(fileNo || '').trim();
+        if (state._fileNoPickTarget === 'df') {
+            TVC_DefectReport.applyFileNoFromPicker?.(val);
+        } else {
+            state._wrForm = state._wrForm || {};
+            state._wrForm.fileNo = val;
+            const inp = document.querySelector('#workReportBody [data-wf="fileNo"]');
+            if (inp) inp.value = val;
+            else renderWorkReportModal({ preserveScroll: true });
+        }
+        closeFileNoPickModal();
+    }
+
     function buildWrGroupPickList() {
         const key = wrGroupKeyFromForm();
         const q = (_wrGroupPickSearch || '').toLowerCase().trim();
         const matchNode = (n) => !q || TVC_SpareMenu.safeTreeLabel(n.label).toLowerCase().includes(q);
         const critKey = TVC_SpareMenu.CRITICAL_GROUP_KEY;
         let html = '';
-        if (!q || 'critical'.includes(q)) {
-            html += `<button type="button" class="spare-consume-pick-item${key === critKey ? ' selected' : ''}"
-                onclick="TVC_App.pickWrGroup('${escAttr(critKey)}','Critical Equipment')">⚠ Critical Equipment</button>`;
-        }
         (TVC_SpareMenu.getPlanGroupPickNodes(state) || []).filter(matchNode).forEach(n => {
             html += `<button type="button" class="spare-consume-pick-item${key === n.key ? ' selected' : ''}"
                 onclick="TVC_App.pickWrGroup('${escAttr(n.key)}','${escAttr(n.label)}')">${esc(TVC_SpareMenu.safeTreeLabel(n.label))}</button>`;
@@ -6695,9 +6982,9 @@ const TVC_App = (function () {
         }), 0);
     }
 
-    function toggleWrJobPick(ev) {
+    async function toggleWrJobPick(ev) {
         ev?.stopPropagation();
-        if (!wrGroupKeyFromForm()) return alert('PMS Group No.를 먼저 선택하세요.');
+        if (!wrGroupKeyFromForm()) await TVC_Dialog.alert('Select PMS Group No. first.');
         const wrap = document.getElementById('wrJobPick');
         if (!wrap) return;
         closeWrPickMenu(document.getElementById('wrGroupPick'));
@@ -6913,9 +7200,9 @@ const TVC_App = (function () {
                 approvedByVal, confirmedByVal,
             })}
 
-            <section class="wr-maint-card wr-maint-body">
+            <section class="wr-maint-card wr-maint-body wr-file-no-anchor">
                 <div class="wr-maint-grid wr-maint-grid-3">
-                    ${fld('File No.', inp('fileNo', ''))}
+                    ${fld('File No.', renderFileNoInputHtml({ value: wf('fileNo', ''), ro }))}
                     ${fld('Voy. No.', inp('voyNo', ''))}
                     ${fld('Place', inp('place', ''))}
                     ${fld('Work Date', `<input type="date" data-wf="workDate" value="${esc(wf('workDate', today))}"${ro ? ' disabled' : ''}>`)}
@@ -6938,7 +7225,7 @@ const TVC_App = (function () {
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap">
                     ${fld('Total Run Hrs', `<input type="number" data-wf="runHrs" value="${esc(wf('runHrs', '0'))}">`)}
-                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', wf('workDate', today)))}">`)}
+                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', job.last_done || ''))}">`)}
                     ${fld('Running Hrs after Last Maint.', inp('rhAfterLastMaint', ''))}
                 </div>
                 ${fld('Outline of Maintenance', `<textarea class="wr-maint-textarea" data-wf="outline" rows="3"${ro ? ' readonly disabled' : ''}>${esc(wf('outline'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
@@ -6948,6 +7235,7 @@ const TVC_App = (function () {
                     canEditShipAttach,
                     canEditCompanyAttach,
                 })}
+                ${renderFileNoPickPanelHtml('wr')}
             </section>
             </div>`;
     }
@@ -6989,11 +7277,10 @@ const TVC_App = (function () {
             ${renderWrApprovalHtml({
                 canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
                 approvedByVal, confirmedByVal,
-                hideApprovedBy: !isCriticalPostpone,
             })}
-            <section class="wr-maint-card wr-maint-body">
+            <section class="wr-maint-card wr-maint-body wr-file-no-anchor">
                 <div class="wr-maint-grid wr-maint-grid-3">
-                    ${fld('File No.', inp('fileNo', ''))}
+                    ${fld('File No.', renderFileNoInputHtml({ value: wf('fileNo', ''), ro }))}
                     ${fld('Voy. No.', inp('voyNo', ''))}
                     ${fld('Place', inp('place', ''))}
                     ${fld('Reported Date', `<input type="date" data-wf="reportDate" value="${esc(wf('reportDate', today))}">`)}
@@ -7014,12 +7301,12 @@ const TVC_App = (function () {
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-3 wr-maint-grid-gap">
                     ${fld('Total Run Hrs', `<input type="number" data-wf="runHrs" value="${esc(wf('runHrs', '0'))}">`)}
-                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', today))}">`)}
+                    ${fld('Last Maintenance Date', `<input type="date" data-wf="lastMaintDate" value="${esc(wf('lastMaintDate', job.last_done || ''))}">`)}
                     ${fld('Running Hrs after Last Maint.', inp('rhAfterLastMaint', ''))}
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-2 wr-maint-grid-gap">
                     ${fld('Original Due Date', `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly>`)}
-                    ${fld('Postpone Date', `<input type="date" data-wf="postponeDate" value="${esc(wf('postponeDate'))}"${ro ? ' disabled' : ''}>`, 'wr-postpone-date')}
+                    ${fld('Postpone Date', `<input type="date" class="tvc-date-input" data-wf="postponeDate" placeholder="YYYY-MM-DD" value="${esc(wf('postponeDate'))}"${ro ? ' disabled' : ''}>`, 'wr-postpone-date')}
                 </div>
                 ${approvedPostponeField}
                 ${renderWrReportFooter({
@@ -7030,6 +7317,7 @@ const TVC_App = (function () {
                     showLaborRow: false,
                     shipCommentLabel: "Ship's Comments (Reason)",
                 })}
+                ${renderFileNoPickPanelHtml('wr')}
             </section>
         </div>`;
     }
@@ -7151,13 +7439,13 @@ const TVC_App = (function () {
         try {
             for (const file of input.files) {
                 if (file.size > maxBytes) {
-                    alert(`${file.name}: 8MB 이하 파일만 첨부할 수 있습니다.`);
+                    await TVC_Dialog.alert(`${file.name}: Only files up to 8 MB can be attached.`);
                     continue;
                 }
                 list.push(await readWrAttachmentFile(file));
             }
         } catch (e) {
-            alert(e.message || '파일을 읽을 수 없습니다.');
+            await TVC_Dialog.alert(e.message || 'Could not read the file.');
         }
         input.value = '';
         renderWorkReportModal({ preserveScroll: true });
@@ -7258,6 +7546,8 @@ const TVC_App = (function () {
 
     function renderWorkReportModal(opts = {}) {
         const scroll = opts.preserveScroll ? captureWorkReportModalScroll() : null;
+        cleanupOrphanPickMenus();
+        closeFileNoPickPopover();
         const host = document.getElementById('workReportBody');
         if (!host) return;
         if (state._batchMode) return renderBatchWorkReportModal(host);
@@ -7284,8 +7574,7 @@ const TVC_App = (function () {
         const canConfirmNow = !!rep && TVC_RBAC.isReportedStatus(rep.status, rep.is_locked) && TVC_RBAC.canConfirmDepartment(state.user, job.department);
         const hqDirectApprove = !!rep && !isRepApproved && TVC_RBAC.canHqDirectApprove(state.user, rep);
         const canApproveNow = !!rep && !isRepApproved && TVC_RBAC.canApproveHqReport(state.user)
-            && (isRepConfirmed || hqDirectApprove)
-            && (state._wrTab !== 'postpone' || isCriticalPostpone || hqDirectApprove);
+            && (isRepConfirmed || hqDirectApprove);
         const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getReportedByLabel(state.user);
         const confirmedByVal = isRepConfirmed
             ? (TVC_RBAC.getDepartmentConfirmLabel(job.department) || rep?.confirmed_by || '')
@@ -7413,6 +7702,7 @@ const TVC_App = (function () {
                 });
         }
         syncWorkReportPage2Ui(showPages, ro);
+        TVC_PWA?.initDateInputFormat?.(host);
         restoreWorkReportModalScroll(scroll);
     }
 
@@ -7420,31 +7710,20 @@ const TVC_App = (function () {
         return !state._batchMode && !state._wrReportId && !state._wrReadonly;
     }
 
-    function showWrCancelConfirm() {
-        document.getElementById('wrCancelConfirmModal')?.classList.remove('hidden');
-    }
-
-    function dismissWrCancelConfirm() {
-        document.getElementById('wrCancelConfirmModal')?.classList.add('hidden');
-    }
-
-    function requestCloseWorkReport() {
+    async function requestCloseWorkReport() {
         if (isNewUnsavedWorkReportSession()) {
-            showWrCancelConfirm();
+            const yes = await TVC_Dialog.confirm({
+                kind: 'cancel',
+                message: 'Cancel report editing?',
+            });
+            if (yes) resetAndCloseWorkReport();
             return;
         }
         closeWorkReport();
     }
 
-    function confirmCancelWorkReport(yes) {
-        dismissWrCancelConfirm();
-        if (!yes) return;
-        resetAndCloseWorkReport();
-    }
-
     /** Work Report 창 닫기 — Confirmed/Approved 체크 시 Confirm·Approve 처리 후 닫기 */
     async function closeWorkReport() {
-        dismissWrCancelConfirm();
         if (state._batchMode) return closeBatchReport();
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
         const apCb = document.getElementById('wrApprovedBy');
@@ -7458,11 +7737,11 @@ const TVC_App = (function () {
                 await refreshAll();
                 const msg = rep.work_type === 'POSTPONE'
                     ? (postponeRequiresCompanyApproval(rep)
-                        ? `${rep.job_code} Critical Postpone 리포트가 Confirm되었습니다. (Company 승인·Export 대기)`
-                        : `${rep.job_code} Postpone 리포트가 Confirm되었습니다. (NEXT DATE 갱신)`)
-                    : `${rep.job_code} 리포트가 Confirm되었습니다. (재고 차감 · LAST DONE / NEXT DATE 갱신)`;
-                return alert(msg);
-            } catch (e) { return alert(e.message || e.code); }
+                        ? `${rep.job_code} critical postpone report confirmed. (Awaiting company approval / export)`
+                        : `${rep.job_code} postpone report confirmed. (NEXT DATE updated)`)
+                    : `${rep.job_code} report confirmed. (Stock deduction · LAST DONE / NEXT DATE update)`;
+                await TVC_Dialog.alert(msg);
+            } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
         }
         const canApproveFromUi = !!rep && apCb && !apCb.disabled && apCb.checked
             && (TVC_RBAC.isConfirmedStatus(rep.status)
@@ -7472,7 +7751,7 @@ const TVC_App = (function () {
                 const approvedPostponeDate = document.getElementById('wrApprovedPostponeDate')?.value
                     || rep.approved_postpone_date || rep.postpone_date || '';
                 if (postponeRequiresCompanyApproval(rep) && !approvedPostponeDate) {
-                    return alert('Approved Postpone Date를 입력하세요.');
+                    await TVC_Dialog.alert('Approved Enter Postpone Date.');
                 }
                 await TVC_Transaction.approveReport(user, rep.id, '', { approvedPostponeDate });
                 resetAndCloseWorkReport();
@@ -7480,14 +7759,15 @@ const TVC_App = (function () {
                 const sched = postponeRequiresCompanyApproval(rep)
                     ? ` (NEXT DATE → ${approvedPostponeDate})`
                     : '';
-                return alert(`${rep.job_code} 리포트가 본사 승인(APPROVED)되었습니다.${sched}`);
-            } catch (e) { return alert(e.message || e.code); }
+                await TVC_Dialog.alert(`${rep.job_code} report approved by company.${sched}`);
+            } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
         }
         resetAndCloseWorkReport();
     }
 
     function resetAndCloseWorkReport() {
-        dismissWrCancelConfirm();
+        cleanupOrphanPickMenus();
+        closeFileNoPickPopover();
         TVC_SpareMenu.teardownWrSparePage2();
         TVC_SpareMenu.cleanupConsumeWorkReportOverlay();
         state._wrReportId = null;
@@ -7503,19 +7783,19 @@ const TVC_App = (function () {
     }
 
     async function saveWorkReport() {
-        if (!window.confirm('Save this Work Report?')) return;
+        if (!await TVC_Dialog.confirm({ kind: 'save', message: 'Save this Work Report?' })) return;
         captureWorkReportForm();
         captureWorkReportUsedParts();
         const job = state.idx.jobById.get(state._wrJobId);
         if (!job) return;
-        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.CREATE_DAILY_REPORT);
+        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.CREATE_DAILY_REPORT);
         if (!user) return;
         const form = { ...state._wrForm };
         const tab = state._wrTab;
         const existingRep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
 
         if (tab === 'postpone' && !form.postponeDate) {
-            return alert('Postpone Date를 입력하세요.');
+            await TVC_Dialog.alert('Enter Postpone Date.');
         }
 
         const workType = existingRep?.work_type === 'TROUBLE'
@@ -7618,7 +7898,7 @@ const TVC_App = (function () {
                     }
                 } catch (syncErr) {
                     console.error('Consumed Log sync failed:', syncErr);
-                    alert(syncErr.message || 'Spare parts stock update failed.');
+                    await TVC_Dialog.alert(syncErr.message || 'Spare parts stock update failed.');
                 }
             }
 
@@ -7629,12 +7909,12 @@ const TVC_App = (function () {
             if (fromHistory) reloadWorkReportViewFromDb(saved, job);
             else reloadWorkReportStateFromSaved(saved, job);
             renderWorkReportModal();
-            alert(wasModify
+            await TVC_Dialog.alert(wasModify
                 ? `${WR_TABS[tab]} 보고가 수정되었습니다.`
                 : tab === 'postpone'
                     ? `${WR_TABS[tab]} 보고가 저장되었습니다. (NEXT DATE → ${form.postponeDate})`
                     : `${WR_TABS[tab]} 보고가 저장되었습니다. (${status})`);
-        } catch (e) { alert(e.message || e.code); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     function openJobDetail(jobId) {
@@ -7696,7 +7976,7 @@ const TVC_App = (function () {
         if (job) openJobDetail(job.id);
     }
 
-    function saveDetailReport(jobId) {
+    async function saveDetailReport(jobId) {
         const job = state.idx.jobById.get(jobId);
         const text = document.getElementById('detailReportInput')?.value || '';
         const all = JSON.parse(localStorage.getItem('tvc_job_meta') || '{}');
@@ -7704,7 +7984,7 @@ const TVC_App = (function () {
         all[job.job_code].last_report = text;
         localStorage.setItem('tvc_job_meta', JSON.stringify(all));
         TVC_JobMeta.addHistory(job.job_code, { action: 'DETAIL_SAVED', user: state.user.display_name, notes: text.slice(0, 100) });
-        alert('Saved');
+        await TVC_Dialog.alert('Saved');
     }
 
     function openProcedureHistory(jobId) {
@@ -7731,10 +8011,10 @@ const TVC_App = (function () {
 
     // ── Workflow actions ─────────────────────────────────────────────
     async function doSubmit(jobId) {
-        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.CREATE_DAILY_REPORT);
+        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.CREATE_DAILY_REPORT);
         if (!user) return;
         const job = state.idx.jobById.get(jobId);
-        if (user.department && user.department !== job.department) return alert('타 부서 항목은 보고할 수 없습니다.');
+        if (user.department && user.department !== job.department) await TVC_Dialog.alert('타 부서 항목은 보고할 수 없습니다.');
         const usedParts = await pickUsedParts();
         if (usedParts === null) return;
         try {
@@ -7742,15 +8022,15 @@ const TVC_App = (function () {
             TVC_JobMeta.addHistory(job.job_code, { action: 'REPORTED', user: user.display_name, notes: '' });
             closeModal('jobDetailModal');
             await refreshAll();
-            alert('REPORTED submitted');
-        } catch (e) { alert(e.message || e.code); }
+            await TVC_Dialog.alert('REPORTED submitted');
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function doExecute(jobId) {
-        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.EXECUTE_MAINTENANCE);
+        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.EXECUTE_MAINTENANCE);
         if (!user) return;
         const job = state.idx.jobById.get(jobId);
-        if (!TVC_RBAC.canApproveDepartment(user, job.department)) return alert('타 부서 항목은 승인할 수 없습니다.');
+        if (!TVC_RBAC.canApproveDepartment(user, job.department)) await TVC_Dialog.alert('타 부서 항목은 승인할 수 없습니다.');
         const usedParts = await pickUsedParts();
         if (usedParts === null) return;
         try {
@@ -7758,8 +8038,8 @@ const TVC_App = (function () {
             TVC_JobMeta.addHistory(job.job_code, { action: 'CONFIRMED', user: user.display_name, notes: 'Stock deducted' });
             closeModal('jobDetailModal');
             await refreshAll();
-            alert('Confirmed & stock deducted');
-        } catch (e) { alert(e.message || e.code); }
+            await TVC_Dialog.alert('Confirmed & stock deducted');
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function pickUsedParts() {
@@ -7771,24 +8051,24 @@ const TVC_App = (function () {
     }
 
     async function doConfirm(reportId) {
-        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.APPROVE_DAILY_REPORT);
+        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.APPROVE_DAILY_REPORT);
         if (!user) return;
         const rep = state.reports.find(r => r.id === reportId);
         const dept = rep ? reportDept(rep) : null;
         if (!TVC_RBAC.canConfirmDepartment(user, dept)) {
-            alert(`타 부서(${dept || '?'}) 리포트는 Confirm할 수 없습니다. 범위: ${TVC_RBAC.getDeptLabel(user.department)}`);
+            await TVC_Dialog.alert(`Other department (${dept || '?'}) 리포트는 Confirm할 수 없습니다. 범위: ${TVC_RBAC.getDeptLabel(user.department)}`);
             return;
         }
-        try { await TVC_Transaction.confirmReport(user, reportId); await refreshAll(); alert('Confirmed'); }
-        catch (e) { alert(e.message || e.code); }
+        try { await TVC_Transaction.confirmReport(user, reportId); await refreshAll(); await TVC_Dialog.alert('Confirmed'); }
+        catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function doApprove(reportId) {
-        const user = TVC_Auth.requirePermission(TVC_RBAC.Action.CONFIRM_REPORT);
+        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.CONFIRM_REPORT);
         if (!user) return;
         const comment = document.getElementById('comment-' + reportId)?.value || '';
-        try { await TVC_Transaction.approveReport(user, reportId, comment); await refreshAll(); alert('APPROVED'); }
-        catch (e) { alert(e.message || e.code); }
+        try { await TVC_Transaction.approveReport(user, reportId, comment); await refreshAll(); await TVC_Dialog.alert('APPROVED'); }
+        catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function refreshAll() {
@@ -7995,11 +8275,13 @@ const TVC_App = (function () {
     function openListPrintWindow(title, bodyHtml, preview) {
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TVC — ${esc(title)}</title>
             <style>${printTableStyles()}</style></head><body>${bodyHtml}</body></html>`;
-        const w = window.open('', '_blank');
+        const features = 'width=980,height=760,menubar=no,toolbar=no,location=no,status=no';
+        const w = window.open('', '_blank', features);
         if (!w) {
-            alert('Pop-up blocked. Allow pop-ups to print or preview.');
+            void TVC_Dialog.alert('Pop-up blocked. Allow pop-ups to print or preview.');
             return;
         }
+        w.document.open();
         w.document.write(html);
         w.document.close();
         w.focus();
@@ -8021,11 +8303,11 @@ const TVC_App = (function () {
                 ? TVC_SpareMenu.buildPrintBody()
                 : '';
             if (!body) {
-                alert('SPARE list is not ready to print.');
+                void TVC_Dialog.alert('SPARE list is not ready to print.');
                 return;
             }
         } else {
-            alert('Print is not available on this tab.');
+            void TVC_Dialog.alert('Print is not available on this tab.');
             return;
         }
         openListPrintWindow(title, body, preview);
@@ -8041,25 +8323,25 @@ const TVC_App = (function () {
         if (loginBusy) return;
         try {
             if (!bootReady) {
-                setLoginBusy(true, '시스템 준비 중…');
+                setLoginBusy(true, 'Preparing system…');
                 await bootReadyPromise;
                 setLoginBusy(false);
             }
-            setLoginBusy(true, '로그인 중…');
+            setLoginBusy(true, 'Signing in…');
             const loginMode = document.getElementById('loginDept')?.value || '';
             const r = await TVC_Auth.login(
                 document.getElementById('loginUser').value,
                 document.getElementById('loginPass').value,
                 loginMode
             );
-            if (errEl) errEl.textContent = r.ok ? '' : (r.error || '로그인 실패');
+            if (errEl) errEl.textContent = r.ok ? '' : (r.error || 'Sign in failed');
             if (r.ok) {
                 const refreshed = await TVC_Auth.refreshSessionFromDb();
                 await onLogin(refreshed || r.user);
             }
         } catch (e) {
             console.error('[TVC] login failed', e);
-            if (errEl) errEl.textContent = e.message || '로그인 중 오류가 발생했습니다.';
+            if (errEl) errEl.textContent = e.message || 'An error occurred while signing in.';
         } finally {
             setLoginBusy(false);
         }
@@ -8079,8 +8361,8 @@ const TVC_App = (function () {
             await TVC_StationSync.exportStationPackage(user);
             await refreshAll();
             if (state.currentTab === 'menu') renderSyncHistory();
-            alert(`${TVC_Space.stationLabel(user.station)} 데이터가 Captain Hub용 패키지로보내졌습니다.`);
-        } catch (e) { alert(e.message); }
+            await TVC_Dialog.alert(`${TVC_Space.stationLabel(user.station)} 데이터가 Captain Hub용 패키지로보내졌습니다.`);
+        } catch (e) { await TVC_Dialog.alert(e.message); }
     }
 
     async function handleCompanyExport() {
@@ -8090,8 +8372,8 @@ const TVC_App = (function () {
             await TVC_StationSync.exportCompanyPackage(user);
             await refreshAll();
             if (state.currentTab === 'menu') renderSyncHistory();
-            alert('회사 보고용 데이터 패키지가 생성되었습니다.');
-        } catch (e) { alert(e.message); }
+            await TVC_Dialog.alert('회사 보고용 데이터 패키지가 생성되었습니다.');
+        } catch (e) { await TVC_Dialog.alert(e.message); }
     }
 
     async function handleHubImport(file) {
@@ -8101,8 +8383,8 @@ const TVC_App = (function () {
             await TVC_StationSync.importStationPackage(user, file);
             await refreshAll();
             if (state.currentTab === 'menu') { renderSyncHistory(); renderCaptainViewDashboard(); }
-            alert('Station 데이터 병합(Merge)이 완료되었습니다.');
-        } catch (e) { alert(e.message); }
+            await TVC_Dialog.alert('Station 데이터 병합(Merge)이 완료되었습니다.');
+        } catch (e) { await TVC_Dialog.alert(e.message); }
     }
 
     async function handleDefectImport(file) {
@@ -8112,8 +8394,8 @@ const TVC_App = (function () {
             const payload = await TVC_DefectSync.importPackage(user, file);
             await refreshAfterImport(payload);
             if (state.currentTab === 'menu') TVC_DefectReport.renderInbox();
-            alert('Defect package imported successfully.');
-        } catch (e) { alert(e.message); }
+            await TVC_Dialog.alert('Defect package imported successfully.');
+        } catch (e) { await TVC_Dialog.alert(e.message); }
     }
 
     async function handlePostponeImport(file) {
@@ -8122,8 +8404,8 @@ const TVC_App = (function () {
         try {
             const payload = await TVC_PostponeSync.importPackage(user, file);
             await refreshAfterImport(payload);
-            alert('Postpone package imported successfully.');
-        } catch (e) { alert(e.message); }
+            await TVC_Dialog.alert('Postpone package imported successfully.');
+        } catch (e) { await TVC_Dialog.alert(e.message); }
     }
 
     async function urgentExportDefect(caseId) {
@@ -8137,8 +8419,8 @@ const TVC_App = (function () {
                 TVC_DefectReport.renderInbox();
             }
             if (state.currentTab === 'history') renderWorkHistory();
-            alert(`Urgent Defect package created:\n${filename}\n\nAttach ZIP or HTML to email to Company. HQ imports the ZIP for Phase 2.`);
-        } catch (e) { alert(e.message); }
+            await TVC_Dialog.alert(`Urgent Defect package created:\n${filename}\n\nAttach ZIP or HTML to email to Company. HQ imports the ZIP for Phase 2.`);
+        } catch (e) { await TVC_Dialog.alert(e.message); }
     }
 
     async function exportDefectCompletion(caseId) {
@@ -8152,19 +8434,19 @@ const TVC_App = (function () {
                 TVC_DefectReport.renderInbox();
             }
             if (state.currentTab === 'history') renderWorkHistory();
-            alert(`Completion package created:\n${filename}`);
-        } catch (e) { alert(e.message); }
+            await TVC_Dialog.alert(`Completion package created:\n${filename}`);
+        } catch (e) { await TVC_Dialog.alert(e.message); }
     }
 
     async function handleExport() {
         const user = TVC_Auth.getCurrentUser();
         if (!user) return;
         if (typeof TVC_Space !== 'undefined' && user.station && !TVC_Space.canStationDataXfer(user)) {
-            alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
+            await TVC_Dialog.alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
             return;
         }
         if (!TVC_RBAC.can(user, user.account_type === 'HQ' ? TVC_RBAC.Action.EXPORT_HQ_FEEDBACK : TVC_RBAC.Action.EXPORT_SHIP_SYNC)) {
-            alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
+            await TVC_Dialog.alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
             return;
         }
         pickDepartmentThen('Export할 부서를 선택하세요 (DECK / ENGINE)', async (dept) => {
@@ -8173,8 +8455,8 @@ const TVC_App = (function () {
                 await refreshAll();
                 if (state.currentTab === 'menu') renderSyncHistory();
                 const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user.vessel_id || 'VESSEL_ID';
-                alert(`${TVC_RBAC.getDeptLabel(dept)} 데이터 ZIP이 내보내졌습니다. (${vesselId}_${dept}_PMS_EXPORT_…zip)`);
-            } catch (e) { alert(e.message); }
+                await TVC_Dialog.alert(`${TVC_RBAC.getDeptLabel(dept)} 데이터 ZIP이 내보내졌습니다. (${vesselId}_${dept}_PMS_EXPORT_…zip)`);
+            } catch (e) { await TVC_Dialog.alert(e.message); }
         });
     }
 
@@ -8183,11 +8465,11 @@ const TVC_App = (function () {
         if (!user || !file) return;
         const importAction = user.account_type === 'HQ' ? TVC_RBAC.Action.IMPORT_HQ_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC;
         if (!TVC_RBAC.can(user, importAction)) {
-            alert('Data Import 권한이 없습니다.');
+            await TVC_Dialog.alert('Data Import 권한이 없습니다.');
             return;
         }
         if (typeof TVC_Space !== 'undefined' && user.station && !TVC_Space.canStationDataXfer(user)) {
-            alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
+            await TVC_Dialog.alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
             return;
         }
         const dept = state._pendingImportDept || user.department;
@@ -8206,8 +8488,8 @@ const TVC_App = (function () {
             const vesselNote = (TVC_RBAC.isHqAccount(user) && payload?.export_meta?.vessel_id)
                 ? `\n선박: ${TVC_Fleet.resolveById(payload.export_meta.vessel_id)?.name || payload.export_meta.vessel_id}`
                 : '';
-            alert(`${TVC_RBAC.getDeptLabel(dept)} 데이터 Import 완료${vesselNote}${unlockNote}`);
-        } catch (e) { alert(e.message); }
+            await TVC_Dialog.alert(`${TVC_RBAC.getDeptLabel(dept)} 데이터 Import 완료${vesselNote}${unlockNote}`);
+        } catch (e) { await TVC_Dialog.alert(e.message); }
     }
 
     async function loadSeedFile(file) {
@@ -8215,7 +8497,7 @@ const TVC_App = (function () {
         await TVC_Seed.loadFromFile(file);
         document.getElementById('seedBanner')?.classList.add('hidden');
         await refreshAll();
-        alert(`Loaded ${state.jobs.length} jobs`);
+        await TVC_Dialog.alert(`Loaded ${state.jobs.length} jobs`);
     }
 
     // ── Database Backup & Restore (Menu PMS · SPARE Master Data) ─────
@@ -8228,10 +8510,10 @@ const TVC_App = (function () {
         };
     }
 
-    function openMasterBackupModal(scope = 'pms') {
+    async function openMasterBackupModal(scope = 'pms') {
         if (!state.user) return;
         if (typeof TVC_MasterBackup === 'undefined') {
-            alert('Backup 모듈을 사용할 수 없습니다.');
+            await TVC_Dialog.alert('Backup 모듈을 사용할 수 없습니다.');
             return;
         }
         _masterBackupScope = scope === 'spare' ? 'spare' : 'pms';
@@ -8256,13 +8538,13 @@ const TVC_App = (function () {
     async function runMasterBackup() {
         const user = state.user || TVC_Auth.getCurrentUser();
         if (!user) return;
-        if (typeof TVC_MasterBackup === 'undefined') return alert('Backup 모듈을 사용할 수 없습니다.');
+        if (typeof TVC_MasterBackup === 'undefined') await TVC_Dialog.alert('Backup 모듈을 사용할 수 없습니다.');
         try {
             const r = await TVC_MasterBackup.exportBackup(_masterBackupScope, user, masterBackupOpts());
             const parts = Object.entries(r.counts || {}).map(([k, n]) => `${k}: ${n}`).join(', ');
-            alert(`${TVC_MasterBackup.scopeLabel(r.scope)} Backup 완료\n${r.filename}\n${parts}`);
+            await TVC_Dialog.alert(`${TVC_MasterBackup.scopeLabel(r.scope)} Backup 완료\n${r.filename}\n${parts}`);
         } catch (e) {
-            alert(e.message || String(e));
+            await TVC_Dialog.alert(e.message || String(e));
         }
     }
 
@@ -8275,12 +8557,12 @@ const TVC_App = (function () {
         if (!file) return;
         const user = state.user || TVC_Auth.getCurrentUser();
         if (!user) return;
-        if (typeof TVC_MasterBackup === 'undefined') return alert('Backup 모듈을 사용할 수 없습니다.');
+        if (typeof TVC_MasterBackup === 'undefined') await TVC_Dialog.alert('Backup 모듈을 사용할 수 없습니다.');
         const label = TVC_MasterBackup.scopeLabel(_masterBackupScope);
-        if (!window.confirm(
+        if (!await TVC_Dialog.confirm({ message: 
             `${label}를 선택한 백업 파일로 교체합니다.\n` +
             '현재 Master Data는 덮어씌워집니다. 계속할까요?'
-        )) return;
+         })) return;
         try {
             const r = await TVC_MasterBackup.restoreBackup(_masterBackupScope, file, user, masterBackupOpts());
             closeMasterBackupModal();
@@ -8289,10 +8571,10 @@ const TVC_App = (function () {
                 await TVC_SpareMenu.render?.();
             }
             const parts = Object.entries(r.counts || {}).map(([k, n]) => `${k}: ${n}`).join(', ');
-            alert(`${label} Restore 완료\nVessel: ${r.vesselId || '—'}\n${parts}`);
+            await TVC_Dialog.alert(`${label} Restore 완료\nVessel: ${r.vesselId || '—'}\n${parts}`);
         } catch (e) {
-            if (e?.message === '복구가 취소되었습니다.') return;
-            alert(e.message || String(e));
+            if (e?.message === 'Restore cancelled.') return;
+            await TVC_Dialog.alert(e.message || String(e));
         }
     }
 
@@ -8336,32 +8618,32 @@ const TVC_App = (function () {
         });
     }
     async function exportPmsMasterExcel() {
-        if (!canPmsMasterExcel()) return alert(pmsMasterExcelDeniedMessage());
-        if (typeof TVC_PmsMasterExcel === 'undefined') return alert('PMS Master Export를 사용할 수 없습니다.');
+        if (!canPmsMasterExcel()) await TVC_Dialog.alert(pmsMasterExcelDeniedMessage());
+        if (typeof TVC_PmsMasterExcel === 'undefined') await TVC_Dialog.alert('PMS Master Export를 사용할 수 없습니다.');
         try {
             await TVC_PmsMasterExcel.exportToFile();
         } catch (e) {
-            alert(e.message || 'Export failed');
+            await TVC_Dialog.alert(e.message || 'Export failed');
         }
     }
 
-    function triggerPmsMasterImport() {
-        if (!canPmsMasterExcel()) return alert(pmsMasterExcelDeniedMessage());
+    async function triggerPmsMasterImport() {
+        if (!canPmsMasterExcel()) await TVC_Dialog.alert(pmsMasterExcelDeniedMessage());
         document.getElementById('pmsMasterImportFile')?.click();
     }
 
     async function importPmsMasterExcel(file) {
         const user = TVC_Auth.getCurrentUser();
-        if (!user || !canPmsMasterExcel()) return alert(pmsMasterExcelDeniedMessage());
+        if (!user || !canPmsMasterExcel()) await TVC_Dialog.alert(pmsMasterExcelDeniedMessage());
         if (!file) return;
-        if (typeof TVC_PmsMasterExcel === 'undefined') return alert('PMS Master Import를 사용할 수 없습니다.');
-        if (!confirm(`PMS Master Excel을 Import 합니다.\n\n${file.name}\n\nGroup · Equipment · Jobs가 갱신됩니다. 계속할까요?`)) return;
+        if (typeof TVC_PmsMasterExcel === 'undefined') await TVC_Dialog.alert('PMS Master Import를 사용할 수 없습니다.');
+        if (!await TVC_Dialog.confirm({ message: `Import PMS Master Excel?\n\n${file.name}\n\nGroup, Equipment, and Jobs will be updated. Continue?` })) return;
         try {
             const r = await TVC_PmsMasterExcel.importFromFile(file, user);
             await refreshAll();
-            alert(`Import 완료\n\nJobs: ${r.jobs}행 (신규 ${r.created}, 수정 ${r.updated}, CODE 변경 ${r.renamed})\nGroups: ${r.groups} · Equipment: ${r.equipment}`);
+            await TVC_Dialog.alert(`Import 완료\n\nJobs: ${r.jobs}행 (신규 ${r.created}, 수정 ${r.updated}, CODE 변경 ${r.renamed})\nGroups: ${r.groups} · Equipment: ${r.equipment}`);
         } catch (e) {
-            alert(e.message || e.code || 'Import failed');
+            await TVC_Dialog.alert(e.message || e.code || 'Import failed');
         }
     }
 
@@ -8399,7 +8681,8 @@ const TVC_App = (function () {
         histDetailWorkReport, histModifyReport, histReportApproval, histHqReportApproval, histDeleteReport,
         toggleHistCheck, toggleHistSelectAll,
         navReport, deleteWorkReport, printWorkReport, closeWorkReport, requestCloseWorkReport,
-        confirmCancelWorkReport, dismissWrCancelConfirm,
+        openFileNoPickModal, closeFileNoPickModal, fileNoPickSearch, applyFileNoPick,
+        
         selectJobRow,
         selectSpareRow, focusSpareRow, toggleSpareRow, syncSpareItemToolbar, spareActionIds, canEditSpareItems, openSpareAppend, openSpareModify, deleteSpareItem,
         saveRunHrs, updateRunHrs, revertRunHrs, runHrsPreview, runHrsTotalEdit,

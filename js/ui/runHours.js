@@ -48,7 +48,7 @@ const TVC_RunHours = (function () {
     }
 
     function rhEditLockTip() {
-        return 'Running Hours Update는 Chief engineer (ce) · Superintendent (hq)만 사용할 수 있습니다.';
+        return 'Running Hours Update requires Chief Engineer (ce) or Superintendent (hq) permission.';
     }
 
     function updateRevertButtonState() {
@@ -66,13 +66,13 @@ const TVC_RunHours = (function () {
             if (!editable) {
                 updateBtn.title = rhEditLockTip();
             } else if (revertSnapshot) {
-                updateBtn.title = 'Running Hours Update가 완료되었습니다. Revert 후 다시 Update할 수 있습니다.';
+                updateBtn.title = 'Running Hours update is complete. Use Revert to update again.';
             } else if (!inputEditMode && ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
-                updateBtn.title = 'Work History: Maintenance·Postpone Confirm, Critical Postpone는 Submitted까지 완료 후 Update 가능합니다. (Defect 제외)';
+                updateBtn.title = 'Work History: confirm Maintenance/Postpone; critical Postpone must be Submitted before Update. (Defect excluded)';
             } else if (inputEditMode) {
-                updateBtn.title = '입력 후 Apply Update를 눌러 저장합니다.';
+                updateBtn.title = 'Enter values, then click Apply Update to save.';
             } else {
-                updateBtn.title = 'Update를 눌러 입력을 시작합니다.';
+                updateBtn.title = 'Click Update to begin entering values.';
             }
         }
         updateRevertButtonState();
@@ -170,7 +170,7 @@ const TVC_RunHours = (function () {
     /** Update: 1st click → unlock inputs; 2nd click (Apply Update) → save */
     async function updateAll() {
         if (!canEditRh()) {
-            alert(rhEditLockTip());
+            await TVC_Dialog.alert(rhEditLockTip());
             return;
         }
         const state = ctx.getState();
@@ -178,7 +178,9 @@ const TVC_RunHours = (function () {
         if (!nodes.length) return;
 
         if (revertSnapshot) {
-            alert('Running Hours Update가 이미 완료되었습니다.\nRevert 후 다시 Update할 수 있습니다.');
+            await TVC_Dialog.alert(
+                'Running Hours update is already complete.\nUse Revert to update again.'
+            );
             return;
         }
 
@@ -191,12 +193,12 @@ const TVC_RunHours = (function () {
                     || (ctx.workHistoryEntriesRaw
                         ? ctx.workHistoryEntriesRaw().filter(e => ctx.isWorkHistoryEntryConfirmed && !ctx.isWorkHistoryEntryConfirmed(e)).length
                         : 0);
-                alert(
-                    `Monthly 준비: Work History 미완료 ${unconfirmed}건\n` +
+                await TVC_Dialog.alert(
+                    `Monthly prep: ${unconfirmed} unfinished Work History item(s)\n` +
                     '· Maintenance / non-critical Postpone → Confirm\n' +
-                    '· Critical Postpone → Confirm 후 Submitted (Export)\n' +
-                    '· Defect는 별도 (RH 조건 아님)\n' +
-                    '완료 후 Running Hours Update를 진행하세요.'
+                    '· Critical Postpone → Confirm then Submitted (Export)\n' +
+                    '· Defect reports are separate (not an RH gate)\n' +
+                    'Complete them before Running Hours Update.'
                 );
                 return;
             }
@@ -245,27 +247,29 @@ const TVC_RunHours = (function () {
         syncRhToolbarUi();
 
         const resetNote = summaries.some(s => s.includes(': 0 h'))
-            ? '\n↺ Total Run Hours = 0 인 장비는 Work Plan Due Date가 원복됩니다.'
+            ? '\nEquipment with Total Run Hours = 0 will restore Work Plan due dates.'
             : '';
-        alert(
+        await TVC_Dialog.alert(
             `Running Hours updated · ${updatedYmd}\n\n` +
             (summaries.length ? summaries.join('\n') + '\n\n' : '') +
-            `시간 기반 정비 ${res.changed}건의 Due Date를 재계산했습니다.${resetNote}\n` +
-            `(개발자 콘솔 로그에서 상세 확인 가능)`
+            `Recalculated due dates for ${res.changed} run-hour job(s).${resetNote}`
         );
     }
 
     /** 마지막 Update 이전 상태로 되돌림 */
     async function revert() {
         if (!canEditRh()) {
-            alert(rhEditLockTip());
+            await TVC_Dialog.alert(rhEditLockTip());
             return;
         }
         if (!revertSnapshot) {
-            alert('되돌릴 Update 기록이 없습니다.');
+            await TVC_Dialog.alert('No update record to revert.');
             return;
         }
-        if (!confirm('마지막 Running Hours Update를 되돌리시겠습니까?\nWork Plan Due Date도 이전 상태로 재계산됩니다.')) {
+        if (!await TVC_Dialog.confirm({
+            kind: 'warning',
+            message: 'Revert the last Running Hours update?\nWork Plan due dates will be recalculated.',
+        })) {
             return;
         }
 
@@ -278,7 +282,7 @@ const TVC_RunHours = (function () {
         if (ctx.refresh) await ctx.refresh();
         render();
         syncRhToolbarUi();
-        alert('Running Hours Update가 되돌려졌습니다.');
+        await TVC_Dialog.alert('Running Hours update reverted.');
     }
 
     function resetInputEditMode() {

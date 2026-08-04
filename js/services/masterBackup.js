@@ -44,14 +44,6 @@ const TVC_MasterBackup = (function () {
         return scope === SCOPE.SPARE ? 'SPARE Master Data' : 'PMS Master Data';
     }
 
-    function downloadBlob(blob, filename) {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-    }
-
     function stamp() {
         const d = new Date();
         const p = (n) => String(n).padStart(2, '0');
@@ -121,7 +113,7 @@ const TVC_MasterBackup = (function () {
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         const tag = scope === SCOPE.SPARE ? 'SPARE_MASTER_BACKUP' : 'PMS_MASTER_BACKUP';
         const filename = `${payload.vessel_id}_${tag}_${stamp()}.zip`;
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
         const counts = Object.fromEntries(
             Object.entries(payload.stores).map(([k, rows]) => [k, (rows || []).length])
         );
@@ -160,16 +152,16 @@ const TVC_MasterBackup = (function () {
         }
         if (payload.scope && payload.scope !== scope) {
             throw new Error(
-                `이 파일은 ${scopeLabel(payload.scope)} 백업입니다. ` +
-                `${scopeLabel(scope)} Restore에는 사용할 수 없습니다.`
+                `This file is a ${scopeLabel(payload.scope)} 백업입니다. ` +
+                `${scopeLabel(scope)} backup and cannot be used for restore in the current scope.`
             );
         }
         const expectedVessel = await resolveVesselId(user, opts);
         if (payload.vessel_id && expectedVessel && payload.vessel_id !== expectedVessel) {
-            const ok = window.confirm(
-                `백업 선박(${payload.vessel_id})과 현재 선박(${expectedVessel})이 다릅니다.\n그래도 복구하시겠습니까?`
-            );
-            if (!ok) throw new Error('복구가 취소되었습니다.');
+            const ok = await TVC_Dialog.confirm({ message: 
+                `Backup vessel (${payload.vessel_id}) differs from current vessel (${expectedVessel}).\nRestore anyway?`
+             });
+            if (!ok) throw new Error('Restore cancelled.');
         }
 
         const storeNames = storesFor(scope);

@@ -2,14 +2,6 @@
 const TVC_DefectSync = (function () {
     const now = () => new Date().toISOString();
 
-    function downloadBlob(blob, filename) {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
-    }
-
     function esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     }
@@ -117,6 +109,7 @@ const TVC_DefectSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_URGENT_TO_HQ',
                 package_type: 'DEFECT_CASE',
@@ -135,6 +128,7 @@ const TVC_DefectSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_REPLY_HQ_TO_SHIP',
                 package_type: 'DEFECT_CASE_REPLY',
@@ -163,7 +157,7 @@ const TVC_DefectSync = (function () {
 
         const filename = `${payload.export_meta.vessel_id}_DEFECT_URGENT_${row.case_no}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
 
         row.sync_status = 'SYNCED';
         row.last_synced_at = now();
@@ -180,6 +174,7 @@ const TVC_DefectSync = (function () {
                 department: row.department || 'ALL',
                 vessel_id: payload.export_meta.vessel_id,
                 filename,
+                case_no: row.case_no,
                 record_count: 1,
                 status: 'SUCCESS',
                 space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
@@ -195,6 +190,7 @@ const TVC_DefectSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_COMPLETION_TO_HQ',
                 package_type: 'DEFECT_CASE_COMPLETION',
@@ -212,6 +208,7 @@ const TVC_DefectSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_CLOSE_HQ_TO_SHIP',
                 package_type: 'DEFECT_CASE_CLOSE',
@@ -239,11 +236,24 @@ const TVC_DefectSync = (function () {
 
         const filename = `${payload.export_meta.vessel_id}_DEFECT_COMPLETION_${row.case_no}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
 
         row.sync_status = 'SYNCED';
         row.last_synced_at = now();
         await TVC_DB.put('defect_cases', row);
+        if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
+            await TVC_Sync.recordSyncHistory({
+                type: 'EXPORT',
+                direction: 'DEFECT_COMPLETION_TO_HQ',
+                department: row.department || 'ALL',
+                vessel_id: payload.export_meta.vessel_id,
+                filename,
+                case_no: row.case_no,
+                record_count: 1,
+                status: 'SUCCESS',
+                space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
+            });
+        }
         return { payload, filename };
     }
 
@@ -263,11 +273,24 @@ const TVC_DefectSync = (function () {
 
         const filename = `${payload.export_meta.vessel_id}_DEFECT_CLOSE_${row.case_no}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
 
         row.sync_status = 'SYNCED';
         row.last_synced_at = now();
         await TVC_DB.put('defect_cases', row);
+        if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
+            await TVC_Sync.recordSyncHistory({
+                type: 'EXPORT',
+                direction: 'DEFECT_CLOSE_HQ_TO_SHIP',
+                department: row.department || 'ALL',
+                vessel_id: payload.export_meta.vessel_id,
+                filename,
+                case_no: row.case_no,
+                record_count: 1,
+                status: 'SUCCESS',
+                space: 'HQ',
+            });
+        }
         return { payload, filename };
     }
 
@@ -287,11 +310,24 @@ const TVC_DefectSync = (function () {
 
         const filename = `${payload.export_meta.vessel_id}_DEFECT_REPLY_${row.case_no}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
 
         row.sync_status = 'SYNCED';
         row.last_synced_at = now();
         await TVC_DB.put('defect_cases', row);
+        if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
+            await TVC_Sync.recordSyncHistory({
+                type: 'EXPORT',
+                direction: 'DEFECT_REPLY_HQ_TO_SHIP',
+                department: row.department || 'ALL',
+                vessel_id: payload.export_meta.vessel_id,
+                filename,
+                case_no: row.case_no,
+                record_count: 1,
+                status: 'SUCCESS',
+                space: 'HQ',
+            });
+        }
         return { payload, filename };
     }
 
@@ -319,6 +355,9 @@ const TVC_DefectSync = (function () {
         const importVesselId = payload.export_meta?.vessel_id;
         const vCheck = TVC_Sync.validateImportVesselId(expectedVesselId, importVesselId, isHq);
         if (!vCheck.ok) throw new Error(vCheck.message);
+        const companyId = payload.export_meta?.company_id || TVC_Sync.licensedCompanyId();
+        const lic = TVC_Sync.assertLicenseForPackage(importVesselId, companyId);
+        if (!lic.ok) throw new Error(lic.error || 'License does not allow this import.');
 
         await TVC_Sync.mergePayload(payload, null, isHq, importVesselId, { importAuthoritative: true });
 

@@ -899,9 +899,15 @@ const TVC_DefectCase = (function () {
     };
 })();
 
-/** 실행 환경 (file:// vs http://) */
+/** 실행 환경 (file:// vs http:// vs Electron tvc-app://) */
 const TVC_Env = (function () {
+    function isElectronApp() {
+        return typeof location !== 'undefined' && location.protocol === 'tvc-app:'
+            || !!(typeof window !== 'undefined' && window.tvcElectron?.isElectron);
+    }
     function isFileProtocol() {
+        // Electron custom protocol is a secure app origin — not browser file://
+        if (isElectronApp()) return false;
         return typeof location !== 'undefined' && location.protocol === 'file:';
     }
     function canFetchBundledAssets() {
@@ -909,6 +915,6 @@ const TVC_Env = (function () {
     }
     const FILE_HINT =
         'index.html을 더블클릭(file://)으로 열면 재고 파일 자동 로드가 차단됩니다. ' +
-        'npm run serve 후 http://localhost:3000 으로 접속하거나, SPARE 탭에서 파일을 직접 선택하세요.';
-    return { isFileProtocol, canFetchBundledAssets, FILE_HINT };
+        'Electron 설치본, START-TVC-PMS.bat, 또는 npm start → http://localhost:3000 으로 실행하세요.';
+    return { isFileProtocol, canFetchBundledAssets, isElectronApp, FILE_HINT };
 })();

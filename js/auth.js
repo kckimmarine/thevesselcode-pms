@@ -41,7 +41,7 @@ const TVC_Auth = (function () {
         else if (typeof TVC_Pbkdf2 !== 'undefined') {
             hash = TVC_Pbkdf2.pbkdf2Hex(password, PBKDF2_SALT, PBKDF2_ITER, 32);
         } else if (typeof location !== 'undefined' && location.protocol === 'file:') {
-            throw new Error('file:// 모드에서는 로그인할 수 없습니다. START-TVC-PMS.bat 또는 npm start → http://localhost:3000 으로 접속하세요.');
+            throw new Error('file:// 모드에서는 로그인할 수 없습니다. Electron 설치본, START-TVC-PMS.bat, 또는 npm start → http://localhost:3000 으로 실행하세요.');
         } else {
             throw new Error('이 브라우저에서 비밀번호 검증을 사용할 수 없습니다. Chrome/Edge 최신 버전을 사용하세요.');
         }
@@ -129,6 +129,12 @@ const TVC_Auth = (function () {
 
         const sessionRole = user.role || (window.TVC_RBAC?.resolveUserRole?.(user));
 
+        if (typeof TVC_License !== 'undefined') {
+            await TVC_License.refresh();
+            const licCheck = TVC_License.assertLoginMode(loginMode, user.account_type);
+            if (!licCheck.ok) return licCheck;
+        }
+
         if (user.account_type === 'HQ') {
             if (loginMode) {
                 return { ok: false, error: 'Superintendent(hq) 계정은 Department 선택 없이 로그인하세요.' };
@@ -165,19 +171,41 @@ const TVC_Auth = (function () {
         sessionStorage.removeItem(SESSION_KEY);
     }
 
-    function requirePermission(action) {
+    async function changePassword(userId, currentPassword, newPassword) {
+        const users = await TVC_DB.getAll('users');
+        const user = users.find(u => u.id === userId && u.is_active);
+        if (!user) return { ok: false, error: 'Account not found.' };
+
+        const current = String(currentPassword || '');
+        const next = String(newPassword || '');
+        if (!current || !next) return { ok: false, error: 'Enter current and new password.' };
+        if (next.length < 4) return { ok: false, error: 'New password must be at least 4 characters.' };
+
+        const currentHash = await hashPassword(current);
+        if (currentHash !== user.password_hash) {
+            return { ok: false, error: 'Current password is incorrect.' };
+        }
+
+        const nextHash = await hashPassword(next);
+        await TVC_DB.put('users', { ...user, password_hash: nextHash });
+        _hashCache.delete(current);
+        _hashCache.delete(next);
+        return { ok: true };
+    }
+
+    async function requirePermission(action) {
         const user = getCurrentUser();
-        if (!user) { alert('로그인이 필요합니다.'); return null; }
+        if (!user) { await TVC_Dialog.alert('Sign in required.'); return null; }
         if (!TVC_RBAC.can(user, action)) {
-            alert(`권한 없음: ${TVC_RBAC.getRoleLabel(user.role)}`);
+            await TVC_Dialog.alert(`Permission denied: ${TVC_RBAC.getRoleLabel(user.role)}`);
             return null;
         }
         if (typeof TVC_Space !== 'undefined' && user.station) {
             try { TVC_Space.assertAction(user, action); }
-            catch (e) { alert(e.message || 'Station 접근 제한'); return null; }
+            catch (e) { await TVC_Dialog.alert(e.message || 'Station access denied'); return null; }
         }
         return user;
     }
 
-    return { initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, DEMO_PASSWORD, DEFAULT_USERS };
+    return { initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, changePassword, DEMO_PASSWORD, DEFAULT_USERS };
 })();

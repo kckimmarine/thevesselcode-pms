@@ -12,3 +12,12 @@ Thumbs.db
 # Temp
 *.tmp
 gitstatus.tmp
+
+# Electron / Pilot license secrets & build output
+electron/keys/private.pem
+dist/
+build/licenses/
+build/electron-builder/
+*.exe
+*.blockmap
+*.nsis.7z

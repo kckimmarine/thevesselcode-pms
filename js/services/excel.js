@@ -30,13 +30,9 @@ const TVC_Excel = (function () {
 
     function available() { return typeof window.ExcelJS !== 'undefined'; }
 
-    function downloadBlob(buffer, filename) {
+    async function downloadBlob(buffer, filename) {
         const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url; a.download = filename;
-        document.body.appendChild(a); a.click();
-        setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+        await TVC_FileExport.save(blob, filename);
     }
 
     /**
@@ -100,7 +96,7 @@ const TVC_Excel = (function () {
         });
 
         const buf = await wb.xlsx.writeBuffer();
-        downloadBlob(buf, opts.filename || `${req.req_no || 'REQUISITION'}.xlsx`);
+        await downloadBlob(buf, opts.filename || `${req.req_no || 'REQUISITION'}.xlsx`);
         return true;
     }
 
@@ -166,7 +162,7 @@ const TVC_Excel = (function () {
         });
 
         const buf = await wb.xlsx.writeBuffer();
-        downloadBlob(buf, opts.filename || `${req.req_no || 'REQUISITION'}_${vendorName}.xlsx`);
+        await downloadBlob(buf, opts.filename || `${req.req_no || 'REQUISITION'}_${vendorName}.xlsx`);
         return true;
     }
 
@@ -295,7 +291,7 @@ const TVC_Excel = (function () {
 
         const dateStamp = (ctx.exportedAt || new Date()).toISOString().slice(0, 10);
         const buf = await wb.xlsx.writeBuffer();
-        downloadBlob(buf, `SPARE-Parts-List-${dateStamp}.xlsx`);
+        await downloadBlob(buf, `SPARE-Parts-List-${dateStamp}.xlsx`);
         return true;
     }
 
@@ -464,7 +460,7 @@ const TVC_Excel = (function () {
 
         const safeNo = String(ctx.req?.req_no || 'REQUISITION').replace(/[^\w\-]+/g, '_');
         const buf = await outWb.xlsx.writeBuffer();
-        downloadBlob(buf, `${safeNo}-requisition.xlsx`);
+        await downloadBlob(buf, `${safeNo}-requisition.xlsx`);
         return true;
     }
 

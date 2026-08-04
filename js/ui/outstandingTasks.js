@@ -2,6 +2,7 @@
 const TVC_OutstandingTasks = (function () {
     let ctx = null;
     let openKey = null;
+    let openScope = 'total';
     const LIST_CAP = 8;
 
     const PMS_KEYS = ['overdue', 'due', 'postponed', 'defect'];
@@ -331,28 +332,43 @@ const TVC_OutstandingTasks = (function () {
         };
     }
 
-    function pmsColHead(key, label, count) {
-        const hot = count > 0;
-        const active = openKey === key;
-        return `<button type="button"
-            class="ot-pms-colhead ot-pms-${escAttr(key)}${hot ? ' ot-hot' : ''}${active ? ' active' : ''}"
-            onclick="TVC_OutstandingTasks.toggle('${escAttr(key)}')"
-            aria-expanded="${active ? 'true' : 'false'}"
-            ${hot ? '' : ' disabled'}
-            title="${esc(label)}">
-            ${esc(label)}
-        </button>`;
+    function filterBucketItems(bucket, scope, state) {
+        if (!bucket?.items) return [];
+        if (!scope || scope === 'total') return bucket.items;
+        if (bucket.key === 'defect') {
+            return bucket.items.filter(dc =>
+                scope === 'critical' ? isDefectCritical(dc, state) : !isDefectCritical(dc, state));
+        }
+        return bucket.items.filter(j =>
+            scope === 'critical' ? isJobCritical(j) : !isJobCritical(j));
     }
 
-    function pmsTotalBtn(key, label, count) {
+    function scopedBucket(bucket, scope, state) {
+        if (!bucket) return null;
+        const items = filterBucketItems(bucket, scope, state);
+        const scopeLabels = { total: 'Total', nonCritical: 'Non-Critical', critical: 'Critical' };
+        return {
+            ...bucket,
+            items,
+            count: items.length,
+            scopeLabel: scopeLabels[scope] || 'Total',
+        };
+    }
+
+    function pmsColHead(key, label, count) {
         const hot = count > 0;
-        const active = openKey === key;
+        return `<span class="ot-pms-colhead ot-pms-colhead-static ot-pms-${escAttr(key)}${hot ? ' ot-hot' : ''}">${esc(label)}</span>`;
+    }
+
+    function pmsScopeBtn(colKey, scope, label, count) {
+        const hot = count > 0;
+        const active = openKey === colKey && openScope === scope;
         return `<button type="button"
-            class="ot-pms-metric ot-pms-${escAttr(key)}${hot ? ' ot-hot' : ''}${active ? ' active' : ''}"
-            onclick="TVC_OutstandingTasks.toggle('${escAttr(key)}')"
+            class="ot-pms-metric ot-pms-${escAttr(colKey)} ot-pms-scope-${escAttr(scope)}${hot ? ' ot-hot' : ''}${active ? ' active' : ''}"
+            onclick="TVC_OutstandingTasks.toggle('${escAttr(colKey)}', '${escAttr(scope)}')"
             aria-expanded="${active ? 'true' : 'false'}"
             ${hot ? '' : ' disabled'}
-            title="${esc(label)}">
+            title="${esc(label)} · ${esc(scope)}">
             <span class="ot-pms-metric-count">${count}</span>
         </button>`;
     }
@@ -369,22 +385,16 @@ const TVC_OutstandingTasks = (function () {
                 <th scope="col" class="ot-pms-rate-h">Outstanding Rate (%)</th>
             </tr>`;
         const body = matrix.rows.map(row => {
-            const isTotal = row.key === 'total';
-            const cells = isTotal
-                ? `
-                    <td class="ot-pms-num">${pmsTotalBtn('overdue', 'Overdue', row.overdue)}</td>
-                    <td class="ot-pms-num">${pmsTotalBtn('due', 'Due', row.due)}</td>
-                    <td class="ot-pms-num">${pmsTotalBtn('postponed', 'Postponed', row.postponed)}</td>
-                    <td class="ot-pms-num">${pmsTotalBtn('defect', 'Defect', row.defect)}</td>`
-                : `
-                    <td class="ot-pms-num"><span class="ot-pms-plain">${row.overdue}</span></td>
-                    <td class="ot-pms-num"><span class="ot-pms-plain">${row.due}</span></td>
-                    <td class="ot-pms-num"><span class="ot-pms-plain">${row.postponed}</span></td>
-                    <td class="ot-pms-num"><span class="ot-pms-plain">${row.defect}</span></td>`;
-            const rateCell = isTotal
+            const scope = row.key;
+            const cells = `
+                    <td class="ot-pms-num">${pmsScopeBtn('overdue', scope, 'Overdue', row.overdue)}</td>
+                    <td class="ot-pms-num">${pmsScopeBtn('due', scope, 'Due', row.due)}</td>
+                    <td class="ot-pms-num">${pmsScopeBtn('postponed', scope, 'Postponed', row.postponed)}</td>
+                    <td class="ot-pms-num">${pmsScopeBtn('defect', scope, 'Defect', row.defect)}</td>`;
+            const rateCell = scope === 'total'
                 ? `<td class="ot-pms-rate ot-pms-rate-total" title="Overdue ÷ Total Job Code">${esc(row.rate)}</td>`
                 : `<td class="ot-pms-rate">${esc(row.rate)}</td>`;
-            return `<tr class="ot-pms-row${isTotal ? ' ot-pms-row-total' : ''}">
+            return `<tr class="ot-pms-row${scope === 'total' ? ' ot-pms-row-total' : ''}">
                 <th scope="row" class="ot-pms-row-label">${esc(row.label)}</th>
                 ${cells}
                 ${rateCell}
@@ -402,18 +412,23 @@ const TVC_OutstandingTasks = (function () {
         </div>`;
     }
 
-    function renderDetail(bucket) {
-        if (!bucket || openKey !== bucket.key) return '';
-        if (!bucket.count) {
-            return `<div class="ot-detail ot-detail-empty muted">No outstanding ${esc(bucket.label.toLowerCase())} items.</div>`;
+    function renderDetail(bucket, scope, state) {
+        if (!bucket || openKey !== bucket.key || openScope !== scope) return '';
+        const scoped = scopedBucket(bucket, scope, state);
+        if (!scoped.count) {
+            const scopeNote = scope === 'total' ? '' : ` (${scoped.scopeLabel})`;
+            return `<div class="ot-detail ot-detail-empty muted">No outstanding ${esc(bucket.label.toLowerCase())}${scopeNote} items.</div>`;
         }
-        const shown = bucket.items.slice(0, LIST_CAP);
+        const shown = scoped.items.slice(0, LIST_CAP);
         const cards = shown.map(item => bucket.renderItem(item)).join('');
-        const more = bucket.count > LIST_CAP
-            ? `<p class="ot-more muted">+ ${bucket.count - LIST_CAP} more</p>` : '';
+        const more = scoped.count > LIST_CAP
+            ? `<p class="ot-more muted">+ ${scoped.count - LIST_CAP} more</p>` : '';
+        const headLabel = scope === 'total'
+            ? `${esc(bucket.label)} · ${scoped.count}`
+            : `${esc(bucket.label)} · ${esc(scoped.scopeLabel)} · ${scoped.count}`;
         return `<div class="ot-detail" id="otDetailPanel">
             <div class="ot-detail-head">
-                <span>${esc(bucket.label)} · ${bucket.count}</span>
+                <span>${headLabel}</span>
                 <button type="button" class="btn btn-sm" onclick="TVC_OutstandingTasks.viewAll('${escAttr(bucket.key)}')">View all →</button>
             </div>
             <div class="ot-card-grid">${cards}</div>
@@ -448,14 +463,11 @@ const TVC_OutstandingTasks = (function () {
 
     function renderPanel(buckets, loadingReq, state) {
         const openBucket = openKey ? buckets[openKey] : null;
-        return `<section class="outstanding-tasks-panel" aria-label="Outstanding Tasks">
-            <header class="ot-head">
-                <h3 class="ot-title">Outstanding Tasks</h3>
-                ${loadingReq ? '<span class="ot-loading muted">Updating…</span>' : ''}
-            </header>
+        return `<section class="outstanding-tasks-panel tvc-section-card" aria-label="Outstanding tasks summary">
+            ${loadingReq ? '<header class="ot-head ot-head-loading"><span class="ot-loading muted">Updating…</span></header>' : ''}
             ${renderPmsMatrix(state)}
             ${renderSpareSection(buckets)}
-            ${renderDetail(openBucket)}
+            ${renderDetail(openBucket, openScope, state)}
         </section>`;
     }
 
@@ -471,7 +483,10 @@ const TVC_OutstandingTasks = (function () {
         host.classList.remove('hidden');
 
         const keys = activeKeys();
-        if (openKey && !keys.includes(openKey)) openKey = null;
+        if (openKey && !keys.includes(openKey)) {
+            openKey = null;
+            openScope = 'total';
+        }
 
         const isHq = TVC_RBAC.isHqAccount(state.user);
         if (isHq && !state.selectedVesselId) {
@@ -487,7 +502,10 @@ const TVC_OutstandingTasks = (function () {
             state._outstandingReqCache = reqRows;
             state._outstandingReqLoaded = true;
             const buckets = bucketDefs(state, reqRows);
-            if (openKey && (!buckets[openKey] || !buckets[openKey].count)) openKey = null;
+            if (openKey && (!buckets[openKey] || !scopedBucket(buckets[openKey], openScope, state)?.count)) {
+                openKey = null;
+                openScope = 'total';
+            }
             host.innerHTML = renderPanel(buckets, false, state);
         } catch (e) {
             console.warn('[TVC_OutstandingTasks] requisitions', e);
@@ -495,9 +513,16 @@ const TVC_OutstandingTasks = (function () {
         }
     }
 
-    function toggle(key) {
+    function toggle(key, scope = 'total') {
         if (!activeKeys().includes(key)) return;
-        openKey = openKey === key ? null : key;
+        const nextScope = scope || 'total';
+        if (openKey === key && openScope === nextScope) {
+            openKey = null;
+            openScope = 'total';
+        } else {
+            openKey = key;
+            openScope = nextScope;
+        }
         render();
     }
 
@@ -514,6 +539,7 @@ const TVC_OutstandingTasks = (function () {
 
     function reset() {
         openKey = null;
+        openScope = 'total';
         const state = ctx.getState();
         if (state) {
             state._outstandingReqLoaded = false;

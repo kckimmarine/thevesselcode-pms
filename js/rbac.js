@@ -417,18 +417,15 @@ const TVC_RBAC = (function () {
         return ACCOUNT_TITLES[username] || (username || 'User');
     }
 
-    /** Reported by — 접속자 직책 (Engineer / Officer / Chief Engineer / Captain / Superintendent) */
+    /** Reported by — 접속자 직책 (Engineer / Officer / Chief engineer / Captain / Superintendent) */
     function getReportedByLabel(user) {
         if (!user) return '';
         const uname = String(user.username || '').toLowerCase();
         const title = getAccountTitle(uname);
-        if (title && title !== 'User') {
-            if (title.toLowerCase() === 'chief engineer') return 'Chief Engineer';
-            return title;
-        }
+        if (title && title !== 'User') return title;
         const role = resolveUserRole(user);
         if (role === Role.SHIP_CAPTAIN) return 'Captain';
-        if (role === Role.SHIP_CHIEF) return 'Chief Engineer';
+        if (role === Role.SHIP_CHIEF) return 'Chief engineer';
         if (role === Role.HQ_SUPERVISOR) return 'Superintendent';
         if (role === Role.SHIP_OFFICER) {
             return user.department === 'ENGINE' ? 'Engineer' : 'Officer';
@@ -440,14 +437,14 @@ const TVC_RBAC = (function () {
     function normalizeReportedByLabel(name) {
         const s = String(name ?? '').trim();
         if (!s) return '';
-        if (s === 'C/E') return 'Chief Engineer';
+        if (s === 'C/E') return 'Chief engineer';
         const lower = s.toLowerCase();
-        if (lower === 'chief engineer') return 'Chief Engineer';
+        if (lower === 'chief engineer' || lower === 'cheif engineer') return 'Chief engineer';
         if (lower === 'captain') return 'Captain';
         if (lower === 'engineer') return 'Engineer';
         if (lower === 'officer') return 'Officer';
         if (lower === 'superintendent') return 'Superintendent';
-        if (/^C\/E\b/i.test(s) || (/\bChief Engineer\b/i.test(s) && !/Captain/i.test(s))) return 'Chief Engineer';
+        if (/^C\/E\b/i.test(s) || (/\bChief Engineer\b/i.test(s) && !/Captain/i.test(s))) return 'Chief engineer';
         if (/^Captain\b/i.test(s) || /선장/.test(s)) return 'Captain';
         if (/^Engineer\b/i.test(s) || /기관/.test(s)) return 'Engineer';
         if (/^Officer\b/i.test(s)) return 'Officer';

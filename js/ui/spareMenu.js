@@ -817,7 +817,7 @@ const TVC_SpareMenu = (function () {
     async function savePlanCriticalEquipment(rawVal) {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            alert('Chief Engineer / Captain permission required.');
+            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
             return;
         }
         if (!st.selectedGroupKey || st.selectedGroupKey === CRITICAL_GROUP_KEY) return;
@@ -825,7 +825,7 @@ const TVC_SpareMenu = (function () {
             await upsertGroupCriticalEquipment(st, parseCriticalEquipmentValue(rawVal));
             afterSpareListChange(st);
         } catch (e) {
-            alert(e.message || e.code || 'Save failed');
+            await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
     }
 
@@ -1052,7 +1052,7 @@ const TVC_SpareMenu = (function () {
         return reqPreviewGroups(st, req).map(g => ({
             key: g.key,
             header: g.header || { pmsGroupNo: g.key, machineryName: '', modelType: '', capacity: '', maker: '', serialNo: '' },
-            spares: g.rows.map(({ spare }) => spare).filter(Boolean).map(canon),
+            spares: g.rows.map(({ spare, line }) => spare || spareFromReqLine(line)).map(canon),
         })).filter(g => g.spares.length);
     }
 
@@ -1763,7 +1763,43 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkCheckedSpareCount(st) {
+        const m = modState(st);
+        if (isRequisitionListWindow(m)) {
+            const req = getReqWorkSession();
+            return (req?.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id)).length;
+        }
         return (st.spares || []).reduce((n, s) => n + (reqWorkRowChecked(canon(s)) ? 1 : 0), 0);
+    }
+
+    /** Requisition line → display spare (local master 우선, 없으면 line 스냅샷) */
+    function spareFromReqLine(line) {
+        const id = reqWorkSpareIdKey(line.spare_part_id)
+            || `line-${String(line.part_no || line.universal_code || '').trim() || 'unknown'}`;
+        return canon({
+            id,
+            part_no: line.part_no || '',
+            makerPartNo: line.part_no || '',
+            universal_code: line.universal_code || '',
+            name: line.name || '',
+            unit: line.unit || 'EA',
+            maker: line.maker || '',
+            model: line.model || '',
+            standard_stock: line.standard_stock,
+            stock: line.qty_on_hand,
+            qty_on_hand: line.qty_on_hand,
+            category: line.department || line.category || '',
+        });
+    }
+
+    function reqWorkLineSpares(st, req) {
+        if (!req?.lines?.length) return [];
+        const spareById = new Map((st.spares || []).map(s => [reqWorkSpareIdKey(s.id), canon(s)]));
+        return (req.lines || [])
+            .filter(l => reqWorkSpareIdKey(l.spare_part_id))
+            .map(line => {
+                const local = spareById.get(reqWorkSpareIdKey(line.spare_part_id));
+                return local || spareFromReqLine(line);
+            });
     }
 
     function reqWorkSelectedBtnMeta(st) {
@@ -2633,7 +2669,7 @@ const TVC_SpareMenu = (function () {
         }
     }
 
-    function submitReqQuoteVendorAdd(slot, ev) {
+    async function submitReqQuoteVendorAdd(slot, ev) {
         ev?.stopPropagation?.();
         ev?.preventDefault?.();
         const menu = document.querySelector(`.spare-req-quote-vendor-menu-portal[data-quote-vendor-slot="${slot}"]`);
@@ -2644,7 +2680,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!window.TVC_Vendors?.register) {
-            alert('Vendor registry is not loaded. Please refresh the page (Ctrl+F5).');
+            await TVC_Dialog.alert('Vendor registry is not loaded. Please refresh the page (Ctrl+F5).');
             showReqQuoteVendorAddStatus(slot, 'Vendor registry not loaded.', true);
             return;
         }
@@ -2707,11 +2743,11 @@ const TVC_SpareMenu = (function () {
         showReqQuoteVendorAddStatus(slot, `Updated: ${updated.name}`);
     }
 
-    function deleteReqQuoteVendor(slot, vendorId) {
+    async function deleteReqQuoteVendor(slot, vendorId) {
         if (!window.TVC_Vendors?.remove) return;
         const v = TVC_Vendors.findById(vendorId);
         if (!v) return;
-        if (!confirm(`Remove vendor "${v.name}"?`)) return;
+        if (!await TVC_Dialog.confirm({ message: `Remove vendor "${v.name}"?` })) return;
         TVC_Vendors.remove(vendorId);
         const req = getReqWorkSession();
         const q = req && ensureReqWorkQuoteState(req);
@@ -3382,11 +3418,17 @@ const TVC_SpareMenu = (function () {
 
     function filteredReqWorkSpares(st) {
         const m = modState(st);
-        const list = filteredSpares(st);
         if (isRequisitionListWindow(m)) {
-            if (!reqWorkCheckedSpareCount(st)) return [];
-            return list.filter(s => reqWorkRowChecked(s));
+            const req = getReqWorkSession();
+            let lineSpares = reqWorkLineSpares(st, req);
+            const q = spareListSearchQuery(st);
+            if (q) {
+                const f = modState(st);
+                lineSpares = lineSpares.filter(s => matchSpare(s, st, f));
+            }
+            return lineSpares;
         }
+        const list = filteredSpares(st);
         if (!m.reqWorkShowSelectedOnly) return list;
         return list.filter(s => reqWorkRowChecked(s));
     }
@@ -4793,14 +4835,16 @@ const TVC_SpareMenu = (function () {
         return notes.length ? `<p class="meta">${notes.map(n => esc(n)).join(' · ')}</p>` : '';
     }
 
-    function openSpareListPrintWindow(title, bodyHtml, preview) {
+    async function openSpareListPrintWindow(title, bodyHtml, preview) {
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TVC — ${esc(title)}</title>
             <style>${spareListPrintStyles()}</style></head><body>${bodyHtml}</body></html>`;
-        const w = window.open('', '_blank');
+        const features = 'width=980,height=760,menubar=no,toolbar=no,location=no,status=no';
+        const w = window.open('', '_blank', features);
         if (!w) {
-            alert('Pop-up blocked. Allow pop-ups to print or preview.');
+            await TVC_Dialog.alert('Pop-up blocked. Allow pop-ups to print or preview.');
             return;
         }
+        w.document.open();
         w.document.write(html);
         w.document.close();
         w.focus();
@@ -5263,7 +5307,7 @@ const TVC_SpareMenu = (function () {
         closeReqQuoteHeadPicks();
         const req = await TVC_Inventory.getRequisition(reqId);
         if (!req) {
-            alert('Requisition not found.');
+            await TVC_Dialog.alert('Requisition not found.');
             return false;
         }
         _reqWorkDraft = {
@@ -6248,7 +6292,7 @@ const TVC_SpareMenu = (function () {
         closeAllConsumeMetaPicks();
         const log = await TVC_Inventory.getConsumeLog(logId);
         if (!log) {
-            alert('Consumption log not found.');
+            await TVC_Dialog.alert('Consumption log not found.');
             return false;
         }
         _consumeDraft = consumeDraftFromLog(log);
@@ -6288,7 +6332,7 @@ const TVC_SpareMenu = (function () {
     async function startConsumeLogListSession(opts = {}) {
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
-        if (!user) return alert('Login required.');
+        if (!user) await TVC_Dialog.alert('Login required.');
         _consumeDraft = newConsumeDraft(st, user);
         syncConsumeLineMap();
         const m = modState(st);
@@ -6320,11 +6364,11 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (!isConsumedLogWindow(m)) return;
         if (!canCreateConsume(st)) {
-            alert('No permission to modify consumption logs.');
+            await TVC_Dialog.alert('No permission to modify consumption logs.');
             return;
         }
         if (!consumeLogListHasDisplayedLog(m)) {
-            return alert('Select a consumption log from the list first.');
+            await TVC_Dialog.alert('Select a consumption log from the list first.');
         }
         if (m.consumeLogListEditing) return;
         m.consumeLogListEditing = true;
@@ -6465,7 +6509,7 @@ const TVC_SpareMenu = (function () {
         } else if (m.consumeOpen && !m.consumePreview) {
             // Make Consumption Report — reference pick (fill File No. like New Requisition)
             const log = await TVC_Inventory.getConsumeLog(id);
-            if (!log) return alert('Consumption log not found.');
+            if (!log) await TVC_Dialog.alert('Consumption log not found.');
             const histScroll = document.getElementById('consumeLogHistListScroll');
             const histScrollTop = histScroll?.scrollTop ?? 0;
             consumeSetFileNoFromLog(log);
@@ -6525,9 +6569,9 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToConfirm.length) {
             if (checkedIds.length) {
-                return alert('None of the selected logs can be confirmed. Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
+                await TVC_Dialog.alert('None of the selected logs can be confirmed. Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
             }
-            return alert('Check one or more Reported logs to confirm.');
+            await TVC_Dialog.alert('Check one or more Reported logs to confirm.');
         }
         const loadedId = _consumeDraft?.log_id || m.selectedConsumeLogId;
         let confirmed = 0;
@@ -6549,16 +6593,16 @@ const TVC_SpareMenu = (function () {
         await refreshConsumeLogListUi();
         const skipped = checkedIds.length - confirmed;
         if (skipped > 0) {
-            alert(`Confirmed ${confirmed} log(s). Skipped ${skipped} (not Reported or no permission).`);
+            await TVC_Dialog.alert(`Confirmed ${confirmed} log(s). Skipped ${skipped} (not Reported or no permission).`);
         } else {
-            alert(`Confirmed ${confirmed} log(s).`);
+            await TVC_Dialog.alert(`Confirmed ${confirmed} log(s).`);
         }
     }
 
     async function consumeLogReportApprove() {
         const st = getState();
         if (!isReqListHqUser(st)) {
-            return alert('Approve is available in HQ mode only.');
+            await TVC_Dialog.alert('Approve is available in HQ mode only.');
         }
         const m = modState(st);
         const { vesselId } = await vesselScope();
@@ -6569,9 +6613,9 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToApprove.length) {
             if (checkedIds.length) {
-                return alert('None of the selected logs can be approved. Confirmed logs, or HQ-authored Reported logs, can be approved with HQ Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected logs can be approved. Confirmed logs, or HQ-authored Reported logs, can be approved with HQ Superintendent permission.');
             }
-            return alert('Check one or more approvable Consumption logs to approve.');
+            await TVC_Dialog.alert('Check one or more approvable Consumption logs to approve.');
         }
         const loadedId = _consumeDraft?.log_id || m.selectedConsumeLogId;
         let approved = 0;
@@ -6598,9 +6642,9 @@ const TVC_SpareMenu = (function () {
         await refreshConsumeLogListUi();
         const skipped = checkedIds.length - approved;
         if (skipped > 0) {
-            alert(`Approved ${approved} log(s). Skipped ${skipped} (not Confirmed or no permission).`);
+            await TVC_Dialog.alert(`Approved ${approved} log(s). Skipped ${skipped} (not Confirmed or no permission).`);
         } else {
-            alert(`Approved ${approved} log(s).`);
+            await TVC_Dialog.alert(`Approved ${approved} log(s).`);
         }
     }
 
@@ -6616,7 +6660,7 @@ const TVC_SpareMenu = (function () {
     async function consumeLogNew() {
         const { st } = await vesselScope();
         if (!canCreateConsume(st)) {
-            alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('No permission to enter consumption records.');
             return;
         }
         const m = modState(st);
@@ -6645,7 +6689,7 @@ const TVC_SpareMenu = (function () {
             const linked = all.find(r => r.consume_log_id === draft.log_id);
             reportId = linked?.id || '';
         }
-        if (!reportId) return alert('No linked Work Report.');
+        if (!reportId) await TVC_Dialog.alert('No linked Work Report.');
 
         let report = (st.reports || []).find(r => r.id === reportId);
         if (!report) {
@@ -6656,14 +6700,14 @@ const TVC_SpareMenu = (function () {
                 if (!st.reports.some(r => r.id === reportId)) st.reports.push(report);
             }
         }
-        if (!report) return alert('Work Report not found.');
+        if (!report) await TVC_Dialog.alert('Work Report not found.');
 
         TVC_WorkReport.fromLegacy(report);
         const item = TVC_WorkReport.findItem(report, draft.job_code) || TVC_WorkReport.getJobItems(report)[0];
-        if (!item?.maintenance_job_id) return alert('Work Report job item not found.');
+        if (!item?.maintenance_job_id) await TVC_Dialog.alert('Work Report job item not found.');
 
         _consumeWorkReportOverlay = true;
-        if (!window.TVC_App?.openWorkReportFromHistory) return alert('Cannot open Work Report screen.');
+        if (!window.TVC_App?.openWorkReportFromHistory) await TVC_Dialog.alert('Cannot open Work Report screen.');
         TVC_App.openWorkReportFromHistory(reportId, item.maintenance_job_id);
         document.getElementById('workReportModal')?.classList.add('modal-over-consume');
     }
@@ -6678,14 +6722,14 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateConsume(st)) {
-            alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('No permission to enter consumption records.');
             return;
         }
         const logId = m.consumeLastSavedLogId || m.selectedConsumeLogId;
-        if (!logId) return alert('Select a consumption log to edit.');
+        if (!logId) await TVC_Dialog.alert('Select a consumption log to edit.');
         const log = await TVC_Inventory.getConsumeLog(logId);
-        if (!log) return alert('Consumption log not found.');
-        if (!(log.lines || []).length) return alert('No parts to edit.');
+        if (!log) await TVC_Dialog.alert('Consumption log not found.');
+        if (!(log.lines || []).length) await TVC_Dialog.alert('No parts to edit.');
         _consumeListReturnAfterSave = true;
         await startConsumeEditSession(logId);
     }
@@ -6694,16 +6738,16 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateConsume(st)) {
-            alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('No permission to enter consumption records.');
             return;
         }
-        if (!m.selectedConsumeLogId) return alert('Select a consumption log to edit.');
+        if (!m.selectedConsumeLogId) await TVC_Dialog.alert('Select a consumption log to edit.');
         const log = await TVC_Inventory.getConsumeLog(m.selectedConsumeLogId);
-        if (!log) return alert('Consumption log not found.');
-        if (!(log.lines || []).length) return alert('No parts to edit.');
+        if (!log) await TVC_Dialog.alert('Consumption log not found.');
+        if (!(log.lines || []).length) await TVC_Dialog.alert('No parts to edit.');
         if (isConsumedLogWindow(m)) {
             if (!consumeLogListHasDisplayedLog(m)) {
-                return alert('Select a consumption log from the list first.');
+                await TVC_Dialog.alert('Select a consumption log from the list first.');
             }
             if (m.consumeLogListEditing) return;
             m.consumeLogListEditing = true;
@@ -6724,14 +6768,14 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         const user = spareInventoryUser(st);
         if (!canCreateConsume(st)) {
-            alert('No permission to delete consumption logs.');
+            await TVC_Dialog.alert('No permission to delete consumption logs.');
             return;
         }
         const checkedIds = Object.keys(m.consumeLogCheckedIds || {}).filter(k => m.consumeLogCheckedIds[k]);
         const idsToDelete = checkedIds.length
             ? checkedIds
             : (m.selectedConsumeLogId ? [m.selectedConsumeLogId] : []);
-        if (!idsToDelete.length) return alert('Check one or more consumption logs to delete.');
+        if (!idsToDelete.length) await TVC_Dialog.alert('Check one or more consumption logs to delete.');
         const labels = [];
         for (const id of idsToDelete) {
             const log = await TVC_Inventory.getConsumeLog(id);
@@ -6742,7 +6786,7 @@ const TVC_SpareMenu = (function () {
         const confirmMsg = idsToDelete.length === 1
             ? `Delete this consumption log?\n\n${labels[0]}`
             : `Delete ${idsToDelete.length} consumption logs?\n\n${labels.join('\n')}`;
-        if (!confirm(confirmMsg)) return;
+        if (!await TVC_Dialog.confirm({ message: confirmMsg })) return;
         const loadedId = _consumeDraft?.log_id || m.selectedConsumeLogId;
         let needClearLoaded = false;
         for (const id of idsToDelete) {
@@ -6776,12 +6820,12 @@ const TVC_SpareMenu = (function () {
         }
         await refresh();
         await refreshConsumeLogListUi();
-        if (idsToDelete.length > 1) alert(`Deleted ${idsToDelete.length} log(s).`);
+        if (idsToDelete.length > 1) await TVC_Dialog.alert(`Deleted ${idsToDelete.length} log(s).`);
     }
 
     async function consumeLogPreview() {
         const id = modState(getState()).selectedConsumeLogId;
-        if (!id) return alert('Select a consumption log.');
+        if (!id) await TVC_Dialog.alert('Select a consumption log.');
         closeConsumeLogModal();
         _consumeListReturnAfterSave = true;
         if (window.TVC_App?.switchTab && getState().currentTab !== 'spare') {
@@ -6878,11 +6922,11 @@ const TVC_SpareMenu = (function () {
     async function consumeLogPrintPreview() {
         const m = modState(getState());
         const id = _consumeDraft?.log_id || m.consumeLastSavedLogId || m.selectedConsumeLogId;
-        if (!id) return alert('Consumption log not found.');
+        if (!id) await TVC_Dialog.alert('Consumption log not found.');
         const html = await buildConsumeLogPrintDocument(id);
-        if (!html) return alert('Consumption log not found.');
+        if (!html) await TVC_Dialog.alert('Consumption log not found.');
         const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return; }
+        if (!w) { await TVC_Dialog.alert('Popup blocked. Please allow popups in your browser.'); return; }
         w.document.write(`<!DOCTYPE html><html><head><title>Consumed Spare Parts Log</title>
             <style>${reqPreviewPrintStyles()}</style></head><body>${html}</body></html>`);
         w.document.close();
@@ -6894,12 +6938,12 @@ const TVC_SpareMenu = (function () {
         const m = modState(getState());
         const id = _consumeDraft?.log_id || m.consumeLastSavedLogId || m.selectedConsumeLogId;
         if (!id || !consumeLogListHasDisplayedLog(m)) {
-            return alert('Select a consumption log from the list first.');
+            await TVC_Dialog.alert('Select a consumption log from the list first.');
         }
         const html = await buildConsumeLogPrintDocument(id);
-        if (!html) return alert('Consumption log not found.');
+        if (!html) await TVC_Dialog.alert('Consumption log not found.');
         const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return; }
+        if (!w) { await TVC_Dialog.alert('Popup blocked. Please allow popups in your browser.'); return; }
         w.document.write(`<!DOCTYPE html><html><head><title>Consumed Spare Parts Log</title>
             <style>${reqPreviewPrintStyles()}</style></head><body>${html}</body></html>`);
         w.document.close();
@@ -7107,7 +7151,7 @@ const TVC_SpareMenu = (function () {
     async function reqListNew() {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('No permission to create requisitions.');
             return;
         }
         closeReqListModal();
@@ -7122,13 +7166,13 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateRequisition(st)) {
-            alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('No permission to create requisitions.');
             return;
         }
-        if (!m.selectedReqId) return alert('Select a requisition to edit.');
+        if (!m.selectedReqId) await TVC_Dialog.alert('Select a requisition to edit.');
         const req = await TVC_Inventory.getRequisition(m.selectedReqId);
-        if (!req) return alert('Requisition not found.');
-        if (!(req.lines || []).length) return alert('No parts to edit.');
+        if (!req) await TVC_Dialog.alert('Requisition not found.');
+        if (!(req.lines || []).length) await TVC_Dialog.alert('No parts to edit.');
         const reqId = m.selectedReqId;
         closeReqListModal();
         _reqListReturnAfterSave = true;
@@ -7142,7 +7186,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (window.TVC_RBAC && !TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION)) {
-            alert('No permission to delete requisitions.');
+            await TVC_Dialog.alert('No permission to delete requisitions.');
             return;
         }
         const { vesselId } = await vesselScope();
@@ -7151,12 +7195,12 @@ const TVC_SpareMenu = (function () {
         const idsToDelete = checkedIds.length
             ? checkedIds
             : (m.selectedReqId ? [m.selectedReqId] : []);
-        if (!idsToDelete.length) return alert('Check one or more requisitions to delete.');
+        if (!idsToDelete.length) await TVC_Dialog.alert('Check one or more requisitions to delete.');
         const reqNos = idsToDelete.map(id => allReqs.find(r => r.id === id)?.req_no || id);
         const confirmMsg = idsToDelete.length === 1
             ? `Delete requisition ${reqNos[0]}?`
             : `Delete ${idsToDelete.length} requisitions?\n\n${reqNos.join('\n')}`;
-        if (!confirm(confirmMsg)) return;
+        if (!await TVC_Dialog.confirm({ message: confirmMsg })) return;
         const loadedId = _reqSheet.reqId || _reqWorkDraft?.id;
         const wasLoadedInListWindow = isRequisitionListWindow(m)
             && loadedId && idsToDelete.includes(loadedId);
@@ -7169,7 +7213,7 @@ const TVC_SpareMenu = (function () {
         if (wasLoadedInListWindow) await clearRequisitionListWindowSelection();
         await refreshReqListUi();
         await syncReportedWaitAndRefreshList();
-        if (idsToDelete.length > 1) alert(`Deleted ${idsToDelete.length} requisition(s).`);
+        if (idsToDelete.length > 1) await TVC_Dialog.alert(`Deleted ${idsToDelete.length} requisition(s).`);
     }
 
     function reqPreviewGroups(st, req) {
@@ -7373,12 +7417,12 @@ const TVC_SpareMenu = (function () {
 
     async function exportReqPreviewExcel(st, req, vesselName) {
         if (!TVC_Excel?.available?.()) {
-            alert('ExcelJS library not loaded.');
+            await TVC_Dialog.alert('ExcelJS library not loaded.');
             return false;
         }
         const pages = buildReqPreviewExportPages(st, req);
         if (!pages.length) {
-            alert('No items to export.');
+            await TVC_Dialog.alert('No items to export.');
             return false;
         }
         try {
@@ -7391,7 +7435,7 @@ const TVC_SpareMenu = (function () {
             });
             return true;
         } catch (e) {
-            alert(`Excel export failed: ${e.message || e}`);
+            await TVC_Dialog.alert(`Excel export failed: ${e.message || e}`);
             return false;
         }
     }
@@ -7458,9 +7502,9 @@ const TVC_SpareMenu = (function () {
             <tbody>${lineRows}</tbody></table>`;
     }
 
-    function openReqPrintWindow(html, { print = false } = {}) {
+    async function openReqPrintWindow(html, { print = false } = {}) {
         const w = window.open('', '_blank', 'width=900,height=700');
-        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return null; }
+        if (!w) { await TVC_Dialog.alert('Popup blocked. Please allow popups in your browser.'); return null; }
         w.document.write(`<!DOCTYPE html><html><head><title>Parts Requisition</title>
             <style>body{font-family:Segoe UI,Arial,sans-serif;font-size:12px;padding:16px}
             table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #999;padding:4px 6px}
@@ -7473,7 +7517,7 @@ const TVC_SpareMenu = (function () {
 
     async function reqListPreview() {
         const id = modState(getState()).selectedReqId;
-        if (!id) return alert('Select a requisition.');
+        if (!id) await TVC_Dialog.alert('Select a requisition.');
         closeReqListModal();
         await startReqWorkPreviewSession(id);
     }
@@ -7498,9 +7542,9 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToConfirm.length) {
             if (checkedIds.length) {
-                return alert('None of the selected requisitions can be confirmed. Only Reported requisitions can be confirmed, and you need Chief Engineer / Captain / Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected requisitions can be confirmed. Only Reported requisitions can be confirmed, and you need Chief Engineer / Captain / Superintendent permission.');
             }
-            return alert('Check one or more Reported requisitions to confirm.');
+            await TVC_Dialog.alert('Check one or more Reported requisitions to confirm.');
         }
         const loadedId = _reqSheet.reqId || _reqWorkDraft?.id;
         let confirmed = 0;
@@ -7522,9 +7566,9 @@ const TVC_SpareMenu = (function () {
         await syncReportedWaitAndRefreshList();
         const skipped = checkedIds.length - confirmed;
         if (skipped > 0) {
-            alert(`Confirmed ${confirmed} requisition(s). Skipped ${skipped} (not Reported or no permission).`);
+            await TVC_Dialog.alert(`Confirmed ${confirmed} requisition(s). Skipped ${skipped} (not Reported or no permission).`);
         } else {
-            alert(`Confirmed ${confirmed} requisition(s).`);
+            await TVC_Dialog.alert(`Confirmed ${confirmed} requisition(s).`);
         }
     }
 
@@ -7539,9 +7583,9 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToApprove.length) {
             if (checkedIds.length) {
-                return alert('None of the selected requisitions can be approved. Submitted requisitions, or HQ-authored Reported requisitions, can be approved with HQ Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected requisitions can be approved. Submitted requisitions, or HQ-authored Reported requisitions, can be approved with HQ Superintendent permission.');
             }
-            return alert('Check one or more approvable requisitions to approve.');
+            await TVC_Dialog.alert('Check one or more approvable requisitions to approve.');
         }
         const loadedId = _reqSheet.reqId || _reqWorkDraft?.id;
         let approved = 0;
@@ -7569,9 +7613,9 @@ const TVC_SpareMenu = (function () {
         await syncReportedWaitAndRefreshList();
         const skipped = checkedIds.length - approved;
         if (skipped > 0) {
-            alert(`Approved ${approved} requisition(s). Skipped ${skipped} (not Submitted or no permission).`);
+            await TVC_Dialog.alert(`Approved ${approved} requisition(s). Skipped ${skipped} (not Submitted or no permission).`);
         } else {
-            alert(`Approved ${approved} requisition(s).`);
+            await TVC_Dialog.alert(`Approved ${approved} requisition(s).`);
         }
     }
 
@@ -7581,9 +7625,9 @@ const TVC_SpareMenu = (function () {
         const xferKind = _reqListXferExportKind;
         const meta = reqListXferExportMeta(xferKind);
         if (xferKind === 'received') {
-            if (!canCreateDeliver(st)) return alert('No permission to export received data.');
+            if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
         } else if (!canCreateRequisition(st)) {
-            return alert('No permission to export requisitions.');
+            await TVC_Dialog.alert('No permission to export requisitions.');
         }
         const { vesselId } = await vesselScope();
         const allReqs = await TVC_Inventory.listRequisitions(vesselId);
@@ -7591,29 +7635,62 @@ const TVC_SpareMenu = (function () {
         const statusLabel = meta.statusLabel;
         if (!ids.length) {
             const anyChecked = Object.keys(m.reqListCheckedIds || {}).some(k => m.reqListCheckedIds[k]);
-            if (anyChecked) return alert(`Only ${statusLabel} requisitions can be exported.`);
-            return alert('Select one or more requisitions to export.');
+            if (anyChecked) await TVC_Dialog.alert(`Only ${statusLabel} requisitions can be exported.`);
+            await TVC_Dialog.alert('Select one or more requisitions to export.');
         }
         const skipped = Object.keys(m.reqListCheckedIds || {}).filter(k => m.reqListCheckedIds[k] && !ids.includes(k));
         const confirmTarget = meta.confirmTarget;
         if (skipped.length) {
             const skipNos = skipped.map(id => allReqs.find(r => r.id === id)?.req_no || id).join(', ');
-            if (!window.confirm(`${skipped.length} non-${statusLabel} item(s) will be skipped (${skipNos}).\n\nExport ${ids.length} ${confirmTarget}?`)) return;
-        } else if (!window.confirm(`Export ${ids.length} ${confirmTarget}?`)) {
+            if (!await TVC_Dialog.confirm({ message: `${skipped.length} non-${statusLabel} item(s) will be skipped (${skipNos}).\n\nExport ${ids.length} ${confirmTarget}?` })) return;
+        } else if (!await TVC_Dialog.confirm({ message: `Export ${ids.length} ${confirmTarget}?` })) {
             return;
         }
-        const exportFn = xferKind === 'received' ? exportReceivedReq
-            : xferKind === 'quotation' ? exportQuotationReq
-                : xferKind === 'reply-evaluation' ? exportReplyEvaluationReq
-                    : xferKind === 'purchase-order' ? exportPurchaseOrderReq
-                        : exportReq;
+        const { isHq } = await vesselScope();
         let ok = 0;
-        for (const id of ids) {
+        let exportFilename = '';
+        if (xferKind === 'quotation') {
+            for (const id of ids) {
+                try {
+                    await exportQuotationReq(id);
+                    ok++;
+                } catch (e) {
+                    await TVC_Dialog.alert(`Export failed: ${e.message || e.code || id}`);
+                }
+            }
+        } else {
+            if (typeof TVC_SpareSync === 'undefined') await TVC_Dialog.alert('SPARE ZIP export is not available.');
+            const reqs = [];
+            for (const id of ids) {
+                const req = await TVC_Inventory.getRequisition(id);
+                if (req) reqs.push(req);
+            }
             try {
-                await exportFn(id);
-                ok++;
+                const result = await TVC_SpareSync.exportRequisitionsZip(st.user, reqs, {
+                    category: meta.category,
+                    vendorOnly: (xferKind === 'requisition' || xferKind === 'received') ? !isHq : undefined,
+                    isHq,
+                });
+                exportFilename = result.filename;
+                for (const req of reqs) {
+                    if (xferKind === 'requisition') {
+                        await applyRequisitionExportStatus(req);
+                    } else if (xferKind === 'reply-evaluation') {
+                        const q = ensureReqWorkQuoteState(req);
+                        q.replyExported = true;
+                        q.flowStage = 'reply-evaluation';
+                        await TVC_Inventory.saveRequisition(req);
+                    } else if (xferKind === 'purchase-order') {
+                        const q = ensureReqWorkQuoteState(req);
+                        q.flowStage = 'purchase-order';
+                        await TVC_Inventory.saveRequisition(req);
+                    }
+                }
+                ok = reqs.length;
+                await refreshReqListModalIfOpen();
+                render();
             } catch (e) {
-                alert(`Export failed: ${e.message || e.code || id}`);
+                await TVC_Dialog.alert(`Export failed: ${e.message || e.code || e}`);
             }
         }
         if (ok) {
@@ -7621,8 +7698,9 @@ const TVC_SpareMenu = (function () {
                 await logSpareDataXfer({
                     direction: 'EXPORT',
                     category: meta.category,
-                    summary: meta.successMsg(ok),
+                    summary: exportFilename ? `${ok} item(s) → ${exportFilename}` : meta.successMsg(ok),
                     count: ok,
+                    file_name: exportFilename,
                 });
                 const returnTo = _reqListXferExportReturn;
                 const reloadId = returnTo === 'req-work' ? _reqWorkDraft?.id : null;
@@ -7633,7 +7711,19 @@ const TVC_SpareMenu = (function () {
                     syncReqWorkHqFlowBtns();
                 }
             }
-            alert(meta.successMsg(ok));
+            await TVC_Dialog.alert(exportFilename
+                ? `Exported ${ok} item(s).\n${exportFilename}`
+                : meta.successMsg(ok));
+        }
+    }
+
+    async function applyRequisitionExportStatus(req) {
+        if (!req?.id) return;
+        const listSt = spareListStatus(req);
+        if (listSt !== SPARE_LIST_STATUS.DRAFT) {
+            await TVC_Inventory.setStatus(req.id, TVC_Inventory.REQ_STATUS.SUBMITTED);
+        } else if (req.status === TVC_Inventory.REQ_STATUS.DRAFT) {
+            await TVC_Inventory.setStatus(req.id, TVC_Inventory.REQ_STATUS.EXPORTED);
         }
     }
 
@@ -7646,9 +7736,9 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         const id = m.selectedReqId;
-        if (!id) return alert('Select a requisition.');
+        if (!id) await TVC_Dialog.alert('Select a requisition.');
         const req = await TVC_Inventory.getRequisition(id);
-        if (!req) return alert('Requisition not found.');
+        if (!req) await TVC_Dialog.alert('Requisition not found.');
         const { vesselId } = await vesselScope();
         const vesselName = await vesselLabel(vesselId);
         await exportReqPreviewExcel(st, req, vesselName);
@@ -7688,21 +7778,21 @@ const TVC_SpareMenu = (function () {
         syncSpareToolbarUi();
     }
 
-    function openSpareModify() {
+    async function openSpareModify() {
         if (reqWorkSpareActionBlocked()) return;
         if (isInlineEditing(getState())) return saveInlineEdit();
         if (window.TVC_App?.openSpareModify) return TVC_App.openSpareModify();
         const ids = spareActionIds('modify');
-        if (!ids.length) return alert('Select a part to edit (click row or use checkbox).');
-        if (getCheckedSpareIds(getState()).length > 1) return alert('Modify allows only one selected item.');
+        if (!ids.length) await TVC_Dialog.alert('Select a part to edit (click row or use checkbox).');
+        if (getCheckedSpareIds(getState()).length > 1) await TVC_Dialog.alert('Modify allows only one selected item.');
         edit(ids[0]);
     }
 
-    function openSpareAppend() {
+    async function openSpareAppend() {
         if (reqWorkSpareActionBlocked()) return;
         if (window.TVC_App?.openSpareAppend) return TVC_App.openSpareAppend();
         if (!canModifySpare(getState())) {
-            return alert('Chief Engineer / Captain permission required.');
+            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
         }
         append();
     }
@@ -7710,13 +7800,13 @@ const TVC_SpareMenu = (function () {
     async function deleteSpareItems(ids) {
         const st = getState();
         const list = (ids || []).filter(Boolean);
-        if (!list.length) return alert('Select part(s) to delete (click row or use checkbox).');
+        if (!list.length) await TVC_Dialog.alert('Select part(s) to delete (click row or use checkbox).');
         const labels = list.map(id => {
             const s = (st.spares || []).find(x => x.id === id);
             return s ? (s.part_no || s.name || id) : id;
         });
         const preview = labels.slice(0, 5).join(', ') + (labels.length > 5 ? ` and ${labels.length - 5} more` : '');
-        if (!confirm(`Delete ${list.length} selected part(s)?\n\n${preview}\n\nThis cannot be undone.`)) return;
+        if (!await TVC_Dialog.confirm({ message: `Delete ${list.length} selected part(s)?\n\n${preview}\n\nThis cannot be undone.` })) return;
         try {
             const user = spareInventoryUser(st);
             for (const id of list) await TVC_Inventory.deleteSpare(user, id);
@@ -7728,8 +7818,8 @@ const TVC_SpareMenu = (function () {
             await refresh();
             afterSpareListChange(st);
             if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
-            alert(`${list.length} part(s) deleted.`);
-        } catch (e) { alert(e.message || e.code || 'Delete failed'); }
+            await TVC_Dialog.alert(`${list.length} part(s) deleted.`);
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code || 'Delete failed'); }
     }
 
     async function deleteSpareItem() {
@@ -7748,10 +7838,10 @@ const TVC_SpareMenu = (function () {
             const req = await TVC_Inventory.createRequisition(st.user, {
                 vesselId, spares: [s], qtyMap: { [s.id]: qty },
             });
-            alert(`Requisition created: ${req.req_no}`);
+            await TVC_Dialog.alert(`Requisition created: ${req.req_no}`);
             await refresh();
             await openReqListModal({ selectId: req.id });
-        } catch (e) { alert(e.message || e.code); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function assignToTask(spareId) {
@@ -7763,9 +7853,9 @@ const TVC_SpareMenu = (function () {
         const qty = parseInt(prompt('Qty per job:', '1') || '1', 10) || 1;
         try {
             await TVC_Inventory.addBomLine(jobCode.trim().toUpperCase(), spareId, qty);
-            alert(`BOM linked: ${jobCode.trim().toUpperCase()} · qty ${qty}`);
+            await TVC_Dialog.alert(`BOM linked: ${jobCode.trim().toUpperCase()} · qty ${qty}`);
             openDetail(spareId);
-        } catch (e) { alert(e.message || e.code); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function suggestRequisition(alerts) {
@@ -7774,7 +7864,7 @@ const TVC_SpareMenu = (function () {
             `• ${a.partNo || '—'} — ${a.name || ''} (재고 ${a.stock} / Min ${a.minStock ?? a.standard})`
         ).join('\n');
         const job = alerts[0]?.jobCode ? `\n\nJob: ${alerts[0].jobCode}` : '';
-        if (!confirm(`Stock is below Min Stock.\n\n${lines}${job}\n\nCreate a requisition in the SPARE tab?`)) return;
+        if (!await TVC_Dialog.confirm({ message: `Stock is below Min Stock.\n\n${lines}${job}\n\nCreate a requisition in the SPARE tab?` })) return;
         const st = getState();
         const m = modState(st);
         if (alerts[0]?.sparePartId) { setFocusedSpareId(getState(), alerts[0].sparePartId); modState(getState()).panelOpen = true; }
@@ -7945,49 +8035,49 @@ const TVC_SpareMenu = (function () {
         </span>`;
     }
 
-    function appendGroupFromTree() {
+    async function appendGroupFromTree() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            return alert('Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.');
+            await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
         }
         if (window.TVC_App?.openOrigGroupAdd) return TVC_App.openOrigGroupAdd();
-        alert('Group append is unavailable.');
+        await TVC_Dialog.alert('Group append is unavailable.');
     }
 
     async function deleteGroupFromTree() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            return alert('Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.');
+            await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
         }
         const node = groupSelectedNode(st);
-        if (!canDeleteSelectedGroup(st)) return alert('Select a group to delete.');
-        if (!confirm(`Delete GROUP "${node.label}"?\n\nOnly empty groups (no jobs, no spare parts) can be deleted.`)) return;
+        if (!canDeleteSelectedGroup(st)) await TVC_Dialog.alert('Select a group to delete.');
+        if (!await TVC_Dialog.confirm({ message: `Delete GROUP "${node.label}"?\n\nOnly empty groups (no jobs, no spare parts) can be deleted.` })) return;
         const user = spareInventoryUser(st) || st.user;
-        if (!user) return alert('Login required.');
+        if (!user) await TVC_Dialog.alert('Login required.');
         try {
             await TVC_MaintenancePlan.deleteGroup(user, node.department, node.label);
             st.selectedGroupKey = null;
             await refresh();
             await render();
-            alert('Group deleted.');
+            await TVC_Dialog.alert('Group deleted.');
         } catch (e) {
             const code = e.code || '';
-            if (code === 'HAS_JOBS') return alert(`Cannot delete: ${e.count || ''} maintenance job(s) in this group.`);
-            if (code === 'HAS_SPARES') return alert('Cannot delete: spare parts exist in this group.');
-            alert(e.message || code || 'Delete failed');
+            if (code === 'HAS_JOBS') await TVC_Dialog.alert(`Cannot delete: ${e.count || ''} maintenance job(s) in this group.`);
+            if (code === 'HAS_SPARES') await TVC_Dialog.alert('Cannot delete: spare parts exist in this group.');
+            await TVC_Dialog.alert(e.message || code || 'Delete failed');
         }
     }
 
-    function startGroupHeaderEdit() {
+    async function startGroupHeaderEdit() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            return alert('Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.');
+            await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
         }
         const key = st.selectedGroupKey;
         const treeName = st.currentTab === 'actual'
             ? 'PMS GROUP Tree' : 'SPARE GROUP Tree';
         if (!key || key === CRITICAL_GROUP_KEY) {
-            return alert(`${treeName} — select a group to edit first.`);
+            await TVC_Dialog.alert(`${treeName} — select a group to edit first.`);
         }
         if (window.TVC_App?.isOrigJobInlineEditing?.() && window.TVC_App?.cancelOrigJobInlineEdit) {
             TVC_App.cancelOrigJobInlineEdit();
@@ -8017,7 +8107,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (!m.groupHeaderEdit) return;
         if (!canEditGroupHeader(st)) {
-            return alert('Modify · Append · Delete는 Chief engineer (ce) · Chief officer (co) · Captain · Superintendent (hq)만 사용할 수 있습니다.');
+            await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
         }
         const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
         const draft = m.groupHeaderDraft || {};
@@ -8138,8 +8228,8 @@ const TVC_SpareMenu = (function () {
             if (labelChanged) st.selectedGroupKey = `${dept}|${newLabel}`;
             afterSpareListChange(st);
             if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
-            alert(`Group header saved (${rows.length} item(s) updated)`);
-        } catch (e) { alert(e.message || e.code || 'Save failed'); }
+            await TVC_Dialog.alert(`Group header saved (${rows.length} item(s) updated)`);
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code || 'Save failed'); }
     }
 
     async function saveGroupHeaderMeta(st, header, spare, opts = {}) {
@@ -8235,11 +8325,11 @@ const TVC_SpareMenu = (function () {
         };
         const code = g('sie_code').trim();
         const itemName = g('sie_item').trim();
-        if (!header.pmsGroupNo) return alert('Select SPARE Group No.');
-        if (!code) return alert('Enter Code.');
-        if (!itemName) return alert('Enter Item.');
+        if (!header.pmsGroupNo) await TVC_Dialog.alert('Select SPARE Group No.');
+        if (!code) await TVC_Dialog.alert('Enter Code.');
+        if (!itemName) await TVC_Dialog.alert('Enter Item.');
         const partClass = TVC_SpareSchema.normalizePartClass(g('sie_class'));
-        if (!partClass) return alert('Select Class (G or L).');
+        if (!partClass) await TVC_Dialog.alert('Select Class (G or L).');
         // 기존 캐논 객체 위에 편집값을 얹어 깨끗한 canonical → toRow(snake_case)로 저장한다.
         // (camelCase/snake_case 혼용 시 재로드에서 옛 값/0 으로 되돌아가는 문제 방지)
         const baseCanon = isNew ? TVC_SpareSchema.blank() : canon(raw);
@@ -8270,7 +8360,7 @@ const TVC_SpareMenu = (function () {
             await refresh();
             afterSpareListChange(st);
             if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
-        } catch (e) { alert(e.message || e.code); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function edit(id) {
@@ -8306,7 +8396,7 @@ const TVC_SpareMenu = (function () {
             st._spareEdit = null;
             await refresh();
             render();
-        } catch (e) { alert(e.message || e.code); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function saveDetailGroup(id) {
@@ -8324,7 +8414,7 @@ const TVC_SpareMenu = (function () {
             const canRequisition = window.TVC_RBAC && st.user && TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION);
             const canModify = canModifySpare(st);
             await renderDetailPanel(id, canRequisition, canModify);
-        } catch (e) { alert(e.message || e.code); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     function showImportLoading(msg) {
@@ -8378,7 +8468,7 @@ const TVC_SpareMenu = (function () {
             const res = await TVC_DB.loadSpareInventory(source ?? null, importOpts);
             await finishImport(st, res);
             if (!silent) {
-                alert(
+                await TVC_Dialog.alert(
                     `ENGINE 재고 적재 완료 (loadSpareInventory)\n` +
                     `· ${res.stats?.spares || 0} parts\n` +
                     `· Equipment ${res.equipment} nodes (MAIN ENGINE 등 부모)\n` +
@@ -8414,7 +8504,7 @@ const TVC_SpareMenu = (function () {
     /** 권장: 번들 XLS → 없으면 loadSpareInventory(CSV) · file:// 는 label 클릭 */
     async function loadBundledXls() {
         if (TVC_Env.isFileProtocol()) {
-            alert(
+            await TVC_Dialog.alert(
                 'file:// 모드에서는 자동 Import가 불가합니다.\n\n' +
                 '▶ "Select spare-inventory.xls" 버튼을 직접 클릭하세요\n' +
                 '▶ 권장: npm run serve → http://localhost:3000'
@@ -8444,7 +8534,7 @@ const TVC_SpareMenu = (function () {
                 }
             }
             await finishImport(st, res);
-            alert(
+            await TVC_Dialog.alert(
                 `ENGINE 재고 Import 완료\n` +
                 `· ${res.stats?.spares || res.spares?.length || 0} parts\n` +
                 `· Equipment ${res.equipment} · 신규 ${res.spareCreated} · 갱신 ${res.spareUpdated}`
@@ -8453,16 +8543,16 @@ const TVC_SpareMenu = (function () {
             hideImportLoading();
             const msg = e.message || e.code || String(e);
             if (/fetch|Failed to fetch|404|NOT_FOUND/i.test(msg)) {
-                if (confirm(
+                if (await TVC_Dialog.confirm({ message: 
                     '재고 파일을 불러올 수 없습니다.\n\n' +
                     '▶ npm run serve 로 http://localhost:3000 접속 후 재시도\n' +
                     '▶ 또는 [확인] → spare inventory.xls 직접 선택\n\n' +
                     'Select file 창을 열까요?'
-                )) {
+                 })) {
                     triggerInventoryImport();
                 }
             } else {
-                alert('Import failed: ' + msg);
+                await TVC_Dialog.alert('Import failed: ' + msg);
             }
         } finally {
             hideImportLoading();
@@ -8488,7 +8578,7 @@ const TVC_SpareMenu = (function () {
         try {
             await loadSpareInventory(file, { merge: true });
         } catch (e) {
-            alert('CSV upload failed: ' + (e.message || e.code));
+            await TVC_Dialog.alert('CSV upload failed: ' + (e.message || e.code));
         } finally {
             const fi = document.getElementById('srCsvUploadFile');
             if (fi) fi.value = '';
@@ -8518,13 +8608,13 @@ const TVC_SpareMenu = (function () {
                 });
             }
             await finishImport(st, res);
-            alert(
+            await TVC_Dialog.alert(
                 `ENGINE 재고 Import 완료\n` +
                 `· ${res.stats?.spares || res.spares?.length || 0} parts\n` +
                 `· Equipment ${res.equipment} · 신규 ${res.spareCreated} · 갱신 ${res.spareUpdated}`
             );
         } catch (e) {
-            alert('Import failed: ' + (e.message || e.code));
+            await TVC_Dialog.alert('Import failed: ' + (e.message || e.code));
         } finally {
             hideImportLoading();
             document.getElementById('srInventoryImportFile').value = '';
@@ -8546,30 +8636,24 @@ const TVC_SpareMenu = (function () {
                 : await TVC_Inventory.applyVendorQuote(_importReqId, rows);
             const req = await TVC_Inventory.getRequisition(_importReqId);
             const dbRes = await TVC_Inventory.applyExcelImport(rows, req?.req_no);
-            alert(`Applied: ${res.updated}/${res.total} · DB ${dbRes.updated}/${dbRes.total}`);
+            await TVC_Dialog.alert(`Applied: ${res.updated}/${res.total} · DB ${dbRes.updated}/${dbRes.total}`);
             await refresh();
             await refreshReqListModalIfOpen();
             render();
-        } catch (e) { alert('Import failed: ' + (e.message || e.code)); }
+        } catch (e) { await TVC_Dialog.alert('Import failed: ' + (e.message || e.code)); }
         finally { document.getElementById('srImportFile').value = ''; _importReqId = null; }
     }
 
     async function exportQuotationReq(id) {
+        const { st, isHq } = await vesselScope();
         const req = await TVC_Inventory.getRequisition(id);
         if (!req) throw new Error('REQ_NOT_FOUND');
         if (!reqWorkHqQuoteSetupReady(req)) throw new Error('Request Quote not complete for this requisition.');
-        if (!TVC_Excel?.exportQuoteRequisition) throw new Error('Excel export is not available.');
+        if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
         ensureReqWorkQuoteState(req);
         const targets = reqWorkQuoteExportTargets(req);
         if (!targets.length) throw new Error('No vendor quote files for this requisition.');
-        for (const t of targets) {
-            await TVC_Excel.exportQuoteRequisition(req, {
-                vendorName: t.vendorName,
-                currency: t.currency,
-                lines: t.lines,
-                filename: t.filename,
-            });
-        }
+        await TVC_SpareSync.exportQuotationZip(st.user, req, targets, { isHq });
         const q = ensureReqWorkQuoteState(req);
         q.flowStage = 'export-quote';
         await TVC_Inventory.saveRequisition(req);
@@ -8578,14 +8662,14 @@ const TVC_SpareMenu = (function () {
     }
 
     async function exportReplyEvaluationReq(id) {
+        const { st, isHq } = await vesselScope();
         const req = await TVC_Inventory.getRequisition(id);
         if (!req) throw new Error('REQ_NOT_FOUND');
         if (!reqWorkHqEvaluationReady(req)) throw new Error('Evaluation not complete for this requisition.');
-        if (!TVC_Excel?.exportRequisition) throw new Error('Excel export is not available.');
-        const safeReq = String(req.req_no || 'REQUISITION').replace(/[\\/:*?"<>|]/g, '_').trim();
-        await TVC_Excel.exportRequisition(req, {
-            vendorOnly: false,
-            filename: `${safeReq}_EVAL_REPLY.xlsx`,
+        if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
+        await TVC_SpareSync.exportRequisitionZip(st.user, req, {
+            category: SPARE_XFER_EXPORT.REPLY_EVALUATION,
+            isHq,
         });
         const q = ensureReqWorkQuoteState(req);
         q.replyExported = true;
@@ -8596,11 +8680,15 @@ const TVC_SpareMenu = (function () {
     }
 
     async function exportPurchaseOrderReq(id) {
+        const { st, isHq } = await vesselScope();
         const req = await TVC_Inventory.getRequisition(id);
         if (!req) throw new Error('REQ_NOT_FOUND');
         if (!reqListCanPurchaseOrderExport(req)) throw new Error('Reply Evaluation export required before Purchase Order.');
-        if (!TVC_Excel?.exportRequisition) throw new Error('Excel export is not available.');
-        await TVC_Excel.exportRequisition(req, { vendorOnly: false });
+        if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
+        await TVC_SpareSync.exportRequisitionZip(st.user, req, {
+            category: SPARE_XFER_EXPORT.PURCHASE_ORDER,
+            isHq,
+        });
         const q = ensureReqWorkQuoteState(req);
         q.flowStage = 'purchase-order';
         await TVC_Inventory.saveRequisition(req);
@@ -8609,31 +8697,36 @@ const TVC_SpareMenu = (function () {
     }
 
     async function exportReceivedReq(id) {
-        const { isHq } = await vesselScope();
+        const { st, isHq } = await vesselScope();
         const req = await TVC_Inventory.getRequisition(id);
         if (!req) throw new Error('REQ_NOT_FOUND');
         if (!reqListCanReceivedExport(req)) throw new Error('Only Received requisitions can be exported.');
-        await TVC_Excel.exportRequisition(req, { vendorOnly: !isHq });
+        if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
+        await TVC_SpareSync.exportRequisitionZip(st.user, req, {
+            category: SPARE_XFER_EXPORT.RECEIVED,
+            vendorOnly: !isHq,
+            isHq,
+        });
         await refreshReqListModalIfOpen();
         render();
     }
 
     async function exportReq(id) {
-        const { isHq } = await vesselScope();
+        const { st, isHq } = await vesselScope();
         try {
             const req = await TVC_Inventory.getRequisition(id);
             if (!req) throw new Error('REQ_NOT_FOUND');
             if (!reqListCanMasterExport(req)) throw new Error('Only Confirmed requisitions can be exported.');
-            await TVC_Excel.exportRequisition(req, { vendorOnly: !isHq });
-            const listSt = spareListStatus(req);
-            if (listSt !== SPARE_LIST_STATUS.DRAFT) {
-                await TVC_Inventory.setStatus(id, TVC_Inventory.REQ_STATUS.SUBMITTED);
-            } else if (req.status === TVC_Inventory.REQ_STATUS.DRAFT) {
-                await TVC_Inventory.setStatus(id, TVC_Inventory.REQ_STATUS.EXPORTED);
-            }
+            if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
+            await TVC_SpareSync.exportRequisitionZip(st.user, req, {
+                category: SPARE_XFER_EXPORT.REQUISITION,
+                vendorOnly: !isHq,
+                isHq,
+            });
+            await applyRequisitionExportStatus(req);
             await refreshReqListModalIfOpen();
             render();
-        } catch (e) { alert(e.message || e.code); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     // ── SPARE Data Export / Import (unified wizard) ─────────────────────
@@ -8651,6 +8744,7 @@ const TVC_SpareMenu = (function () {
             step: 'mode',
             importKind: 'general',
             hqImportType: null, // requisition | quotation | received | inventory
+            masterImportType: null, // requisition | evaluation | received | inventory
             vesselImportType: null, // evaluation | inventory
         };
     }
@@ -8658,6 +8752,13 @@ const TVC_SpareMenu = (function () {
     const HQ_IMPORT_TYPES = [
         { key: 'requisition', label: 'Requisition' },
         { key: 'quotation', label: 'Quotation' },
+        { key: 'received', label: 'Received' },
+        { key: 'inventory', label: 'Inventory' },
+    ];
+
+    const MASTER_IMPORT_TYPES = [
+        { key: 'requisition', label: 'Requisition' },
+        { key: 'evaluation', label: 'Evaluation' },
         { key: 'received', label: 'Received' },
         { key: 'inventory', label: 'Inventory' },
     ];
@@ -8798,11 +8899,16 @@ const TVC_SpareMenu = (function () {
         return String(row?.direction || '').toUpperCase() === 'EXPORT';
     }
 
+    function isSpareMasterHub(user) {
+        return typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub?.(user);
+    }
+
     function renderSpareXferModal() {
         const body = document.getElementById('spareSyncBody');
         if (!body) return;
         const st = getState();
         const isHq = !!(window.TVC_RBAC?.isHqAccount?.(st.user));
+        const isMaster = !isHq && isSpareMasterHub(st.user);
         const step = _spareXfer.step || 'mode';
         let content = '';
         if (step === 'mode') {
@@ -8824,6 +8930,7 @@ const TVC_SpareMenu = (function () {
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Inventory</button>`;
             content = `
                 <p class="spare-sync-hint">${isHq ? 'Select the data type to export.' : 'Select the data type to export to Master PC.'}</p>
+                <p class="spare-sync-note muted">Exports are saved as <strong>.zip</strong> packages (tvc_spare_sync.json inside), same as PMS.</p>
                 <div class="spare-sync-actions">
                     ${isHq ? hqExportBtns : vesselExportBtns}
                 </div>`;
@@ -8836,12 +8943,27 @@ const TVC_SpareMenu = (function () {
                         onclick="TVC_SpareMenu.spareXferSelectHqImportType('${t.key}')">${esc(t.label)}${hqType === t.key ? ' ✓' : ''}</button>`).join('');
                 content = `
                 <p class="spare-sync-hint">Select import type, then open the file.</p>
-                <p class="spare-sync-note muted">Requisition / Quotation / Received: <strong>.xlsx</strong> · Inventory: <strong>.xls / .xlsx / .csv</strong></p>
+                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy <strong>.xlsx</strong> · Inventory also <strong>.xls / .csv</strong></p>
                 <div class="spare-sync-actions">
                     ${typeBtns}
                     <button type="button" class="btn btn-green spare-sync-btn"
                         onclick="TVC_SpareMenu.spareXferTriggerImport('hq')"
                         ${hqType ? '' : ' disabled title="Select import type first"'}>Open file…</button>
+                </div>`;
+            } else if (isMaster) {
+                const masterType = _spareXfer.masterImportType || '';
+                const typeBtns = MASTER_IMPORT_TYPES.map(t => `
+                    <button type="button" class="btn spare-sync-btn spare-sync-check-btn${masterType === t.key ? ' is-checked' : ''}"
+                        aria-pressed="${masterType === t.key ? 'true' : 'false'}"
+                        onclick="TVC_SpareMenu.spareXferSelectMasterImportType('${t.key}')">${esc(t.label)}${masterType === t.key ? ' ✓' : ''}</button>`).join('');
+                content = `
+                <p class="spare-sync-hint">Select import type, then open the file.</p>
+                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Evaluation <strong>.xlsx / .json</strong> · Inventory <strong>.xls / .xlsx / .csv</strong></p>
+                <div class="spare-sync-actions">
+                    ${typeBtns}
+                    <button type="button" class="btn btn-green spare-sync-btn"
+                        onclick="TVC_SpareMenu.spareXferTriggerImport('master')"
+                        ${masterType ? '' : ' disabled title="Select import type first"'}>Open file…</button>
                 </div>`;
             } else {
                 const vesselType = _spareXfer.vesselImportType || '';
@@ -8851,7 +8973,7 @@ const TVC_SpareMenu = (function () {
                         onclick="TVC_SpareMenu.spareXferSelectVesselImportType('${t.key}')">${esc(t.label)}${vesselType === t.key ? ' ✓' : ''}</button>`).join('');
                 content = `
                 <p class="spare-sync-hint">Select import type, then open the file.</p>
-                <p class="spare-sync-note muted">Evaluation: <strong>*_EVAL_REPLY.xlsx</strong> / <strong>*EVAL*.xlsx</strong> or Assessment <strong>.json</strong> · Inventory: <strong>.xls / .xlsx / .csv</strong></p>
+                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Evaluation <strong>.xlsx / .json</strong> · Inventory <strong>.xls / .xlsx / .csv</strong></p>
                 <div class="spare-sync-actions">
                     ${typeBtns}
                     <button type="button" class="btn btn-green spare-sync-btn"
@@ -8892,6 +9014,7 @@ const TVC_SpareMenu = (function () {
         _spareXfer.step = mode === 'export' ? 'export-type' : 'import';
         if (mode === 'import') {
             _spareXfer.hqImportType = null;
+            _spareXfer.masterImportType = null;
             _spareXfer.vesselImportType = null;
         }
         renderSpareXferModal();
@@ -8901,6 +9024,7 @@ const TVC_SpareMenu = (function () {
         if (_spareXfer.step === 'export-type' || _spareXfer.step === 'import') {
             _spareXfer.step = 'mode';
             _spareXfer.hqImportType = null;
+            _spareXfer.masterImportType = null;
             _spareXfer.vesselImportType = null;
         }
         renderSpareXferModal();
@@ -8910,6 +9034,13 @@ const TVC_SpareMenu = (function () {
         const k = String(key || '');
         if (!VESSEL_IMPORT_TYPES.some(t => t.key === k)) return;
         _spareXfer.vesselImportType = _spareXfer.vesselImportType === k ? null : k;
+        renderSpareXferModal();
+    }
+
+    function spareXferSelectMasterImportType(key) {
+        const k = String(key || '');
+        if (!MASTER_IMPORT_TYPES.some(t => t.key === k)) return;
+        _spareXfer.masterImportType = _spareXfer.masterImportType === k ? null : k;
         renderSpareXferModal();
     }
 
@@ -8928,21 +9059,30 @@ const TVC_SpareMenu = (function () {
         return false;
     }
 
-    function spareXferTriggerImport(kind = 'general') {
+    async function spareXferTriggerImport(kind = 'general') {
         const st = getState();
         const isHq = !!(window.TVC_RBAC?.isHqAccount?.(st.user));
-        // Vessel Import: Evaluation / Inventory 선택 후 Open file
-        if (!isHq && _spareXfer.step === 'import') {
+        const isMaster = !isHq && isSpareMasterHub(st.user);
+        // Station Import: Evaluation / Inventory 선택 후 Open file
+        if (!isHq && !isMaster && _spareXfer.step === 'import') {
             if (!_spareXfer.vesselImportType) {
-                alert('Import 유형을 먼저 선택하세요.');
+                await TVC_Dialog.alert('Select an import type first.');
                 return;
             }
             kind = _spareXfer.vesselImportType;
         }
+        // Master Hub Import: Requisition / Evaluation / Received / Inventory
+        if (isMaster && _spareXfer.step === 'import') {
+            if (!_spareXfer.masterImportType) {
+                await TVC_Dialog.alert('Select an import type first.');
+                return;
+            }
+            kind = _spareXfer.masterImportType;
+        }
         // HQ Import: 유형 선택 후 Open file
         if (isHq && _spareXfer.step === 'import') {
             if (!_spareXfer.hqImportType) {
-                alert('Import 유형을 먼저 선택하세요.');
+                await TVC_Dialog.alert('Select an import type first.');
                 return;
             }
             kind = _spareXfer.hqImportType;
@@ -8952,13 +9092,13 @@ const TVC_SpareMenu = (function () {
         const fi = document.getElementById('spareXferImportFile');
         if (!fi) return;
         if (mode === 'evaluation') {
-            fi.setAttribute('accept', '.json,.xlsx,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            fi.setAttribute('accept', '.zip,.json,.xlsx,application/zip,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         } else if (mode === 'inventory') {
-            fi.setAttribute('accept', '.xls,.xlsx,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv');
+            fi.setAttribute('accept', '.zip,.xls,.xlsx,.csv,application/zip,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv');
         } else if (mode === 'requisition' || mode === 'quotation' || mode === 'received') {
-            fi.setAttribute('accept', '.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            fi.setAttribute('accept', '.zip,.xlsx,application/zip,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         } else {
-            fi.setAttribute('accept', '.json,.xlsx,.xls,.csv,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv');
+            fi.setAttribute('accept', '.zip,.json,.xlsx,.xls,.csv,application/zip,application/json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv');
         }
         fi.value = '';
         fi.click();
@@ -8966,7 +9106,7 @@ const TVC_SpareMenu = (function () {
 
     async function spareXferOpenReqExportList() {
         const st = getState();
-        if (!canCreateRequisition(st)) return alert('No permission to export requisitions.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export requisitions.');
         const m = modState(st);
         m.reqListPhaseTab = REQ_LIST_PHASE.ALL;
         _reqListXferExportKind = 'requisition';
@@ -8985,89 +9125,124 @@ const TVC_SpareMenu = (function () {
 
     async function spareXferOpenQuotationExportList() {
         const st = getState();
-        if (!canCreateRequisition(st)) return alert('No permission to export quotations.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export quotations.');
         closeSpareSyncMenu();
         await openReqXferExportList('quotation', { returnTo: 'sync' });
     }
 
     async function spareXferOpenReplyEvalExportList() {
         const st = getState();
-        if (!canCreateRequisition(st)) return alert('No permission to export evaluation replies.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export evaluation replies.');
         closeSpareSyncMenu();
         await openReqXferExportList('reply-evaluation', { returnTo: 'sync' });
     }
 
     async function spareXferOpenPurchaseOrderExportList() {
         const st = getState();
-        if (!canCreateRequisition(st)) return alert('No permission to export purchase orders.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export purchase orders.');
         closeSpareSyncMenu();
         await openReqXferExportList('purchase-order', { returnTo: 'sync' });
     }
 
     async function spareXferOpenReceivedExportList() {
         const st = getState();
-        if (!canCreateDeliver(st)) return alert('No permission to export received data.');
+        if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
         closeSpareSyncMenu();
         await openReqXferExportList('received', { returnTo: 'sync' });
     }
 
+    function spareImportCategory(kind) {
+        const map = {
+            requisition: SPARE_XFER_EXPORT.REQUISITION,
+            quotation: SPARE_XFER_EXPORT.QUOTATION,
+            received: SPARE_XFER_EXPORT.RECEIVED,
+            evaluation: SPARE_XFER_EXPORT.REPLY_EVALUATION,
+            inventory: SPARE_XFER_EXPORT.INVENTORY,
+        };
+        return map[kind] || '';
+    }
+
     async function spareXferExportRequisitions() {
-        const { vesselId, isHq } = await vesselScope();
+        const { st, vesselId, isHq } = await vesselScope();
         const all = await TVC_Inventory.listRequisitions(vesselId);
         const exportable = all.filter(r => reqListCanMasterExport(r));
-        if (!exportable.length) return alert('No Confirmed requisitions ready to export.');
-        if (!window.confirm(`Export ${exportable.length} requisition(s) to Master PC?`)) return;
+        if (!exportable.length) await TVC_Dialog.alert('No Confirmed requisitions ready to export.');
+        if (typeof TVC_SpareSync === 'undefined') await TVC_Dialog.alert('SPARE ZIP export is not available.');
+        if (!await TVC_Dialog.confirm({ message: `Export ${exportable.length} requisition(s) to Master PC?` })) return;
         try {
-            let ok = 0;
+            const { filename } = await TVC_SpareSync.exportRequisitionsZip(st.user, exportable, {
+                category: SPARE_XFER_EXPORT.REQUISITION,
+                vendorOnly: !isHq,
+                isHq,
+            });
             for (const req of exportable) {
-                await TVC_Excel.exportRequisition(req, { vendorOnly: !isHq });
-                if (spareListStatus(req) !== SPARE_LIST_STATUS.DRAFT) {
-                    await TVC_Inventory.setStatus(req.id, TVC_Inventory.REQ_STATUS.SUBMITTED);
-                }
-                ok++;
+                await applyRequisitionExportStatus(req);
             }
             await logSpareDataXfer({
                 direction: 'EXPORT', category: SPARE_XFER_EXPORT.REQUISITION,
-                summary: `${ok} requisition(s) exported`, count: ok,
+                summary: `${exportable.length} requisition(s) → ${filename}`,
+                count: exportable.length,
+                file_name: filename,
             });
             closeSpareSyncMenu();
             await refreshReqListModalIfOpen();
             render();
-            alert(`Exported ${ok} requisition(s).`);
-        } catch (e) { alert(e.message || e.code); }
+            await TVC_Dialog.alert(`Exported ${exportable.length} requisition(s).\n${filename}`);
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function spareXferExportReceived() {
         const st = getState();
-        if (!canCreateDeliver(st)) return alert('No permission to export received data.');
+        if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
         const { vesselId, isHq } = await vesselScope();
         const reqs = (await TVC_Inventory.listRequisitions(vesselId))
             .filter(r => reqWorkflowPhase(r) === REQ_LIST_PHASE.RECEIVED || !!reqListReceivedDate(r));
-        if (!reqs.length) return alert('No received requisitions to export.');
-        if (!window.confirm(`Export ${reqs.length} received requisition(s) to Master PC?`)) return;
+        if (!reqs.length) await TVC_Dialog.alert('No received requisitions to export.');
+        if (typeof TVC_SpareSync === 'undefined') await TVC_Dialog.alert('SPARE ZIP export is not available.');
+        if (!await TVC_Dialog.confirm({ message: `Export ${reqs.length} received requisition(s) to Master PC?` })) return;
         try {
-            let ok = 0;
-            for (const req of reqs) {
-                await TVC_Excel.exportRequisition(req, { vendorOnly: !isHq });
-                ok++;
-            }
+            const { filename } = await TVC_SpareSync.exportRequisitionsZip(st.user, reqs, {
+                category: SPARE_XFER_EXPORT.RECEIVED,
+                vendorOnly: !isHq,
+                isHq,
+            });
             await logSpareDataXfer({
                 direction: 'EXPORT', category: SPARE_XFER_EXPORT.RECEIVED,
-                summary: `${ok} received requisition(s) exported`, count: ok,
+                summary: `${reqs.length} received requisition(s) → ${filename}`,
+                count: reqs.length,
+                file_name: filename,
             });
             closeSpareSyncMenu();
-            alert(`Exported ${ok} received requisition(s).`);
-        } catch (e) { alert(e.message || e.code); }
+            await TVC_Dialog.alert(`Exported ${reqs.length} received requisition(s).\n${filename}`);
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function spareXferExportInventory() {
+        if (typeof TVC_License !== 'undefined') {
+            await TVC_License.refresh();
+            const st = getState();
+            const vesselId = window.TVC_RBAC?.isHqAccount?.(st.user)
+                ? st.selectedVesselId
+                : (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID));
+            const lic = TVC_License.assertExportImport(
+                vesselId,
+                TVC_License.statusSync()?.companyId || TVC_License.COMPANY_ID
+            );
+            if (!lic.ok) await TVC_Dialog.alert(lic.error || 'License does not allow Inventory export.');
+        }
+        const { st, vesselId, isHq } = await vesselScope();
         const spares = (getState().spares || []).map(canon);
-        if (!spares.length) return alert('No parts to export.');
-        exportPartsList();
+        if (!spares.length) await TVC_Dialog.alert('No parts to export.');
+        if (typeof TVC_SpareSync === 'undefined') await TVC_Dialog.alert('SPARE ZIP export is not available.');
+        const { filename } = await TVC_SpareSync.exportInventoryZip(st.user, spares, {
+            vessel_id: vesselId,
+            department: st.department,
+            isHq,
+        });
         await logSpareDataXfer({
             direction: 'EXPORT', category: SPARE_XFER_EXPORT.INVENTORY,
-            summary: `${spares.length} part(s) exported (CSV)`, count: spares.length,
-            file_name: `spare-parts-list-${new Date().toISOString().slice(0, 10)}.csv`,
+            summary: `${spares.length} part(s) exported (ZIP)`, count: spares.length,
+            file_name: filename,
         });
         closeSpareSyncMenu();
     }
@@ -9118,7 +9293,47 @@ const TVC_SpareMenu = (function () {
             }
             syncReqWorkHqFlowBtns();
         }
-        alert(`Import applied to ${req.req_no}: ${res.updated}/${res.total} lines · DB ${dbRes.updated}/${dbRes.total}`);
+        await TVC_Dialog.alert(`Import applied to ${req.req_no}: ${res.updated}/${res.total} lines · DB ${dbRes.updated}/${dbRes.total}`);
+    }
+
+    async function spareXferImportZip(file, importKind) {
+        const { st, isHq } = await vesselScope();
+        if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP import is not available.');
+        let importMode = null;
+        if (_reqImportMode === 'vendor-quote' || importKind === 'quotation') importMode = 'vendor-quote';
+        else if (_reqImportMode === 'hq-adjustment') importMode = 'hq-adjustment';
+        const result = await TVC_SpareSync.importZip(st.user, file, {
+            expectedCategory: spareImportCategory(importKind) || undefined,
+            importMode,
+        });
+        const category = result.category || spareImportCategory(importKind) || 'SPARE';
+        const importedReqs = result.payload?.requisitions || [];
+        await logSpareDataXfer({
+            direction: 'IMPORT',
+            category,
+            file_name: file.name,
+            summary: `Imported ${result.updated} record(s) from ZIP`,
+            count: result.updated,
+        });
+        _reqImportMode = null;
+        _importReqId = null;
+        closeSpareSyncMenu();
+        await reloadSparesCache();
+        await refresh();
+        await refreshReqListModalIfOpen();
+        render();
+        const m = modState(getState());
+        if (importedReqs.length) {
+            const target = importedReqs.find(r => String(r.id) === String(_reqWorkDraft?.id)) || importedReqs[0];
+            if (target?.id && (isRequisitionListWindow(m) || m.reqListOpen)) {
+                if (isRequisitionListWindow(m)) {
+                    await loadRequisitionIntoListWindow(target.id, { preserveHistPopover: true });
+                } else if (m.reqListOpen) {
+                    applyReqListSelection(m, target.id);
+                }
+            }
+        }
+        await TVC_Dialog.alert(`Import complete: ${result.updated} record(s) from ${file.name}`);
     }
 
     async function onSpareXferImportFile(file) {
@@ -9126,9 +9341,14 @@ const TVC_SpareMenu = (function () {
         const name = (file.name || '').toLowerCase();
         const importKind = _spareXfer.importKind || 'general';
         try {
+            if (name.endsWith('.zip')) {
+                await spareXferImportZip(file, importKind);
+                return;
+            }
+
             if (importKind === 'evaluation') {
                 if (!isSpareEvaluationImportFile(file)) {
-                    alert('Evaluation 파일만 업로드할 수 있습니다.\n· *_EVAL_REPLY.xlsx / *EVAL*.xlsx\n· Assessment .json');
+                    await TVC_Dialog.alert('Only evaluation files can be uploaded.\n· *_EVAL_REPLY.xlsx / *EVAL*.xlsx\n· Assessment .json');
                     return;
                 }
                 if (name.endsWith('.json')) {
@@ -9155,9 +9375,12 @@ const TVC_SpareMenu = (function () {
 
             if (importKind === 'requisition') {
                 if (!name.endsWith('.xlsx')) {
-                    return alert('Requisition Import는 .xlsx 파일만 가능합니다.');
+                    await TVC_Dialog.alert('Requisition Import accepts .xlsx files only.');
+                    return;
                 }
-                _reqImportMode = 'hq-adjustment';
+                if (window.TVC_RBAC?.isHqAccount?.(getState().user)) {
+                    _reqImportMode = 'hq-adjustment';
+                }
                 await spareXferImportRequisitionExcel(file, {
                     category: SPARE_XFER_EXPORT.REQUISITION,
                     summary: 'Requisition imported',
@@ -9167,7 +9390,7 @@ const TVC_SpareMenu = (function () {
 
             if (importKind === 'quotation') {
                 if (!name.endsWith('.xlsx')) {
-                    return alert('Quotation Import는 .xlsx 파일만 가능합니다.');
+                    await TVC_Dialog.alert('Quotation Import accepts .xlsx files only.');
                 }
                 _reqImportMode = 'vendor-quote';
                 await spareXferImportRequisitionExcel(file, {
@@ -9179,7 +9402,7 @@ const TVC_SpareMenu = (function () {
 
             if (importKind === 'received') {
                 if (!name.endsWith('.xlsx')) {
-                    return alert('Received Import는 .xlsx 파일만 가능합니다.');
+                    await TVC_Dialog.alert('Received Import accepts .xlsx files only.');
                 }
                 await spareXferImportRequisitionExcel(file, {
                     category: SPARE_XFER_EXPORT.RECEIVED,
@@ -9190,7 +9413,7 @@ const TVC_SpareMenu = (function () {
 
             if (importKind === 'inventory') {
                 if (!(name.endsWith('.csv') || name.endsWith('.xls') || name.endsWith('.xlsx'))) {
-                    return alert('Inventory Import는 .xls / .xlsx / .csv 파일만 가능합니다.');
+                    await TVC_Dialog.alert('Inventory Import accepts .xls, .xlsx, or .csv files only.');
                 }
                 await onInventoryImportFile(file);
                 await logSpareDataXfer({
@@ -9238,9 +9461,9 @@ const TVC_SpareMenu = (function () {
                 }
                 return;
             }
-            alert('Unsupported file type. Use .xlsx (Requisition), .json (Assessment), or .xls/.csv (Inventory).');
+            await TVC_Dialog.alert('Unsupported file type. Use .xlsx (Requisition), .json (Assessment), or .xls/.csv (Inventory).');
         } catch (e) {
-            alert('Import failed: ' + (e.message || e.code));
+            await TVC_Dialog.alert('Import failed: ' + (e.message || e.code));
         } finally {
             _reqImportMode = null;
             _importReqId = null;
@@ -9280,24 +9503,27 @@ const TVC_SpareMenu = (function () {
     }
 
     async function hqRequestQuotation() {
-        const { vesselId } = await vesselScope();
+        const { st, vesselId } = await vesselScope();
         const all = await TVC_Inventory.listRequisitions(vesselId);
         const exportable = all.filter(r => reqListCanExport(r));
-        if (!exportable.length) return alert('No requisitions ready for quotation request.');
-        if (!window.confirm(`Export ${exportable.length} requisition(s) for vendor quotation?`)) return;
+        if (!exportable.length) await TVC_Dialog.alert('No requisitions ready for quotation request.');
+        if (typeof TVC_SpareSync === 'undefined') await TVC_Dialog.alert('SPARE ZIP export is not available.');
+        if (!await TVC_Dialog.confirm({ message: `Export ${exportable.length} requisition(s) for vendor quotation?` })) return;
         try {
-            for (const req of exportable) {
-                await TVC_Excel.exportRequisition(req, { vendorOnly: true });
-            }
-            alert(`Exported ${exportable.length} requisition(s) for vendor quotation.`);
-        } catch (e) { alert(e.message || e.code); }
+            const { filename } = await TVC_SpareSync.exportRequisitionsZip(st.user, exportable, {
+                category: SPARE_XFER_EXPORT.REQUISITION,
+                vendorOnly: true,
+                isHq: true,
+            });
+            await TVC_Dialog.alert(`Exported ${exportable.length} requisition(s) for vendor quotation.\n${filename}`);
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     async function hqRequisitionView() {
         const m = modState(getState());
         const { isHq } = await vesselScope();
         if (!isHq || !isRequisitionListWindow(m)) return;
-        if (!reqWorkHqRequestQuoteEnabled(m)) return alert('Select a requisition first.');
+        if (!reqWorkHqRequestQuoteEnabled(m)) await TVC_Dialog.alert('Select a requisition first.');
         const hadQuoteStage = m.reqWorkHqQuoteView || m.reqWorkHqEvalView;
         m.reqWorkHqQuoteView = false;
         m.reqWorkHqEvalView = false;
@@ -9317,7 +9543,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const { isHq } = await vesselScope();
         if (!isHq || !isRequisitionListWindow(m)) return hqRequestQuotation();
-        if (!reqWorkHqRequestQuoteEnabled(m)) return alert('Select a requisition first.');
+        if (!reqWorkHqRequestQuoteEnabled(m)) await TVC_Dialog.alert('Select a requisition first.');
         if (m.reqWorkHqQuoteView && !m.reqWorkHqEvalView) {
             syncReqWorkHqFlowBtns();
             return;
@@ -9368,16 +9594,16 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         const { isHq } = await vesselScope();
-        if (!isHq || !isRequisitionListWindow(m)) return alert('Open Requisition List and select a requisition first.');
-        if (!reqWorkListHasDisplayedReq(m)) return alert('Select a requisition first.');
-        if (!canCreateRequisition(st)) return alert('No permission to export quotations.');
+        if (!isHq || !isRequisitionListWindow(m)) await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
+        if (!reqWorkListHasDisplayedReq(m)) await TVC_Dialog.alert('Select a requisition first.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export quotations.');
         await openReqXferExportList('quotation', { returnTo: 'req-work', selectId: _reqWorkDraft?.id });
     }
 
-    function hqCheckQuotation() {
+    async function hqCheckQuotation() {
         const req = getReqWorkSession();
         if (!reqWorkHqQuoteSetupReady(req)) {
-            return alert('Complete Request Quote first: select vendor, currency, and check at least one item.');
+            await TVC_Dialog.alert('Complete Request Quote first: select vendor, currency, and check at least one item.');
         }
         _reqImportMode = 'vendor-quote';
         _importReqId = req?.id || null;
@@ -9388,7 +9614,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(getState());
         const req = getReqWorkSession();
         if (!reqWorkHqVendorQuoteImported(req)) {
-            return alert('Enter vendor price or import quote first (Import Quote).');
+            await TVC_Dialog.alert('Enter vendor price or import quote first (Import Quote).');
         }
         m.reqWorkHqEvalView = !m.reqWorkHqEvalView;
         const q = ensureReqWorkQuoteState(req);
@@ -9411,9 +9637,9 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         const { isHq } = await vesselScope();
-        if (!isHq || !isRequisitionListWindow(m)) return alert('Open Requisition List and select a requisition first.');
-        if (!reqWorkListHasDisplayedReq(m)) return alert('Select a requisition first.');
-        if (!canCreateRequisition(st)) return alert('No permission to export evaluation replies.');
+        if (!isHq || !isRequisitionListWindow(m)) await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
+        if (!reqWorkListHasDisplayedReq(m)) await TVC_Dialog.alert('Select a requisition first.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export evaluation replies.');
         await openReqXferExportList('reply-evaluation', { returnTo: 'req-work', selectId: _reqWorkDraft?.id });
     }
 
@@ -9421,9 +9647,9 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         const { isHq } = await vesselScope();
-        if (!isHq || !isRequisitionListWindow(m)) return alert('Open Requisition List and select a requisition first.');
-        if (!reqWorkListHasDisplayedReq(m)) return alert('Select a requisition first.');
-        if (!canCreateRequisition(st)) return alert('No permission to export purchase orders.');
+        if (!isHq || !isRequisitionListWindow(m)) await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
+        if (!reqWorkListHasDisplayedReq(m)) await TVC_Dialog.alert('Select a requisition first.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export purchase orders.');
         await openReqXferExportList('purchase-order', { returnTo: 'req-work', selectId: _reqWorkDraft?.id });
     }
 
@@ -9431,9 +9657,9 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         const { isHq } = await vesselScope();
-        if (!isHq || !isRequisitionListWindow(m)) return alert('Open Requisition List and select a requisition first.');
-        if (!reqWorkListHasDisplayedReq(m)) return alert('Select a requisition first.');
-        if (!canCreateDeliver(st)) return alert('No permission to export received data.');
+        if (!isHq || !isRequisitionListWindow(m)) await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
+        if (!reqWorkListHasDisplayedReq(m)) await TVC_Dialog.alert('Select a requisition first.');
+        if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
         await openReqXferExportList('received', { returnTo: 'req-work', selectId: _reqWorkDraft?.id });
     }
 
@@ -9842,12 +10068,12 @@ const TVC_SpareMenu = (function () {
         return reqWorkLinesMissingRequestQty(lines).length === 0;
     }
 
-    function reqWorkMissingRequestQtyAlert(lines) {
+    async function reqWorkMissingRequestQtyAlert(lines) {
         const missingQty = reqWorkLinesMissingRequestQty(lines);
         if (!missingQty.length) return false;
         const names = missingQty.slice(0, 5).map(l => l.part_no || l.name || '—').join(', ');
         const more = missingQty.length > 5 ? ` and ${missingQty.length - 5} more` : '';
-        alert(`Some selected parts have no Request quantity.\n\n${names}${more}\n\nEnter Request quantity for each selected part, then save.`);
+        await TVC_Dialog.alert(`Some selected parts have no Request quantity.\n\n${names}${more}\n\nEnter Request quantity for each selected part, then save.`);
         return true;
     }
 
@@ -10361,8 +10587,8 @@ const TVC_SpareMenu = (function () {
         } else {
             await TVC_Inventory.saveRequisition(record);
         }
-        if (after === SPARE_LIST_STATUS.CONFIRMED) alert('Confirmed.');
-        else if (after === SPARE_LIST_STATUS.APPROVED) alert('Approved by Company.');
+        if (after === SPARE_LIST_STATUS.CONFIRMED) await TVC_Dialog.alert('Confirmed.');
+        else if (after === SPARE_LIST_STATUS.APPROVED) await TVC_Dialog.alert('Approved by Company.');
         return true;
     }
 
@@ -10730,9 +10956,11 @@ const TVC_SpareMenu = (function () {
         updateReqWorkHeadCheckAll();
         const countEl = document.getElementById('reqWorkCount');
         if (countEl) {
-            countEl.textContent = m.reqWorkShowSelectedOnly
-                ? reqWorkSelectedCountLabel(st, _reqWorkCachedList.length)
-                : `${_reqWorkCachedList.length} / ${allCanon.length}`;
+            countEl.textContent = isRequisitionListWindow(m)
+                ? `${_reqWorkCachedList.length} item(s)`
+                : m.reqWorkShowSelectedOnly
+                    ? reqWorkSelectedCountLabel(st, _reqWorkCachedList.length)
+                    : `${_reqWorkCachedList.length} / ${allCanon.length}`;
         }
         updateReqWorkSelectedBtn();
         updateSpareModalTreeToggleUi('reqWork');
@@ -10906,7 +11134,7 @@ const TVC_SpareMenu = (function () {
     async function startReqWorkSession(createNew = true, opts = {}) {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('No permission to create requisitions.');
             return;
         }
         closeReqSheetModal();
@@ -10944,11 +11172,11 @@ const TVC_SpareMenu = (function () {
     async function startReqWorkEditSession(reqId) {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('No permission to create requisitions.');
             return;
         }
         const req = await TVC_Inventory.getRequisition(reqId);
-        if (!req) return alert('Requisition not found.');
+        if (!req) await TVC_Dialog.alert('Requisition not found.');
         closeReqSheetModal();
         _reqWorkDraft = {
             ...req,
@@ -10981,7 +11209,7 @@ const TVC_SpareMenu = (function () {
     async function startReqWorkPreviewSession(reqId) {
         const { st } = await vesselScope();
         const req = await TVC_Inventory.getRequisition(reqId);
-        if (!req) return alert('Requisition not found.');
+        if (!req) await TVC_Dialog.alert('Requisition not found.');
         closeReqSheetModal();
         _reqWorkDraft = {
             ...req,
@@ -11049,27 +11277,27 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (m.reqWorkCompleted) return;
         if (!canCompleteRequisition(st)) {
-            return alert('Complete is available to Chief Engineer only.');
+            await TVC_Dialog.alert('Complete is available to Chief Engineer only.');
         }
         finalizeReqWorkDraftForSave();
         const req = getReqWorkSession();
-        if (!req || !_reqWorkDraft) return alert('Requisition not found.');
-        if (!_reqWorkDraft.req_no?.trim()) return alert('Enter Requisition No.');
+        if (!req || !_reqWorkDraft) await TVC_Dialog.alert('Requisition not found.');
+        if (!_reqWorkDraft.req_no?.trim()) await TVC_Dialog.alert('Enter Requisition No.');
 
         _reqWorkDraft.lines = (_reqWorkDraft.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
         if (!_reqWorkDraft.lines.length) {
-            return alert('Select part(s).');
+            await TVC_Dialog.alert('Select part(s).');
         }
 
         const missingQty = reqWorkLinesMissingRequestQty(_reqWorkDraft.lines);
         if (missingQty.length) {
             const names = missingQty.slice(0, 5).map(l => l.part_no || l.name || '—').join(', ');
             const more = missingQty.length > 5 ? ` and ${missingQty.length - 5} more` : '';
-            return alert(`Some selected parts have no Request quantity.\n\n${names}${more}\n\nEnter Request quantity for each selected part, then save.`);
+            await TVC_Dialog.alert(`Some selected parts have no Request quantity.\n\n${names}${more}\n\nEnter Request quantity for each selected part, then save.`);
         }
 
         // 작성/수정 완료 확인 — 취소 시 현재 화면 유지
-        if (!window.confirm('Complete this requisition?')) return;
+        if (!await TVC_Dialog.confirm({ message: 'Complete this requisition?' })) return;
 
         // 확인 시 Made on = 오늘, by = 부서별 직책(Captain / Chief Engineer)
         applyReqWorkCompleteMeta(st, _reqWorkDraft);
@@ -11090,14 +11318,14 @@ const TVC_SpareMenu = (function () {
         await renderReqWorkModal();
         const doneMsg = m.reqWorkEditMode
             ? `청구서 ${savedNo} 수정 완료 (${lineCount} line(s)).`
-            : `청구서 ${savedNo} 완료 (${lineCount} line(s)) — Requisition List에 추가되었습니다.`;
-        alert(doneMsg);
+            : `Requisition ${savedNo} completed (${lineCount} line(s)) — Requisition List에 추가되었습니다.`;
+        await TVC_Dialog.alert(doneMsg);
     }
 
     async function reqWorkSwitchToNew() {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('No permission to create requisitions.');
             return;
         }
         const m = modState(st);
@@ -11110,11 +11338,11 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (!isRequisitionListWindow(m)) return;
         if (!canCreateRequisition(st)) {
-            alert('No permission to modify requisitions.');
+            await TVC_Dialog.alert('No permission to modify requisitions.');
             return;
         }
         if (!reqWorkListHasDisplayedReq(m)) {
-            return alert('Select a requisition from the list first.');
+            await TVC_Dialog.alert('Select a requisition from the list first.');
         }
         if (m.reqWorkListEditing) return;
         m.reqWorkListEditing = true;
@@ -11127,15 +11355,15 @@ const TVC_SpareMenu = (function () {
         if (m.reqWorkCompleted) return;
         if (isRequisitionListWindow(m) && !m.reqWorkListEditing) return;
         finalizeReqWorkDraftForSave();
-        if (!_reqWorkDraft) return alert('Requisition not found.');
-        if (!_reqWorkDraft.req_no?.trim()) return alert('Enter Requisition No.');
+        if (!_reqWorkDraft) { await TVC_Dialog.alert('Requisition not found.'); return; }
+        if (!_reqWorkDraft.req_no?.trim()) { await TVC_Dialog.alert('Enter Requisition No.'); return; }
 
         _reqWorkDraft.lines = (_reqWorkDraft.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
-        if (!_reqWorkDraft.lines.length) return alert('Select part(s).');
-        if (isNewRequisitionWindow(m) && reqWorkMissingRequestQtyAlert(_reqWorkDraft.lines)) return;
+        if (!_reqWorkDraft.lines.length) { await TVC_Dialog.alert('Select part(s).'); return; }
+        if (isNewRequisitionWindow(m) && await reqWorkMissingRequestQtyAlert(_reqWorkDraft.lines)) return;
 
         const isNewReqSave = m.reqWorkOpen && !m.reqWorkListMode && !m.reqWorkPreview && !m.reqWorkEditMode;
-        if (isNewReqSave && !window.confirm('저장하시겠습니까?')) return;
+        if (isNewReqSave && !await TVC_Dialog.confirm({ message: 'Save changes?' })) return;
 
         const dept = _reqWorkDraft.department || st.department;
         let pendingConfirm = false;
@@ -11169,8 +11397,8 @@ const TVC_SpareMenu = (function () {
             m.reqWorkListEditing = false;
             await refreshReqListUi();
             await renderReqWorkModal();
-            if (pendingConfirm && spareListStatus(_reqWorkDraft) === SPARE_LIST_STATUS.CONFIRMED) alert('Confirmed.');
-            else alert(`Requisition ${_reqWorkDraft.req_no} saved (${_reqWorkDraft.lines.length} line(s)).`);
+            if (pendingConfirm && spareListStatus(_reqWorkDraft) === SPARE_LIST_STATUS.CONFIRMED) await TVC_Dialog.alert('Confirmed.');
+            else await TVC_Dialog.alert(`Requisition ${_reqWorkDraft.req_no} saved (${_reqWorkDraft.lines.length} line(s)).`);
             return;
         }
     }
@@ -11192,10 +11420,10 @@ const TVC_SpareMenu = (function () {
         return { st, req, vesselName };
     }
 
-    function openReqWorkPreviewWindow(ctx, print = false) {
+    async function openReqWorkPreviewWindow(ctx, print = false) {
         const pages = buildReqPreviewPagesHtml(ctx.st, ctx.req, ctx.vesselName);
         const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { alert('Popup blocked. Please allow popups in your browser.'); return; }
+        if (!w) { await TVC_Dialog.alert('Popup blocked. Please allow popups in your browser.'); return; }
         w.document.write(`<!DOCTYPE html><html><head><title>Parts Requisition — ${esc(ctx.req.req_no || '')}</title>
             <style>${reqPreviewPrintStyles()}</style></head><body>${pages}</body></html>`);
         w.document.close();
@@ -11211,7 +11439,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (isRequisitionListWindow(m) && !reqWorkListHasDisplayedReq(m)) {
-            alert('Select a requisition from the list first.');
+            await TVC_Dialog.alert('Select a requisition from the list first.');
             return false;
         }
         captureReqWorkMeta();
@@ -11248,19 +11476,19 @@ const TVC_SpareMenu = (function () {
             return;
         }
         const ctx = await reqWorkPrintContext();
-        if (!ctx) return alert('Enter Requisition No. before preview.');
+        if (!ctx) await TVC_Dialog.alert('Enter Requisition No. before preview.');
         openReqWorkPreviewWindow(ctx, false);
     }
 
     async function reqWorkPrint() {
         const ctx = await reqWorkPrintContext();
-        if (!ctx) return alert('Enter Requisition No. before print.');
+        if (!ctx) await TVC_Dialog.alert('Enter Requisition No. before print.');
         openReqWorkPreviewWindow(ctx, true);
     }
 
     async function reqWorkExportExcel() {
         const ctx = await reqWorkPrintContext();
-        if (!ctx) return alert('Select a requisition from the list first.');
+        if (!ctx) await TVC_Dialog.alert('Select a requisition from the list first.');
         await exportReqPreviewExcel(ctx.st, ctx.req, ctx.vesselName);
     }
 
@@ -11269,9 +11497,9 @@ const TVC_SpareMenu = (function () {
         if (!ctx) {
             const { st, vesselId } = await vesselScope();
             const id = modState(st).reqWorkLastSavedId;
-            if (!id) return alert('Requisition not found.');
+            if (!id) await TVC_Dialog.alert('Requisition not found.');
             const req = await TVC_Inventory.getRequisition(id);
-            if (!req) return alert('Requisition not found.');
+            if (!req) await TVC_Dialog.alert('Requisition not found.');
             const vesselName = await vesselLabel(vesselId);
             openReqWorkPreviewWindow({ st, req, vesselName }, true);
             return;
@@ -11300,14 +11528,14 @@ const TVC_SpareMenu = (function () {
         if (searchEl) searchEl.value = '';
     }
 
-    function reqWorkToggleSelectedOnly() {
+    async function reqWorkToggleSelectedOnly() {
         const st = getState();
         const m = modState(st);
         if (isRequisitionListWindow(m)) return;
         if (m.reqWorkShowSelectedOnly) {
             m.reqWorkShowSelectedOnly = false;
         } else {
-            if (!reqWorkCheckedSpareCount(st)) return alert('No parts selected.');
+            if (!reqWorkCheckedSpareCount(st)) await TVC_Dialog.alert('No parts selected.');
             m.reqWorkShowSelectedOnly = true;
         }
         refreshReqWorkListUi();
@@ -11612,7 +11840,7 @@ const TVC_SpareMenu = (function () {
         if (!req) return false;
         const sid = reqWorkSpareIdKey(spareId);
         if ((req.lines || []).some(l => reqWorkSameSpareId(l.spare_part_id, sid))) {
-            if (!silent) alert('Part already added.');
+            if (!silent) await TVC_Dialog.alert('Part already added.');
             return false;
         }
         const spare = (getState().spares || []).find(s => reqWorkSameSpareId(s.id, sid));
@@ -11633,10 +11861,10 @@ const TVC_SpareMenu = (function () {
     async function addToRequisition() {
         const st = getState();
         if (!canCreateRequisition(st)) {
-            return alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('No permission to create requisitions.');
         }
         const ids = spareListSelectedIds(st);
-        if (!ids.length) return alert('Select parts using the checkbox.');
+        if (!ids.length) await TVC_Dialog.alert('Select parts using the checkbox.');
 
         const m = modState(st);
         const writableOpen = m.reqWorkOpen && !m.reqWorkEditMode && !m.reqWorkPreview && !m.reqWorkCompleted;
@@ -11653,8 +11881,8 @@ const TVC_SpareMenu = (function () {
         captureReqWorkMeta();
         refreshList();
         refreshReqWorkListUi();
-        if (added) alert(`${added} part(s) added to requisition.`);
-        else alert('Selected parts are already on the requisition or cannot be added.');
+        if (added) await TVC_Dialog.alert(`${added} part(s) added to requisition.`);
+        else await TVC_Dialog.alert('Selected parts are already on the requisition or cannot be added.');
     }
 
     async function reqWorkAddChecked() {
@@ -11721,20 +11949,20 @@ const TVC_SpareMenu = (function () {
 
     async function exportPartsListXlsx() {
         const ctx = spareListExportContext();
-        if (!ctx.rows.length) return alert('No parts to export.');
+        if (!ctx.rows.length) await TVC_Dialog.alert('No parts to export.');
         if (typeof TVC_Excel === 'undefined' || !TVC_Excel.exportSparePartsList) {
-            return alert('Excel export is not available.');
+            await TVC_Dialog.alert('Excel export is not available.');
         }
         try {
             await TVC_Excel.exportSparePartsList(ctx);
         } catch (e) {
-            alert(e.message || 'Export failed');
+            await TVC_Dialog.alert(e.message || 'Export failed');
         }
     }
 
-    function exportPartsList() {
+    async function exportPartsList() {
         const spares = (getState().spares || []).map(canon);
-        if (!spares.length) return alert('No parts to export.');
+        if (!spares.length) await TVC_Dialog.alert('No parts to export.');
         const headers = ['Code', 'Class', 'Dwg No.', 'Part No.', 'Items', 'Unit', SPARE_COL_WORK, SPARE_COL_STD, SPARE_COL_ROB, 'Group'];
         const rows = spares.map(s => [
             spareNumbering(s),
@@ -11752,11 +11980,7 @@ const TVC_SpareMenu = (function () {
             .map(r => r.map(c => `"${String(c ?? '').replace(/"/g, '""')}"`).join(','))
             .join('\r\n');
         const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `spare-parts-list-${new Date().toISOString().slice(0, 10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        await TVC_FileExport.save(blob, `spare-parts-list-${new Date().toISOString().slice(0, 10)}.csv`);
     }
 
     function showSpicsModal(id) { document.getElementById(id)?.classList.remove('hidden'); }
@@ -12368,7 +12592,7 @@ const TVC_SpareMenu = (function () {
     function buildPage2JobPickListInner() {
         const ctx = getPage2JobContext();
         if (!ctx?.groupKey) {
-            return '<div class="spare-consume-pick-empty muted">PMS Group No.를 먼저 선택하세요.</div>';
+            return '<div class="spare-consume-pick-empty muted">Select PMS Group No. first.</div>';
         }
         const q = (_page2JobPickSearch || '').toLowerCase().trim();
         const jobs = consumeJobsForGroup(getState(), ctx.groupKey).filter(j => {
@@ -12377,7 +12601,7 @@ const TVC_SpareMenu = (function () {
             return hay.includes(q);
         });
         if (!jobs.length) {
-            return '<div class="spare-consume-pick-empty muted">검색 결과 없음</div>';
+            return '<div class="spare-consume-pick-empty muted">No results</div>';
         }
         const activeRow = ctx.items?.[_page2ActiveJobRowIndex || 0];
         const selectedCode = activeRow?.job_code || '';
@@ -12654,10 +12878,10 @@ const TVC_SpareMenu = (function () {
         return !!target.closest?.('[id^="consumeJobPickTrigger-"]');
     }
 
-    function toggleConsumeJobPick(ev, rowIdx = 0) {
+    async function toggleConsumeJobPick(ev, rowIdx = 0) {
         ev?.stopPropagation();
         const draft = getConsumeSession();
-        if (!draft?.spare_group_key) return alert('Select PMS Group No. first.');
+        if (!draft?.spare_group_key) await TVC_Dialog.alert('Select PMS Group No. first.');
         const menu = document.getElementById('consumeJobPickMenu');
         if (!menu) return;
         const wasOpen = menu.style.display !== 'none' && menu.style.display !== '';
@@ -12994,13 +13218,13 @@ const TVC_SpareMenu = (function () {
         if (searchEl) searchEl.value = '';
     }
 
-    function consumeToggleSelectedOnly() {
+    async function consumeToggleSelectedOnly() {
         const st = getState();
         const m = modState(st);
         if (m.consumeShowSelectedOnly) {
             m.consumeShowSelectedOnly = false;
         } else {
-            if (!consumeCheckedSpareCount(st)) return alert('No parts selected.');
+            if (!consumeCheckedSpareCount(st)) await TVC_Dialog.alert('No parts selected.');
             m.consumeShowSelectedOnly = true;
         }
         refreshConsumeListUi();
@@ -13485,11 +13709,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             });
         const allSelected = !st.selectedGroupKey;
         let html = `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="TVC_SpareMenu.wrSpareSelectGroup(null)"><span>📋 All Groups</span></div>`;
-        if (matchCritical) {
-            const critSel = st.selectedGroupKey === CRITICAL_GROUP_KEY ? ' selected' : '';
-            html += `<div class="tree-node tree-node-critical${critSel}" onclick="TVC_SpareMenu.wrSpareSelectGroup('${CRITICAL_GROUP_KEY}')"><span>⚠ Critical Equipment</span></div>`;
-        }
-        if (!byDept.size && q && !matchCritical) {
+        if (!byDept.size && q) {
             html += `<div class="tree-empty muted">No groups match "${esc(q)}"</div>`;
         }
         DEPT_TREE_ORDER.filter(d => byDept.has(d)).forEach(dept => {
@@ -13967,7 +14187,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
         if (!user || !canCreateConsume(st)) {
-            return alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('No permission to enter consumption records.');
         }
         _consumeDraft = newConsumeDraft(st, user);
         syncConsumeLineMap();
@@ -13997,10 +14217,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function startConsumeEditSession(logId) {
         const { st } = await vesselScope();
         if (!canCreateConsume(st)) {
-            return alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('No permission to enter consumption records.');
         }
         const log = await TVC_Inventory.getConsumeLog(logId);
-        if (!log) return alert('Consumption log not found.');
+        if (!log) await TVC_Dialog.alert('Consumption log not found.');
         _consumeDraft = consumeDraftFromLog(log);
         syncConsumeLineMap();
         const m = modState(st);
@@ -14029,7 +14249,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function startConsumePreviewSession(logId) {
         const { st } = await vesselScope();
         const log = await TVC_Inventory.getConsumeLog(logId);
-        if (!log) return alert('Consumption log not found.');
+        if (!log) await TVC_Dialog.alert('Consumption log not found.');
         _consumeDraft = consumeDraftFromLog(log);
         if (!_consumeDraft.work_report_id) {
             _consumeDraft.work_report_id = resolveConsumeDraftWorkReportId(_consumeDraft, st);
@@ -14069,7 +14289,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const st = getState();
         const m = modState(st);
         if (!opts.skipConfirm && !m.consumePreview && !(isConsumedLogWindow(m) && !m.consumeLogListEditing)) {
-            if (!confirm('작성을 취소하시겠습니까?')) return;
+            if (!await TVC_Dialog.confirm({ message: 'Cancel editing?' })) return;
         }
         const draft = getConsumeSession();
         if (draft?.log_id) {
@@ -14218,7 +14438,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             await reloadSparesCache();
             return res.at;
         } catch (e) {
-            if (e.code === 'STOCK' && confirm(e.message + '\n\nProceed anyway?')) {
+            if (e.code === 'STOCK' && await TVC_Dialog.confirm({ message: e.message + '\n\nProceed anyway?' })) {
                 if (prevLog?.stock_applied_at) {
                     await applyDiff(true);
                     await reloadSparesCache();
@@ -14402,19 +14622,19 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     async function saveConsume() {
-        if (!confirm('저장하시겠습니까?')) return;
+        if (!await TVC_Dialog.confirm({ message: 'Save changes?' })) return;
         captureConsumeMeta();
         captureConsumeLineQtys();
         const { st, vesselId } = await vesselScope();
         const user = spareInventoryUser(st);
-        if (!user) return alert('Login required.');
+        if (!user) await TVC_Dialog.alert('Login required.');
         const draft = getConsumeSession();
         if (!draft) return;
         const m = modState(st);
         const lines = (draft.lines || [])
             .filter(l => consumeSpareIdKey(l.spare_part_id) && (Number(l.qty_consumed) || 0) > 0)
             .map(l => ({ spare_part_id: l.spare_part_id, qty: Number(l.qty_consumed), note: '' }));
-        if (!lines.length) return alert('Select parts and enter Consumed quantity.');
+        if (!lines.length) await TVC_Dialog.alert('Select parts and enter Consumed quantity.');
 
         const noteParts = [
             draft.consumed_date ? `Consumed: ${draft.consumed_date}` : '',
@@ -14459,7 +14679,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                         draft.stock_applied_at = res.at;
                     }
                 } catch (e) {
-                    if (e.code === 'STOCK' && confirm(e.message + '\n\nProceed anyway?')) {
+                    if (e.code === 'STOCK' && await TVC_Dialog.confirm({ message: e.message + '\n\nProceed anyway?' })) {
                         if (prev?.stock_applied_at) await applyDiff(true);
                         else {
                             const res = await TVC_InventoryService.recordConsumption(user, lines, {
@@ -14489,7 +14709,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             m.selectedConsumeLogId = saved.id;
             await reloadSparesCache();
             await refresh();
-            alert(`Consumption log updated — ${lines.length} line(s).`);
+            await TVC_Dialog.alert(`Consumption log updated — ${lines.length} line(s).`);
             if (isConsumedLogWindow(m)) {
                 m.consumeLogListEditing = false;
                 await renderConsumeModal();
@@ -14521,9 +14741,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             await reloadSparesCache();
             await refresh();
             await render();
-            alert(`CONSUMPTION recorded — ${res.count} item(s)`);
+            await TVC_Dialog.alert(`CONSUMPTION recorded — ${res.count} item(s)`);
         } catch (e) {
-            if (e.code === 'STOCK' && confirm(e.message + '\n\nProceed anyway?')) {
+            if (e.code === 'STOCK' && await TVC_Dialog.confirm({ message: e.message + '\n\nProceed anyway?' })) {
                 const res = await TVC_InventoryService.recordConsumption(user, lines, { ref, note, forceOk: true, source_type: 'consume_log' });
                 const saved = await persistConsumeLogFromDraft(draft, {
                     st, user, vesselId,
@@ -14541,8 +14761,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 await reloadSparesCache();
                 await refresh();
                 await render();
-                alert(`CONSUMPTION — ${res.count} item(s)`);
-            } else alert(e.message || e.code || 'Save failed');
+                await TVC_Dialog.alert(`CONSUMPTION — ${res.count} item(s)`);
+            } else await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
     }
 
@@ -14586,7 +14806,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     function validateReceiveSave(draft) {
-        if (!draft.requisition_id) return 'Requisition No.를 선택하세요.';
+        if (!draft.requisition_id) return 'Select Requisition No.';
         if (!String(draft.received_date || '').trim()) return 'Received Date를 입력하세요.';
         if (!String(draft.deliver_port || '').trim()) return 'Received Port를 입력하세요.';
         const lines = (draft.lines || [])
@@ -14610,10 +14830,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const allReqs = await TVC_Inventory.listRequisitions(vesselId);
         const target = resolveCloseOsTargetReq(allReqs, m, st);
         if (!target) {
-            return alert('Select a Received requisition with O/S > 0, or one with a pending O/S close awaiting your approval.');
+            await TVC_Dialog.alert('Select a Received requisition with O/S > 0, or one with a pending O/S close awaiting your approval.');
         }
         const req = await TVC_Inventory.getRequisition(target.id);
-        if (!req) return alert('Requisition not found.');
+        if (!req) await TVC_Dialog.alert('Requisition not found.');
         _closeOsReqId = req.id;
         renderCloseOsModal(req);
         document.getElementById('spareCloseOsModal')?.classList.remove('hidden');
@@ -14658,14 +14878,14 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function saveCloseOsWaive() {
         if (!_closeOsReqId) return;
         const req = await TVC_Inventory.getRequisition(_closeOsReqId);
-        if (!req) return alert('Requisition not found.');
+        if (!req) await TVC_Dialog.alert('Requisition not found.');
         const st = getState();
         const reason = String(document.getElementById('closeOsReason')?.value || '').trim();
         const initiated = reqOsWaiveInitiated(req);
-        if (!initiated && !reason) return alert('Reason is required.');
-        if (!initiated && !reqCanCloseOs(req)) return alert('This requisition cannot close O/S.');
+        if (!initiated && !reason) await TVC_Dialog.alert('Reason is required.');
+        if (!initiated && !reqCanCloseOs(req)) await TVC_Dialog.alert('This requisition cannot close O/S.');
         if (req.os_waived_confirmed_at && reason !== String(req.os_waive_reason || '').trim()) {
-            return alert('Reason cannot be changed after confirmation.');
+            await TVC_Dialog.alert('Reason cannot be changed after confirmation.');
         }
         let changed = false;
         const now = new Date().toISOString();
@@ -14682,7 +14902,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 req.os_waive_reason = reason;
                 req.os_closure = 'WAIVED';
             }
-            if (!String(req.os_waive_reason || '').trim()) return alert('Enter reason before confirming.');
+            if (!String(req.os_waive_reason || '').trim()) await TVC_Dialog.alert('Enter reason before confirming.');
             req.os_waived_confirmed_by = requisitionConfirmByLabel(st, req);
             req.os_waived_confirmed_at = now;
             changed = true;
@@ -14693,7 +14913,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             req.os_closure = 'WAIVED';
             changed = true;
         }
-        if (!changed) return alert('No changes to save.');
+        if (!changed) await TVC_Dialog.alert('No changes to save.');
         await TVC_Inventory.saveRequisition(req);
         const loadedId = _reqSheet.reqId || _reqWorkDraft?.id;
         const m = modState(st);
@@ -14704,12 +14924,12 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         await syncReportedWaitAndRefreshList();
         syncReqWorkListWindowHeadButtons();
         if (reqOsWaived(req)) {
-            alert('O/S closed — approved by Company.');
+            await TVC_Dialog.alert('O/S closed — approved by Company.');
             closeCloseOsModal();
             return;
         }
-        if (req.os_waived_confirmed_at) alert('O/S close request confirmed.');
-        else alert('O/S close request saved.');
+        if (req.os_waived_confirmed_at) await TVC_Dialog.alert('O/S close request confirmed.');
+        else await TVC_Dialog.alert('O/S close request saved.');
         renderCloseOsModal(req);
     }
 
@@ -14774,7 +14994,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             return;
         }
         const req = await TVC_Inventory.getRequisition(id);
-        if (!req) return alert('Requisition not found.');
+        if (!req) await TVC_Dialog.alert('Requisition not found.');
         draft.ref = draft.ref || req.req_no || '';
         if (!draft.deliver_port) draft.deliver_port = req.deliver_port || '';
         if (!draft.made_by) draft.made_by = req.made_by || '';
@@ -15019,7 +15239,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
         if (!user || !canCreateDeliver(st)) {
-            return alert('No permission to record received parts.');
+            await TVC_Dialog.alert('No permission to record received parts.');
         }
         _receiveDraft = newReceiveDraft(st, user);
         syncReceiveLineMap();
@@ -15054,12 +15274,12 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (st.currentTab === 'spare') render();
     }
 
-    function receiveToggleSelectedOnly() {
+    async function receiveToggleSelectedOnly() {
         const st = getState();
         const m = modState(st);
         if (m.receiveShowSelectedOnly) m.receiveShowSelectedOnly = false;
         else {
-            if (!receiveCheckedSpareCount(st)) return alert('No parts selected.');
+            if (!receiveCheckedSpareCount(st)) await TVC_Dialog.alert('No parts selected.');
             m.receiveShowSelectedOnly = true;
         }
         refreshReceiveListUi();
@@ -15269,7 +15489,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const draft = getReceiveSession();
         if (!draft) return;
         const err = validateReceiveSave(draft);
-        if (err) return alert(err);
+        if (err) await TVC_Dialog.alert(err);
         showReceiveSaveConfirm();
     }
 
@@ -15277,15 +15497,15 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         captureReceiveMeta();
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
-        if (!user) return alert('Login required.');
+        if (!user) await TVC_Dialog.alert('Login required.');
         const draft = getReceiveSession();
         if (!draft) return;
         const err = validateReceiveSave(draft);
-        if (err) return alert(err);
+        if (err) await TVC_Dialog.alert(err);
         const lines = (draft.lines || [])
             .filter(l => receiveSpareIdKey(l.spare_part_id) && (Number(l.qty_received) || 0) > 0)
             .map(l => ({ spare_part_id: l.spare_part_id, qty: Number(l.qty_received), note: draft.ships_comments || '' }));
-        if (!lines.length) return alert('Select parts and enter Received quantity.');
+        if (!lines.length) await TVC_Dialog.alert('Select parts and enter Received quantity.');
         const noteParts = [
             draft.received_date ? `Received: ${draft.received_date}` : '',
             draft.deliver_port ? `Port: ${draft.deliver_port}` : '',
@@ -15317,9 +15537,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             closeReceiveModal();
             await refresh();
             await render();
-            alert(`RECEIVED — ${res.count} item(s)`);
+            await TVC_Dialog.alert(`RECEIVED — ${res.count} item(s)`);
         } catch (e) {
-            alert(e.message || e.code || 'Save failed');
+            await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
     }
 
@@ -15430,9 +15650,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         captureTxDraftFromDom();
         const { st } = await vesselScope();
         const user = st.user;
-        if (!user) return alert('Login required.');
+        if (!user) await TVC_Dialog.alert('Login required.');
         const lines = _txDraft.lines.filter(l => l.qty > 0).map(l => ({ spare_part_id: l.spare_part_id, qty: l.qty, note: _txDraft.note }));
-        if (!lines.length) return alert('Enter quantity.');
+        if (!lines.length) await TVC_Dialog.alert('Enter quantity.');
         try {
             const res = _txDraft.type === TVC_INVENTORY_TX.CONSUMPTION
                 ? await TVC_InventoryService.recordConsumption(user, lines, { ref: _txDraft.ref, note: _txDraft.note })
@@ -15440,13 +15660,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             closeTxModal();
             await refresh();
             await render();
-            alert(`${res.tx_type} recorded — ${res.count} item(s)`);
+            await TVC_Dialog.alert(`${res.tx_type} recorded — ${res.count} item(s)`);
         } catch (e) {
-            if (e.code === 'STOCK' && _txDraft.type === TVC_INVENTORY_TX.CONSUMPTION && confirm(e.message + '\n\nProceed anyway?')) {
+            if (e.code === 'STOCK' && _txDraft.type === TVC_INVENTORY_TX.CONSUMPTION && await TVC_Dialog.confirm({ message: e.message + '\n\nProceed anyway?' })) {
                 const res = await TVC_InventoryService.recordConsumption(user, lines, { ref: _txDraft.ref, note: _txDraft.note, forceOk: true });
                 closeTxModal(); await refresh(); await render();
-                alert(`CONSUMPTION — ${res.count} item(s)`);
-            } else alert(e.message || e.code || 'Save failed');
+                await TVC_Dialog.alert(`CONSUMPTION — ${res.count} item(s)`);
+            } else await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
     }
 
@@ -15457,13 +15677,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         try {
             _hqAssessment = await TVC_InventoryService.diffHqImport(JSON.parse(await file.text()));
             openAssessmentModal();
-        } catch (e) { alert('HQ Import JSON failed: ' + (e.message || e)); }
+        } catch (e) { await TVC_Dialog.alert('HQ Import JSON failed: ' + (e.message || e)); }
         finally { const fi = document.getElementById('spareHqImportFile'); if (fi) fi.value = ''; }
     }
 
-    function openAssessmentModal() {
+    async function openAssessmentModal() {
         const body = document.getElementById('spareAssessmentBody');
-        if (!body || !_hqAssessment) return alert('Load JSON via Data Import first.');
+        if (!body || !_hqAssessment) await TVC_Dialog.alert('Load JSON via Data Import first.');
         const s = _hqAssessment.summary;
         const rows = (_hqAssessment.diff || []).slice(0, 200).map(d => `<tr>
             <td><span class="pill ${d.type === 'NEW' ? 'ok' : 'overdue'}">${esc(d.type)}</span></td>
@@ -15492,8 +15712,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         try {
             const res = await TVC_InventoryService.applyHqAssessment(st.user, _hqAssessment);
             await refresh(); await render(); closeAssessmentModal();
-            alert(`Assessment applied — ${res.updated} item(s)`);
-        } catch (e) { alert(e.message || e.code); }
+            await TVC_Dialog.alert(`Assessment applied — ${res.updated} item(s)`);
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     // ── Spare Item History (Consumed / Received / Requisition) ─────────
@@ -15514,9 +15734,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         });
     }
 
-    function openSpareItemHistoryForFocus() {
+    async function openSpareItemHistoryForFocus() {
         const id = getFocusedSpareId(getState());
-        if (!id) return alert('Select a spare part row first.');
+        if (!id) await TVC_Dialog.alert('Select a spare part row first.');
         openSpareItemHistory(id);
     }
 
@@ -15609,7 +15829,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function openSpareItemHistory(spareId, tab) {
         const st = getState();
         const spare = (st.spares || []).map(canon).find(s => String(s.id) === String(spareId));
-        if (!spare) return alert('Spare part not found.');
+        if (!spare) await TVC_Dialog.alert('Spare part not found.');
         setFocusedSpareId(st, spareId);
         syncSpareItemHistoryBtns();
         if (_shSpareId !== spareId) _shTab = 'consumed';
@@ -15784,12 +16004,17 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             const dt = spareHistEventDate(r);
             const isExport = spareHistIsExport(r);
             const peer = spareHistPeerLabel(r, user);
+            const fn = String(r.filename || r.file_name || '').trim();
+            const fileCell = fn
+                ? `<span class="menu-hist-file" title="${escAttr(fn)}">${esc(fn)}</span>`
+                : '<span class="muted">—</span>';
             return `<tr>
                 <td class="menu-hist-exp">${isExport ? esc(dt) : ''}</td>
                 <td class="menu-hist-imp">${isExport ? '' : esc(dt)}</td>
                 <td class="menu-hist-dir">${esc(peer)}</td>
+                <td class="menu-hist-file">${fileCell}</td>
             </tr>`;
-        }).join('') || `<tr><td colspan="3" class="muted" style="text-align:center">No ${esc(spareHistCategoryLabel(cat))} history yet.</td></tr>`;
+        }).join('') || `<tr><td colspan="4" class="muted" style="text-align:center">No ${esc(spareHistCategoryLabel(cat))} history yet.</td></tr>`;
 
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeHistoryModal()">×</button>
@@ -15802,6 +16027,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                         <th>Export</th>
                         <th>Import</th>
                         <th>Direction</th>
+                        <th class="menu-hist-file-h">File Name</th>
                     </tr></thead>
                     <tbody>${tbody}</tbody>
                 </table>
@@ -15872,7 +16098,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function openReqSheetModal() {
         const { st, vesselId } = await vesselScope();
         if (window.TVC_RBAC && !TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION)) {
-            alert('No permission to create requisitions.'); return;
+            await TVC_Dialog.alert('No permission to create requisitions.'); return;
         }
         try {
             const req = _reqSheet.reqId
@@ -15883,7 +16109,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             if (!_reqSheet.step) _reqSheet.step = 3;
             await renderReqSheetModal();
             showSpicsModal('spareReqSheetModal');
-        } catch (e) { alert(e.message || e.code || 'Cannot open requisition.'); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code || 'Cannot open requisition.'); }
     }
 
     function closeReqSheetModal() {
@@ -15930,7 +16156,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         });
         await TVC_Inventory.saveRequisition(req);
         await syncReportedWaitAndRefreshList();
-        alert('Requisition saved.');
+        await TVC_Dialog.alert('Requisition saved.');
         await renderReqSheetModal();
         render();
     }
@@ -16084,7 +16310,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         captureReqSheetForm();
         const req = await TVC_Inventory.getRequisition(_reqSheet.reqId);
         if (!req) return;
-        if ((req.lines || []).some(l => l.spare_part_id === spareId)) { alert('Part already added.'); return; }
+        if ((req.lines || []).some(l => l.spare_part_id === spareId)) { await TVC_Dialog.alert('Part already added.'); return; }
         const spare = (getState().spares || []).find(s => s.id === spareId);
         if (!spare) return;
         req.lines = req.lines || [];
@@ -16129,7 +16355,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         await saveReqSheetModal();
         try {
             await exportReq(_reqSheet.reqId);
-        } catch (e) { alert(e.message || e.code); }
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     function reqSheetPrint() {
@@ -16331,20 +16557,21 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
     async function exportDeliveryData() {
         const st = getState();
-        if (!canCreateDeliver(st)) return alert('No permission to export received data.');
+        if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
         const { vesselId, isHq } = await vesselScope();
         const reqs = (await TVC_Inventory.listRequisitions(vesselId))
             .filter(r => reqWorkflowPhase(r) === REQ_LIST_PHASE.RECEIVED || !!reqListReceivedDate(r));
-        if (!reqs.length) return alert('No received requisitions to export.');
-        if (!window.confirm(`Export ${reqs.length} received requisition(s) to Master?`)) return;
+        if (!reqs.length) await TVC_Dialog.alert('No received requisitions to export.');
+        if (typeof TVC_SpareSync === 'undefined') await TVC_Dialog.alert('SPARE ZIP export is not available.');
+        if (!await TVC_Dialog.confirm({ message: `Export ${reqs.length} received requisition(s) to Master?` })) return;
         try {
-            let ok = 0;
-            for (const req of reqs) {
-                await TVC_Excel.exportRequisition(req, { vendorOnly: !isHq });
-                ok++;
-            }
-            alert(`Exported ${ok} received requisition(s) to Master.`);
-        } catch (e) { alert(e.message || e.code); }
+            const { filename } = await TVC_SpareSync.exportRequisitionsZip(st.user, reqs, {
+                category: SPARE_XFER_EXPORT.RECEIVED,
+                vendorOnly: !isHq,
+                isHq,
+            });
+            await TVC_Dialog.alert(`Exported ${reqs.length} received requisition(s) to Master.\n${filename}`);
+        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
     return {
@@ -16377,7 +16604,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         refreshWrSpareJobContext,
         onTxSearchInput, addTxLine, removeTxLine,
         openHqImportModal, onHqImportFile, openAssessmentModal, closeAssessmentModal, applyHqAssessment,
-        openSpareSyncMenu, closeSpareSyncMenu, spareXferPickMode, spareXferBack, spareXferSelectVesselImportType, spareXferSelectHqImportType, spareXferTriggerImport,
+        openSpareSyncMenu, closeSpareSyncMenu, spareXferPickMode, spareXferBack, spareXferSelectVesselImportType, spareXferSelectMasterImportType, spareXferSelectHqImportType, spareXferTriggerImport,
         spareXferOpenReqExportList, spareXferOpenQuotationExportList, spareXferOpenReplyEvalExportList, spareXferOpenPurchaseOrderExportList,
         spareXferOpenReceivedExportList, spareXferExportRequisitions, spareXferExportReceived, spareXferExportInventory,
         reqListXferExportBack,

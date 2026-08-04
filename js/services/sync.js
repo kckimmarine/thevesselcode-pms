@@ -49,6 +49,21 @@ const TVC_Sync = (function () {
         return { ok: true };
     }
 
+    function licensedCompanyId() {
+        if (typeof TVC_License !== 'undefined') {
+            return TVC_License.statusSync()?.companyId || TVC_License.COMPANY_ID;
+        }
+        return 'DAEMYUNG';
+    }
+
+    /** Electron Pilot: company + vessel must match license */
+    function assertLicenseForPackage(vesselId, companyId) {
+        if (typeof TVC_License === 'undefined') return { ok: true };
+        const st = TVC_License.statusSync();
+        if (!st?.enforced) return { ok: true };
+        return TVC_License.assertExportImport(vesselId, companyId || licensedCompanyId());
+    }
+
     /** dept 지정 시 해당 부서 데이터만 델타에 포함 (영구 분리) */
     async function collectDelta(dept) {
         const [jobs, reports, spares, components, audits, requisitions, jobBom, catalog, groups, defects] = await Promise.all([
@@ -108,6 +123,9 @@ const TVC_Sync = (function () {
 
         const delta = await collectDelta(dept);
         const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user.vessel_id || 'UNKNOWN';
+        const companyId = licensedCompanyId();
+        const lic = assertLicenseForPackage(vesselId, companyId);
+        if (!lic.ok) throw new Error(lic.error || 'License does not allow this export.');
         const exportDate = now().slice(0, 10).replace(/-/g, '');
         const stationId = opts.station_id || (typeof TVC_Space !== 'undefined' ? TVC_Space.getStation(user) : null);
 
@@ -120,6 +138,7 @@ const TVC_Sync = (function () {
         const payload = {
             export_meta: {
                 vessel_id: vesselId,
+                company_id: companyId,
                 export_date: now().slice(0, 10),
                 direction,
                 department: dept,
@@ -142,7 +161,7 @@ const TVC_Sync = (function () {
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         const prefix = direction === 'STATION_TO_HUB' ? `${vesselId}_${stationId || dept}_STATION` : `${vesselId}_${dept}_PMS_EXPORT`;
         const filename = `${prefix}_${exportDate}.zip`;
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
 
         await markExported(delta);
         await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
@@ -254,6 +273,13 @@ const TVC_Sync = (function () {
         if (!vCheck.ok) {
             const err = new Error(vCheck.message);
             err.code = vCheck.code;
+            await failImport(err);
+        }
+        const importCompanyId = payload.export_meta?.company_id || licensedCompanyId();
+        const licCheck = assertLicenseForPackage(importVesselId, importCompanyId);
+        if (!licCheck.ok) {
+            const err = new Error(licCheck.error || 'License does not allow this import.');
+            err.code = 'LICENSE_MISMATCH';
             await failImport(err);
         }
         let status = 'SUCCESS';
@@ -395,13 +421,6 @@ const TVC_Sync = (function () {
         }
     }
 
-    function downloadBlob(blob, filename) {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
-    }
 
     async function exportCompanyZip(user) {
         if (typeof TVC_Space !== 'undefined') TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.COMPANY_EXPORT);
@@ -426,10 +445,14 @@ const TVC_Sync = (function () {
         }
 
         const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user.vessel_id || 'UNKNOWN';
+        const companyId = licensedCompanyId();
+        const lic = assertLicenseForPackage(vesselId, companyId);
+        if (!lic.ok) throw new Error(lic.error || 'License does not allow this export.');
         const exportDate = now().slice(0, 10).replace(/-/g, '');
         const payload = {
             export_meta: {
                 vessel_id: vesselId,
+                company_id: companyId,
                 export_date: now().slice(0, 10),
                 direction: 'SHIP_TO_HQ',
                 department: 'ALL',
@@ -452,7 +475,7 @@ const TVC_Sync = (function () {
 
         const filename = `${vesselId}_COMPANY_REPORT_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        downloadBlob(blob, filename);
+        await TVC_FileExport.save(blob, filename);
 
         await markExported(merged);
         await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
@@ -523,5 +546,9 @@ const TVC_Sync = (function () {
         return payload;
     }
 
-    return { exportZip, exportCompanyZip, importZip, importPayload, collectDelta, mergePayload, getHistory, recordSyncHistory, validateImportVesselId, resolveExpectedVesselId };
+    return {
+        exportZip, exportCompanyZip, importZip, importPayload, collectDelta, mergePayload,
+        getHistory, recordSyncHistory, validateImportVesselId, resolveExpectedVesselId,
+        assertLicenseForPackage, licensedCompanyId,
+    };
 })();

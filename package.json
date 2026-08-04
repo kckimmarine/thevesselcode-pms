@@ -2,15 +2,29 @@
   "name": "thevesselcode-offline-pms",
   "version": "2.0.0",
   "description": "THE VESSEL CODE — Unified PMS + SPICS (Offline-First)",
+  "main": "electron/main.js",
+  "author": "THE VESSEL CODE",
   "scripts": {
     "import-xlsx": "python scripts/import-pms-xlsx.py",
     "export-pms-master-sample": "node scripts/export-pms-master-sample.mjs",
     "serve": "npx --yes serve . -p 3000",
     "start": "npx --yes serve . -p 3000",
+    "electron": "node scripts/run-electron.mjs HQ_OFFICE",
+    "electron:dev": "node scripts/run-electron.mjs HQ_OFFICE",
+    "electron:master": "node scripts/run-electron.mjs VESSEL_MASTER",
+    "electron:engine": "node scripts/run-electron.mjs VESSEL_ENGINE",
+    "electron:deck": "node scripts/run-electron.mjs VESSEL_DECK",
+    "electron:hq": "node scripts/run-electron.mjs HQ_OFFICE",
+    "license:keys": "node scripts/generate-license-keys.mjs",
+    "license:issue": "node scripts/issue-license.mjs --all",
+    "icons:build": "node scripts/build-app-icon.mjs",
+    "dist": "node scripts/build-pilot-packages.mjs",
+    "dist:dir": "electron-builder --win dir",
     "vendor-sync": "node scripts/vendor-sync.mjs",
     "verify-rbac": "node scripts/verify-rbac.mjs",
     "verify-sync-vessel": "node scripts/verify-sync-vessel.mjs",
-    "verify-all": "node scripts/verify-rbac.mjs && node scripts/verify-sync-vessel.mjs"
+    "verify-license": "node scripts/verify-license.mjs",
+    "verify-all": "node scripts/verify-rbac.mjs && node scripts/verify-sync-vessel.mjs && node scripts/verify-license.mjs"
   },
   "license": "ISC",
   "dependencies": {
@@ -18,5 +32,49 @@
     "jszip": "^3.10.1",
     "uuid": "^14.0.0",
     "xlsx": "^0.18.5"
+  },
+  "devDependencies": {
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.3"
+  },
+  "build": {
+    "appId": "com.thevesselcode.tvc-pms",
+    "productName": "TVC-PMS",
+    "copyright": "Copyright © THE VESSEL CODE",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "index.html",
+      "css/**/*",
+      "js/**/*",
+      "vendor/**/*",
+      "icons/**/*",
+      "data/**/*",
+      "manifest.json",
+      "service-worker.js",
+      "electron/**/*",
+      "!electron/keys/private.pem",
+      "!**/*.map"
+    ],
+    "asar": true,
+    "icon": "build/icon.ico",
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "TVC-PMS"
+    }
   }
 }

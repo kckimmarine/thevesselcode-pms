@@ -146,13 +146,9 @@ const TVC_PmsMasterExcel = (function () {
         });
     }
 
-    function downloadBlob(buf, filename) {
+    async function downloadBlob(buf, filename) {
         const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = filename;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        await TVC_FileExport.save(blob, filename);
     }
 
     /** Renumber DECK job codes on export (26-001 → 01-001). ENGINE codes unchanged. */
@@ -351,7 +347,7 @@ const TVC_PmsMasterExcel = (function () {
         const vesselId = opts.vesselId || (await loadExportData()).vesselId;
         const stamp = new Date().toISOString().slice(0, 10);
         const buf = await wb.xlsx.writeBuffer();
-        downloadBlob(buf, `${vesselId}_PMS_MASTER_${stamp}.xlsx`);
+        await downloadBlob(buf, `${vesselId}_PMS_MASTER_${stamp}.xlsx`);
         return true;
     }
 

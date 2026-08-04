@@ -4,12 +4,12 @@ cd /d "%~dp0"
 title TVC-PMS — THE VESSEL CODE
 
 echo.
-echo  ⚓ THE VESSEL CODE — TVC-PMS
+echo  ⚓ THE VESSEL CODE — TVC-PMS (개발용 로컬 서버)
 echo  ─────────────────────────────
 echo  브라우저: http://localhost:3000
 echo.
+echo  ※ Pilot/현장 배포는 Electron 설치본(npm run dist)을 사용하세요.
 echo  ※ index.html 더블클릭(file://)과는 데이터가 다릅니다.
-echo     이 배치 파일로 실행해야 재고 Import가 정상 동작합니다.
 echo.
 echo  (이 창을 닫으면 서버가 종료됩니다)
 echo.
