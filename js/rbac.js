@@ -462,6 +462,49 @@ const TVC_RBAC = (function () {
         return '';
     }
 
+    /** 데모 user id → username (legacy confirmed_by/approved_by 저장값) */
+    const DEMO_USER_ID_TO_USERNAME = {
+        'user-chief': 'ce',
+        'user-co': 'co',
+        'user-captain': 'captain',
+        'user-engineer': 'engineer',
+        'user-officer': 'officer',
+        'user-hq': 'hq',
+    };
+
+    /** Confirm 시 DB 저장용 라벨 */
+    function getConfirmByStoredLabel(dept, user) {
+        return getDepartmentConfirmLabel(dept, user) || getReportedByLabel(user) || '';
+    }
+
+    /** Confirmed by 표시 — legacy user id·username·abbreviation → 직책 라벨 */
+    function resolveConfirmByLabel(stored, dept, user) {
+        const raw = String(stored ?? '').trim();
+        if (!raw) return '';
+
+        const mappedUname = DEMO_USER_ID_TO_USERNAME[raw];
+        if (mappedUname) {
+            const d = dept || (mappedUname === 'ce' ? 'ENGINE' : mappedUname === 'hq' ? '' : 'DECK');
+            return getDepartmentConfirmLabel(d, { username: mappedUname })
+                || getAccountTitle(mappedUname) || '';
+        }
+
+        const normalized = normalizeReportedByLabel(raw);
+        if (normalized !== raw) return normalized;
+
+        const lower = raw.toLowerCase();
+        if (DEMO_ROLE_BY_USERNAME[lower]) {
+            return getDepartmentConfirmLabel(dept, { username: lower })
+                || getAccountTitle(lower) || normalized;
+        }
+
+        if (/^user-/.test(raw)) {
+            return getDepartmentConfirmLabel(dept, user) || normalized;
+        }
+
+        return normalized;
+    }
+
     /**
      * 목록 Modify/Delete — Reported·Draft: 작성자(동 부서)
      * Confirmed: 확인자(동 부서) · Submitted: HQ only (선박 제출분) · Approved: 불가
@@ -487,7 +530,7 @@ const TVC_RBAC = (function () {
     return {
         AccountType, Role, Department, ReportStatus, Action,
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, normalizeReportedByLabel,
-        getDepartmentConfirmLabel, canModifyDeleteListReport,
+        getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
         isShipAccount, isHqAccount, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,

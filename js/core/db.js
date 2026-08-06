@@ -531,8 +531,14 @@ const TVC_DB = (function () {
 
         async function listAll() {
             const rows = await getAll(STORE);
-            return rows.map(TVC_SpareSchema.fromRow).sort((a, b) =>
-                (a.makerPartNo || '').localeCompare(b.makerPartNo || ''));
+            return rows.map(TVC_SpareSchema.fromRow).sort((a, b) => {
+                const ca = String(a.inventoryNumbering || a.makerPartNo || a.part_no || '').trim();
+                const cb = String(b.inventoryNumbering || b.makerPartNo || b.part_no || '').trim();
+                if (!ca && !cb) return 0;
+                if (!ca) return 1;
+                if (!cb) return -1;
+                return ca.localeCompare(cb, undefined, { numeric: true, sensitivity: 'base' });
+            });
         }
 
         async function getById(id) {

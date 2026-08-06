@@ -493,10 +493,12 @@ const TVC_Transaction = (function () {
 
             const forceOk = payloadForceOk(user);
             const confirmTasks = [];
+            let confirmDept = user.department || '';
 
             for (const item of reportedItems) {
                 const job = await api.get('maintenance_jobs', item.maintenance_job_id);
                 if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
+                if (!confirmDept) confirmDept = job.department || '';
                 if (user.department && user.department !== job.department) {
                     throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
                 }
@@ -521,7 +523,7 @@ const TVC_Transaction = (function () {
             }
 
             report.status = TVC_WorkReport.aggregateStatus(report.job_items);
-            report.confirmed_by = user.id;
+            report.confirmed_by = TVC_RBAC.getConfirmByStoredLabel(confirmDept, user);
             report.confirmed_at = now();
             if (report.job_items.length === 1) {
                 report.prev_job_state = report.job_items[0].prev_job_state;
@@ -597,7 +599,7 @@ const TVC_Transaction = (function () {
             }
 
             report.status = 'APPROVED';
-            report.approved_by = user.id;
+            report.approved_by = TVC_RBAC.getReportedByLabel(user) || user.display_name || '';
             report.approved_at = now();
             report.company_comment = companyComment || '';
             report.is_locked = true;

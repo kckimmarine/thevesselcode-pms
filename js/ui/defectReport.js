@@ -1726,8 +1726,7 @@ const TVC_DefectReport = (function () {
             canConfirmNow,
             canApproveNow,
             confirmedByVal: isConfirmed
-                ? (TVC_RBAC.normalizeReportedByLabel?.(row.confirmed_by)
-                    || TVC_RBAC.getDepartmentConfirmLabel(row.department, user) || row.confirmed_by || '')
+                ? (TVC_RBAC.resolveConfirmByLabel?.(row.confirmed_by, row.department, user) || '')
                 : '',
             approvedByVal: isApproved ? 'Company' : '',
         };

@@ -6714,8 +6714,7 @@ const TVC_App = (function () {
         const canApproveNow = !!rep && !isRepApproved && TVC_RBAC.canApproveHqReport(state.user)
             && (isRepConfirmed || hqDirectApprove);
         const confirmedByVal = isRepConfirmed
-            ? (TVC_RBAC.normalizeReportedByLabel?.(rep?.confirmed_by)
-                || TVC_RBAC.getDepartmentConfirmLabel(job.department, state.user) || rep?.confirmed_by || '')
+            ? (TVC_RBAC.resolveConfirmByLabel?.(rep?.confirmed_by, job.department, state.user) || '')
             : '';
         const approvedByVal = isRepApproved ? 'Company' : '';
         const title = state._wrTab === 'postpone' ? 'Postpone Report'
@@ -7828,8 +7827,7 @@ const TVC_App = (function () {
             && (isRepConfirmed || hqDirectApprove);
         const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getReportedByLabel(state.user);
         const confirmedByVal = isRepConfirmed
-            ? (TVC_RBAC.normalizeReportedByLabel?.(rep?.confirmed_by)
-                || TVC_RBAC.getDepartmentConfirmLabel(job.department, state.user) || rep?.confirmed_by || '')
+            ? (TVC_RBAC.resolveConfirmByLabel?.(rep?.confirmed_by, job.department, state.user) || '')
             : '';
         const approvedByVal = isRepApproved ? 'Company' : '';
         const canEditShipAttach = !ro && (!rep || TVC_RBAC.isReportedStatus(rep.status));

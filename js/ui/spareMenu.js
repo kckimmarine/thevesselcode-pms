@@ -1071,7 +1071,9 @@ const TVC_SpareMenu = (function () {
 
     function reqWorkUsesGroupedList(st) {
         const m = modState(st);
-        return isRequisitionListWindow(m) && reqWorkCheckedSpareCount(st) > 0;
+        if (!isRequisitionListWindow(m) || reqWorkCheckedSpareCount(st) <= 0) return false;
+        if (m.reqWorkListEditing && !m.reqWorkShowSelectedOnly) return false;
+        return true;
     }
 
     function reqWorkGroupedSections(st) {
@@ -1547,6 +1549,16 @@ const TVC_SpareMenu = (function () {
 
     function spareNumbering(s) {
         return s.inventoryNumbering || s.makerPartNo || s.part_no || '';
+    }
+
+    /** Code 컬럼(inventoryNumbering) 기준 — Show All·SPARE 목록 공통 정렬 */
+    function compareSpareByCode(a, b) {
+        const ca = String(spareNumbering(canon(a)) || '').trim();
+        const cb = String(spareNumbering(canon(b)) || '').trim();
+        if (!ca && !cb) return 0;
+        if (!ca) return 1;
+        if (!cb) return -1;
+        return ca.localeCompare(cb, undefined, { numeric: true, sensitivity: 'base' });
     }
 
     // 부품 코드(예: "01-001-01") 앞자리 → PMS Group 번호
@@ -3463,7 +3475,8 @@ const TVC_SpareMenu = (function () {
 
     function filteredSpares(st) {
         const f = modState(st);
-        return (st.spares || []).map(canon).filter(s => matchSpare(s, st, f));
+        return (st.spares || []).map(canon).filter(s => matchSpare(s, st, f))
+            .sort(compareSpareByCode);
     }
 
     /** 검색/재고 필터와 무관하게, 현재 선택된 그룹(병합/크리티컬 포함)에 속한 모든 부품 */
@@ -3493,6 +3506,9 @@ const TVC_SpareMenu = (function () {
     function filteredReqWorkSpares(st) {
         const m = modState(st);
         if (isRequisitionListWindow(m)) {
+            if (m.reqWorkListEditing && !m.reqWorkShowSelectedOnly) {
+                return filteredSpares(st);
+            }
             const req = getReqWorkSession();
             let lineSpares = reqWorkLineSpares(st, req);
             const q = spareListSearchQuery(st);
@@ -3500,7 +3516,7 @@ const TVC_SpareMenu = (function () {
                 const f = modState(st);
                 lineSpares = lineSpares.filter(s => matchSpare(s, st, f));
             }
-            return lineSpares;
+            return lineSpares.sort(compareSpareByCode);
         }
         const list = filteredSpares(st);
         if (!m.reqWorkShowSelectedOnly) return list;
@@ -7354,7 +7370,14 @@ const TVC_SpareMenu = (function () {
             if (na != null) return -1;
             if (nb != null) return 1;
             return String(a.key).localeCompare(String(b.key));
-        });
+        }).map(g => ({
+            ...g,
+            rows: [...g.rows].sort((a, b) => {
+                const sa = a.spare || { part_no: a.line?.part_no, inventoryNumbering: a.line?.universal_code };
+                const sb = b.spare || { part_no: b.line?.part_no, inventoryNumbering: b.line?.universal_code };
+                return compareSpareByCode(sa, sb);
+            }),
+        }));
     }
 
     function reqPreviewItemCells(spare, line) {
@@ -10458,8 +10481,8 @@ const TVC_SpareMenu = (function () {
             canConfirmNow,
             canApproveNow,
             confirmedByVal: isConfirmed
-                ? (TVC_RBAC.normalizeReportedByLabel?.(record?.confirmed_by)
-                    || record?.confirmed_by || requisitionConfirmByLabel(st, record))
+                ? (TVC_RBAC.resolveConfirmByLabel?.(record?.confirmed_by, record?.department || st?.department, user)
+                    || requisitionConfirmByLabel(st, record))
                 : '',
             approvedByVal: isApproved ? 'Company' : '',
         };
@@ -11133,7 +11156,9 @@ const TVC_SpareMenu = (function () {
         const countEl = document.getElementById('reqWorkCount');
         if (countEl) {
             countEl.textContent = isRequisitionListWindow(m)
-                ? `${_reqWorkCachedList.length} item(s)`
+                ? (m.reqWorkListEditing && !m.reqWorkShowSelectedOnly
+                    ? `${_reqWorkCachedList.length} / ${allCanon.length}`
+                    : `${_reqWorkCachedList.length} item(s)`)
                 : m.reqWorkShowSelectedOnly
                     ? reqWorkSelectedCountLabel(st, _reqWorkCachedList.length)
                     : `${_reqWorkCachedList.length} / ${allCanon.length}`;
@@ -11173,7 +11198,9 @@ const TVC_SpareMenu = (function () {
         const selBtn = reqWorkSelectedBtnMeta(st);
         const selectedBtnCls = selBtn.active ? ' plan-selected-filter-active' : '';
         const countLabel = isRequisitionListWindow(m)
-            ? `${_reqWorkCachedList.length} item(s)`
+            ? (m.reqWorkListEditing && !m.reqWorkShowSelectedOnly
+                ? `${_reqWorkCachedList.length} / ${allCanon.length}`
+                : `${_reqWorkCachedList.length} item(s)`)
             : m.reqWorkShowSelectedOnly
             ? reqWorkSelectedCountLabel(st, _reqWorkCachedList.length)
             : `${_reqWorkCachedList.length} / ${allCanon.length}`;
@@ -11714,6 +11741,8 @@ const TVC_SpareMenu = (function () {
             if (!reqWorkCheckedSpareCount(st)) await TVC_Dialog.alert('No parts selected.');
             m.reqWorkShowSelectedOnly = true;
         }
+        const scroll = document.getElementById('reqWorkListScroll');
+        if (scroll) scroll.scrollTop = 0;
         refreshReqWorkListUi();
     }
 
