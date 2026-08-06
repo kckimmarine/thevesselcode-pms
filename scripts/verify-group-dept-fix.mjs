@@ -48,7 +48,19 @@ function forceDeptForGroupLabel(label) {
     if (label && isLegacyDeckGroupLabel(label)) return 'DECK';
     return null;
 }
+function forceDeptForGroup26Job(job) {
+    const groupStr = String(job?.group || '').toUpperCase();
+    if (groupStr.includes('CARGO TANK') && groupStr.includes('F.O TANK')) return null;
+    const itemStr = String(job?.item_sort1 || '').toUpperCase();
+    const pathStr = `${groupStr}\0${itemStr}`;
+    if (pathStr.includes('F.O TANK')) return 'ENGINE';
+    if (pathStr.includes('CARGO TANK')) return 'DECK';
+    return null;
+}
 function forceDeptForJob(job) {
+    if (job?.master_import_at) return null;
+    const fromSplit26 = forceDeptForGroup26Job(job);
+    if (fromSplit26) return fromSplit26;
     const code = String(job?.job_code || '').trim().toUpperCase();
     if (JOB_DEPT_OVERRIDES[code]) return JOB_DEPT_OVERRIDES[code];
     return forceDeptForGroupLabel(job?.group);
@@ -87,6 +99,12 @@ assert('ENGINE + "28. LSA/FFE" forces DECK', forceDeptForJob(j2) === 'DECK');
 
 const j3 = { department: 'ENGINE', group: '24. MAIN ENGINE', job_code: '24-001' };
 assert('ENGINE group 24 stays ENGINE force', forceDeptForJob(j3) === 'ENGINE');
+
+const j4 = { department: 'ENGINE', group: '26. F.O TANK MONITORING SYSTEM', job_code: '26-001' };
+assert('split F.O TANK 26-001 → ENGINE', forceDeptForJob(j4) === 'ENGINE');
+
+const j5 = { department: 'ENGINE', group: '26. F.O TANK MONITORING SYSTEM', job_code: '26-001', master_import_at: '2026-08-05T00:00:00.000Z' };
+assert('master_import_at skips legacy override', forceDeptForJob(j5) === null);
 
 console.log('\n3. pruneEmptyGroupDefs');
 const jobs = [

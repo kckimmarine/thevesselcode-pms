@@ -414,6 +414,67 @@ const TVC_Transaction = (function () {
         return job;
     }
 
+    /** 선장/기관장: CONFIRMED → REPORTED (Modify 중 Confirm 해제) */
+    async function unconfirmReport(user, reportId) {
+        TVC_RBAC.assert(user, TVC_RBAC.Action.APPROVE_DAILY_REPORT);
+
+        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'spare_parts', 'inventory_history', 'consume_logs', 'audit_logs'], async (api) => {
+            const report = await api.get('daily_work_reports', reportId);
+            if (!report) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
+            TVC_WorkReport.fromLegacy(report);
+            if (report.is_locked) throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
+            if (TVC_RBAC.isApprovedStatus(report.status, report.is_locked)) {
+                throw Object.assign(new Error('ALREADY_APPROVED'), { code: 'INVALID' });
+            }
+            if (!TVC_RBAC.isConfirmedStatus(report.status, report.is_locked)
+                && !report.job_items.some(i => TVC_RBAC.isConfirmedStatus(i.status))) {
+                throw Object.assign(new Error('NOT_CONFIRMED'), { code: 'INVALID' });
+            }
+
+            const isPostpone = report.work_type === 'POSTPONE';
+            for (const item of report.job_items || []) {
+                if (!TVC_RBAC.isConfirmedStatus(item.status)) continue;
+                const job = await api.get('maintenance_jobs', item.maintenance_job_id);
+                if (!job) continue;
+                if (user.department && user.department !== job.department) {
+                    throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
+                }
+                if (!isPostpone) {
+                    await rollbackApprovedItem(api, item, user, report);
+                } else {
+                    await restoreJobScheduleFromSnapshot(api, item);
+                }
+                item.status = 'REPORTED';
+            }
+
+            report.status = TVC_WorkReport.aggregateStatus(report.job_items);
+            report.confirmed_by = '';
+            report.confirmed_at = '';
+            report.stock_applied_at = '';
+
+            if (report.consume_log_id) {
+                const log = await api.get('consume_logs', report.consume_log_id);
+                if (log) {
+                    log.list_status = 'Reported';
+                    log.stock_applied_at = '';
+                    log.confirmed_at = '';
+                    log.confirmed_by = '';
+                    await api.put('consume_logs', log);
+                }
+            }
+
+            markPending(report);
+            await api.put('daily_work_reports', report);
+            const codes = (report.job_items || []).map(i => i.job_code).filter(Boolean).join(', ');
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `↩ [UNCONFIRMED] ${codes || report.job_code || reportId} — ${user.display_name || user.username}`,
+                sync_status: 'LOCAL',
+            });
+            return report;
+        });
+    }
+
     /** 선장/기관장: REPORTED → CONFIRMED + SPICS 재고 자동 차감 (단일·Batch) */
     async function confirmReport(user, reportId) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.APPROVE_DAILY_REPORT);
@@ -704,7 +765,7 @@ const TVC_Transaction = (function () {
 
     return {
         submitReport, submitBatchReport, updateReport, deleteReport,
-        approveReport, executeMaintenance, confirmReport, calcNextDate, markPending,
+        approveReport, executeMaintenance, confirmReport, unconfirmReport, calcNextDate, markPending,
         applyDefectJobSchedule, shouldApplyDefectJobSchedule,
         jobRequiresCompanyPostponeApproval, reportRequiresCompanyPostponeApproval,
         purgeAllWorkReports,

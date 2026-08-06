@@ -51,7 +51,19 @@ function forceDeptForGroupLabel(label) {
     return null;
 }
 
+function forceDeptForGroup26Job(job) {
+    const groupStr = String(job?.group || '').toUpperCase();
+    if (groupStr.includes('CARGO TANK') && groupStr.includes('F.O TANK')) return null;
+    const itemStr = String(job?.item_sort1 || '').toUpperCase();
+    const pathStr = `${groupStr}\0${itemStr}`;
+    if (pathStr.includes('F.O TANK')) return 'ENGINE';
+    if (pathStr.includes('CARGO TANK')) return 'DECK';
+    return null;
+}
+
 function forceDeptForJob(job) {
+    const fromSplit26 = forceDeptForGroup26Job(job);
+    if (fromSplit26) return fromSplit26;
     const code = String(job?.job_code || '').trim().toUpperCase();
     if (JOB_DEPT_OVERRIDES[code]) return JOB_DEPT_OVERRIDES[code];
     return forceDeptForGroupLabel(job?.group);

@@ -111,6 +111,7 @@ const TVC_META_KEYS = {
     INVENTORY_XLS_LOADED: 'inventory_xls_loaded', // data/spare-inventory.xls 자동 적재
     ORIGINAL_PLAN_UPDATE: 'original_plan_update_last',
     ORIGINAL_PLAN_LOCK: 'original_plan_lock_v1',
+    PMS_MASTER_IMPORTED: 'pms_master_imported_at',
 };
 
 /** 번들 ENGINE CSV 경로 (우선순위 순) */

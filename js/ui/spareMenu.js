@@ -157,7 +157,7 @@ const TVC_SpareMenu = (function () {
             <input type="checkbox" id="${headChkId}" class="spare-head-chk spare-consume-log-head-chk" aria-label="Select all consumed logs"
                 onclick="event.stopPropagation()" onchange="TVC_SpareMenu.consumeLogToggleAll(this.checked)">
         </th>
-        <th class="spare-consume-log-th-type" title="C: Make Consumption Report · M: Maintenance Report · D: Defect Report">Type</th>
+        <th class="spare-consume-log-th-type" title="C: Make Consumption Report · M: Maintenance Report · P: Postponed Report · D: Defect Report">Type</th>
         <th class="spare-consume-log-th-file">File No</th>
         <th class="spare-consume-log-th-job">JOB CODE</th>
         <th class="cl-col-sort-h spare-consume-log-th-sort">SORT-1</th>
@@ -168,12 +168,25 @@ const TVC_SpareMenu = (function () {
     </tr></thead>`;
     }
 
+    function consumeLogLinkedReport(log, st) {
+        if (!log) return null;
+        const reports = st?.reports || [];
+        if (log.work_report_id) return reports.find(r => r.id === log.work_report_id) || null;
+        if (log.id) return reports.find(r => r.consume_log_id === log.id) || null;
+        return null;
+    }
+
     function consumeLogTypeMarker(log) {
+        const st = getState();
         const src = String(log?.source || '').toLowerCase();
         if (src === 'defect_report' || src === 'defect' || log?.defect_case_id) {
             return { letter: 'D', title: 'Defect Report', cls: 'hist-type-defect' };
         }
         if (src === 'work_report' || log?.work_report_id) {
+            const rep = consumeLogLinkedReport(log, st);
+            if (rep?.work_type === 'POSTPONE') {
+                return { letter: 'P', title: 'Postponed Report', cls: 'hist-type-postpone' };
+            }
             return { letter: 'M', title: 'Maintenance Report', cls: 'hist-type-maint' };
         }
         return { letter: 'C', title: 'Make Consumption Report', cls: 'hist-type-consume' };
@@ -695,36 +708,50 @@ const TVC_SpareMenu = (function () {
         return result;
     }
 
-    /** maintenance_groups에 저장된 그룹 헤더 메타(그룹 Modify로 영속 저장) 조회 */
-    function groupDefHeader(st, label) {
+    /** maintenance_groups에 저장된 그룹/장비 헤더 메타 조회 (그룹 Modify · 아이템 Modify · PMS Master) */
+    function groupDefHeader(st, label, itemSort1) {
         const lab = String(label || '').trim();
         if (!lab) return null;
         const inDept = (gr) => (!st.department || gr.department === st.department);
+        const itemKey = String(itemSort1 || '').trim();
+        const mapDef = (def) => {
+            if (!def) return null;
+            const has = def.machinery_name || def.model_type || def.maker || def.capacity || def.dwg_no || def.serial_no
+                || def.is_critical_equipment != null;
+            if (!def.header_edited && !has) return null;
+            return {
+                edited: !!def.header_edited,
+                machineryName: headerFieldText(def.machinery_name),
+                modelType: headerFieldText(def.model_type),
+                maker: headerFieldText(def.maker),
+                capacity: headerFieldText(def.capacity),
+                dwgNo: headerFieldText(def.dwg_no),
+                serialNo: headerFieldText(def.serial_no),
+                criticalEquipment: criticalEquipmentLabel(def.is_critical_equipment),
+            };
+        };
+        const matchLabel = (gr) => {
+            if (!inDept(gr)) return false;
+            if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(gr.label);
+            return normalizeGroupLabel(gr.label) === normalizeGroupLabel(lab);
+        };
+        if (itemKey) {
+            const itemDef = (st.groups || []).find(gr => matchLabel(gr)
+                && String(gr.item_sort1 || '').trim() === itemKey);
+            const mappedItem = mapDef(itemDef);
+            if (mappedItem) return mappedItem;
+        }
         // 병합 그룹(03~05)은 개별 gen-engine 라벨에 저장되므로, 병합 라벨 조회 시 그 중 하나를 사용
         let def;
         if (isGeneratorEngineGroupLabel(lab)) {
             def = (st.groups || []).find(gr => inDept(gr) && isGeneratorEngineGroupLabel(gr.label)
-                && (gr.machinery_name || gr.model_type || gr.maker || gr.capacity));
+                && !String(gr.item_sort1 || '').trim()
+                && (gr.machinery_name || gr.model_type || gr.maker || gr.capacity || gr.header_edited));
         }
         if (!def) {
-            const target = normalizeGroupLabel(lab);
-            def = (st.groups || []).find(gr => inDept(gr) && normalizeGroupLabel(gr.label) === target);
+            def = (st.groups || []).find(gr => matchLabel(gr) && !String(gr.item_sort1 || '').trim());
         }
-        if (!def) return null;
-        const has = def.machinery_name || def.model_type || def.maker || def.capacity || def.dwg_no || def.serial_no
-            || def.is_critical_equipment != null;
-        // header_edited가 없고 저장된 값도 없으면 무시(폴백 사용)
-        if (!def.header_edited && !has) return null;
-        return {
-            edited: !!def.header_edited,
-            machineryName: headerFieldText(def.machinery_name),
-            modelType: headerFieldText(def.model_type),
-            maker: headerFieldText(def.maker),
-            capacity: headerFieldText(def.capacity),
-            dwgNo: headerFieldText(def.dwg_no),
-            serialNo: headerFieldText(def.serial_no),
-            criticalEquipment: criticalEquipmentLabel(def.is_critical_equipment),
-        };
+        return mapDef(def);
     }
 
     function parseCriticalEquipmentValue(raw) {
@@ -1069,12 +1096,52 @@ const TVC_SpareMenu = (function () {
     }
 
     function renderPlanGroupHeaderHtml(st) {
+        if (window.TVC_App?.isOrigJobInlineEditing?.()) {
+            const draft = window.TVC_App.getOrigJobInlineEquipmentDraft?.();
+            if (draft) return renderPlanJobEquipmentHeaderEditHtml(st, draft);
+        }
         return renderSpareGroupHeaderHtml(withDerivedPlanGroupKey(st), {
             pmsLabel: 'PMS Group No.',
             idleHint: 'Click a job or select a group in the PMS GROUP Tree to display equipment information.',
             ariaLabel: 'PMS Group information',
             showCriticalEquipment: true,
         });
+    }
+
+    function renderPlanJobEquipmentHeaderEditHtml(st, draft) {
+        const sort1 = String(draft.itemSort1 || '').trim();
+        const hint = sort1
+            ? `Equipment header for SORT-1 “${sort1}” (PMS Master Equipment Headers)`
+            : 'Equipment header for this item (saved with job)';
+        return `<section class="spare-group-header is-editing is-job-equipment-editing" aria-label="Edit item equipment header">
+            <div class="spare-group-header-card">
+                <div class="spare-gh-row spare-gh-row-primary">
+                    <div class="spare-gh-field spare-gh-field-wide">
+                        <span class="spare-gh-label">PMS Group No.</span>
+                        <span class="spare-gh-value spare-gh-value-primary">${esc(String(draft.pmsGroupNo || '—'))}</span>
+                    </div>
+                </div>
+                <div class="spare-gh-row spare-gh-row-quad">
+                    <div class="spare-gh-field">
+                        <span class="spare-gh-label">Maker</span>
+                        ${ghInput('oie_maker', draft.maker)}
+                    </div>
+                    <div class="spare-gh-field">
+                        <span class="spare-gh-label">Model / Type</span>
+                        ${ghInput('oie_modelType', draft.modelType)}
+                    </div>
+                    <div class="spare-gh-field">
+                        <span class="spare-gh-label">Capacity</span>
+                        ${ghInput('oie_capacity', draft.capacity)}
+                    </div>
+                    <div class="spare-gh-field">
+                        <span class="spare-gh-label">Serial No.</span>
+                        ${ghInput('oie_serialNo', draft.serialNo)}
+                    </div>
+                </div>
+                <p class="spare-gh-edit-hint muted">${esc(hint)}</p>
+            </div>
+        </section>`;
     }
 
     function ghInput(id, value, extraClass = '') {
@@ -1806,7 +1873,7 @@ const TVC_SpareMenu = (function () {
     function reqWorkSelectedBtnMeta(st) {
         const m = modState(st);
         const n = reqWorkCheckedSpareCount(st);
-        if (isRequisitionListWindow(m)) {
+        if (isRequisitionListWindow(m) && !m.reqWorkListEditing) {
             return {
                 label: n >= 1 ? `Selected Items (${n})` : 'No requisition selected',
                 title: 'Requisition List shows parts from the selected requisition only',
@@ -1854,18 +1921,21 @@ const TVC_SpareMenu = (function () {
     function unlockReqWorkHistPanelControls() {
         const hist = document.getElementById('reqWorkHistPanel');
         if (!hist || hist.classList.contains('hidden')) return;
-        // Only filters / search / period / row checkboxes — never touch head toolbar
-        // (toggling Confirm/Approve/Print disabled causes flicker on every row select)
+        const m = modState(getState());
+        const listHeadLocked = isRequisitionListWindow(m) && !m.reqWorkListEditing;
         hist.querySelectorAll([
             '.spare-req-list-filters input',
             '.spare-req-list-filters button',
             '.spare-req-list-filters select',
             '.spare-req-list-body-table input[type="checkbox"]',
-            '.spare-req-list-head-chk',
             '.tvc-date-picker-btn',
         ].join(',')).forEach(el => {
             if (el.closest('tr.menu-xfer-defect-row-disabled')) return;
             if (el.disabled) el.removeAttribute('disabled');
+        });
+        hist.querySelectorAll('.spare-req-list-head-chk').forEach(el => {
+            if (listHeadLocked) el.setAttribute('disabled', 'disabled');
+            else el.removeAttribute('disabled');
         });
     }
 
@@ -3012,12 +3082,15 @@ const TVC_SpareMenu = (function () {
     function updateReqWorkHeadCheckAll() {
         const el = document.getElementById('reqWorkHeadChkAll');
         if (!el) return;
+        const locked = reqWorkFormLocked();
         const list = _reqWorkCachedList || [];
-        if (!list.length) {
+        if (!list.length || locked) {
             el.checked = false;
             el.indeterminate = false;
+            el.disabled = locked || !list.length;
             return;
         }
+        el.disabled = false;
         let n = 0;
         list.forEach(s => { if (reqWorkRowChecked(s)) n++; });
         el.checked = n === list.length;
@@ -4683,7 +4756,15 @@ const TVC_SpareMenu = (function () {
         const user = spareInventoryUser(st);
         const dept = req?.department || st?.department;
         if (window.TVC_RBAC?.isHqAccount?.(user)) return 'Superintendent';
-        return TVC_RBAC.getDepartmentConfirmLabel(dept) || TVC_RBAC.getRankLabel(user);
+        return TVC_RBAC.getDepartmentConfirmLabel(dept, user) || TVC_RBAC.getRankLabel(user);
+    }
+
+    function canUnconfirmRequisition(st, req) {
+        if (!req) return false;
+        if (spareListStatus(req) !== SPARE_LIST_STATUS.CONFIRMED) return false;
+        const user = spareInventoryUser(st);
+        const dept = req.department || st.department;
+        return TVC_RBAC.canConfirmDepartment(user, dept);
     }
 
     function reqListCanConfirm(st, req) {
@@ -5004,13 +5085,16 @@ const TVC_SpareMenu = (function () {
         const scopeReqs = _reqListXferExportKind
             ? (reqs || []).filter(r => reqListCanXferExport(r))
             : (reqs || []);
+        const m = modState(getState());
+        const headLocked = isRequisitionListWindow(m) && !m.reqWorkListEditing;
         document.querySelectorAll('.spare-req-list-head-chk').forEach(el => {
-            if (!scopeReqs.length) {
+            if (headLocked || !scopeReqs.length) {
                 el.checked = false;
                 el.indeterminate = false;
+                el.disabled = headLocked || !scopeReqs.length;
                 return;
             }
-            const m = modState(getState());
+            el.disabled = false;
             let n = 0;
             scopeReqs.forEach(r => { if (reqListIsRowChecked(m, r.id)) n++; });
             el.checked = n === scopeReqs.length;
@@ -6380,6 +6464,7 @@ const TVC_SpareMenu = (function () {
         else setConsumeLogHistOpen(false);
         await renderConsumeModal();
         showSpicsModal('spareConsumeModal');
+        syncConsumeListModalSizing();
     }
 
     async function consumeLogEnterListEdit() {
@@ -6916,10 +7001,9 @@ const TVC_SpareMenu = (function () {
 
     function renderConsumePreviewHtml(st, draft, vesselName) {
         if (!draft) return '';
-        const log = consumeLogPreviewSource(draft);
-        const pages = buildConsumeLogPreviewPagesHtml(st, log, vesselName);
+        const pages = buildConsumeLogWrPrintHtmlFromDraft(st, draft);
         return `
-        <div class="spare-req-work-wrap req-preview-wrap">
+        <div class="spare-req-work-wrap req-preview-wrap wr-consume-preview-wrap">
           <div class="spare-req-work-head">
             <h3 class="spare-req-work-title">Preview</h3>
             <span class="spare-req-work-head-spacer"></span>
@@ -6928,33 +7012,33 @@ const TVC_SpareMenu = (function () {
             <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeConsumeModal()">Close</button>
             <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeConsumeModal()" title="Close">×</button>
           </div>
-          <div class="spare-req-work-scroll req-preview-scroll">
-            <div class="req-preview-pages">${pages}</div>
+          <div class="spare-req-work-scroll req-preview-scroll wr-consume-preview-scroll">
+            <style>${wrReportPrintStyles()}</style>
+            <div class="wr-consume-preview-doc">${pages}</div>
           </div>
         </div>`;
     }
 
     async function buildConsumeLogPrintDocument(logId) {
-        const { st, vesselId } = await vesselScope();
+        const { st } = await vesselScope();
         const log = await TVC_Inventory.getConsumeLog(logId);
         if (!log) return null;
-        const vesselName = await vesselLabel(vesselId, log.department || st.user?.department);
-        return buildConsumeLogPreviewPagesHtml(st, log, vesselName);
+        return buildConsumeLogWrPrintHtml(st, log);
     }
 
     async function consumeLogPrintPreview() {
         const m = modState(getState());
         const id = _consumeDraft?.log_id || m.consumeLastSavedLogId || m.selectedConsumeLogId;
-        if (!id) await TVC_Dialog.alert('Consumption log not found.');
+        if (!id) {
+            await TVC_Dialog.alert('Consumption log not found.');
+            return;
+        }
         const html = await buildConsumeLogPrintDocument(id);
-        if (!html) await TVC_Dialog.alert('Consumption log not found.');
-        const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { await TVC_Dialog.alert('Popup blocked. Please allow popups in your browser.'); return; }
-        w.document.write(`<!DOCTYPE html><html><head><title>Consumed Spare Parts Log</title>
-            <style>${reqPreviewPrintStyles()}</style></head><body>${html}</body></html>`);
-        w.document.close();
-        w.focus();
-        w.print();
+        if (!html) {
+            await TVC_Dialog.alert('Consumption log not found.');
+            return;
+        }
+        openWrReportPrintWindow('Spare Parts Consumption', html, { print: false });
     }
 
     async function consumeLogWindowDocPreview() {
@@ -6962,15 +7046,14 @@ const TVC_SpareMenu = (function () {
         const id = _consumeDraft?.log_id || m.consumeLastSavedLogId || m.selectedConsumeLogId;
         if (!id || !consumeLogListHasDisplayedLog(m)) {
             await TVC_Dialog.alert('Select a consumption log from the list first.');
+            return;
         }
         const html = await buildConsumeLogPrintDocument(id);
-        if (!html) await TVC_Dialog.alert('Consumption log not found.');
-        const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { await TVC_Dialog.alert('Popup blocked. Please allow popups in your browser.'); return; }
-        w.document.write(`<!DOCTYPE html><html><head><title>Consumed Spare Parts Log</title>
-            <style>${reqPreviewPrintStyles()}</style></head><body>${html}</body></html>`);
-        w.document.close();
-        w.focus();
+        if (!html) {
+            await TVC_Dialog.alert('Consumption log not found.');
+            return;
+        }
+        openWrReportPrintWindow('Spare Parts Consumption', html, { print: false });
     }
 
     async function consumeLogOpenList() {
@@ -10133,7 +10216,7 @@ const TVC_SpareMenu = (function () {
         if (window.TVC_RBAC?.getReportedByLabel) return TVC_RBAC.getReportedByLabel(user);
         const role = user.role || TVC_RBAC?.resolveUserRole?.(user);
         if (role === 'SHIP_CAPTAIN') return 'Captain';
-        if (role === 'SHIP_CHIEF') return 'Chief Engineer';
+        if (role === 'SHIP_CHIEF') return 'Chief engineer';
         if (role === 'HQ_SUPERVISOR') return 'Superintendent';
         if (role === 'SHIP_OFFICER') {
             return String(user.department || '').toUpperCase() === 'ENGINE' ? 'Engineer' : 'Officer';
@@ -10364,8 +10447,9 @@ const TVC_SpareMenu = (function () {
         const isHq = isReqListHqUser(st);
         const canConfirmRequisitionNow = canConfirmRequisition(st, record);
         const canApproveRequisitionNow = canApproveRequisition(st, record);
-        const canConfirmNow = hasKey && canConfirmRequisitionNow
-            && (!listMode || listEditing || isHq);
+        const canUnconfirmRequisitionNow = listMode && listEditing
+            && canUnconfirmRequisition(st, record);
+        const canConfirmNow = hasKey && (canConfirmRequisitionNow || canUnconfirmRequisitionNow);
         const canApproveNow = hasKey && canApproveRequisitionNow
             && (!listMode || listEditing || isHq);
         return {
@@ -10374,7 +10458,8 @@ const TVC_SpareMenu = (function () {
             canConfirmNow,
             canApproveNow,
             confirmedByVal: isConfirmed
-                ? (record?.confirmed_by || requisitionConfirmByLabel(st, record))
+                ? (TVC_RBAC.normalizeReportedByLabel?.(record?.confirmed_by)
+                    || record?.confirmed_by || requisitionConfirmByLabel(st, record))
                 : '',
             approvedByVal: isApproved ? 'Company' : '',
         };
@@ -10390,9 +10475,12 @@ const TVC_SpareMenu = (function () {
             approvedByVal = '',
             confirmedByVal = '',
         } = opts;
+        const confirmToggle = prefix === 'reqWork'
+            ? 'TVC_SpareMenu.reqWorkConfirmByToggle()'
+            : `TVC_SpareMenu.spareConfirmedByToggle('${prefix}')`;
         return `<section class="wr-maint-card wr-maint-approval" aria-label="Approval">
             <div class="wr-maint-approval-item${canConfirmNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="${prefix}ConfirmedBy"${isRepConfirmed ? ' checked' : ''}${canConfirmNow ? '' : ' disabled'} onchange="TVC_SpareMenu.spareConfirmedByToggle('${prefix}')"> Confirmed by</label>
+                <label class="wr-maint-chk"><input type="checkbox" id="${prefix}ConfirmedBy"${isRepConfirmed ? ' checked' : ''}${canConfirmNow ? '' : ' disabled'} onchange="${confirmToggle}"> Confirmed by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
             </div>
             <div class="wr-maint-approval-item${canApproveNow ? ' is-active' : ''}">
@@ -10520,6 +10608,70 @@ const TVC_SpareMenu = (function () {
             confirmedByVal: approval.confirmedByVal,
             approvedByVal: approval.approvedByVal,
         })}</div>`;
+    }
+
+    async function reqWorkConfirmByToggle() {
+        const cfCb = document.getElementById('reqWorkConfirmedBy');
+        if (!cfCb || cfCb.disabled) return;
+        const st = getState();
+        const m = modState(st);
+        const req = getReqWorkSession();
+        if (!req?.id) return;
+        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+
+        if (!cfCb.checked) {
+            if (input && !req.confirmed_by && !req.confirmed_at) {
+                input.value = '';
+                return;
+            }
+            if (!canUnconfirmRequisition(st, req)
+                || !(isRequisitionListWindow(m) && m.reqWorkListEditing)) {
+                cfCb.checked = true;
+                return;
+            }
+            try {
+                req.confirmed_by = '';
+                req.confirmed_at = '';
+                req.list_status = SPARE_LIST_STATUS.REPORTED;
+                await TVC_Inventory.saveRequisition(req);
+                _reqWorkDraft = req;
+                if (input) input.value = '';
+                await refreshReqListUi();
+                await renderReqWorkModal();
+                await syncReportedWaitAndRefreshList();
+                await TVC_Dialog.alert('Confirm removed. Requisition returned to Reported.');
+            } catch (e) {
+                cfCb.checked = true;
+                await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
+            }
+            return;
+        }
+
+        const label = requisitionConfirmByLabel(st, req);
+        if (input) input.value = label;
+        if (!canConfirmRequisition(st, req)) {
+            cfCb.checked = false;
+            if (input) input.value = '';
+            await TVC_Dialog.alert('Cannot confirm this requisition. Only Reported requisitions can be confirmed with Chief Engineer / Captain permission.');
+            return;
+        }
+        if (spareListStatus(req) === SPARE_LIST_STATUS.CONFIRMED
+            || spareListStatus(req) === SPARE_LIST_STATUS.APPROVED) return;
+        try {
+            req.confirmed_by = label;
+            req.confirmed_at = new Date().toISOString();
+            req.list_status = SPARE_LIST_STATUS.CONFIRMED;
+            await TVC_Inventory.saveRequisition(req);
+            _reqWorkDraft = req;
+            await refreshReqListUi();
+            await renderReqWorkModal();
+            await syncReportedWaitAndRefreshList();
+            await TVC_Dialog.alert('Confirmed.');
+        } catch (e) {
+            cfCb.checked = false;
+            if (input) input.value = '';
+            await TVC_Dialog.alert(e.message || e.code || 'Confirm failed');
+        }
     }
 
     function spareConfirmedByToggle(prefix) {
@@ -10651,6 +10803,7 @@ const TVC_SpareMenu = (function () {
         const commentsEditable = !preview && !docPreview && (!listMode || listEditing);
         const commentsRo = commentsEditable ? '' : ' disabled readonly tabindex="-1"';
         const commentsOnInput = commentsEditable ? ' oninput="TVC_SpareMenu.captureReqWorkMeta()"' : '';
+        const vendorCommentsRo = ' disabled readonly tabindex="-1"';
         const reportedByVal = resolveSpareReportedBy(req, spareInventoryUser(st));
         const today = new Date().toISOString().slice(0, 10);
         const reqType = reqListTypeKind(req);
@@ -10736,7 +10889,7 @@ const TVC_SpareMenu = (function () {
                     <div class="spare-consume-meta-comments">
                         <label class="spare-consume-meta-col-head" for="reqWorkVendorComments">Vendor's Comments</label>
                         <textarea id="reqWorkVendorComments" class="spare-req-meta-input spare-consume-meta-textarea spare-req-meta-comments-textarea" rows="4"
-                            placeholder="Enter vendor remarks for this requisition…"${commentsRo}${commentsOnInput}>${esc(req.vendor_comments || '')}</textarea>
+                            placeholder="Enter vendor remarks for this requisition…"${vendorCommentsRo}>${esc(req.vendor_comments || '')}</textarea>
                     </div>
                 </div>
             </div>
@@ -11554,7 +11707,7 @@ const TVC_SpareMenu = (function () {
     async function reqWorkToggleSelectedOnly() {
         const st = getState();
         const m = modState(st);
-        if (isRequisitionListWindow(m)) return;
+        if (isRequisitionListWindow(m) && !m.reqWorkListEditing) return;
         if (m.reqWorkShowSelectedOnly) {
             m.reqWorkShowSelectedOnly = false;
         } else {
@@ -14076,6 +14229,293 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         teardownPage2JobContext();
     }
 
+    /** Page 2 → Page 1 전환·저장 전 spare 선택/수량을 state에 반영 */
+    function persistWrSpareUsedParts() {
+        const st = getState();
+        syncWrLineMap();
+        const scroll = document.getElementById('wrSpareListScroll');
+        st._wrUsedParts = st._wrUsedParts || [];
+        if (scroll) {
+            scroll.querySelectorAll('[data-spare-id]').forEach(el => {
+                const sid = wrSpareIdKey(el.dataset.spareId);
+                if (!sid) return;
+                const cb = el.querySelector('input[type=checkbox]');
+                const qtyInp = el.querySelector('.spare-wr-qty-input:not([disabled])');
+                if (cb && !cb.checked) {
+                    st._wrUsedParts = st._wrUsedParts.filter(l => !wrSameSpareId(l.spare_part_id, sid));
+                    return;
+                }
+                if (!cb?.checked && !qtyInp) return;
+                const spare = (st.spares || []).find(s => wrSameSpareId(s.id, sid));
+                let line = st._wrUsedParts.find(l => wrSameSpareId(l.spare_part_id, sid));
+                const qty = qtyInp
+                    ? Math.max(0, Math.floor(Number(qtyInp.value) || 0))
+                    : (Number(line?.qty_used) || 1);
+                if (!line && spare && (cb?.checked || qty > 0)) {
+                    st._wrUsedParts.push(buildWrLine(spare, qty || 1));
+                } else if (line) {
+                    line.qty_used = qty || line.qty_used || 1;
+                }
+            });
+        } else if (_wrSpareLineBySpareId?.size) {
+            st._wrUsedParts = Array.from(_wrSpareLineBySpareId.values()).map(l => ({ ...l }));
+        }
+        syncWrLineMap();
+        return st._wrUsedParts;
+    }
+
+    function wrReportPrintStyles() {
+        return `
+            @page { size: A4 portrait; margin: 12mm; }
+            * { box-sizing: border-box; }
+            body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 11px; color: #1a202c; margin: 0; padding: 16px; background: #fff; }
+            .wr-print-toolbar { display: flex; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #cbd5e0; }
+            .wr-print-toolbar button { font: inherit; padding: 6px 14px; border: 1px solid #cbd5e0; border-radius: 6px; background: #edf2f7; cursor: pointer; }
+            .wr-print-toolbar .btn-green { background: #38a169; color: #fff; border-color: #2f855a; }
+            .wr-print-title { font-size: 16px; font-weight: 700; color: #1a365d; margin: 0 0 4px; }
+            .wr-print-page { page-break-after: always; margin-bottom: 16px; }
+            .wr-print-page:last-child { page-break-after: auto; }
+            .wr-print-page-title { font-size: 13px; font-weight: 700; color: #2d3748; margin: 0 0 10px; padding-bottom: 4px; border-bottom: 2px solid #cbd5e0; }
+            .wr-print-doc { background: #eef1f5; padding: 12px 14px; border-radius: 8px; }
+            .wr-maint-form { display: flex; flex-direction: column; gap: 10px; }
+            .wr-maint-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
+            .wr-maint-approval { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 4px; }
+            .wr-maint-approval-item { display: flex; align-items: center; gap: 8px; }
+            .wr-maint-chk { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; white-space: nowrap; }
+            .wr-maint-grid { display: grid; gap: 8px 12px; }
+            .wr-maint-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+            .wr-maint-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .wr-maint-span-all { grid-column: 1 / -1; }
+            .wr-maint-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+            .wr-maint-field > label { font-size: 10px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: 0.02em; }
+            .wr-print-val, .wr-maint-field input, .wr-maint-field textarea {
+                border: 1px solid #cbd5e0; border-radius: 4px; padding: 4px 6px; background: #fff; min-height: 24px; font: inherit;
+            }
+            .wr-maint-textarea { min-height: 56px; white-space: pre-wrap; }
+            .wr-maint-grid-gap { margin-top: 10px; }
+            .wr-print-spare-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }
+            .wr-print-spare-table th, .wr-print-spare-table td { border: 1px solid #666; padding: 3px 5px; vertical-align: middle; }
+            .wr-print-spare-table th { background: #dde5ef; text-align: center; font-weight: 700; }
+            .wr-print-spare-table td.num { text-align: center; }
+            .wr-page2-job-rows { display: flex; flex-direction: column; gap: 0; }
+            .wr-page2-job-row { margin-top: 0; }
+            .spare-group-header { margin: 10px 0 6px; }
+            .spare-group-header-card {
+                background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+                padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 10px;
+            }
+            .spare-gh-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; align-items: start; }
+            .spare-gh-row-primary { grid-template-columns: 1fr; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
+            .spare-gh-row-quad { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+            .spare-gh-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+            .spare-gh-label { font-size: 10px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: 0.02em; }
+            .spare-gh-value {
+                border: 1px solid #cbd5e0; border-radius: 4px; padding: 4px 6px; background: #fff;
+                min-height: 24px; font: inherit; color: #2d3748;
+            }
+            .spare-gh-value-primary { font-weight: 600; }
+            .spare-gh-value.empty { color: #a0aec0; }
+            .df-workflow-phases { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+            .df-post-block { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; }
+            .df-post-title { margin: 0 0 8px; font-size: 12px; color: #1a365d; }
+            .wr-print-hint { margin: 0 0 10px; color: #718096; font-size: 11px; line-height: 1.4; }
+            @media print {
+                .no-print { display: none !important; }
+                body { padding: 0; }
+                .wr-print-doc { background: #fff; padding: 0; }
+            }`;
+    }
+
+    function buildWrSpareMetaPrintHtml(meta = {}) {
+        const pmsLabel = meta.pmsGroupNo ? safeTreeLabel(meta.pmsGroupNo) : '—';
+        const roInp = (type, val) => type === 'date'
+            ? `<input type="text" class="wr-ro tvc-date-input" value="${esc(fmtSpareDate(val))}" readonly disabled>`
+            : `<input type="${type}" class="wr-ro" value="${esc(val)}" readonly disabled>`;
+        const fld = (label, inner, extraCls = '') =>
+            `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}"><label>${label}</label>${inner}</div>`;
+        const jobItems = (meta.jobItems && meta.jobItems.length)
+            ? meta.jobItems
+            : [{
+                job_code: meta.jobCode || '',
+                sort1: meta.sort1 || '',
+                sort2: meta.sort2 || '',
+                job_detail: meta.jobDetail || '',
+            }];
+        const jobRows = jobItems.map((row, idx) => renderPage2MaintJobRowHtml(row, idx, {
+            readonly: true,
+            groupKey: meta.groupKey || '',
+        })).join('');
+        const spareComments = meta.spareShipComments ?? meta.shipComments ?? '';
+        return `<section class="wr-maint-card wr-maint-body wr-spare-meta-form" aria-label="Work report job context">
+            <div class="wr-maint-grid wr-maint-grid-3">
+                ${fld('Work Date', roInp('date', meta.workDate || ''))}
+                ${fld('Reported Date', roInp('date', meta.reportDate || ''))}
+                ${fld('Reported by', roInp('text', meta.reportedBy || ''))}
+                ${fld('PMS Group No.', roInp('text', pmsLabel), 'wr-maint-span-all')}
+            </div>
+            <div class="wr-page2-job-rows">${jobRows}</div>
+            ${fld("SHIP'S COMMENTS (IF ANY)", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly disabled>${esc(spareComments)}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+        </section>`;
+    }
+
+    function buildWrSpareGroupHeaderPrintHtml(st, meta = {}) {
+        const sort1 = meta.sort1 || meta.jobItems?.[0]?.sort1 || '';
+        const gh = resolveGroupHeaderByKey(
+            st,
+            meta.groupKey || '',
+            meta.pmsGroupNo || '',
+            st.selectedGroupKey,
+            sort1,
+        );
+        return renderSpareGroupHeaderFromResolved(gh, { pmsLabel: 'SPARE Group No.' });
+    }
+
+    function buildWrSpareTablePrintHtml(st, usedParts) {
+        const lines = (usedParts || []).filter(p => Number(p.qty_used) > 0);
+        const spareHead = `<thead><tr>
+            ${SPARE_IDENTITY_HEAD.trim()}
+            <th class="c-unit">Unit</th>
+            <th class="c-work" title="${SPARE_COL_WORK_TITLE}">${SPARE_COL_WORK}</th>
+            <th class="c-std" title="${SPARE_COL_STD_TITLE}">${SPARE_COL_STD}</th>
+            <th class="c-stk" title="${SPARE_COL_ROB_TITLE}">${SPARE_COL_ROB}</th>
+            <th class="c-cons" title="${SPARE_COL_COS_TITLE}">${SPARE_COL_COS}</th>
+        </tr></thead>`;
+        const spareRows = lines.map(line => {
+            const spareRaw = (st.spares || []).find(s => String(s.id) === String(line.spare_part_id));
+            const s = spareRaw ? canon(spareRaw) : {};
+            const rob = line.qty_on_hand != null
+                ? String(line.qty_on_hand)
+                : (spareRaw ? String(TVC_Inventory.currentStock(spareRaw)) : '—');
+            const cos = String(Number(line.qty_used) || 0);
+            return `<tr>
+                <td class="c-num num"><strong>${esc(spareNumbering(s) || line.part_no || '')}</strong></td>
+                <td class="c-cls">${esc(spareClass(s || spareRaw) || '')}</td>
+                <td class="c-dwg">${esc(spareDwgNo(s, st) || '—')}</td>
+                <td class="c-pno">${esc(spareDrawingNo(s) || '—')}</td>
+                <td class="c-item">${esc(s.name || spareRaw?.name || line.name || '')}</td>
+                <td class="c-unit">${esc(spareUnit(s))}</td>
+                <td class="c-work">${esc(spareWorking(s) || '')}</td>
+                <td class="c-std num">${esc(spareStandardQty(s) || '')}</td>
+                <td class="c-stk num">${esc(rob)}</td>
+                <td class="c-cons num">${esc(cos)}</td>
+            </tr>`;
+        }).join('') || `<tr><td colspan="10" style="text-align:center;color:#64748b;padding:12px">No spare parts selected.</td></tr>`;
+        return `<table class="wr-print-spare-table spare-data-table-wrspare">${spareHead}<tbody>${spareRows}</tbody></table>`;
+    }
+
+    function buildWrSparePage2PrintHtml(st, usedParts, meta = {}) {
+        const metaHtml = buildWrSpareMetaPrintHtml(meta);
+        const groupHeaderHtml = buildWrSpareGroupHeaderPrintHtml(st, meta);
+        const spareTableHtml = buildWrSpareTablePrintHtml(st, usedParts);
+        return `<div class="wr-print-page">
+            <h2 class="wr-print-page-title">Page 2 — Spare Parts Consumption</h2>
+            <div class="wr-print-doc">
+                ${metaHtml}
+                ${groupHeaderHtml}
+                ${spareTableHtml}
+            </div>
+        </div>`;
+    }
+
+    function buildConsumeLogWrPrintHtml(st, log) {
+        if (!log) return '';
+        const jobItems = consumeLogJobItems(log);
+        const first = jobItems[0] || {};
+        const meta = {
+            workDate: log.made_on || log.consumed_date || '',
+            reportDate: log.consumed_date || '',
+            reportedBy: log.made_by || '',
+            pmsGroupNo: log.pms_group_no || log.spare_group_label || '',
+            groupKey: log.pms_group_key || log.spare_group_key || '',
+            sort1: first.sort1 || log.sort1 || '',
+            spareShipComments: log.ships_comments || '',
+            jobItems,
+        };
+        const usedParts = (log.lines || [])
+            .filter(l => Number(l.qty ?? l.qty_consumed) > 0)
+            .map(l => ({
+                spare_part_id: l.spare_part_id,
+                qty_used: Number(l.qty ?? l.qty_consumed) || 0,
+                part_no: l.part_no || '',
+                name: l.name || '',
+            }));
+        return buildWrSparePage2PrintHtml(st, usedParts, meta);
+    }
+
+    function buildConsumeLogWrPrintHtmlFromDraft(st, draft) {
+        if (!draft) return '';
+        return buildConsumeLogWrPrintHtml(st, {
+            consumed_date: draft.consumed_date,
+            made_on: draft.made_on,
+            made_by: draft.made_by,
+            pms_group_no: draft.spare_group_label,
+            pms_group_key: draft.spare_group_key,
+            ships_comments: draft.ships_comments,
+            job_items: draft.job_items,
+            lines: (draft.lines || []).map(l => ({
+                spare_part_id: l.spare_part_id,
+                part_no: l.part_no,
+                name: l.name,
+                qty_consumed: l.qty_consumed,
+            })),
+        });
+    }
+
+    function syncConsumeListModalSizing() {
+        const modal = document.getElementById('spareConsumeModal');
+        if (!modal) return;
+        modal.classList.toggle('is-consume-list-window', isConsumedLogWindow());
+    }
+
+    function openLegacyPrintWindow(html, { print = false } = {}) {
+        const features = 'width=980,height=760,menubar=no,toolbar=no,location=no,status=no';
+        const w = window.open('', '_blank', features);
+        if (!w) {
+            TVC_Dialog?.alert?.('Pop-up blocked. Allow pop-ups to print or preview.');
+            return null;
+        }
+        w.document.open();
+        w.document.write(html);
+        w.document.close();
+        w.focus();
+        if (print) {
+            w.addEventListener('load', () => {
+                setTimeout(() => { try { w.print(); } catch (_) {} }, 350);
+            });
+        }
+        return w;
+    }
+
+    function openWrReportPrintWindow(title, bodyHtml, { print = false } = {}) {
+        const toolbar = `<div class="wr-print-toolbar no-print">
+            <button type="button" class="btn-green" onclick="(window.tvcPrintPreview&amp;&amp;window.tvcPrintPreview.print())||window.print()">Print</button>
+            <button type="button" onclick="window.close()">Close</button>
+        </div>`;
+        const hint = `<p class="wr-print-hint no-print">Review the report below — this window is the print preview. Then click <b>Print</b>.</p>`;
+        const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TVC — ${esc(title)}</title>
+            <style>${wrReportPrintStyles()}</style></head><body>${toolbar}${hint}${bodyHtml}</body></html>`;
+
+        const openLegacy = () => openLegacyPrintWindow(html, { print });
+
+        if (typeof window !== 'undefined' && window.tvcElectron?.openPrintPreview) {
+            return window.tvcElectron.openPrintPreview({
+                html,
+                title: `TVC — ${title}`,
+                autoPrint: print,
+            }).then(res => {
+                if (res?.ok) return null;
+                if (res?.error) return openLegacy();
+                return null;
+            }).catch(e => {
+                const msg = String(e?.message || e || '');
+                if (/no handler registered|handling remote event/i.test(msg)) return openLegacy();
+                return TVC_Dialog?.alert?.(msg || 'Print preview failed.').then(() => null);
+            });
+        }
+
+        return openLegacy();
+    }
+
     async function renderConsumeModal() {
         const body = document.getElementById('spareConsumeBody');
         if (!body) return;
@@ -14204,6 +14644,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             requestAnimationFrame(syncConsumeHeadLayout);
         });
         syncSpareDateInputs(body);
+        syncConsumeListModalSizing();
     }
 
     async function startConsumeSession() {
@@ -14342,6 +14783,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         closeAllConsumeMetaPicks();
         if (_consumeResizeObs) { _consumeResizeObs.disconnect(); _consumeResizeObs = null; }
         if (vlConsume) { vlConsume.destroy(); vlConsume = null; }
+        syncConsumeListModalSizing();
         closeSpicsModal('spareConsumeModal');
         if (st.currentTab === 'spare') render();
         if (returnToList) {
@@ -14477,6 +14919,38 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
     }
 
+    function aggregateUsedPartsLines(partArrays) {
+        const map = new Map();
+        const addLine = (p) => {
+            const id = consumeSpareIdKey(p?.spare_part_id);
+            const qty = Number(p?.qty_used ?? p?.qty_consumed) || 0;
+            if (!id || qty <= 0) return;
+            const existing = map.get(id);
+            if (existing) {
+                existing.qty_used += qty;
+            } else {
+                map.set(id, {
+                    spare_part_id: p.spare_part_id,
+                    qty_used: qty,
+                    part_no: p.part_no || '',
+                    name: p.name || '',
+                });
+            }
+        };
+        (partArrays || []).forEach(arr => (arr || []).forEach(addLine));
+        return Array.from(map.values());
+    }
+
+    function aggregateUsedPartsFromWorkReport(report) {
+        if (!report) return [];
+        if (report.is_batch && Array.isArray(report.job_items) && report.job_items.length) {
+            return aggregateUsedPartsLines(report.job_items.map(it => it.used_parts));
+        }
+        const top = report.used_parts || [];
+        if (top.length) return top.filter(p => Number(p.qty_used) > 0);
+        return (report.job_items?.[0]?.used_parts || []).filter(p => Number(p.qty_used) > 0);
+    }
+
     async function syncConsumeLogFromWorkReport({ report, job, usedParts, form, user, department }) {
         if (!report?.id || !job) return { logId: null, stockAppliedAt: '' };
         await TVC_DB.open();
@@ -14496,7 +14970,6 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             if (existingLogId) {
                 await reverseConsumeLogStockForLog(user, prevLog, undefined, { skipRbac: true });
                 await TVC_Inventory.deleteConsumeLog(existingLogId);
-                await reloadSparesCache();
             }
             return { logId: null, stockAppliedAt: '' };
         }
@@ -14549,18 +15022,23 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 source: 'work_report',
             },
         });
-        const stockAppliedAt = await applyConsumeLogStock(user, {
-            logId: saved.id,
-            prevLog,
-            nextLines: logLines,
-            ref: job.job_code || '',
-            note: `Work Report — ${job.job_code || report.id}`,
-            skipRbac: true,
-        });
-        if (stockAppliedAt) {
-            await TVC_Inventory.saveConsumeLog({ ...saved, stock_applied_at: stockAppliedAt });
+        let stockAppliedAt = '';
+        if (logLines.length) {
+            stockAppliedAt = await applyConsumeLogStock(user, {
+                logId: saved.id,
+                prevLog,
+                nextLines: logLines,
+                ref: job.job_code || '',
+                note: `Work Report — ${job.job_code || report.id}`,
+                skipRbac: true,
+            }) || '';
+            if (stockAppliedAt) {
+                await TVC_Inventory.saveConsumeLog({ ...saved, stock_applied_at: stockAppliedAt });
+            }
+        } else if (saved.stock_applied_at) {
+            await TVC_Inventory.saveConsumeLog({ ...saved, stock_applied_at: '' });
         }
-        return { logId: saved.id, stockAppliedAt: stockAppliedAt || '' };
+        return { logId: saved.id, stockAppliedAt };
     }
 
     async function syncConsumeLogFromDefectReport({ defectCase, usedParts, user, department }) {
@@ -14582,7 +15060,6 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             if (existingLogId) {
                 await reverseConsumeLogStockForLog(user, prevLog, undefined, { skipRbac: true });
                 await TVC_Inventory.deleteConsumeLog(existingLogId);
-                await reloadSparesCache();
             }
             return { logId: null, stockAppliedAt: '' };
         }
@@ -14629,19 +15106,24 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 source: 'defect_report',
             },
         });
-        const stockAppliedAt = await applyConsumeLogStock(user, {
-            logId: saved.id,
-            prevLog,
-            nextLines: logLines,
-            ref: draft.job_code,
-            note: `Defect Report — ${defectCase.case_no || defectCase.id}`,
-            sourceType: 'defect_report',
-            skipRbac: true,
-        });
-        if (stockAppliedAt) {
-            await TVC_Inventory.saveConsumeLog({ ...saved, stock_applied_at: stockAppliedAt });
+        let stockAppliedAt = '';
+        if (logLines.length) {
+            stockAppliedAt = await applyConsumeLogStock(user, {
+                logId: saved.id,
+                prevLog,
+                nextLines: logLines,
+                ref: draft.job_code,
+                note: `Defect Report — ${defectCase.case_no || defectCase.id}`,
+                sourceType: 'defect_report',
+                skipRbac: true,
+            }) || '';
+            if (stockAppliedAt) {
+                await TVC_Inventory.saveConsumeLog({ ...saved, stock_applied_at: stockAppliedAt });
+            }
+        } else if (saved.stock_applied_at) {
+            await TVC_Inventory.saveConsumeLog({ ...saved, stock_applied_at: '' });
         }
-        return { logId: saved.id, stockAppliedAt: stockAppliedAt || '' };
+        return { logId: saved.id, stockAppliedAt };
     }
 
     async function saveConsume() {
@@ -16027,9 +16509,11 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             const dt = spareHistEventDate(r);
             const isExport = spareHistIsExport(r);
             const peer = spareHistPeerLabel(r, user);
-            const fn = String(r.filename || r.file_name || '').trim();
+            const fn = (typeof TVC_Filename !== 'undefined' && TVC_Filename.histResolve)
+                ? TVC_Filename.histResolve(r)
+                : String(r.filename || r.file_name || '').trim();
             const fileCell = fn
-                ? `<span class="menu-hist-file" title="${escAttr(fn)}">${esc(fn)}</span>`
+                ? `<span class="menu-hist-file-text" title="${escAttr(fn)}">${esc(fn)}</span>`
                 : '<span class="muted">—</span>';
             return `<tr>
                 <td class="menu-hist-exp">${isExport ? esc(dt) : ''}</td>
@@ -16046,6 +16530,12 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             <div class="menu-hist-cats${isHq ? ' menu-hist-cats-hq' : ''}" role="tablist">${tabs}</div>
             <div class="spics-tx-lines-wrap menu-hist-table-wrap">
                 <table class="spics-tx-table spics-hist-table menu-hist-table">
+                    <colgroup>
+                        <col class="menu-hist-col-exp">
+                        <col class="menu-hist-col-imp">
+                        <col class="menu-hist-col-dir">
+                        <col class="menu-hist-col-file">
+                    </colgroup>
                     <thead><tr>
                         <th>Export</th>
                         <th>Import</th>
@@ -16550,17 +17040,27 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
         const prevKey = st.selectedGroupKey;
         const gk = `${job.department || ''}|${String(job.group || '').trim()}`;
-        return resolveGroupHeaderByKey(st, gk, job.group || '', prevKey);
+        return resolveGroupHeaderByKey(st, gk, job.group || '', prevKey, job.item_sort1 || '');
     }
 
-    function resolveGroupHeaderByKey(st, groupKey, groupLabel, restoreKey) {
+    function resolveGroupHeaderByKey(st, groupKey, groupLabel, restoreKey, itemSort1) {
         const prevKey = restoreKey !== undefined ? restoreKey : st.selectedGroupKey;
+        const label = groupLabel
+            ? safeTreeLabel(groupLabel)
+            : (groupKey ? safeTreeLabel(String(groupKey).split('|').slice(1).join('|')) : '');
+        const itemDef = label ? groupDefHeader(st, label, itemSort1) : null;
+        if (itemDef?.edited) {
+            return {
+                pmsGroupNo: label || '',
+                maker: itemDef.maker || '',
+                modelType: itemDef.modelType || '',
+                capacity: itemDef.capacity || '',
+                serialNo: itemDef.serialNo || '',
+            };
+        }
         st.selectedGroupKey = groupKey || null;
         const h = resolveSpareHeaderFromGroup(st);
         st.selectedGroupKey = prevKey;
-        const label = groupLabel
-            ? safeTreeLabel(groupLabel)
-            : (groupKey ? safeTreeLabel(groupFilterLabel(st)) : '');
         return {
             pmsGroupNo: label || h.pmsGroupNo || '',
             maker: h.maker || '',
@@ -16568,6 +17068,45 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             capacity: h.capacity || '',
             serialNo: h.serialNo || '',
         };
+    }
+
+    async function saveJobEquipmentHeader(user, { department, group, item_sort1, maker, modelType, capacity, serialNo }) {
+        if (!window.TVC_DB) return;
+        const dept = department || user?.department || '';
+        const label = String(group || '').trim();
+        if (!label) return;
+        const item = String(item_sort1 || '').trim();
+        const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+        const existing = (defs || []).find(gr => gr.department === dept
+            && normalizeGroupLabel(gr.label) === normalizeGroupLabel(label)
+            && String(gr.item_sort1 || '').trim() === item);
+        const defBase = existing || {
+            id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+            department: dept,
+            label,
+            sort_order: 0,
+            created_at: new Date().toISOString(),
+        };
+        const row = {
+            ...defBase,
+            label,
+            item_sort1: item || null,
+            machinery_name: defBase.machinery_name || '',
+            model_type: modelType || '',
+            maker: maker || '',
+            capacity: capacity || '',
+            serial_no: serialNo || '',
+            header_edited: true,
+            updated_at: new Date().toISOString(),
+            sync_status: 'LOCAL',
+        };
+        await TVC_DB.put('maintenance_groups', row);
+        const st = getState();
+        const groups = st.groups || [];
+        const gi = groups.findIndex(gr => gr.id === row.id);
+        if (gi >= 0) groups[gi] = row;
+        else groups.push(row);
+        st.groups = groups;
     }
 
     function getPlanGroupPickNodes(st) {
@@ -16604,18 +17143,19 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         openDetail, closeDetail, saveDetailGroup,
         createRequisition, assignToTask, suggestRequisition,
         append, startInlineAppend, edit, cancelEdit, cancelInlineEdit, saveEdit, saveInlineEdit, startInlineEdit, pickEditGroup, toggleEditGroupPick, pickSpareClass, toggleSpareClassPick,
-        startGroupHeaderEdit, appendGroupFromTree, deleteGroupFromTree, saveGroupHeaderEdit, cancelGroupHeaderEdit, savePlanCriticalEquipment,
+        startGroupHeaderEdit, appendGroupFromTree, deleteGroupFromTree, saveGroupHeaderEdit, cancelGroupHeaderEdit, savePlanCriticalEquipment, saveJobEquipmentHeader,
         loadBundledXls, loadSpareInventory, ensureInventoryLoaded,
         openConsumeModal, openDeliverModal, closeReceiveModal, saveReceive, confirmSaveReceive, dismissReceiveSaveConfirm, closeTxModal, saveTx, closeConsumeModal, saveConsume, captureConsumeMeta,
         receiveSelectGroup, receiveSetTreeSearch, receiveToggleGroupTree, receiveSetSearch, receiveToggleSelectedOnly,
         receiveFocusRow, receiveToggleRow, receiveToggleAll, receiveSetQty, captureReceiveMeta, receiveSelectRequisition,
-        syncConsumeLogFromWorkReport, syncConsumeLogFromDefectReport, reverseConsumeLogStockForLog, reloadSparesCache,
+        syncConsumeLogFromWorkReport, syncConsumeLogFromDefectReport, aggregateUsedPartsLines, aggregateUsedPartsFromWorkReport, reverseConsumeLogStockForLog, reloadSparesCache,
         toggleConsumeGroupPick, consumeGroupPickSearch, pickConsumeMetaGroup,
         toggleConsumeJobPick, consumeJobPickSearch, pickConsumeMetaJob, addConsumeJobRow, removeConsumeJobRow,
         consumeSelectGroup, consumeSetTreeSearch, consumeToggleGroupTree, consumeSetSearch, consumeToggleLowOnly,
         consumeToggleSelectedOnly, consumeFocusRow, consumeToggleRow, consumeToggleAll, consumeSetQty,
         renderSpareGroupHeaderHtml, renderPlanGroupHeaderHtml,
-        renderWrSparePage2Html, initWrSparePage2, teardownWrSparePage2, resolveWrJobHeader,
+        renderWrSparePage2Html, initWrSparePage2, teardownWrSparePage2, persistWrSpareUsedParts,
+        buildWrSparePage2PrintHtml, openWrReportPrintWindow, wrReportPrintStyles, resolveWrJobHeader,
         capturePage2JobItems, addPage2JobRow, removePage2JobRow, togglePage2JobPick, pickPage2Job,
         page2JobPickSearch, buildPage2JobItemsFromJobs, newConsumeJobRow, jobRowFromMaintenanceJob,
         resolveGroupHeaderByKey, getPlanGroupPickNodes, getJobsForGroupKey, findJobByCode, safeTreeLabel,
@@ -16661,7 +17201,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         consumeLogSetPeriod, consumeLogClearPeriod, consumeLogSetSearch, consumeLogClearSearch,
         getConsumeLogListFilters, setConsumeLogListFilters,
         toggleConsumeLogHistList, consumeLogEnterListEdit, loadConsumeLogIntoListWindow,
-        closeReqWorkModal, reqWorkComplete, reqWorkSave, reqWorkSwitchToNew, reqWorkEnterListEdit, reqWorkOpenList, reqWorkPrint, reqWorkDocPreview, reqWorkDocPreviewPrint, reqWorkExitDocPreview, reqWorkExitPreview, reqWorkEnterPreview, reqWorkPrintPreview, reqWorkExportExcel, reqWorkAddSpare, addToRequisition, reqWorkAddChecked, captureReqWorkMeta,
+        closeReqWorkModal, reqWorkComplete, reqWorkSave, reqWorkSwitchToNew, reqWorkEnterListEdit, reqWorkOpenList, reqWorkPrint, reqWorkDocPreview, reqWorkDocPreviewPrint, reqWorkExitDocPreview, reqWorkExitPreview, reqWorkEnterPreview, reqWorkPrintPreview, reqWorkExportExcel, reqWorkAddSpare, addToRequisition, reqWorkAddChecked, captureReqWorkMeta, reqWorkConfirmByToggle,
         toggleReqWorkHistList, reqWorkPickReqNo,
         reqWorkSetRequestQty, reqWorkSetEvalQty, reqWorkEvalQtyKeydown, reqWorkSetReceivedQty,
         reqWorkSelectGroup, reqWorkSetTreeSearch, reqWorkToggleGroupTree, reqWorkSetSearch, reqWorkToggleLowOnly,

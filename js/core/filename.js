@@ -77,6 +77,16 @@ const TVC_Filename = (function () {
         return `${prefix}${seq}.${ext}`;
     }
 
+    /** Resolve export filename from sync_history row (filename / file_name / summary). */
+    function histResolve(row) {
+        const direct = String(row?.filename || row?.file_name || '').trim();
+        if (direct) return direct;
+        const summary = String(row?.summary || '');
+        const m = summary.match(/→\s*(\S+\.(?:zip|xlsx|csv|json))/i)
+            || summary.match(/(\S+\.(?:zip|xlsx|csv|json))\s*$/i);
+        return m ? m[1] : '';
+    }
+
     return {
         vesselSlug,
         scopeToken,
@@ -85,5 +95,6 @@ const TVC_Filename = (function () {
         nextSeq,
         build,
         buildFlat,
+        histResolve,
     };
 })();

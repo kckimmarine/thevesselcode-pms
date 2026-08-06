@@ -12,4 +12,5 @@ contextBridge.exposeInMainWorld('tvcElectron', {
     pickExportFolder: () => ipcRenderer.invoke('tvc:pick-export-folder'),
     openExportFolder: () => ipcRenderer.invoke('tvc:open-export-folder'),
     saveExportFile: (bytes, filename) => ipcRenderer.invoke('tvc:save-export-file', { bytes, filename }),
+    openPrintPreview: (payload) => ipcRenderer.invoke('tvc:open-print-preview', payload),
 });

@@ -293,7 +293,7 @@ const TVC_DefectCaseService = (function () {
         return row;
     }
 
-    async function saveApprovalMeta(user, id, { confirm, approve } = {}) {
+    async function saveApprovalMeta(user, id, { confirm, approve, unconfirm } = {}) {
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
         const today = now().slice(0, 10);
@@ -308,8 +308,20 @@ const TVC_DefectCaseService = (function () {
             if (!TVC_RBAC.canConfirmDepartment(user, row.department)) {
                 throw Object.assign(new Error('Confirm permission required.'), { code: 'FORBIDDEN' });
             }
-            row.confirmed_by = TVC_RBAC.getRankLabel(user);
+            row.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(row.department, user)
+                || TVC_RBAC.getRankLabel(user);
             row.confirmed_at = today;
+            changed = true;
+        }
+        if (unconfirm && (row.confirmed_at || row.confirmed_by)) {
+            if (row.approved_at || row.approved_by) {
+                throw Object.assign(new Error('Approved case cannot be unconfirmed.'), { code: 'INVALID_STATUS' });
+            }
+            if (!TVC_RBAC.canConfirmDepartment(user, row.department)) {
+                throw Object.assign(new Error('Confirm permission required.'), { code: 'FORBIDDEN' });
+            }
+            row.confirmed_by = '';
+            row.confirmed_at = '';
             changed = true;
         }
         if (approve && !row.approved_at) {
@@ -322,7 +334,8 @@ const TVC_DefectCaseService = (function () {
             }
             // HQ 작성분: Confirmed 없이 Approve — 표시 일관성을 위해 Confirmed도 함께 기록
             if (!row.confirmed_at && hqDirect) {
-                row.confirmed_by = TVC_RBAC.getRankLabel(user);
+                row.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(row.department, user)
+                || TVC_RBAC.getRankLabel(user);
                 row.confirmed_at = today;
             }
             row.approved_by = TVC_RBAC.getRankLabel(user);

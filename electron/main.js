@@ -52,6 +52,65 @@ function resolveExportFolder(settings) {
     return app.getPath('downloads');
 }
 
+function registerPrintPreviewIpc() {
+    const printPreviewPreload = path.join(__dirname, 'print-preview-preload.js');
+    let lastPrintPreviewWindow = null;
+
+    async function printWebContents(webContents) {
+        if (!webContents || webContents.isDestroyed()) {
+            return { ok: false, error: 'Print window not available.' };
+        }
+        try {
+            await webContents.print({
+                silent: false,
+                printBackground: true,
+            });
+            return { ok: true };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    }
+
+    ipcMain.handle('tvc:open-print-preview', async (_evt, payload) => {
+        const html = String(payload?.html || '');
+        const title = String(payload?.title || 'Print Preview');
+        const autoPrint = !!payload?.autoPrint;
+        if (!html) return { ok: false, error: 'Empty print document.' };
+
+        if (lastPrintPreviewWindow && !lastPrintPreviewWindow.isDestroyed()) {
+            lastPrintPreviewWindow.close();
+        }
+
+        const win = new BrowserWindow({
+            width: 980,
+            height: 760,
+            title,
+            autoHideMenuBar: true,
+            webPreferences: {
+                preload: printPreviewPreload,
+                contextIsolation: true,
+                nodeIntegration: false,
+                sandbox: true,
+            },
+        });
+        lastPrintPreviewWindow = win;
+        win.on('closed', () => {
+            if (lastPrintPreviewWindow === win) lastPrintPreviewWindow = null;
+        });
+
+        const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+        await win.loadURL(dataUrl);
+
+        if (autoPrint) {
+            await new Promise(r => setTimeout(r, 450));
+            return printWebContents(win.webContents);
+        }
+        return { ok: true };
+    });
+
+    ipcMain.handle('tvc:print-preview-window', (evt) => printWebContents(evt.sender));
+}
+
 function registerSettingsIpc() {
     ipcMain.handle('tvc:get-settings', () => {
         const settings = readSettings();
@@ -292,6 +351,7 @@ app.whenReady().then(() => {
         protocol: PROTOCOL,
     }));
     registerSettingsIpc();
+    registerPrintPreviewIpc();
 
     createWindow();
 

@@ -322,7 +322,7 @@ const TVC_PmsMasterExcel = (function () {
         const wsJ = wb.addWorksheet('Jobs', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsJ, [
             `Vessel: ${vesselId}  ·  ${exportJobs.length} jobs`,
-            'JOB_ID column is hidden (export only). Edit JOB CODE with care — re-import cascades Work History. New jobs: leave JOB_ID empty.',
+            'JOB_ID column is hidden (export only). Edit GROUP NO / JOB CODE freely — rows removed from this sheet are dropped on import (Work Report linked jobs are kept with temp code). New jobs: leave JOB_ID empty.',
         ], 14);
         const jHeaders = ['JOB_ID', 'DEPARTMENT', 'GROUP NO', 'GROUP NAME', '⚠', 'JOB CODE', 'SORT-1', 'SORT-2', 'JOB DETAIL', 'PERIOD', 'UNIT', 'P.I.C', 'NEXT DATE', 'LAST DONE'];
         jHeaders.forEach((h, i) => { wsJ.getRow(HDR_ROW).getCell(i + 1).value = h; });
@@ -475,6 +475,111 @@ const TVC_PmsMasterExcel = (function () {
         return false;
     }
 
+    async function jobHasAnyWorkReport(jobId) {
+        const reports = await TVC_DB.getAll('daily_work_reports');
+        for (const rep of reports) {
+            TVC_WorkReport.fromLegacy(rep);
+            for (const item of rep.job_items || []) {
+                if (item.maintenance_job_id === jobId) return true;
+            }
+        }
+        return false;
+    }
+
+    function tempJobCode(jobId) {
+        return `__tvc_${String(jobId || '').replace(/-/g, '').slice(0, 12)}`;
+    }
+
+    function refreshJobMaps(jobs) {
+        return {
+            byId: new Map(jobs.map(j => [j.id, j])),
+            byDeptCode: new Map(jobs.map(j => [`${j.department}|${j.job_code}`, j])),
+        };
+    }
+
+    function importRowMatchesJob(row, job) {
+        if (row.job_id && row.job_id === job.id) return true;
+        if (row.department !== job.department) return false;
+        if (row.job_code === job.job_code) return true;
+        if (row._legacyJobCode && row._legacyJobCode === job.job_code) return true;
+        if (norm(row.group) === norm(job.group) && norm(row.job_detail) === norm(job.job_detail)) return true;
+        return false;
+    }
+
+    function findImportJobMatch(row, byId, byDeptCode, existingJobs) {
+        if (row.job_id) {
+            const byIdHit = byId.get(row.job_id);
+            if (byIdHit) return byIdHit;
+        }
+        let job = byDeptCode.get(`${row.department}|${row.job_code}`);
+        if (job) return job;
+        if (row._legacyJobCode) {
+            job = byDeptCode.get(`${row.department}|${row._legacyJobCode}`);
+            if (job) return job;
+        }
+        const gNorm = norm(row.group);
+        const dNorm = norm(row.job_detail);
+        if (gNorm && dNorm) {
+            job = existingJobs.find(j =>
+                j.department === row.department &&
+                norm(j.group) === gNorm &&
+                norm(j.job_detail) === dNorm
+            );
+            if (job) return job;
+        }
+        return null;
+    }
+
+    /** Excel에 없는 job 제거 — Work Report 연결 시 임시 CODE로 격리 */
+    async function removeOrphanJobs(jobRows) {
+        const importIds = new Set(jobRows.map(r => r.job_id).filter(Boolean));
+        const importDepts = new Set(jobRows.map(r => r.department));
+        const existingJobs = await TVC_DB.getAll('maintenance_jobs');
+        let removed = 0;
+        let detached = 0;
+
+        for (const job of existingJobs) {
+            if (!importDepts.has(job.department)) continue;
+            if (importIds.has(job.id)) continue;
+            if (jobRows.some(row => importRowMatchesJob(row, job))) continue;
+
+            if (await jobHasAnyWorkReport(job.id)) {
+                const temp = tempJobCode(job.id);
+                if (job.job_code !== temp) {
+                    await cascadeJobCodeRename(job.job_code, temp, job.id);
+                    job.job_code = temp;
+                    job.sync_status = job.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (job.sync_status || 'LOCAL');
+                    job.updated_at = new Date().toISOString();
+                    await TVC_DB.put('maintenance_jobs', job);
+                    detached++;
+                }
+            } else {
+                await TVC_DB.del('maintenance_jobs', job.id);
+                removed++;
+            }
+        }
+        return { removed, detached };
+    }
+
+    /** 일괄 JOB CODE 변경 충돌 방지 — 먼저 고유 임시 CODE로 이동 */
+    async function reserveJobCodeSlots(jobRows, byId) {
+        let reserved = 0;
+        for (const row of jobRows) {
+            if (!row.job_id) continue;
+            const job = byId.get(row.job_id);
+            if (!job || job.job_code === row.job_code) continue;
+            const temp = tempJobCode(job.id);
+            if (job.job_code === temp) continue;
+            await cascadeJobCodeRename(job.job_code, temp, job.id);
+            job.job_code = temp;
+            job.sync_status = job.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (job.sync_status || 'LOCAL');
+            job.updated_at = new Date().toISOString();
+            await TVC_DB.put('maintenance_jobs', job);
+            reserved++;
+        }
+        return reserved;
+    }
+
     async function cascadeJobCodeRename(oldCode, newCode, jobId) {
         let n = 0;
         const reports = await TVC_DB.getAll('daily_work_reports');
@@ -591,20 +696,21 @@ const TVC_PmsMasterExcel = (function () {
         for (const g of groupRows) await upsertGroupDef(g, null);
         for (const e of equipRows) await upsertGroupDef(e, e.item_sort1);
 
-        const existingJobs = await TVC_DB.getAll('maintenance_jobs');
-        const byId = new Map(existingJobs.map(j => [j.id, j]));
-        const byDeptCode = new Map(existingJobs.map(j => [`${j.department}|${j.job_code}`, j]));
+        const orphanStats = await removeOrphanJobs(jobRows);
+        let existingJobs = await TVC_DB.getAll('maintenance_jobs');
+        let { byId, byDeptCode } = refreshJobMaps(existingJobs);
+        await reserveJobCodeSlots(jobRows, byId);
+
+        existingJobs = await TVC_DB.getAll('maintenance_jobs');
+        ({ byId, byDeptCode } = refreshJobMaps(existingJobs));
 
         let created = 0;
         let updated = 0;
         let renamed = 0;
+        const importStamp = new Date().toISOString();
 
         for (const row of jobRows) {
-            let job = row.job_id ? byId.get(row.job_id) : null;
-            if (!job) job = byDeptCode.get(`${row.department}|${row.job_code}`);
-            if (!job && row._legacyJobCode) {
-                job = byDeptCode.get(`${row.department}|${row._legacyJobCode}`);
-            }
+            let job = findImportJobMatch(row, byId, byDeptCode, existingJobs);
 
             const period = Number(row.period) || 1;
             const unit = (row.unit || 'M').toUpperCase();
@@ -618,10 +724,13 @@ const TVC_PmsMasterExcel = (function () {
                 const dup = existingJobs.filter(j => j.department === row.department && j.job_code === row.job_code);
                 if (dup.length) throw new Error(`JOB CODE 중복: ${row.department} ${row.job_code}`);
 
-                job = {
-                    id: typeof crypto !== 'undefined' && crypto.randomUUID
+                const newId = row.job_id && !byId.has(row.job_id)
+                    ? row.job_id
+                    : (typeof crypto !== 'undefined' && crypto.randomUUID
                         ? crypto.randomUUID()
-                        : 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+                        : 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
+                job = {
+                    id: newId,
                     department: row.department,
                     group: row.group,
                     job_code: row.job_code,
@@ -640,7 +749,8 @@ const TVC_PmsMasterExcel = (function () {
                     plan_status: 'PLANNED',
                     schedule_basis: null,
                     sync_status: 'LOCAL',
-                    updated_at: new Date().toISOString(),
+                    master_import_at: importStamp,
+                    updated_at: importStamp,
                 };
                 if (job.next_date && new Date(job.next_date) < new Date(new Date().toDateString())) {
                     job.is_overdue = true;
@@ -667,8 +777,6 @@ const TVC_PmsMasterExcel = (function () {
                 }
 
                 if (oldCode !== row.job_code) {
-                    const other = existingJobs.find(j => j.id !== job.id && j.department === row.department && j.job_code === row.job_code);
-                    if (other) throw new Error(`JOB CODE 충돌: ${row.job_code} (${row.department})`);
                     await cascadeJobCodeRename(oldCode, row.job_code, job.id);
                     job.job_code = row.job_code;
                     renamed++;
@@ -678,12 +786,16 @@ const TVC_PmsMasterExcel = (function () {
                     renamed++;
                 }
                 job.sync_status = job.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (job.sync_status || 'LOCAL');
-                job.updated_at = new Date().toISOString();
+                job.master_import_at = importStamp;
+                job.updated_at = importStamp;
                 updated++;
             }
             await TVC_DB.put('maintenance_jobs', job);
             byId.set(job.id, job);
             byDeptCode.set(`${job.department}|${job.job_code}`, job);
+            const idx = existingJobs.findIndex(j => j.id === job.id);
+            if (idx >= 0) existingJobs[idx] = job;
+            else existingJobs.push(job);
         }
 
         const allJobs = await TVC_DB.getAll('maintenance_jobs');
@@ -691,13 +803,24 @@ const TVC_PmsMasterExcel = (function () {
         const comps = rebuildComponentTree(allJobs);
         await TVC_DB.bulkPut('ship_components', comps);
 
+        const orphanNote = orphanStats.removed || orphanStats.detached
+            ? ` · 제외 ${orphanStats.removed} · Work Report 격리 ${orphanStats.detached}`
+            : '';
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
-            log: `📥 [PMS Master Import] jobs +${created} ~${updated} rename ${renamed} — ${user.display_name}`,
+            log: `📥 [PMS Master Import] jobs +${created} ~${updated} rename ${renamed}${orphanNote} — ${user.display_name}`,
             sync_status: 'LOCAL',
         });
+        await TVC_DB.setMeta(TVC_META_KEYS.PMS_MASTER_IMPORTED, importStamp);
 
-        return { created, updated, renamed, groups: groupRows.length, equipment: equipRows.length, jobs: jobRows.length };
+        return {
+            created, updated, renamed,
+            removed: orphanStats.removed,
+            detached: orphanStats.detached,
+            groups: groupRows.length,
+            equipment: equipRows.length,
+            jobs: jobRows.length,
+        };
     }
 
     async function importFromFile(file, user) {
@@ -711,7 +834,7 @@ const TVC_PmsMasterExcel = (function () {
     return {
         exportToFile, exportToWorkbook, importFromFile, importFromWorkbook,
         buildGroupLabel, splitGroupLabel, resolveGroup, renumberJobsForExport,
-        isLegacyDeckGroupLabel, pruneEmptyGroupDefs,
+        isLegacyDeckGroupLabel, pruneEmptyGroupDefs, findImportJobMatch, importRowMatchesJob,
         masterExcelFilename,
         DECK_LEGACY_CATALOG,
     };

@@ -1110,6 +1110,74 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .modal-box { background: #fff; border-radius: 12px; padding: 24px; max-width: 520px; width: 100%; max-height: 90vh; overflow: auto; position: relative; }
 .modal-box.wide { max-width: 640px; }
 .modal-box.wp-modal { max-width: 820px; width: 96%; }
+
+/* Work Procedure modal — content-height (max 720px); History tab scrolls inside pane */
+#workProcedureModal {
+    overflow: auto;
+    align-items: flex-start;
+    justify-content: center;
+    -webkit-overflow-scrolling: touch;
+}
+#workProcedureModal .modal-box.wp-modal {
+    width: 820px;
+    max-width: 820px;
+    min-width: 820px;
+    height: auto;
+    max-height: min(92vh, 720px);
+    min-height: 0;
+    padding: 24px;
+    overflow: auto;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+    box-sizing: border-box;
+}
+#workProcedureModal .modal-box.wp-modal > .modal-x {
+    flex-shrink: 0;
+}
+#workProcedureBody {
+    flex: 0 1 auto;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: visible;
+}
+#workProcedureBody > .wp-title,
+#workProcedureBody > .wp-job-head,
+#workProcedureBody > .wp-job-detail,
+#workProcedureBody > .wp-tabs {
+    flex-shrink: 0;
+}
+#workProcedureBody > .wp-tab-pane {
+    min-height: 0;
+    overflow: auto;
+}
+#workProcedureBody > .wp-tab-pane-procedure {
+    flex: 0 1 auto;
+}
+#workProcedureBody > .wp-tab-pane-history {
+    flex: 0 1 auto;
+    min-height: 280px;
+    max-height: calc(min(92vh, 720px) - 240px);
+    overflow: auto;
+}
+#workProcedureBody > .wp-modal-actions {
+    flex-shrink: 0;
+    margin-top: 6px;
+}
+#workProcedureBody .wp-proc-box,
+#workProcedureBody .wp-proc-input {
+    min-height: 280px;
+    max-height: none;
+    box-sizing: border-box;
+}
+#workProcedureBody .wp-table-wrap {
+    max-height: none;
+    min-height: 280px;
+    height: auto;
+    box-sizing: border-box;
+}
+
 .wp-title { margin: 0 0 8px; color: var(--navy); font-size: 18px; }
 .wp-job-head { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #4a5568; margin-bottom: 4px; }
 .wp-job-detail { font-size: 13px; color: #2d3748; margin: 0 0 12px; }
@@ -1187,6 +1255,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     min-width: 1000px;
     height: min(92vh, 920px);
     max-height: 92vh;
+    min-height: min(92vh, 920px);
     padding: 0;
     overflow: hidden;
     display: flex;
@@ -2294,6 +2363,31 @@ input.tvc-date-input::placeholder {
     width: 130px;
     min-width: 130px;
 }
+.orig-job-inline-table .c-next .tvc-date-input-wrap,
+.orig-job-inline-table .c-last .tvc-date-input-wrap {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    gap: 2px;
+}
+.orig-job-inline-table .c-next .tvc-date-input-wrap .tvc-date-input,
+.orig-job-inline-table .c-last .tvc-date-input-wrap .tvc-date-input,
+.orig-inline-date {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
+    font-size: 12px;
+    font-family: inherit;
+    padding: 3px 6px;
+    box-sizing: border-box;
+}
+.orig-job-inline-table .c-next .tvc-date-picker-btn,
+.orig-job-inline-table .c-last .tvc-date-picker-btn {
+    width: 22px;
+    height: 22px;
+    flex-shrink: 0;
+}
 .orig-inline-period {
     display: flex;
     align-items: center;
@@ -2317,14 +2411,6 @@ input.tvc-date-input::placeholder {
     font-size: 12px;
     font-weight: 700;
     color: var(--navy);
-}
-.orig-inline-date {
-    min-width: 118px;
-    width: 118px;
-    max-width: 118px;
-    font-size: 11px;
-    padding: 4px 6px;
-    box-sizing: border-box;
 }
 .plan-action-batch-codes {
     display: flex;
@@ -4985,6 +5071,34 @@ label.spare-file-pick input[type=file] { display: none; }
 
 /* Consumption List (View Consumption List) */
 #spareConsumeLogBody { min-height: 0; }
+#spareConsumeModal.is-consume-list-window,
+#spareConsumeLogModal {
+    overflow: auto;
+    align-items: flex-start;
+    justify-content: center;
+    -webkit-overflow-scrolling: touch;
+}
+#spareConsumeModal.is-consume-list-window .modal-box.spare-req-work-modal,
+#spareConsumeLogModal .modal-box.spare-req-list-modal {
+    width: 1000px;
+    min-width: 1000px;
+    max-width: 1000px;
+    height: min(92vh, 920px);
+    min-height: min(92vh, 920px);
+    max-height: 92vh;
+    margin: auto;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+}
+.wr-consume-preview-scroll {
+    background: #edf2f7;
+    padding: 12px;
+}
+.wr-consume-preview-doc .wr-print-page {
+    max-width: 210mm;
+    margin: 0 auto;
+}
 .spare-consume-log-wrap .spare-req-list-modal,
 .spare-req-list-modal-wrap #spareConsumeLogBody .spare-req-list-wrap {
     min-width: 0;
@@ -5988,9 +6102,10 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-req-hist-popover .spare-req-list-table col.rl-col-total { width: 56px; }
 .spare-req-hist-popover .spare-req-list-table .spare-req-list-reqno,
 .spare-req-hist-popover .spare-req-list-table .spare-req-list-spare-group {
-    overflow: visible;
-    text-overflow: clip;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
+    max-width: 148px;
 }
 .spare-req-hist-popover .spare-req-list-head-table thead th,
 .spare-req-hist-popover .spare-req-list-body-table tbody td {
@@ -6863,7 +6978,26 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 .spare-sync-back { margin-right: auto; }
 
-.menu-xfer-wide { max-width: 760px; }
+.menu-xfer-wide { max-width: min(980px, 96vw); }
+.menu-xfer-table-wrap {
+    max-height: 280px;
+    overflow: auto;
+    margin: 0 0 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+}
+.menu-xfer-defect-table {
+    min-width: 920px;
+}
+.menu-xfer-table col.menu-xfer-col-chk { width: 32px; }
+.menu-xfer-table col.menu-xfer-col-file-no { width: 72px; }
+.menu-xfer-table col.menu-xfer-col-type { width: 40px; }
+.menu-xfer-table col.menu-xfer-col-warn { width: 28px; }
+.menu-xfer-table col.menu-xfer-col-job { width: 72px; }
+.menu-xfer-table col.menu-xfer-col-sort { width: 140px; }
+.menu-xfer-table col.menu-xfer-col-status { width: 72px; }
+.menu-xfer-table col.menu-xfer-col-date { width: 88px; }
+.menu-xfer-table col.menu-xfer-col-filename { width: 180px; }
 .menu-xfer-block-msg {
     margin: 0 0 10px;
     padding: 10px 12px;
@@ -6880,13 +7014,6 @@ label.spare-file-pick input[type=file] { display: none; }
     font-size: 13px;
     line-height: 1.5;
     background: #f7fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-}
-.menu-xfer-table-wrap {
-    max-height: 280px;
-    overflow: auto;
-    margin: 0 0 12px;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
 }
@@ -6971,12 +7098,16 @@ label.spare-file-pick input[type=file] { display: none; }
     font-weight: 700;
     color: var(--navy);
 }
+.menu-hist-table col.menu-hist-col-exp { width: 18%; }
+.menu-hist-table col.menu-hist-col-imp { width: 18%; }
+.menu-hist-table col.menu-hist-col-dir { width: 14%; }
+.menu-hist-table col.menu-hist-col-file { width: 50%; }
 .menu-hist-table th.menu-hist-file-h,
 .menu-hist-table td.menu-hist-file,
 .menu-xfer-table th.menu-xfer-file-h,
 .menu-xfer-table td.menu-xfer-file {
     text-align: left !important;
-    max-width: 0;
+    min-width: 140px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -6984,8 +7115,8 @@ label.spare-file-pick input[type=file] { display: none; }
     font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     color: #2d3748;
 }
-.menu-hist-file,
-.menu-xfer-file .menu-hist-file {
+.menu-hist-file-text,
+.menu-xfer-file .menu-hist-file-text {
     display: block;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -7373,10 +7504,28 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         padding: 12px;
     }
     #workReportModal .modal-box.wr-modal,
-    #defectReportModal .modal-box.wr-modal {
+    #defectReportModal .modal-box.wr-modal,
+    #spareConsumeModal.is-consume-list-window .modal-box.spare-req-work-modal,
+    #spareConsumeLogModal .modal-box.spare-req-list-modal {
         width: 1000px;
         min-width: 1000px;
         max-width: 1000px;
+        height: min(92vh, 920px);
+        min-height: min(92vh, 920px);
+        border-radius: 12px;
+    }
+    #workProcedureModal {
+        align-items: flex-start;
+        justify-content: center;
+        padding: 12px;
+    }
+    #workProcedureModal .modal-box.wp-modal {
+        width: min(96vw, 820px);
+        min-width: min(96vw, 820px);
+        max-width: min(96vw, 820px);
+        height: auto;
+        max-height: min(92vh, 720px);
+        min-height: 0;
         border-radius: 12px;
     }
     #spareReqListModal .modal-box.spare-req-list-modal {

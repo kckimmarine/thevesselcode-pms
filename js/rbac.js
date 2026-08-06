@@ -452,12 +452,13 @@ const TVC_RBAC = (function () {
         return s;
     }
 
-    /** Confirmed by 표시 — ENGINE: Chief Engineer, DECK: Chief Officer / Captain */
+    /** Confirmed by 표시 — ENGINE: Chief engineer, DECK: Chief officer / Captain */
     function getDepartmentConfirmLabel(dept, user) {
         const d = String(dept || '').toUpperCase();
         const uname = String(user?.username || '').toLowerCase();
-        if (d === 'ENGINE') return 'Chief Engineer';
-        if (d === 'DECK') return uname === 'co' ? 'Chief Officer' : 'Captain';
+        if (uname === 'captain') return 'Captain';
+        if (d === 'ENGINE') return 'Chief engineer';
+        if (d === 'DECK') return uname === 'co' ? 'Chief officer' : 'Captain';
         return '';
     }
 

@@ -96,11 +96,9 @@ const TVC_InventoryService = (function () {
             if (isConsumption) {
                 delta = -qty;
                 row.qty_on_hand = Math.max(0, onHand - qty);
-                row.qty_working = (Number(row.qty_working) || 0) + qty;
             } else if (isReversal) {
                 delta = qty;
                 row.qty_on_hand = onHand + qty;
-                row.qty_working = Math.max(0, (Number(row.qty_working) || 0) - qty);
             } else {
                 delta = qty;
                 row.qty_on_hand = onHand + qty;

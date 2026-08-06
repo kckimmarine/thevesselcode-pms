@@ -190,10 +190,13 @@ const TVC_Sync = (function () {
 
     async function recordSyncHistory(entry) {
         try {
+            const fn = String(entry?.filename || entry?.file_name || '').trim();
             await TVC_DB.put('sync_history', {
                 at: now(),
                 date: new Date().toLocaleString(),
                 ...entry,
+                filename: fn,
+                file_name: fn,
             });
         } catch (_) { /* store may not exist on legacy DB */ }
     }
