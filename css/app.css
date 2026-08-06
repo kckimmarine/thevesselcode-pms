@@ -4827,7 +4827,11 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-req-list-table .rl-st-Confirmed { background: #d97706; }
 .spare-req-list-table .rl-st-Exported,
 .spare-req-list-table .rl-st-Submitted { background: #5a67d8; }
+.spare-req-list-table .rl-st-Requisition { background: #3182ce; }
+.spare-req-list-table .rl-st-ReqQuote { background: #5a67d8; }
+.spare-req-list-table .rl-st-Quoted { background: #7c3aed; }
 .spare-req-list-table .rl-st-Evaluated { background: #805ad5; }
+.spare-req-list-table .rl-st-Ordered { background: #d97706; }
 .spare-req-list-table .rl-st-Received { background: #16a34a; }
 .spare-req-list-table .rl-st-PartialRecv { background: #38a169; }
 .spare-req-list-table .spare-req-list-daterange {
@@ -5300,6 +5304,12 @@ label.spare-file-pick input[type=file] { display: none; }
     justify-content: center;
     -webkit-overflow-scrolling: touch;
     padding: 12px;
+}
+#spareReqListModal.is-req-xfer-stack {
+    z-index: 10150;
+}
+#spareReqWorkModal.is-req-xfer-underlay {
+    z-index: 10000;
 }
 #spareReqListModal .modal-box.spare-req-list-modal {
     width: min(96vw, 1360px);
@@ -6236,6 +6246,21 @@ label.spare-file-pick input[type=file] { display: none; }
     align-items: center;
     gap: 8px;
 }
+.spare-req-meta-received-inline {
+    display: grid;
+    grid-template-columns: minmax(120px, 140px) max-content minmax(0, 1fr);
+    align-items: center;
+    gap: 8px 10px;
+    min-width: 0;
+}
+.spare-req-work-meta .spare-req-meta-inline-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1a202c;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
 .spare-req-meta-by {
     font-size: 11px;
     font-weight: 700;
@@ -6312,6 +6337,11 @@ label.spare-file-pick input[type=file] { display: none; }
 /* Received Spare Parts — meta + list panel (Consumed / New Requisition family) */
 .spare-receive-meta-form {
     margin-bottom: 12px;
+}
+.spare-receive-meta-comments-row {
+    margin-top: 10px;
+    border-radius: 10px;
+    border: 1px solid #e2e8f0;
 }
 .spare-receive-meta-row-req {
     padding-bottom: 2px;

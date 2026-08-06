@@ -52,11 +52,14 @@ const TVC_SpareSync = (function () {
         };
     }
 
-    async function saveZip(payload, filename, readmeLines) {
+    async function saveZip(payload, filename, readmeLines, extraFiles = []) {
         if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded.');
         const zip = new JSZip();
         zip.file(JSON_NAME, JSON.stringify(payload, null, 2));
         zip.file('README.txt', (readmeLines || []).filter(Boolean).join('\n'));
+        (extraFiles || []).forEach((f) => {
+            if (f?.filename && f?.buffer) zip.file(f.filename, f.buffer);
+        });
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
         return filename;
@@ -100,8 +103,11 @@ const TVC_SpareSync = (function () {
             `Date: ${payload.export_meta.export_date}`,
             '',
             `Open ${JSON_NAME} for structured data.`,
-        ];
-        await saveZip(payload, filename, readme);
+            (opts.excelFiles || []).length
+                ? `Excel: ${(opts.excelFiles || []).map(f => f.filename).filter(Boolean).join(', ')}`
+                : '',
+        ].filter(Boolean);
+        await saveZip(payload, filename, readme, opts.excelFiles || []);
         return { filename, payload };
     }
 
@@ -146,8 +152,11 @@ const TVC_SpareSync = (function () {
             `Vendors: ${targets.map(t => t.vendor_name).join(', ')}`,
             `Vessel: ${payload.export_meta.vessel_id}`,
             `Date: ${payload.export_meta.export_date}`,
+            '',
+            'Vendor Excel files: fill yellow cells (Reference No, Quoted Date, Comments, Price, Remark) and return.',
+            (opts.excelFiles || []).map(f => f.filename).filter(Boolean).join(', ') || '(none)',
         ];
-        await saveZip(payload, filename, readme);
+        await saveZip(payload, filename, readme, opts.excelFiles || []);
         return { filename, payload };
     }
 

@@ -443,6 +443,7 @@ const TVC_RBAC = (function () {
         if (lower === 'captain') return 'Captain';
         if (lower === 'engineer') return 'Engineer';
         if (lower === 'officer') return 'Officer';
+        if (lower === 'chief officer' || lower === 'co') return 'Chief officer';
         if (lower === 'superintendent') return 'Superintendent';
         if (/^C\/E\b/i.test(s) || (/\bChief Engineer\b/i.test(s) && !/Captain/i.test(s))) return 'Chief engineer';
         if (/^Captain\b/i.test(s) || /선장/.test(s)) return 'Captain';
@@ -450,6 +451,32 @@ const TVC_RBAC = (function () {
         if (/^Officer\b/i.test(s)) return 'Officer';
         if (/Superintendent|본사|\bHQ\b/i.test(s)) return 'Superintendent';
         return s;
+    }
+
+    /** Requisition / SPARE — 작성 계정(created_by)만으로 Reported by 직책 (made_by 무시) */
+    function getReportedByLabelForAuthor(record) {
+        if (!record) return '';
+        const uname = String(record.created_by_username || '').trim().toLowerCase();
+        if (uname) {
+            const title = getAccountTitle(uname);
+            if (title && title !== 'User') return title;
+            return getReportedByLabel({ username: uname });
+        }
+        const mappedUname = DEMO_USER_ID_TO_USERNAME[String(record.created_by || '').trim()];
+        if (mappedUname) {
+            return getAccountTitle(mappedUname) || getReportedByLabel({ username: mappedUname });
+        }
+        return '';
+    }
+
+    /** Requisition / SPARE — 작성 계정(created_by) 기준 Reported by 직책 */
+    function getReportedByLabelForRecord(record) {
+        if (!record) return '';
+        const fromAuthor = getReportedByLabelForAuthor(record);
+        if (fromAuthor) return fromAuthor;
+        const saved = normalizeReportedByLabel(record.made_by);
+        if (saved) return saved;
+        return '';
     }
 
     /** Confirmed by 표시 — ENGINE: Chief engineer, DECK: Chief officer / Captain */
@@ -529,7 +556,7 @@ const TVC_RBAC = (function () {
 
     return {
         AccountType, Role, Department, ReportStatus, Action,
-        can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, normalizeReportedByLabel,
+        can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
         isShipAccount, isHqAccount, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,

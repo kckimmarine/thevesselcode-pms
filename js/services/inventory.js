@@ -219,6 +219,7 @@ const TVC_Inventory = (function () {
             status: REQ_STATUS.DRAFT,
             created_at: now(),
             created_by: user?.id || null,
+            created_by_username: user?.username || '',
             creator_name: '',
             lines,
         });

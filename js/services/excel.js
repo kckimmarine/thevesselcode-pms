@@ -169,29 +169,106 @@ const TVC_Excel = (function () {
     /** 헤더명 → 컬럼 index 매핑 (열 순서 무관) */
     function buildHeaderMap(ws) {
         const map = {};
-        // 헤더는 4행(export 기준). 그러나 안전하게 상위 6행에서 'Part No' 있는 행을 찾는다.
         let headerRowNo = 4;
-        for (let rn = 1; rn <= 8; rn++) {
+        for (let rn = 1; rn <= 35; rn++) {
             const row = ws.getRow(rn);
             let found = false;
             row.eachCell({ includeEmpty: false }, (cell) => {
-                if (String(cell.value).trim().toLowerCase() === 'part no') found = true;
+                const v = String(cell.value).trim().toLowerCase().replace(/\.$/, '');
+                if (v === 'part no') found = true;
             });
             if (found) { headerRowNo = rn; break; }
         }
         const header = ws.getRow(headerRowNo);
         header.eachCell({ includeEmpty: false }, (cell, col) => {
-            const key = String(cell.value || '').trim().toLowerCase();
+            const key = String(cell.value || '').trim().toLowerCase().replace(/\.$/, '');
+            if (!key) return;
+            if (key === 'price' && map.price != null) return;
+            if (key === 'remark' && map.remark != null) return;
+            if (key === 'amount' && map.amount != null) return;
             map[key] = col;
         });
         return { map, headerRowNo };
+    }
+
+    function parseNumCell(v) {
+        const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, ''));
+        return Number.isNaN(n) ? null : n;
+    }
+
+    function rowCellVal(row, col) {
+        return col ? (row.getCell(col).value ?? '') : '';
+    }
+
+    function isBlankImportCell(v) {
+        const s = String(v ?? '').trim();
+        return !s || s === '—' || s === '-' || s === '–';
+    }
+
+    function quotePrintVendorMeta(ws) {
+        const cellStr = (addr) => {
+            const v = ws.getCell(addr).value;
+            if (v == null || v === '') return null;
+            if (v instanceof Date) return v.toISOString().slice(0, 10);
+            return String(v).trim() || null;
+        };
+        return {
+            vendorName: cellStr('K11'),
+            refNo: cellStr('K12'),
+            quotedDate: cellStr('K13'),
+            totalAmount: ws.getCell('K14').value ?? ws.getCell('M14').value ?? null,
+            comments: cellStr('K15'),
+            field16: cellStr('K16') || cellStr('I16'),
+            field17: cellStr('K17') || cellStr('I17'),
+            currency: cellStr('M14') || cellStr('K14') || cellStr('M25') || cellStr('J14') || null,
+        };
+    }
+
+    /** Vendor quotation print form (SPARE PARTS REQUISITION + Price/Remark columns) */
+    function parseQuotePrintForm(ws, map, headerRowNo) {
+        const cCode = map.code;
+        const cPart = map['part no'];
+        if (!cCode && !cPart) return null;
+        const cRemark = map.remark || map['vendor comment'];
+        const meta = quotePrintVendorMeta(ws);
+        const currency = meta.currency;
+        const rows = [];
+        ws.eachRow((row, rn) => {
+            if (rn <= headerRowNo) return;
+            const code = cCode ? String(rowCellVal(row, cCode)).trim() : '';
+            const drawing = cPart ? String(rowCellVal(row, cPart)).trim() : '';
+            const partNo = !isBlankImportCell(code) ? code : (!isBlankImportCell(drawing) ? drawing : '');
+            if (!partNo || partNo.toLowerCase().replace(/\.$/, '') === 'part no' || partNo === 'Code') return;
+            const price = parseNumCell(row.getCell(13).value)
+                ?? parseNumCell(row.getCell(14).value)
+                ?? parseNumCell(row.getCell(10).value)
+                ?? parseNumCell(rowCellVal(row, map.price));
+            const remark17 = String(rowCellVal(row, 17) || '').trim();
+            const remark18 = cRemark ? String(rowCellVal(row, cRemark) || '').trim() : '';
+            const vendorComment = remark17 || remark18 || null;
+            rows.push({
+                part_no: partNo,
+                price,
+                currency,
+                vendor_comment: vendorComment,
+                qty_approved: null,
+                qty_received: null,
+                current_stock: null,
+                hq_comment: null,
+            });
+        });
+        return rows.length ? { rows, ...meta } : null;
+    }
+
+    function isQuotePrintForm(map) {
+        return map.remark != null || (map.price != null && map.req != null && map['qty requested'] == null);
     }
 
     /**
      * 회신 엑셀 파싱 → part_no 기준 행 배열.
      * 반환: [{ part_no, price, currency, vendor_comment, qty_approved, hq_comment }]
      */
-    async function parseRequisitionFile(file) {
+    async function parseRequisitionFile(file, opts = {}) {
         if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(await file.arrayBuffer());
@@ -199,27 +276,32 @@ const TVC_Excel = (function () {
         if (!ws) throw new Error('시트를 찾을 수 없습니다.');
 
         const { map, headerRowNo } = buildHeaderMap(ws);
+        if (isQuotePrintForm(map)) {
+            const parsed = parseQuotePrintForm(ws, map, headerRowNo);
+            if (parsed?.rows?.length) {
+                if (opts.withMeta) return parsed;
+                return parsed.rows;
+            }
+        }
+
         const col = (name) => map[name.toLowerCase()];
         const cPart = col('part no');
         if (!cPart) throw new Error("'Part No' 열을 찾을 수 없습니다.");
 
         const rows = [];
-        const val = (row, c) => (c ? (row.getCell(c).value ?? '') : '');
-        const num = (v) => { const n = parseFloat(String(v).replace(/[^0-9.\-]/g, '')); return isNaN(n) ? null : n; };
-
         ws.eachRow((row, rn) => {
             if (rn <= headerRowNo) return;
-            const partNo = String(val(row, cPart)).trim();
+            const partNo = String(rowCellVal(row, cPart)).trim();
             if (!partNo) return;
             rows.push({
                 part_no: partNo,
-                price: num(val(row, col('unit price'))),
-                currency: String(val(row, col('currency')) || '').trim() || null,
-                vendor_comment: String(val(row, col('vendor comment')) || '').trim() || null,
-                qty_approved: num(val(row, col('qty approved'))),
-                qty_received: num(val(row, col('qty received'))) ?? num(val(row, col('qty approved'))),
-                current_stock: num(val(row, col('current stock'))),
-                hq_comment: String(val(row, col('hq comment')) || '').trim() || null,
+                price: parseNumCell(rowCellVal(row, col('unit price'))),
+                currency: String(rowCellVal(row, col('currency')) || '').trim() || null,
+                vendor_comment: String(rowCellVal(row, col('vendor comment')) || '').trim() || null,
+                qty_approved: parseNumCell(rowCellVal(row, col('qty approved'))),
+                qty_received: parseNumCell(rowCellVal(row, col('qty received'))) ?? parseNumCell(rowCellVal(row, col('qty approved'))),
+                current_stock: parseNumCell(rowCellVal(row, col('current stock'))),
+                hq_comment: String(rowCellVal(row, col('hq comment')) || '').trim() || null,
             });
         });
         return rows;
@@ -296,8 +378,27 @@ const TVC_Excel = (function () {
     }
 
     const SPARE_REQ_PRINT_TEMPLATE = 'data/spare-parts-requisition-template.xlsx';
-    const SPARE_REQ_DATA_START_ROW = 16;
-    const SPARE_REQ_HEADER_ROW = 15;
+    const SPARE_REQ_DATA_START_ROW = 28;
+    const SPARE_REQ_HEADER_ROW = 27;
+    const SPARE_REQ_MAX_COL = 18;
+    const SPARE_REQ_TEMPLATE_MIN_ROW = 46;
+    const SPARE_REQ_MAX_DATA_ROW = 35;
+
+    const SPARE_QUOTE_PRINT_TEMPLATE = 'data/spare-parts-quotation-template.xlsx';
+    const SPARE_QUOTE_DATA_START_ROW = 28;
+    const SPARE_QUOTE_HEADER_ROW = 27;
+    const SPARE_QUOTE_MAX_COL = 18;
+    const SPARE_QUOTE_TEMPLATE_MIN_ROW = 34;
+    const SPARE_QUOTE_MAX_DATA_ROW = 34;
+    const SPARE_QUOTE_SUM_ROW = 26;
+    const SPARE_QUOTE_YELLOW = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFF00' } };
+
+    function clearSpareQuoteTemplateRows(ws, fromRow = SPARE_QUOTE_DATA_START_ROW, toRow = SPARE_QUOTE_TEMPLATE_MIN_ROW) {
+        for (let rn = fromRow; rn <= toRow; rn++) {
+            const row = ws.getRow(rn);
+            for (let c = 1; c <= SPARE_QUOTE_MAX_COL; c++) row.getCell(c).value = null;
+        }
+    }
 
     function cloneCellStyle(src, dst) {
         if (!src || !dst) return;
@@ -317,16 +418,18 @@ const TVC_Excel = (function () {
         }
     }
 
-    function cloneWorksheetFromTemplate(src, dst) {
+    function cloneWorksheetFromTemplate(src, dst, opts = {}) {
+        const maxCol = opts.maxCol || 15;
+        const minRow = opts.minRow || 34;
         (src.columns || []).forEach((col, idx) => {
             if (col && col.width) dst.getColumn(idx + 1).width = col.width;
         });
-        const maxRow = Math.max(src.rowCount || 0, 34);
+        const maxRow = Math.max(src.rowCount || 0, minRow);
         for (let rn = 1; rn <= maxRow; rn++) {
             const srcRow = src.getRow(rn);
             const dstRow = dst.getRow(rn);
             if (srcRow.height) dstRow.height = srcRow.height;
-            for (let colNumber = 1; colNumber <= 15; colNumber++) {
+            for (let colNumber = 1; colNumber <= maxCol; colNumber++) {
                 const srcCell = srcRow.getCell(colNumber);
                 const dstCell = dstRow.getCell(colNumber);
                 if (srcCell.value !== null && srcCell.value !== undefined) dstCell.value = srcCell.value;
@@ -338,6 +441,9 @@ const TVC_Excel = (function () {
             try { dst.mergeCells(m); } catch (_) { /* ignore duplicate merge */ }
         });
         if (src.pageSetup) dst.pageSetup = { ...src.pageSetup };
+        if (src.headerFooter) {
+            try { dst.headerFooter = JSON.parse(JSON.stringify(src.headerFooter)); } catch (_) { /* ignore */ }
+        }
     }
 
     function spareReqCellValue(v) {
@@ -365,42 +471,209 @@ const TVC_Excel = (function () {
     function applySpareReqDataRowStyle(ws, rowNum, templateRowNum = SPARE_REQ_DATA_START_ROW) {
         const tpl = ws.getRow(templateRowNum);
         const row = ws.getRow(rowNum);
-        for (let c = 1; c <= 15; c++) cloneCellStyle(tpl.getCell(c), row.getCell(c));
+        for (let c = 1; c <= SPARE_REQ_MAX_COL; c++) cloneCellStyle(tpl.getCell(c), row.getCell(c));
+    }
+
+    function clearSpareReqTemplateRows(ws, fromRow = SPARE_REQ_DATA_START_ROW, toRow = SPARE_REQ_TEMPLATE_MIN_ROW) {
+        for (let rn = fromRow; rn <= toRow; rn++) {
+            const row = ws.getRow(rn);
+            for (let c = 1; c <= SPARE_REQ_MAX_COL; c++) row.getCell(c).value = null;
+        }
+    }
+
+    function applySpareQuoteDataRowStyle(ws, rowNum) {
+        const tpl = ws.getRow(SPARE_QUOTE_DATA_START_ROW);
+        const row = ws.getRow(rowNum);
+        for (let c = 1; c <= SPARE_QUOTE_MAX_COL; c++) cloneCellStyle(tpl.getCell(c), row.getCell(c));
+        [13, 14, 17, 18].forEach((c) => { row.getCell(c).fill = SPARE_QUOTE_YELLOW; });
+    }
+
+    function fillSpareQuotePrintSheet(ws, req, vesselName, page, ctx) {
+        const fmt = typeof ctx.fmtDate === 'function' ? ctx.fmtDate : (d) => (d ? String(d).slice(0, 10) : '');
+        const typeLabel = ctx.typeLabel || req.priority || 'ROUTINE';
+        const dash = (v) => (v == null || v === '' ? '—' : v);
+        const currency = String(ctx.currency || 'USD').trim().toUpperCase() || 'USD';
+        const quoteMode = ctx.quoteMode === 'order' ? 'order' : 'vendor';
+        const receivedDate = req.received_on || req.received_date || '';
+        const receivedPort = String(req.received_port || '').trim();
+
+        ws.getCell('C4').value = vesselName || '—';
+        ws.getCell('K4').value = page.pageTotal;
+        ws.getCell('C5').value = req.req_no || '—';
+        ws.getCell('K5').value = typeLabel;
+        ws.getCell('C6').value = `${dash(fmt(req.deliver_date_from) || null)} ~ ${dash(fmt(req.deliver_date_to) || null)}`;
+        ws.getCell('K6').value = dash(fmt(req.made_on) || null);
+        ws.getCell('O6').value = req.made_by || '—';
+        ws.getCell('C7').value = req.deliver_port || '—';
+        ws.getCell('K7').value = dash(fmt(req.assessed_on) || null);
+        ws.getCell('O7').value = req.assessed_by || '—';
+        ws.getCell('C8').value = dash(fmt(receivedDate) || null);
+        ws.getCell('G8').value = receivedPort || '—';
+        ws.getCell('K8').value = dash(fmt(req.ordered_on) || null);
+        ws.getCell('O8').value = req.ordered_by || '—';
+
+        ws.getCell('A12').value = req.ships_comments || '';
+
+        ws.getCell('K11').value = String(ctx.vendorName || '').trim() || '—';
+        ws.getCell('K12').value = '';
+        ws.getCell('K13').value = '';
+        ws.getCell('K15').value = '';
+
+        const h = page.header || {};
+        ws.getCell('A20').value = h.pmsGroupNo || page.groupKey || '—';
+        ws.getCell('A23').value = h.maker || '—';
+        ws.getCell('E23').value = h.modelType || '—';
+        ws.getCell('I23').value = h.capacity || '—';
+        ws.getCell('N23').value = h.serialNo || '—';
+
+        clearSpareQuoteTemplateRows(ws);
+        ws.getRow(35).eachCell({ includeEmpty: false }, (cell) => { cell.value = null; });
+
+        const rows = page.rows || [];
+        rows.forEach((r, idx) => {
+            const rowNum = SPARE_QUOTE_DATA_START_ROW + idx;
+            if (rowNum > SPARE_QUOTE_MAX_DATA_ROW) applySpareQuoteDataRowStyle(ws, rowNum);
+            const row = ws.getRow(rowNum);
+            const orderQty = quoteMode === 'order'
+                ? spareReqCellValue(r.assess != null && r.assess !== '—' ? r.assess : r.request)
+                : '';
+            const price = quoteMode === 'order' && r.unitPrice != null ? spareReqCellValue(r.unitPrice) : '';
+            row.getCell(1).value = r.lineNo;
+            row.getCell(2).value = r.code ?? '';
+            row.getCell(3).value = r.cls ?? '';
+            row.getCell(4).value = r.dwg ?? '';
+            row.getCell(5).value = r.pno ?? '';
+            row.getCell(6).value = r.item ?? '';
+            row.getCell(10).value = r.unit ?? '';
+            row.getCell(11).value = spareReqCellValue(r.request);
+            row.getCell(12).value = orderQty;
+            row.getCell(13).value = price;
+            row.getCell(14).value = price;
+            if (!price) {
+                row.getCell(13).fill = SPARE_QUOTE_YELLOW;
+                row.getCell(14).fill = SPARE_QUOTE_YELLOW;
+            }
+            row.getCell(15).value = { formula: `K${rowNum}*M${rowNum}` };
+            row.getCell(16).value = { formula: `K${rowNum}*M${rowNum}` };
+            const remark = quoteMode === 'order' ? (r.vendorRemark || '') : '';
+            row.getCell(17).value = remark;
+            row.getCell(18).value = remark;
+            if (!remark) {
+                row.getCell(17).fill = SPARE_QUOTE_YELLOW;
+                row.getCell(18).fill = SPARE_QUOTE_YELLOW;
+            }
+            row.commit();
+        });
+
+        const lastDataRow = Math.max(SPARE_QUOTE_MAX_DATA_ROW, SPARE_QUOTE_DATA_START_ROW + rows.length - 1);
+        ws.getCell('K14').value = currency;
+        ws.getCell('M26').value = currency;
+        ws.getCell('N26').value = currency;
+        ws.getCell('O26').value = { formula: `SUM(O${SPARE_QUOTE_DATA_START_ROW}:P${lastDataRow})` };
+        ws.getCell('P26').value = { formula: `SUM(O${SPARE_QUOTE_DATA_START_ROW}:P${lastDataRow})` };
+        ['M14', 'N14', 'O14', 'P14', 'Q14', 'R14'].forEach((addr) => {
+            ws.getCell(addr).value = { formula: 'O26' };
+        });
+
+        const lastRow = Math.max(SPARE_QUOTE_TEMPLATE_MIN_ROW, SPARE_QUOTE_HEADER_ROW + rows.length);
+        ws.pageSetup = { ...(ws.pageSetup || {}), printArea: `A1:R${lastRow}` };
+        ws.pageSetup.orientation = 'landscape';
+        ws.pageSetup.scale = 85;
+        ws.pageSetup.fitToWidth = 1;
+        ws.pageSetup.fitToHeight = 1;
+        const footer = `&CPage ${page.pageIndex} of ${page.pageTotal}`;
+        ws.headerFooter = { ...(ws.headerFooter || {}), oddFooter: footer, evenFooter: footer };
+    }
+
+    async function buildQuoteSparePartsWorkbook(ctx) {
+        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        const pages = ctx?.pages || [];
+        if (!pages.length) throw new Error('No items to export.');
+
+        const res = await fetch(SPARE_QUOTE_PRINT_TEMPLATE);
+        if (!res.ok) throw new Error('Quotation Excel template not found.');
+        const tplBuf = await res.arrayBuffer();
+
+        const outWb = new ExcelJS.Workbook();
+        outWb.creator = 'TVC-PMS';
+        outWb.created = new Date();
+        const usedNames = new Set();
+
+        for (let i = 0; i < pages.length; i++) {
+            const tmpWb = new ExcelJS.Workbook();
+            await tmpWb.xlsx.load(tplBuf);
+            const src = tmpWb.worksheets[0];
+            if (!src) throw new Error('Template worksheet missing.');
+            const sheetName = safeReqSheetName(pages[i].sheetName || pages[i].groupKey, i, usedNames);
+            const ws = outWb.addWorksheet(sheetName);
+            cloneWorksheetFromTemplate(src, ws, { maxCol: SPARE_QUOTE_MAX_COL, minRow: SPARE_QUOTE_TEMPLATE_MIN_ROW });
+            fillSpareQuotePrintSheet(ws, ctx.req, ctx.vesselName, pages[i], ctx);
+        }
+        return outWb;
+    }
+
+    async function buildQuoteSparePartsRequisitionBuffer(ctx) {
+        const wb = await buildQuoteSparePartsWorkbook(ctx);
+        return wb.xlsx.writeBuffer();
+    }
+
+    async function exportQuoteSparePartsRequisitionForm(ctx) {
+        const buf = await buildQuoteSparePartsRequisitionBuffer(ctx);
+        const safeNo = String(ctx.req?.req_no || 'REQUISITION').replace(/[^\w\-]+/g, '_');
+        const safeVendor = String(ctx.vendorName || 'VENDOR').replace(/[^\w\-]+/g, '_');
+        await downloadBlob(buf, ctx.filename || `${safeNo}_${safeVendor}.xlsx`);
+        return true;
     }
 
     function fillSpareReqPrintSheet(ws, req, vesselName, page, ctx) {
         const fmt = typeof ctx.fmtDate === 'function' ? ctx.fmtDate : (d) => (d ? String(d).slice(0, 10) : '');
         const typeLabel = ctx.typeLabel || req.priority || 'ROUTINE';
         const dash = (v) => (v == null || v === '' ? '—' : v);
+        const vendor = ctx.vendorInfo || {};
+        const receivedDate = req.received_on || req.received_date || '';
+        const receivedPort = String(req.received_port || '').trim();
 
         ws.getCell('C4').value = vesselName || '—';
-        ws.getCell('I4').value = `${page.pageIndex} / ${page.pageTotal}`;
+        ws.getCell('K4').value = page.pageTotal;
         ws.getCell('C5').value = req.req_no || '—';
-        ws.getCell('I5').value = typeLabel;
+        ws.getCell('K5').value = typeLabel;
         ws.getCell('C6').value = `${dash(fmt(req.deliver_date_from) || null)} ~ ${dash(fmt(req.deliver_date_to) || null)}`;
-        ws.getCell('I6').value = dash(fmt(req.made_on) || null);
-        ws.getCell('L6').value = req.made_by || '—';
+        ws.getCell('K6').value = dash(fmt(req.made_on) || null);
+        ws.getCell('O6').value = req.made_by || '—';
         ws.getCell('C7').value = req.deliver_port || '—';
-        ws.getCell('I7').value = dash(fmt(req.assessed_on) || null);
-        ws.getCell('L7').value = req.assessed_by || '—';
+        ws.getCell('K7').value = dash(fmt(req.assessed_on) || null);
+        ws.getCell('O7').value = req.assessed_by || '—';
+        ws.getCell('C8').value = dash(fmt(receivedDate) || null);
+        ws.getCell('G8').value = receivedPort || '—';
+        ws.getCell('K8').value = dash(fmt(req.ordered_on) || null);
+        ws.getCell('O8').value = req.ordered_by || '—';
+
+        ws.getCell('A12').value = req.ships_comments || '';
+
+        ws.getCell('K11').value = String(vendor.vendorName || '').trim() || '—';
+        ws.getCell('K12').value = vendor.refNo || '';
+        ws.getCell('K13').value = vendor.quotedDate ? dash(fmt(vendor.quotedDate) || vendor.quotedDate) : '';
+        if (vendor.totalAmount != null && vendor.totalAmount !== '') {
+            ws.getCell('K14').value = spareReqCellValue(vendor.totalAmount);
+            if (vendor.currency) ws.getCell('M14').value = String(vendor.currency).trim().toUpperCase();
+        }
+        ws.getCell('K15').value = vendor.comments || req.vendor_comments || '';
+        ws.getCell('K16').value = vendor.field16 || '';
+        ws.getCell('K17').value = vendor.field17 || '';
 
         const h = page.header || {};
-        ws.getCell('A10').value = h.pmsGroupNo || page.groupKey || '—';
-        ws.getCell('A12').value = h.maker || '—';
-        ws.getCell('E12').value = h.modelType || '—';
-        ws.getCell('G12').value = h.capacity || '—';
-        ws.getCell('K12').value = h.serialNo || '—';
-        ws.getCell('A15').value = 'No.';
+        ws.getCell('A20').value = h.pmsGroupNo || page.groupKey || '—';
+        ws.getCell('A23').value = h.maker || '—';
+        ws.getCell('E23').value = h.modelType || '—';
+        ws.getCell('I23').value = h.capacity || '—';
+        ws.getCell('N23').value = h.serialNo || '—';
 
-        for (let rn = SPARE_REQ_DATA_START_ROW; rn <= 34; rn++) {
-            const row = ws.getRow(rn);
-            for (let c = 1; c <= 15; c++) row.getCell(c).value = null;
-        }
+        clearSpareReqTemplateRows(ws);
 
         const rows = page.rows || [];
         rows.forEach((r, idx) => {
             const rowNum = SPARE_REQ_DATA_START_ROW + idx;
-            if (rowNum > 34) applySpareReqDataRowStyle(ws, rowNum);
+            if (rowNum > SPARE_REQ_MAX_DATA_ROW) applySpareReqDataRowStyle(ws, rowNum);
             const row = ws.getRow(rowNum);
             row.getCell(1).value = r.lineNo;
             row.getCell(2).value = r.code ?? '';
@@ -408,32 +681,29 @@ const TVC_Excel = (function () {
             row.getCell(4).value = r.dwg ?? '';
             row.getCell(5).value = r.pno ?? '';
             row.getCell(6).value = r.item ?? '';
-            row.getCell(7).value = r.unit ?? '';
-            row.getCell(8).value = spareReqCellValue(r.working);
-            row.getCell(9).value = spareReqCellValue(r.std);
-            row.getCell(10).value = spareReqCellValue(r.stock);
-            row.getCell(11).value = spareReqCellValue(r.awaiting);
-            row.getCell(12).value = spareReqCellValue(r.need);
-            row.getCell(13).value = spareReqCellValue(r.request);
-            row.getCell(14).value = spareReqCellValue(r.assess);
-            row.getCell(15).value = spareReqCellValue(r.rcvd);
+            row.getCell(10).value = r.unit ?? '';
+            row.getCell(11).value = spareReqCellValue(r.working);
+            row.getCell(12).value = spareReqCellValue(r.std);
+            row.getCell(13).value = spareReqCellValue(r.stock);
+            row.getCell(14).value = spareReqCellValue(r.awaiting);
+            row.getCell(15).value = spareReqCellValue(r.need);
+            row.getCell(16).value = spareReqCellValue(r.request);
+            row.getCell(17).value = spareReqCellValue(r.assess);
+            row.getCell(18).value = spareReqCellValue(r.rcvd);
             row.commit();
         });
 
-        const lastRow = Math.max(34, SPARE_REQ_HEADER_ROW + rows.length);
-        ws.pageSetup = { ...(ws.pageSetup || {}), printArea: `A1:O${lastRow}` };
+        const lastRow = Math.max(SPARE_REQ_TEMPLATE_MIN_ROW, SPARE_REQ_HEADER_ROW + rows.length);
+        ws.pageSetup = { ...(ws.pageSetup || {}), printArea: `A1:R${lastRow}` };
         ws.pageSetup.orientation = 'landscape';
-        ws.pageSetup.scale = 85;
+        ws.pageSetup.scale = 72;
         ws.pageSetup.fitToWidth = 1;
         ws.pageSetup.fitToHeight = 1;
+        const footer = `&CPage ${page.pageIndex} of ${page.pageTotal}`;
+        ws.headerFooter = { ...(ws.headerFooter || {}), oddFooter: footer, evenFooter: footer };
     }
 
-    /**
-     * SPARE PARTS REQUISITION 인쇄 양식 → xlsx (Print/Preview와 동일 레이아웃)
-     * @param {{ req, vesselName, typeLabel?, fmtDate?, pages }} ctx
-     *   pages: [{ pageIndex, pageTotal, groupKey, header, rows }]
-     */
-    async function exportSparePartsRequisitionForm(ctx) {
+    async function buildSparePartsRequisitionWorkbook(ctx) {
         if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
         const pages = ctx?.pages || [];
         if (!pages.length) throw new Error('No items to export.');
@@ -454,18 +724,33 @@ const TVC_Excel = (function () {
             if (!src) throw new Error('Template worksheet missing.');
             const sheetName = safeReqSheetName(pages[i].sheetName || pages[i].groupKey, i, usedNames);
             const ws = outWb.addWorksheet(sheetName);
-            cloneWorksheetFromTemplate(src, ws);
+            cloneWorksheetFromTemplate(src, ws, { maxCol: SPARE_REQ_MAX_COL, minRow: SPARE_REQ_TEMPLATE_MIN_ROW });
             fillSpareReqPrintSheet(ws, ctx.req, ctx.vesselName, pages[i], ctx);
         }
+        return outWb;
+    }
 
+    async function buildSparePartsRequisitionBuffer(ctx) {
+        const wb = await buildSparePartsRequisitionWorkbook(ctx);
+        return wb.xlsx.writeBuffer();
+    }
+
+    /**
+     * SPARE PARTS REQUISITION 인쇄 양식 → xlsx (Print/Preview와 동일 레이아웃)
+     * @param {{ req, vesselName, typeLabel?, fmtDate?, pages }} ctx
+     *   pages: [{ pageIndex, pageTotal, groupKey, header, rows }]
+     */
+    async function exportSparePartsRequisitionForm(ctx) {
+        const buf = await buildSparePartsRequisitionBuffer(ctx);
         const safeNo = String(ctx.req?.req_no || 'REQUISITION').replace(/[^\w\-]+/g, '_');
-        const buf = await outWb.xlsx.writeBuffer();
-        await downloadBlob(buf, `${safeNo}-requisition.xlsx`);
+        await downloadBlob(buf, ctx.filename || `${safeNo}-requisition.xlsx`);
         return true;
     }
 
     return {
-        available, exportRequisition, exportQuoteRequisition, parseRequisitionFile, exportSparePartsList,
-        exportSparePartsRequisitionForm, COLS, SPARE_LIST_COLS,
+        available, exportRequisition, exportQuoteRequisition, parseRequisitionFile, parseVendorQuoteFile: (file) => parseRequisitionFile(file, { withMeta: true }), exportSparePartsList,
+        exportSparePartsRequisitionForm, buildQuoteSparePartsRequisitionBuffer, exportQuoteSparePartsRequisitionForm,
+        buildSparePartsRequisitionBuffer,
+        COLS, SPARE_LIST_COLS,
     };
 })();
