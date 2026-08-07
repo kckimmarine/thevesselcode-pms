@@ -216,9 +216,11 @@ const TVC_SpareSync = (function () {
         const payload = JSON.parse(await jsonFile.async('string'));
         const meta = payload.export_meta || {};
         const category = String(meta.category || opts.expectedCategory || '').toUpperCase();
-        const expected = opts.expectedCategory ? String(opts.expectedCategory).toUpperCase() : '';
-        if (expected && category && category !== expected) {
-            throw new Error(`Category mismatch: expected ${expected}, file has ${category}.`);
+        const expectedList = (opts.expectedCategories || (opts.expectedCategory ? [opts.expectedCategory] : []))
+            .map(c => String(c).toUpperCase())
+            .filter(Boolean);
+        if (expectedList.length && category && !expectedList.includes(category)) {
+            throw new Error(`Category mismatch: expected ${expectedList.join(' or ')}, file has ${category}.`);
         }
 
         let updated = 0;
@@ -234,6 +236,10 @@ const TVC_SpareSync = (function () {
                         vendor_comment: l.vendor_comment,
                     }));
                     await TVC_Inventory.applyVendorQuote(req.id, rows);
+                } else if (opts.importMode === 'vessel-order' && window.TVC_Inventory?.applyVesselOrderImport) {
+                    const existing = await TVC_Inventory.getRequisition(req.id);
+                    if (existing) await TVC_Inventory.applyVesselOrderImport(req.id, req);
+                    else await TVC_DB.put('requisitions', req);
                 } else if (opts.importMode === 'hq-adjustment' && window.TVC_Inventory?.applyHqAdjustment) {
                     const existing = await TVC_Inventory.getRequisition(req.id);
                     if (existing) {

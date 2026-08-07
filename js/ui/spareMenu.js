@@ -151,6 +151,7 @@ const TVC_SpareMenu = (function () {
         REQUISITION: 'Requisition',
         REQ_QUOTE: 'Req Quote',
         QUOTED: 'Quoted',
+        EVALUATING: 'Evaluating',
         EVALUATED: 'Evaluated',
         ORDERED: 'Ordered',
         RECEIVED: 'Received',
@@ -2192,31 +2193,28 @@ const TVC_SpareMenu = (function () {
     /** Request Quote(견적 ZIP) Export 완료 — Import Quote 탭 활성화 기준 */
     function reqWorkHqQuoteExportComplete(req) {
         if (!req) return false;
-        const fs = String(req?.hq_quote?.flowStage || '');
-        return ['export-quote', 'quoted', 'import-quote', 'evaluation', 'reply-evaluation', 'purchase-order', 'ordered', 'order', 'received-import', 'received'].includes(fs);
+        if (req?.hq_quote?.quoteExported) return true;
+        return reqHqFlowStageReached(req, 'export-quote');
     }
 
     /** Import Quote 완료 — Evaluation / Reply Evaluation 탭 활성화 기준 */
     function reqWorkHqImportQuoteComplete(req) {
         if (!req) return false;
         if (reqWorkHqVendorQuoteImported(req)) return true;
-        const fs = String(req?.hq_quote?.flowStage || '');
-        return ['import-quote', 'evaluation', 'reply-evaluation', 'purchase-order', 'ordered', 'order', 'received'].includes(fs);
+        return reqHqFlowStageReached(req, 'import-quote');
     }
 
     /** Reply Evaluation Export 완료 — Purchase Order 탭 활성화 기준 */
     function reqWorkHqReplyEvalExportComplete(req) {
         if (!req) return false;
-        const fs = String(req?.hq_quote?.flowStage || '');
-        return !!req?.hq_quote?.replyExported
-            || ['reply-evaluation', 'purchase-order', 'ordered', 'order', 'received'].includes(fs);
+        if (req?.hq_quote?.replyExported) return true;
+        return reqHqFlowStageReached(req, 'purchase-order');
     }
 
     /** 선박 Received + HQ Import 완료 — Received 탭 활성화 기준 */
     function reqWorkHqReceivedImportComplete(req) {
         if (!req) return false;
-        const fs = String(req?.hq_quote?.flowStage || '');
-        if (fs === 'received' || !!req?.hq_quote?.receivedImported) return true;
+        if (req?.hq_quote?.receivedImported) return true;
         const hasReceivedDate = !!reqListReceivedDate(req);
         const hasLineReceived = (req.lines || []).some(l => Number(l.qty_received) > 0);
         return hasReceivedDate && hasLineReceived;
@@ -2351,6 +2349,7 @@ const TVC_SpareMenu = (function () {
 
     function applyReqWorkHqStageOnLoad(req, m) {
         if (!req || !m) return;
+        reqHqSyncMaxFlowStage(req);
         const st = getState();
         const isHq = !!(window.TVC_RBAC?.isHqAccount?.(spareInventoryUser(st)));
         const q = ensureReqWorkQuoteState(req);
@@ -4606,7 +4605,7 @@ const TVC_SpareMenu = (function () {
             canConfirmNow,
             canApproveNow,
             confirmedByVal: isConfirmed ? (req.os_waived_confirmed_by || requisitionConfirmByLabel(st, req)) : '',
-            approvedByVal: isApproved ? 'Company' : '',
+            approvedByVal: isApproved ? (req?.os_waived_approved_by || 'Company') : '',
         };
     }
 
@@ -4851,9 +4850,106 @@ const TVC_SpareMenu = (function () {
         return req.vessel_flow;
     }
 
+    const REQ_VESSEL_FLOW_STAGES = ['report', 'confirm', 'submit', 'submitted', 'evaluation-import', 'evaluated', 'received', 'received-export'];
+    const REQ_HQ_FLOW_STAGES = ['requisition', 'request-quote', 'export-quote', 'quoted', 'import-quote', 'evaluation', 'purchase-order', 'ordered', 'received-import', 'received'];
+
+    function normalizeHqFlowStage(stage) {
+        const s = String(stage || '');
+        if (s === 'reply-evaluation') return 'purchase-order';
+        if (s === 'order') return 'ordered';
+        return s;
+    }
+
+    function reqFlowStageIndex(stages, stage) {
+        const idx = stages.indexOf(stage);
+        return idx >= 0 ? idx : -1;
+    }
+
+    function reqFlowBumpMaxStage(stages, container, maxKey, stage) {
+        const idx = reqFlowStageIndex(stages, stage);
+        if (idx < 0) return;
+        const curIdx = reqFlowStageIndex(stages, container[maxKey] || '');
+        if (idx > curIdx) container[maxKey] = stage;
+    }
+
+    function reqVesselBumpMaxFlowStage(req, stage) {
+        reqFlowBumpMaxStage(REQ_VESSEL_FLOW_STAGES, ensureReqWorkVesselFlowState(req), 'maxFlowStage', stage);
+    }
+
+    function reqHqBumpMaxFlowStage(req, stage) {
+        reqFlowBumpMaxStage(REQ_HQ_FLOW_STAGES, ensureReqWorkQuoteState(req), 'maxFlowStage', normalizeHqFlowStage(stage));
+    }
+
+    function reqVesselSyncMaxFlowStage(req) {
+        if (!req) return;
+        const vf = ensureReqWorkVesselFlowState(req);
+        if (!vf.maxFlowStage && vf.flowStage) reqVesselBumpMaxFlowStage(req, vf.flowStage);
+        const idx = reqVesselFlowProgressIndex(req);
+        if (idx >= 0) vf.maxFlowStage = REQ_VESSEL_FLOW_STAGES[idx];
+    }
+
+    function reqHqSyncMaxFlowStage(req) {
+        if (!req) return;
+        const q = ensureReqWorkQuoteState(req);
+        if (!q.maxFlowStage && q.flowStage) reqHqBumpMaxFlowStage(req, q.flowStage);
+        const idx = reqHqFlowProgressIndex(req);
+        if (idx >= 0) q.maxFlowStage = REQ_HQ_FLOW_STAGES[idx];
+    }
+
+    function reqVesselFlowProgressIndex(req) {
+        if (!req) return 0;
+        let maxIdx = 0;
+        const bump = (stage) => {
+            const idx = REQ_VESSEL_FLOW_STAGES.indexOf(stage);
+            if (idx >= 0) maxIdx = Math.max(maxIdx, idx);
+        };
+        const vf = req.vessel_flow || {};
+        if (vf.maxFlowStage) bump(vf.maxFlowStage);
+        if (reqVesselWorkflowComplete(req) || reqVesselReceiveRecorded(req) || reqVesselReceivedExportComplete(req)) {
+            bump('received-export');
+        } else {
+            const status = reqVesselListWorkflowStatus(req);
+            if (status === VESSEL_REQ_LIST_STATUS.RECEIVED) bump('received');
+            else if (status === VESSEL_REQ_LIST_STATUS.EVALUATED || reqVesselHasEvalData(req)) bump('evaluated');
+            else if (status === VESSEL_REQ_LIST_STATUS.SUBMITTED || reqVesselSubmitExportComplete(req)) bump('submitted');
+            else if (status === VESSEL_REQ_LIST_STATUS.CONFIRMED) bump('confirm');
+            else bump('report');
+        }
+        return maxIdx;
+    }
+
+    function reqHqFlowProgressIndex(req) {
+        if (!req) return 0;
+        let maxIdx = 0;
+        const bump = (stage) => {
+            const idx = REQ_HQ_FLOW_STAGES.indexOf(normalizeHqFlowStage(stage));
+            if (idx >= 0) maxIdx = Math.max(maxIdx, idx);
+        };
+        const q = req.hq_quote || {};
+        if (q.maxFlowStage) bump(q.maxFlowStage);
+        if (q.receivedImported || reqWorkHqReceivedImportComplete(req)) bump('received');
+        if (q.orderExported || String(req.ordered_on || '').trim()) bump('ordered');
+        if (q.replyExported) bump('purchase-order');
+        if (reqWorkHqEvaluationReady(req)) bump('evaluation');
+        if (reqWorkHqVendorQuoteImported(req)) bump('import-quote');
+        if (q.quoteExported) bump('quoted');
+        return maxIdx;
+    }
+
+    function reqVesselFlowStageReached(req, stage) {
+        const stageIdx = REQ_VESSEL_FLOW_STAGES.indexOf(stage);
+        return stageIdx >= 0 && stageIdx <= reqVesselFlowProgressIndex(req);
+    }
+
+    function reqHqFlowStageReached(req, stage) {
+        const stageIdx = REQ_HQ_FLOW_STAGES.indexOf(stage);
+        return stageIdx >= 0 && stageIdx <= reqHqFlowProgressIndex(req);
+    }
+
     function reqVesselFlowStageEnabled(req, stage) {
         if (!req) return false;
-        if (reqVesselWorkflowComplete(req)) return stage === 'received-export';
+        if (reqVesselFlowStageReached(req, stage)) return true;
+        if (reqVesselWorkflowComplete(req)) return false;
         const status = reqVesselListWorkflowStatus(req);
         switch (stage) {
             case 'report':
@@ -4884,7 +4980,7 @@ const TVC_SpareMenu = (function () {
     function reqVesselResolvedFlowStage(req) {
         if (!req) return 'report';
         const vf = String(req?.vessel_flow?.flowStage || '');
-        if (vf && reqVesselFlowStageEnabled(req, vf)) return vf;
+        if (vf && REQ_VESSEL_FLOW_STAGES.includes(vf)) return vf;
         if (reqVesselWorkflowComplete(req)) return 'received-export';
         if (reqVesselReceiveRecorded(req)) return 'received-export';
         const status = reqVesselListWorkflowStatus(req);
@@ -4906,7 +5002,8 @@ const TVC_SpareMenu = (function () {
         if (isReqListHqUser(getState())) return;
         m.reqWorkHqQuoteView = false;
         m.reqWorkHqEvalView = false;
-        m.reqWorkVesselFlowStage = reqVesselResolvedFlowStage(req);
+        reqVesselSyncMaxFlowStage(req);
+        m.reqWorkVesselFlowStage = reqVesselActiveFlowStage(m, req);
         const vf = ensureReqWorkVesselFlowState(req);
         vf.flowStage = m.reqWorkVesselFlowStage;
     }
@@ -4927,6 +5024,17 @@ const TVC_SpareMenu = (function () {
         st = st || getState();
         if (isReqListHqUser(st)) return reqHqListWorkflowStatus(req);
         return reqVesselListWorkflowStatus(req);
+    }
+
+    /** Requisition List work window — STATUS reflects active workflow tab when applicable */
+    function reqWorkMetaStatusLabel(req, st) {
+        st = st || getState();
+        const m = modState(st);
+        if (req && isReqListHqUser(st) && isRequisitionListWindow(m)
+            && reqWorkHqActiveFlowStage(m, req) === 'evaluation') {
+            return HQ_REQ_LIST_STATUS.EVALUATING;
+        }
+        return reqListDisplayStatusLabel(req, st);
     }
 
     function reqListDateInPeriod(dateStr, from, to) {
@@ -5755,7 +5863,7 @@ const TVC_SpareMenu = (function () {
         setVal('reqWorkOrderedBy', req.ordered_by || '');
         setVal('reqWorkReceivedOn', fmtSpareDate(reqListReceivedDate(req) || ''));
         setVal('reqWorkReceivedPort', reqListReceivedPort(req));
-        setVal('reqWorkStatus', reqListDisplayStatusLabel(req, getState()));
+        setVal('reqWorkStatus', reqWorkMetaStatusLabel(req, getState()));
         const reqType = reqListTypeKind(req);
         document.querySelectorAll('input[name="reqWorkPriority"]').forEach(radio => {
             radio.checked = radio.value === reqType;
@@ -8411,10 +8519,13 @@ const TVC_SpareMenu = (function () {
                         const q = ensureReqWorkQuoteState(req);
                         q.replyExported = true;
                         q.flowStage = 'reply-evaluation';
+                        reqHqBumpMaxFlowStage(req, 'purchase-order');
                         await TVC_Inventory.saveRequisition(req);
                     } else if (xferKind === 'purchase-order') {
                         const q = ensureReqWorkQuoteState(req);
                         q.flowStage = 'ordered';
+                        q.orderExported = true;
+                        reqHqBumpMaxFlowStage(req, 'ordered');
                         await TVC_Inventory.saveRequisition(req);
                     }
                 }
@@ -8449,6 +8560,7 @@ const TVC_SpareMenu = (function () {
                         m.reqWorkVesselFlowStage = 'submitted';
                         const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
                         vf.flowStage = 'submitted';
+                        reqVesselBumpMaxFlowStage(_reqWorkDraft, 'submitted');
                         await persistReqWorkVesselDraft();
                         syncReqWorkFlowBtns();
                     } else if (!isReqListHqUser(getState()) && xferKind === 'received') {
@@ -8456,6 +8568,7 @@ const TVC_SpareMenu = (function () {
                         const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
                         vf.receivedExported = true;
                         vf.flowStage = 'received-export';
+                        reqVesselBumpMaxFlowStage(_reqWorkDraft, 'received-export');
                         await persistReqWorkVesselDraft();
                         syncReqWorkFlowBtns();
                     } else if (isReqListHqUser(getState()) && xferKind === 'purchase-order') {
@@ -9478,6 +9591,19 @@ const TVC_SpareMenu = (function () {
         });
     }
 
+    function hqSuperintendentApprovalLabel(st) {
+        const user = spareInventoryUser(st);
+        return TVC_RBAC?.getRankLabel?.(user) || 'Superintendent';
+    }
+
+    function applyHqQuoteExportApproval(req, st) {
+        if (!req) return;
+        const now = new Date().toISOString();
+        req.approved_by = hqSuperintendentApprovalLabel(st);
+        req.approved_at = req.approved_at || now;
+        req.list_status = SPARE_LIST_STATUS.APPROVED;
+    }
+
     async function exportQuotationReq(id) {
         const { st, isHq, vesselId } = await vesselScope();
         const req = await resolveExportRequisition(id);
@@ -9516,7 +9642,19 @@ const TVC_SpareMenu = (function () {
         const result = await TVC_SpareSync.exportQuotationZip(st.user, req, targets, { isHq, excelFiles });
         const q = ensureReqWorkQuoteState(req);
         q.flowStage = 'quoted';
+        q.quoteExported = true;
+        reqHqBumpMaxFlowStage(req, 'quoted');
+        applyHqQuoteExportApproval(req, st);
         await TVC_Inventory.saveRequisition(req);
+        if (_reqWorkDraft?.id && String(_reqWorkDraft.id) === String(id)) {
+            _reqWorkDraft.approved_by = req.approved_by;
+            _reqWorkDraft.approved_at = req.approved_at;
+            _reqWorkDraft.list_status = req.list_status;
+            const dq = ensureReqWorkQuoteState(_reqWorkDraft);
+            dq.flowStage = 'quoted';
+            dq.quoteExported = true;
+            reqHqBumpMaxFlowStage(_reqWorkDraft, 'quoted');
+        }
         await refreshReqListModalIfOpen();
         render();
         return result;
@@ -9538,6 +9676,7 @@ const TVC_SpareMenu = (function () {
         const q = ensureReqWorkQuoteState(req);
         q.replyExported = true;
         q.flowStage = 'reply-evaluation';
+        reqHqBumpMaxFlowStage(req, 'purchase-order');
         await TVC_Inventory.saveRequisition(req);
         await refreshReqListModalIfOpen();
         render();
@@ -9558,6 +9697,8 @@ const TVC_SpareMenu = (function () {
         });
         const q = ensureReqWorkQuoteState(req);
         q.flowStage = 'ordered';
+        q.orderExported = true;
+        reqHqBumpMaxFlowStage(req, 'ordered');
         await TVC_Inventory.saveRequisition(req);
         await refreshReqListModalIfOpen();
         render();
@@ -9927,7 +10068,7 @@ const TVC_SpareMenu = (function () {
         const name = (file?.name || '').toLowerCase();
         if (!name) return false;
         if (name.endsWith('.json')) return true;
-        if (name.endsWith('.xlsx') && /eval|evaluation|assessment/i.test(name)) return true;
+        if (name.endsWith('.xlsx') && /eval|evaluation|assessment|_order/i.test(name)) return true;
         return false;
     }
 
@@ -10032,6 +10173,33 @@ const TVC_SpareMenu = (function () {
             inventory: SPARE_XFER_EXPORT.INVENTORY,
         };
         return map[kind] || '';
+    }
+
+    function spareVesselOrderImportCategories() {
+        return [SPARE_XFER_EXPORT.REPLY_EVALUATION, SPARE_XFER_EXPORT.PURCHASE_ORDER];
+    }
+
+    function isVesselOrderImportContext(importKind, category) {
+        if (isReqListHqUser(getState())) return false;
+        return importKind === 'evaluation'
+            || spareVesselOrderImportCategories().includes(category);
+    }
+
+    async function applyVesselOrderedViewState() {
+        const st = getState();
+        const m = modState(st);
+        const req = getReqWorkSession();
+        if (!req || !isRequisitionListWindow(m) || isReqListHqUser(st)) return false;
+        m.reqWorkVesselFlowStage = 'evaluated';
+        m.reqWorkHqQuoteView = false;
+        m.reqWorkHqEvalView = false;
+        const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
+        vf.flowStage = 'evaluated';
+        reqVesselBumpMaxFlowStage(_reqWorkDraft, 'evaluated');
+        await persistReqWorkVesselDraft();
+        await refreshReqWorkListUi();
+        syncReqWorkFlowBtns();
+        return true;
     }
 
     async function spareXferExportRequisitions() {
@@ -10139,6 +10307,8 @@ const TVC_SpareMenu = (function () {
             }
         }
         if (!req) throw new Error('No matching requisition found. Create and complete a requisition first.');
+        const vesselOrderExcel = !isHq && (_spareXfer.importKind === 'evaluation' || /_order\.xlsx$/i.test(file.name || ''));
+        if (vesselOrderExcel) _reqImportMode = 'hq-adjustment';
         const importAsHq = _reqImportMode === 'hq-adjustment' || (_reqImportMode !== 'vendor-quote' && isHq);
         const res = importAsVendor
             ? await applyHqVendorQuoteImport(req.id, rows, {
@@ -10155,6 +10325,8 @@ const TVC_SpareMenu = (function () {
                     currency: parsed.currency,
                 } : null,
             })
+            : vesselOrderExcel && TVC_Inventory?.applyVesselOrderImport
+                ? await TVC_Inventory.applyVesselOrderImport(req.id, { lines: rows })
             : importAsHq
                 ? await TVC_Inventory.applyHqAdjustment(req.id, rows)
                 : await TVC_Inventory.applyVendorQuote(req.id, rows);
@@ -10180,13 +10352,8 @@ const TVC_SpareMenu = (function () {
                 await applyHqReceivedViewState();
             } else if ((importAsVendor || opts.category === SPARE_XFER_EXPORT.QUOTATION) && isReqListHqUser(getState())) {
                 await applyHqEvaluationViewState();
-            } else if (opts.category === SPARE_XFER_EXPORT.REPLY_EVALUATION && !isReqListHqUser(getState())) {
-                const m = modState(getState());
-                m.reqWorkVesselFlowStage = 'evaluated';
-                const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
-                vf.flowStage = 'evaluated';
-                await persistReqWorkVesselDraft();
-                syncReqWorkFlowBtns();
+            } else if (isVesselOrderImportContext(_spareXfer.importKind || 'evaluation', opts.category)) {
+                await applyVesselOrderedViewState();
             } else {
                 syncReqWorkFlowBtns();
             }
@@ -10197,13 +10364,19 @@ const TVC_SpareMenu = (function () {
     async function spareXferImportZip(file, importKind) {
         const { st, isHq } = await vesselScope();
         if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP import is not available.');
+        const vesselOrderImport = !isHq && importKind === 'evaluation';
         let importMode = null;
         if (_reqImportMode === 'vendor-quote' || importKind === 'quotation') importMode = 'vendor-quote';
+        else if (vesselOrderImport) importMode = 'vessel-order';
         else if (_reqImportMode === 'hq-adjustment') importMode = 'hq-adjustment';
-        const result = await TVC_SpareSync.importZip(st.user, file, {
-            expectedCategory: spareImportCategory(importKind) || undefined,
-            importMode,
-        });
+        const importOpts = { importMode };
+        if (vesselOrderImport) {
+            importOpts.expectedCategories = spareVesselOrderImportCategories();
+        } else {
+            const expected = spareImportCategory(importKind);
+            if (expected) importOpts.expectedCategory = expected;
+        }
+        const result = await TVC_SpareSync.importZip(st.user, file, importOpts);
         const category = result.category || spareImportCategory(importKind) || 'SPARE';
         const importedReqs = result.payload?.requisitions || [];
         await logSpareDataXfer({
@@ -10230,12 +10403,8 @@ const TVC_SpareMenu = (function () {
                         await applyHqReceivedViewState();
                     } else if ((importKind === 'quotation' || category === SPARE_XFER_EXPORT.QUOTATION || importMode === 'vendor-quote') && isReqListHqUser(getState())) {
                         await applyHqEvaluationViewState();
-                    } else if ((importKind === 'evaluation' || category === SPARE_XFER_EXPORT.REPLY_EVALUATION) && !isReqListHqUser(getState())) {
-                        m.reqWorkVesselFlowStage = 'evaluated';
-                        const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
-                        vf.flowStage = 'evaluated';
-                        await persistReqWorkVesselDraft();
-                        syncReqWorkFlowBtns();
+                    } else if (isVesselOrderImportContext(importKind, category)) {
+                        await applyVesselOrderedViewState();
                     } else {
                         syncReqWorkFlowBtns();
                     }
@@ -10259,7 +10428,7 @@ const TVC_SpareMenu = (function () {
 
             if (importKind === 'evaluation') {
                 if (!isSpareEvaluationImportFile(file)) {
-                    await TVC_Dialog.alert('Only evaluation files can be uploaded.\n· *_EVAL_REPLY.xlsx / *EVAL*.xlsx\n· Assessment .json');
+                    await TVC_Dialog.alert('Only order/evaluation files can be uploaded.\n· HQ Order .zip\n· *_ORDER.xlsx / *_EVAL_REPLY.xlsx\n· Assessment .json');
                     return;
                 }
                 if (name.endsWith('.json')) {
@@ -10275,10 +10444,11 @@ const TVC_SpareMenu = (function () {
                     openAssessmentModal();
                     return;
                 }
-                // HQ Reply Evaluation Excel (*_EVAL_REPLY.xlsx)
+                const orderExcel = /_order\.xlsx$/i.test(name);
+                if (!isReqListHqUser(getState())) _reqImportMode = 'hq-adjustment';
                 await spareXferImportRequisitionExcel(file, {
-                    category: SPARE_XFER_EXPORT.REPLY_EVALUATION,
-                    summary: 'Reply Evaluation imported',
+                    category: orderExcel ? SPARE_XFER_EXPORT.PURCHASE_ORDER : SPARE_XFER_EXPORT.REPLY_EVALUATION,
+                    summary: orderExcel ? 'Order imported' : 'Reply Evaluation imported',
                     peer: 'Company',
                 });
                 return;
@@ -10545,6 +10715,8 @@ const TVC_SpareMenu = (function () {
         const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
         vf.flowStage = 'evaluation-import';
         await persistReqWorkVesselDraft();
+        _reqImportMode = 'hq-adjustment';
+        _importReqId = req?.id || null;
         _spareXfer.importKind = 'evaluation';
         document.getElementById('spareXferImportFile')?.click();
         syncReqWorkFlowBtns();
@@ -10567,6 +10739,7 @@ const TVC_SpareMenu = (function () {
         m.reqWorkHqEvalView = false;
         const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
         vf.flowStage = 'evaluated';
+        reqVesselBumpMaxFlowStage(_reqWorkDraft, 'evaluated');
         await persistReqWorkVesselDraft();
         await refreshReqWorkListUi();
         syncReqWorkFlowBtns();
@@ -10876,6 +11049,7 @@ const TVC_SpareMenu = (function () {
         const q = ensureReqWorkQuoteState(_reqWorkDraft);
         q.evalActive = false;
         q.flowStage = 'ordered';
+        reqHqBumpMaxFlowStage(_reqWorkDraft, 'ordered');
         await persistReqWorkHqDraft();
         await refreshReqWorkListUi();
         syncReqWorkHqFlowBtns();
@@ -11659,7 +11833,7 @@ const TVC_SpareMenu = (function () {
                 ? (TVC_RBAC.resolveConfirmByLabel?.(record?.confirmed_by, record?.department || st?.department, user)
                     || requisitionConfirmByLabel(st, record))
                 : '',
-            approvedByVal: isApproved ? 'Company' : '',
+            approvedByVal: isApproved ? (record?.approved_by || 'Company') : '',
         };
     }
 
@@ -11741,12 +11915,15 @@ const TVC_SpareMenu = (function () {
     /** Purchase Order Export 완료 — Received Import 탭 활성화 기준 */
     function reqWorkHqPurchaseOrderExportComplete(req) {
         if (!req) return false;
-        const fs = String(req?.hq_quote?.flowStage || '');
-        return ['ordered', 'purchase-order', 'order', 'received-import', 'received'].includes(fs);
+        const q = req?.hq_quote || {};
+        if (q.orderExported) return true;
+        if (String(req?.ordered_on || '').trim()) return true;
+        return reqHqFlowStageReached(req, 'ordered');
     }
 
     function reqWorkHqFlowStageEnabled(req, stage, hasDisplayedReq) {
         if (!hasDisplayedReq || !req) return false;
+        if (reqHqFlowStageReached(req, stage)) return true;
         switch (stage) {
             case 'requisition':
             case 'request-quote':
@@ -11888,7 +12065,7 @@ const TVC_SpareMenu = (function () {
 
     function renderReqWorkApprovalRow(req, opts = {}) {
         const st = getState();
-        const statusLabel = req ? reqListDisplayStatusLabel(req, st) : '';
+        const statusLabel = req ? reqWorkMetaStatusLabel(req, st) : '';
         return `<div class="spare-req-approval-row spare-req-approval-row--split">
             <div class="spare-req-approval-left">${renderSpareApprovalSection(req, opts)}</div>
             <div class="spare-req-approval-status spare-req-meta-row">
@@ -11923,7 +12100,7 @@ const TVC_SpareMenu = (function () {
             confirmedByVal: isConfirmed
                 ? (record?.confirmed_by || requisitionConfirmByLabel(st, record))
                 : '',
-            approvedByVal: isApproved ? 'Company' : '',
+            approvedByVal: isApproved ? (record?.approved_by || 'Company') : '',
         };
     }
 

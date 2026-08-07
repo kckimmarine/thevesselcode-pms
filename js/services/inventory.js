@@ -297,6 +297,27 @@ const TVC_Inventory = (function () {
         return { updated, total: req.lines.length, req };
     }
 
+    /**
+     * 선박 Order import — HQ (Data Export) Order ZIP/Excel의 Eval·Ordered 메타 반영
+     */
+    async function applyVesselOrderImport(reqId, importedReq) {
+        const res = await applyHqAdjustment(reqId, (importedReq?.lines || []).map(l => ({
+            part_no: l.part_no,
+            qty_approved: l.qty_approved,
+            hq_comment: l.hq_comment,
+            price: l.price,
+            currency: l.currency,
+        })));
+        const req = res.req || await getRequisition(reqId);
+        if (!req) throw new Error('REQ_NOT_FOUND');
+        if (importedReq?.assessed_on) req.assessed_on = importedReq.assessed_on;
+        if (importedReq?.assessed_by) req.assessed_by = importedReq.assessed_by;
+        if (importedReq?.ordered_on) req.ordered_on = importedReq.ordered_on;
+        if (importedReq?.ordered_by) req.ordered_by = importedReq.ordered_by;
+        await saveRequisition(req);
+        return { ...res, req };
+    }
+
     /** 엑셀 회신 → spare_parts DB (price, comment, stock 입고) */
     async function applyExcelImport(rows, ref) {
         let updated = 0;
@@ -346,7 +367,7 @@ const TVC_Inventory = (function () {
         blankSpare, saveSpare, deleteSpare, universalCodeFor,
         getBom, bomToUsedParts, addBomLine,
         nextReqNo, createRequisition, getRequisition, listRequisitions, saveRequisition,
-        setStatus, deleteRequisition, applyVendorQuote, applyHqAdjustment, applyExcelImport,
+        setStatus, deleteRequisition, applyVendorQuote, applyHqAdjustment, applyVesselOrderImport, applyExcelImport,
         listConsumeLogs, getConsumeLog, saveConsumeLog, deleteConsumeLog,
     };
 })();
