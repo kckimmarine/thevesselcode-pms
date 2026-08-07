@@ -2193,7 +2193,7 @@ const TVC_SpareMenu = (function () {
     function reqWorkHqQuoteExportComplete(req) {
         if (!req) return false;
         const fs = String(req?.hq_quote?.flowStage || '');
-        return ['export-quote', 'import-quote', 'evaluation', 'reply-evaluation', 'purchase-order', 'order', 'received'].includes(fs);
+        return ['export-quote', 'quoted', 'import-quote', 'evaluation', 'reply-evaluation', 'purchase-order', 'ordered', 'order', 'received-import', 'received'].includes(fs);
     }
 
     /** Import Quote 완료 — Evaluation / Reply Evaluation 탭 활성화 기준 */
@@ -2201,7 +2201,7 @@ const TVC_SpareMenu = (function () {
         if (!req) return false;
         if (reqWorkHqVendorQuoteImported(req)) return true;
         const fs = String(req?.hq_quote?.flowStage || '');
-        return ['import-quote', 'evaluation', 'reply-evaluation', 'purchase-order', 'order', 'received'].includes(fs);
+        return ['import-quote', 'evaluation', 'reply-evaluation', 'purchase-order', 'ordered', 'order', 'received'].includes(fs);
     }
 
     /** Reply Evaluation Export 완료 — Purchase Order 탭 활성화 기준 */
@@ -2209,14 +2209,17 @@ const TVC_SpareMenu = (function () {
         if (!req) return false;
         const fs = String(req?.hq_quote?.flowStage || '');
         return !!req?.hq_quote?.replyExported
-            || ['reply-evaluation', 'purchase-order', 'order', 'received'].includes(fs);
+            || ['reply-evaluation', 'purchase-order', 'ordered', 'order', 'received'].includes(fs);
     }
 
     /** 선박 Received + HQ Import 완료 — Received 탭 활성화 기준 */
     function reqWorkHqReceivedImportComplete(req) {
         if (!req) return false;
         const fs = String(req?.hq_quote?.flowStage || '');
-        return fs === 'received' || !!req?.hq_quote?.receivedImported;
+        if (fs === 'received' || !!req?.hq_quote?.receivedImported) return true;
+        const hasReceivedDate = !!reqListReceivedDate(req);
+        const hasLineReceived = (req.lines || []).some(l => Number(l.qty_received) > 0);
+        return hasReceivedDate && hasLineReceived;
     }
 
     function vendorNameFromQuoteImportFile(name) {
@@ -2360,17 +2363,14 @@ const TVC_SpareMenu = (function () {
                 q.receivedImported = true;
                 q.evalActive = false;
                 m.reqWorkHqEvalView = false;
-                if (reqWorkHqHasQuoteDraft(req) || reqWorkHqVendorQuoteImported(req)) {
-                    m.reqWorkHqQuoteView = true;
-                }
+                m.reqWorkHqQuoteView = false;
                 return;
             }
-            if (q.flowStage === 'purchase-order' || q.flowStage === 'order') {
+            if (q.flowStage === 'ordered' || q.flowStage === 'order' || q.flowStage === 'purchase-order') {
                 q.evalActive = false;
                 m.reqWorkHqEvalView = false;
-                if (reqWorkHqHasQuoteDraft(req) || reqWorkHqVendorQuoteImported(req)) {
-                    m.reqWorkHqQuoteView = true;
-                }
+                m.reqWorkHqQuoteView = false;
+                if (q.flowStage === 'purchase-order') q.flowStage = 'ordered';
                 return;
             }
             if (q.flowStage === 'reply-evaluation' || q.replyExported) {
@@ -4718,7 +4718,7 @@ const TVC_SpareMenu = (function () {
 
         const fs = String(req?.hq_quote?.flowStage || '');
 
-        if (fs === 'purchase-order' || fs === 'order' || !!String(req.ordered_on || '').trim()) {
+        if (fs === 'ordered' || fs === 'order' || fs === 'purchase-order' || !!String(req.ordered_on || '').trim()) {
             return HQ_REQ_LIST_STATUS.ORDERED;
         }
 
@@ -4757,6 +4757,94 @@ const TVC_SpareMenu = (function () {
         return (req.lines || []).some(l => l.qty_approved != null && l.qty_approved !== '');
     }
 
+    /** Received Spare Parts 창에서 저장 완료 */
+    function reqVesselReceiveRecorded(req) {
+        if (!req) return false;
+        if (req?.vessel_flow?.receiveSaved) return true;
+        const hasLineReceived = (req.lines || []).some(l => Number(l.qty_received) > 0);
+        return !!reqListReceivedDate(req) && hasLineReceived;
+    }
+
+    /** Submit 탭 Data Export 완료 */
+    function reqVesselSubmitExportComplete(req) {
+        return !!TVC_Inventory?.isRequisitionSubmittedExport?.(req);
+    }
+
+    /** Received 탭 Data Export 완료 */
+    function reqVesselReceivedExportComplete(req) {
+        return !!req?.vessel_flow?.receivedExported;
+    }
+
+    /** Received Export 이후 워크플로 잠금 */
+    function reqVesselWorkflowComplete(req) {
+        return reqVesselReceivedExportComplete(req);
+    }
+
+    function reqVesselReportTabHint(req) {
+        if (!req) return 'Select a requisition first.';
+        if (reqVesselFlowStageEnabled(req, 'report')) return '';
+        return 'Report tab is locked after Confirm.';
+    }
+
+    function reqVesselConfirmTabHint(req) {
+        if (!req) return 'Select a requisition first.';
+        if (reqVesselFlowStageEnabled(req, 'confirm')) return '';
+        if (reqVesselListWorkflowStatus(req) === VESSEL_REQ_LIST_STATUS.REPORTED) {
+            return 'Report the requisition first.';
+        }
+        return 'Confirm tab is locked after Submit.';
+    }
+
+    function reqVesselEvaluatedTabHint(req) {
+        if (!req) return 'Select a requisition first.';
+        if (reqVesselFlowStageEnabled(req, 'evaluated')) return '';
+        if (reqVesselWorkflowComplete(req)) return 'Workflow complete.';
+        if (!reqVesselHasEvalData(req)) {
+            return 'Import order first (Order tab → Data Import).';
+        }
+        return 'Ordered tab is not available.';
+    }
+
+    function reqVesselSubmittedTabHint(req) {
+        if (!req) return 'Select a requisition first.';
+        if (reqVesselFlowStageEnabled(req, 'submitted')) return '';
+        if (reqVesselWorkflowComplete(req)) return 'Workflow complete.';
+        if (!reqVesselSubmitExportComplete(req)) {
+            return 'Export requisition first (Requisition tab → Data Export).';
+        }
+        return 'Submitted tab is not available.';
+    }
+
+    function reqVesselEvaluationImportTabHint(req) {
+        if (!req) return 'Select a requisition first.';
+        if (reqVesselFlowStageEnabled(req, 'evaluation-import')) return '';
+        if (reqVesselWorkflowComplete(req)) return 'Workflow complete.';
+        if (!reqVesselSubmitExportComplete(req)) {
+            return 'Export requisition first (Requisition tab → Data Export).';
+        }
+        return 'Order import is not available.';
+    }
+
+    function reqVesselReceivedTabHint(req) {
+        if (!req) return 'Select a requisition first.';
+        if (reqVesselFlowStageEnabled(req, 'received')) return '';
+        if (reqVesselWorkflowComplete(req)) return 'Workflow complete.';
+        if (!reqVesselSubmitExportComplete(req)) {
+            return 'Export requisition first (Requisition tab → Data Export).';
+        }
+        return 'Received tab is not available.';
+    }
+
+    function reqVesselReceivedExportTabHint(req) {
+        if (!req) return 'Select a requisition first.';
+        if (reqVesselFlowStageEnabled(req, 'received-export')) return '';
+        if (reqVesselWorkflowComplete(req)) return 'Received export complete.';
+        if (!reqVesselReceiveRecorded(req)) {
+            return 'Complete Received input first (Received Spare Parts).';
+        }
+        return 'Received export is not available.';
+    }
+
     function ensureReqWorkVesselFlowState(req) {
         if (!req) return {};
         if (!req.vessel_flow) req.vessel_flow = {};
@@ -4765,18 +4853,14 @@ const TVC_SpareMenu = (function () {
 
     function reqVesselFlowStageEnabled(req, stage) {
         if (!req) return false;
+        if (reqVesselWorkflowComplete(req)) return stage === 'received-export';
         const status = reqVesselListWorkflowStatus(req);
         switch (stage) {
             case 'report':
-                return true;
+                return status === VESSEL_REQ_LIST_STATUS.REPORTED;
             case 'confirm':
-                return [
-                    VESSEL_REQ_LIST_STATUS.REPORTED,
-                    VESSEL_REQ_LIST_STATUS.CONFIRMED,
-                    VESSEL_REQ_LIST_STATUS.SUBMITTED,
-                    VESSEL_REQ_LIST_STATUS.EVALUATED,
-                    VESSEL_REQ_LIST_STATUS.RECEIVED,
-                ].includes(status);
+                return status === VESSEL_REQ_LIST_STATUS.REPORTED
+                    || status === VESSEL_REQ_LIST_STATUS.CONFIRMED;
             case 'submit':
                 return [
                     VESSEL_REQ_LIST_STATUS.CONFIRMED,
@@ -4784,18 +4868,14 @@ const TVC_SpareMenu = (function () {
                     VESSEL_REQ_LIST_STATUS.EVALUATED,
                     VESSEL_REQ_LIST_STATUS.RECEIVED,
                 ].includes(status);
-            case 'evaluated':
-                return [
-                    VESSEL_REQ_LIST_STATUS.SUBMITTED,
-                    VESSEL_REQ_LIST_STATUS.EVALUATED,
-                    VESSEL_REQ_LIST_STATUS.RECEIVED,
-                ].includes(status) && reqVesselHasEvalData(req);
+            case 'submitted':
+            case 'evaluation-import':
             case 'received':
-                return [
-                    VESSEL_REQ_LIST_STATUS.EVALUATED,
-                    VESSEL_REQ_LIST_STATUS.RECEIVED,
-                ].includes(status)
-                    || (reqVesselHasEvalData(req) && status === VESSEL_REQ_LIST_STATUS.SUBMITTED);
+                return reqVesselSubmitExportComplete(req);
+            case 'evaluated':
+                return reqVesselSubmitExportComplete(req) && reqVesselHasEvalData(req);
+            case 'received-export':
+                return reqVesselReceiveRecorded(req);
             default:
                 return false;
         }
@@ -4805,10 +4885,12 @@ const TVC_SpareMenu = (function () {
         if (!req) return 'report';
         const vf = String(req?.vessel_flow?.flowStage || '');
         if (vf && reqVesselFlowStageEnabled(req, vf)) return vf;
+        if (reqVesselWorkflowComplete(req)) return 'received-export';
+        if (reqVesselReceiveRecorded(req)) return 'received-export';
         const status = reqVesselListWorkflowStatus(req);
         if (status === VESSEL_REQ_LIST_STATUS.RECEIVED) return 'received';
-        if (status === VESSEL_REQ_LIST_STATUS.EVALUATED) return 'evaluated';
-        if (status === VESSEL_REQ_LIST_STATUS.SUBMITTED) return 'submit';
+        if (status === VESSEL_REQ_LIST_STATUS.EVALUATED || reqVesselHasEvalData(req)) return 'evaluated';
+        if (status === VESSEL_REQ_LIST_STATUS.SUBMITTED || reqVesselSubmitExportComplete(req)) return 'submitted';
         if (status === VESSEL_REQ_LIST_STATUS.CONFIRMED) return 'confirm';
         return 'report';
     }
@@ -5673,6 +5755,7 @@ const TVC_SpareMenu = (function () {
         setVal('reqWorkOrderedBy', req.ordered_by || '');
         setVal('reqWorkReceivedOn', fmtSpareDate(reqListReceivedDate(req) || ''));
         setVal('reqWorkReceivedPort', reqListReceivedPort(req));
+        setVal('reqWorkStatus', reqListDisplayStatusLabel(req, getState()));
         const reqType = reqListTypeKind(req);
         document.querySelectorAll('input[name="reqWorkPriority"]').forEach(radio => {
             radio.checked = radio.value === reqType;
@@ -8303,7 +8386,7 @@ const TVC_SpareMenu = (function () {
                 const notReady = reqs.filter(r => !reqListCanPurchaseOrderExport(r));
                 if (notReady.length) {
                     const nos = notReady.map(r => r.req_no || r.id).join(', ');
-                    await TVC_Dialog.alert(`Export Reply Evaluation first: ${nos}`);
+                    await TVC_Dialog.alert(`Complete Evaluation first: ${nos}`);
                     return;
                 }
             }
@@ -8319,6 +8402,11 @@ const TVC_SpareMenu = (function () {
                 for (const req of reqs) {
                     if (xferKind === 'requisition') {
                         await applyRequisitionExportStatus(req);
+                    } else if (xferKind === 'received') {
+                        const vf = ensureReqWorkVesselFlowState(req);
+                        vf.receivedExported = true;
+                        vf.flowStage = 'received-export';
+                        await TVC_Inventory.saveRequisition(req);
                     } else if (xferKind === 'reply-evaluation') {
                         const q = ensureReqWorkQuoteState(req);
                         q.replyExported = true;
@@ -8326,7 +8414,7 @@ const TVC_SpareMenu = (function () {
                         await TVC_Inventory.saveRequisition(req);
                     } else if (xferKind === 'purchase-order') {
                         const q = ensureReqWorkQuoteState(req);
-                        q.flowStage = 'purchase-order';
+                        q.flowStage = 'ordered';
                         await TVC_Inventory.saveRequisition(req);
                     }
                 }
@@ -8356,7 +8444,25 @@ const TVC_SpareMenu = (function () {
                 if (isReqWorkXferExportReturn(returnTo) && reloadId) {
                     showSpicsModal('spareReqWorkModal');
                     await loadRequisitionIntoListWindow(reloadId, { preserveHistPopover: true });
-                    syncReqWorkHqFlowBtns();
+                    const m = modState(getState());
+                    if (!isReqListHqUser(getState()) && xferKind === 'requisition') {
+                        m.reqWorkVesselFlowStage = 'submitted';
+                        const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
+                        vf.flowStage = 'submitted';
+                        await persistReqWorkVesselDraft();
+                        syncReqWorkFlowBtns();
+                    } else if (!isReqListHqUser(getState()) && xferKind === 'received') {
+                        m.reqWorkVesselFlowStage = 'received-export';
+                        const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
+                        vf.receivedExported = true;
+                        vf.flowStage = 'received-export';
+                        await persistReqWorkVesselDraft();
+                        syncReqWorkFlowBtns();
+                    } else if (isReqListHqUser(getState()) && xferKind === 'purchase-order') {
+                        await applyHqOrderedViewState();
+                    } else {
+                        syncReqWorkHqFlowBtns();
+                    }
                 }
             }
             await TVC_Dialog.alert(exportFilename
@@ -9409,7 +9515,7 @@ const TVC_SpareMenu = (function () {
         }
         const result = await TVC_SpareSync.exportQuotationZip(st.user, req, targets, { isHq, excelFiles });
         const q = ensureReqWorkQuoteState(req);
-        q.flowStage = 'export-quote';
+        q.flowStage = 'quoted';
         await TVC_Inventory.saveRequisition(req);
         await refreshReqListModalIfOpen();
         render();
@@ -9451,7 +9557,7 @@ const TVC_SpareMenu = (function () {
             excelSuffix: 'ORDER',
         });
         const q = ensureReqWorkQuoteState(req);
-        q.flowStage = 'purchase-order';
+        q.flowStage = 'ordered';
         await TVC_Inventory.saveRequisition(req);
         await refreshReqListModalIfOpen();
         render();
@@ -9468,6 +9574,12 @@ const TVC_SpareMenu = (function () {
             vendorOnly: !isHq,
             isHq,
         });
+        if (!isHq) {
+            const vf = ensureReqWorkVesselFlowState(req);
+            vf.receivedExported = true;
+            vf.flowStage = 'received-export';
+            await TVC_Inventory.saveRequisition(req);
+        }
         await refreshReqListModalIfOpen();
         render();
     }
@@ -9525,7 +9637,7 @@ const TVC_SpareMenu = (function () {
     ];
 
     const VESSEL_IMPORT_TYPES = [
-        { key: 'evaluation', label: 'Evaluation' },
+        { key: 'evaluation', label: 'Order' },
         { key: 'inventory', label: 'Inventory' },
     ];
 
@@ -9682,7 +9794,6 @@ const TVC_SpareMenu = (function () {
         } else if (step === 'export-type') {
             const hqExportBtns = `
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenQuotationExportList()">Quotation</button>
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReplyEvalExportList()">Evaluation</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenPurchaseOrderExportList()">Order</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Inventory</button>`;
             const vesselExportBtns = `
@@ -9734,7 +9845,7 @@ const TVC_SpareMenu = (function () {
                         onclick="TVC_SpareMenu.spareXferSelectVesselImportType('${t.key}')">${esc(t.label)}${vesselType === t.key ? ' ✓' : ''}</button>`).join('');
                 content = `
                 <p class="spare-sync-hint">Select import type, then open the file.</p>
-                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Evaluation <strong>.xlsx / .json</strong> · Inventory <strong>.xls / .xlsx / .csv</strong></p>
+                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Order <strong>.xlsx / .json</strong> · Inventory <strong>.xls / .xlsx / .csv</strong></p>
                 <div class="spare-sync-actions">
                     ${typeBtns}
                     <button type="button" class="btn btn-green spare-sync-btn"
@@ -10065,19 +10176,20 @@ const TVC_SpareMenu = (function () {
         render();
         if (isRequisitionListWindow(modState(getState())) && String(_reqWorkDraft?.id) === String(req.id)) {
             await loadRequisitionIntoListWindow(req.id, { preserveHistPopover: true });
-            const m = modState(getState());
-            if (opts.category === SPARE_XFER_EXPORT.RECEIVED) {
-                const q = ensureReqWorkQuoteState(_reqWorkDraft);
-                q.flowStage = 'received';
-                q.receivedImported = true;
-                await persistReqWorkHqDraft();
+            if (opts.category === SPARE_XFER_EXPORT.RECEIVED && isReqListHqUser(getState())) {
+                await applyHqReceivedViewState();
+            } else if ((importAsVendor || opts.category === SPARE_XFER_EXPORT.QUOTATION) && isReqListHqUser(getState())) {
+                await applyHqEvaluationViewState();
             } else if (opts.category === SPARE_XFER_EXPORT.REPLY_EVALUATION && !isReqListHqUser(getState())) {
+                const m = modState(getState());
                 m.reqWorkVesselFlowStage = 'evaluated';
                 const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
                 vf.flowStage = 'evaluated';
                 await persistReqWorkVesselDraft();
+                syncReqWorkFlowBtns();
+            } else {
+                syncReqWorkFlowBtns();
             }
-            syncReqWorkFlowBtns();
         }
         await TVC_Dialog.alert(`Import applied to ${req.req_no}: ${res.updated}/${res.total} lines · DB ${dbRes.updated}/${dbRes.total}`);
     }
@@ -10114,18 +10226,19 @@ const TVC_SpareMenu = (function () {
             if (target?.id && (isRequisitionListWindow(m) || m.reqListOpen)) {
                 if (isRequisitionListWindow(m)) {
                     await loadRequisitionIntoListWindow(target.id, { preserveHistPopover: true });
-                    if (importKind === 'received' || category === SPARE_XFER_EXPORT.RECEIVED) {
-                        const q = ensureReqWorkQuoteState(_reqWorkDraft);
-                        q.flowStage = 'received';
-                        q.receivedImported = true;
-                        await persistReqWorkHqDraft();
+                    if ((importKind === 'received' || category === SPARE_XFER_EXPORT.RECEIVED) && isReqListHqUser(getState())) {
+                        await applyHqReceivedViewState();
+                    } else if ((importKind === 'quotation' || category === SPARE_XFER_EXPORT.QUOTATION || importMode === 'vendor-quote') && isReqListHqUser(getState())) {
+                        await applyHqEvaluationViewState();
                     } else if ((importKind === 'evaluation' || category === SPARE_XFER_EXPORT.REPLY_EVALUATION) && !isReqListHqUser(getState())) {
                         m.reqWorkVesselFlowStage = 'evaluated';
                         const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
                         vf.flowStage = 'evaluated';
                         await persistReqWorkVesselDraft();
+                        syncReqWorkFlowBtns();
+                    } else {
+                        syncReqWorkFlowBtns();
                     }
-                    syncReqWorkFlowBtns();
                 } else if (m.reqListOpen) {
                     applyReqListSelection(m, target.id);
                 }
@@ -10324,6 +10437,11 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert('Select a requisition first.');
             return;
         }
+        const req = getReqWorkSession();
+        if (!reqVesselFlowStageEnabled(req, 'report')) {
+            await TVC_Dialog.alert(reqVesselReportTabHint(req) || 'Report tab is not available.');
+            return;
+        }
         m.reqWorkVesselFlowStage = 'report';
         m.reqWorkHqQuoteView = false;
         m.reqWorkHqEvalView = false;
@@ -10345,7 +10463,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!reqVesselFlowStageEnabled(req, 'confirm')) {
-            await TVC_Dialog.alert('Report the requisition first before Confirm.');
+            await TVC_Dialog.alert(reqVesselConfirmTabHint(req) || 'Confirm tab is not available.');
             return;
         }
         m.reqWorkVesselFlowStage = 'confirm';
@@ -10387,6 +10505,51 @@ const TVC_SpareMenu = (function () {
         syncReqWorkFlowBtns();
     }
 
+    async function vesselSubmittedView() {
+        const m = modState(getState());
+        const req = getReqWorkSession();
+        if (!isRequisitionListWindow(m)) return;
+        if (!reqWorkListHasDisplayedReq(m)) {
+            await TVC_Dialog.alert('Select a requisition first.');
+            return;
+        }
+        if (!reqVesselFlowStageEnabled(req, 'submitted')) {
+            await TVC_Dialog.alert(reqVesselSubmittedTabHint(req) || 'Submitted tab is not available.');
+            return;
+        }
+        m.reqWorkVesselFlowStage = 'submitted';
+        m.reqWorkHqQuoteView = false;
+        m.reqWorkHqEvalView = false;
+        const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
+        vf.flowStage = 'submitted';
+        await persistReqWorkVesselDraft();
+        await refreshReqWorkListUi();
+        syncReqWorkFlowBtns();
+    }
+
+    async function vesselEvaluationImportView() {
+        const m = modState(getState());
+        const req = getReqWorkSession();
+        if (!isRequisitionListWindow(m)) return;
+        if (!reqWorkListHasDisplayedReq(m)) {
+            await TVC_Dialog.alert('Select a requisition first.');
+            return;
+        }
+        if (!reqVesselFlowStageEnabled(req, 'evaluation-import')) {
+            await TVC_Dialog.alert(reqVesselEvaluationImportTabHint(req) || 'Order import is not available.');
+            return;
+        }
+        m.reqWorkVesselFlowStage = 'evaluation-import';
+        m.reqWorkHqQuoteView = false;
+        m.reqWorkHqEvalView = false;
+        const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
+        vf.flowStage = 'evaluation-import';
+        await persistReqWorkVesselDraft();
+        _spareXfer.importKind = 'evaluation';
+        document.getElementById('spareXferImportFile')?.click();
+        syncReqWorkFlowBtns();
+    }
+
     async function vesselEvaluatedView() {
         const m = modState(getState());
         const req = getReqWorkSession();
@@ -10396,7 +10559,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!reqVesselFlowStageEnabled(req, 'evaluated')) {
-            await TVC_Dialog.alert('Import evaluation from HQ first (Data Export & Import → Import → Evaluation).');
+            await TVC_Dialog.alert(reqVesselEvaluatedTabHint(req) || 'Ordered tab is not available.');
             return;
         }
         m.reqWorkVesselFlowStage = 'evaluated';
@@ -10418,7 +10581,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!reqVesselFlowStageEnabled(req, 'received')) {
-            await TVC_Dialog.alert('Complete evaluation first before Received.');
+            await TVC_Dialog.alert(reqVesselReceivedTabHint(req) || 'Received tab is not available.');
             return;
         }
         m.reqWorkVesselFlowStage = 'received';
@@ -10428,6 +10591,37 @@ const TVC_SpareMenu = (function () {
         vf.flowStage = 'received';
         await persistReqWorkVesselDraft();
         await refreshReqWorkListUi();
+        syncReqWorkFlowBtns();
+    }
+
+    async function vesselReceivedExportView() {
+        const st = getState();
+        const m = modState(st);
+        const req = getReqWorkSession();
+        if (!isRequisitionListWindow(m)) {
+            await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
+            return;
+        }
+        if (!reqWorkListHasDisplayedReq(m)) {
+            await TVC_Dialog.alert('Select a requisition first.');
+            return;
+        }
+        if (!reqVesselFlowStageEnabled(req, 'received-export')) {
+            await TVC_Dialog.alert(reqVesselReceivedExportTabHint(req) || 'Received export is not available.');
+            return;
+        }
+        if (!canCreateDeliver(st)) {
+            await TVC_Dialog.alert('No permission to export received data.');
+            return;
+        }
+        const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
+        vf.flowStage = 'received-export';
+        await persistReqWorkVesselDraft();
+        await openReqXferExportList('received', {
+            returnTo: 'req-work',
+            selectId: _reqWorkDraft?.id,
+            checkId: _reqWorkDraft?.id,
+        });
         syncReqWorkFlowBtns();
     }
 
@@ -10591,12 +10785,126 @@ const TVC_SpareMenu = (function () {
         const { isHq } = await vesselScope();
         if (!isHq || !isRequisitionListWindow(m)) await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
         if (!reqWorkListHasDisplayedReq(m)) await TVC_Dialog.alert('Select a requisition first.');
-        if (!reqWorkHqReplyEvalExportComplete(getReqWorkSession())) {
-            await TVC_Dialog.alert('Export Reply Evaluation first before Purchase Order.');
+        if (!reqWorkHqEvaluationReady(getReqWorkSession())) {
+            await TVC_Dialog.alert('Complete Evaluation first before Purchase Order.');
             return;
         }
         if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export purchase orders.');
         await openReqXferExportList('purchase-order', { returnTo: 'req-work', selectId: _reqWorkDraft?.id });
+    }
+
+    async function applyHqReceivedViewState() {
+        const m = modState(getState());
+        const req = getReqWorkSession();
+        if (!req || !isRequisitionListWindow(m) || !isReqListHqUser(getState())) return false;
+        m.reqWorkHqEvalView = false;
+        m.reqWorkHqQuoteView = false;
+        closeReqQuoteHeadPicks();
+        const q = ensureReqWorkQuoteState(_reqWorkDraft);
+        q.evalActive = false;
+        q.flowStage = 'received';
+        q.receivedImported = true;
+        await persistReqWorkHqDraft();
+        await refreshReqWorkListUi();
+        syncReqWorkHqFlowBtns();
+        return true;
+    }
+
+    async function applyHqEvaluationViewState() {
+        const st = getState();
+        const m = modState(st);
+        const req = getReqWorkSession();
+        if (!req || !isRequisitionListWindow(m) || !isReqListHqUser(st)) return false;
+        m.reqWorkHqEvalView = true;
+        m.reqWorkHqQuoteView = true;
+        closeReqQuoteHeadPicks();
+        initReqWorkEvalQtyFromReq(req);
+        const q = ensureReqWorkQuoteState(_reqWorkDraft);
+        q.evalActive = true;
+        q.flowStage = 'evaluation';
+        await persistReqWorkHqDraft();
+        await refreshReqWorkListUi();
+        syncReqWorkHqFlowBtns();
+        return true;
+    }
+
+    async function hqQuotedView() {
+        const m = modState(getState());
+        const req = getReqWorkSession();
+        if (!isRequisitionListWindow(m)) return;
+        if (!reqWorkListHasDisplayedReq(m)) {
+            await TVC_Dialog.alert('Select a requisition first.');
+            return;
+        }
+        if (!reqWorkHqFlowStageEnabled(req, 'quoted', true)) {
+            await TVC_Dialog.alert('Export Req Quote first (Data Export).');
+            return;
+        }
+        m.reqWorkHqEvalView = false;
+        m.reqWorkHqQuoteView = true;
+        const q = ensureReqWorkQuoteState(_reqWorkDraft);
+        q.evalActive = false;
+        q.flowStage = 'quoted';
+        await persistReqWorkHqDraft();
+        await refreshReqWorkListUi();
+        syncReqWorkHqFlowBtns();
+    }
+
+    async function hqOrderedView() {
+        const m = modState(getState());
+        const req = getReqWorkSession();
+        if (!isRequisitionListWindow(m)) return;
+        if (!reqWorkListHasDisplayedReq(m)) {
+            await TVC_Dialog.alert('Select a requisition first.');
+            return;
+        }
+        if (!reqWorkHqFlowStageEnabled(req, 'ordered', true)) {
+            await TVC_Dialog.alert('Export Order first (Data Export).');
+            return;
+        }
+        await applyHqOrderedViewState();
+    }
+
+    async function applyHqOrderedViewState() {
+        const st = getState();
+        const m = modState(st);
+        const req = getReqWorkSession();
+        if (!req || !isRequisitionListWindow(m) || !isReqListHqUser(st)) return false;
+        m.reqWorkHqEvalView = false;
+        m.reqWorkHqQuoteView = false;
+        closeReqQuoteHeadPicks();
+        const q = ensureReqWorkQuoteState(_reqWorkDraft);
+        q.evalActive = false;
+        q.flowStage = 'ordered';
+        await persistReqWorkHqDraft();
+        await refreshReqWorkListUi();
+        syncReqWorkHqFlowBtns();
+        return true;
+    }
+
+    async function hqReceivedImportView() {
+        const req = getReqWorkSession();
+        if (!reqWorkHqPurchaseOrderExportComplete(req)) {
+            await TVC_Dialog.alert('Export Order first (Data Export).');
+            return;
+        }
+        _spareXfer.importKind = 'received';
+        _importReqId = req?.id || null;
+        document.getElementById('spareXferImportFile')?.click();
+    }
+
+    async function hqReceivedView() {
+        const m = modState(getState());
+        if (!isRequisitionListWindow(m)) return;
+        if (!reqWorkListHasDisplayedReq(m)) {
+            await TVC_Dialog.alert('Select a requisition first.');
+            return;
+        }
+        if (!reqWorkHqReceivedImportComplete(getReqWorkSession())) {
+            await TVC_Dialog.alert('Import Received data from vessel first (Data Export & Import → Import → Received).');
+            return;
+        }
+        await applyHqReceivedViewState();
     }
 
     async function hqReceivedExport() {
@@ -10644,15 +10952,12 @@ const TVC_SpareMenu = (function () {
         </nav>`;
         }
 
-        const hasAssessment = !!_hqAssessment;
         return `
         <nav class="spare-flow-panel" aria-label="SPARE workflow">
           ${col('consume', 'Consumption', consumedItems)}
           ${col('req', 'Requisition', [
             item('View Requisition List', 'TVC_SpareMenu.viewRequisitionList()', canRequisition),
             item('Make New Requisition', 'TVC_SpareMenu.openNewRequisition()', canRequisition, true),
-            item('Review Company Evaluation', 'TVC_SpareMenu.openAssessmentModal()', canHqImport && hasAssessment),
-            item('Input Received Spare Parts', 'TVC_SpareMenu.openDeliverModal()', canDeliver, true),
           ].join(''))}
           ${renderSpareNecessaryCol({ canModify, user })}
         </nav>`;
@@ -11218,7 +11523,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqListCanPurchaseOrderExport(req) {
-        return reqWorkHqEvaluationReady(req) && !!req?.hq_quote?.replyExported;
+        return reqWorkHqEvaluationReady(req);
     }
 
     function reqListXferExportMeta(kind) {
@@ -11315,6 +11620,20 @@ const TVC_SpareMenu = (function () {
         return Object.keys(map).filter(id => map[id] && reqListCanXferExport(allReqs.find(r => r.id === id)));
     }
 
+    function reqWorkListConfirmCheckboxEnabled(st, record, listEditing) {
+        if (!record || isReqListHqUser(st)) return false;
+        const canConfirm = canConfirmRequisition(st, record);
+        const canUnconfirm = canUnconfirmRequisition(st, record);
+        const m = modState(st);
+        if (!isRequisitionListWindow(m)) {
+            return canConfirm || (listEditing && canUnconfirm);
+        }
+        if (!listEditing) return false;
+        // Vessel Requisition List: Confirm tab only (not Report or later workflow tabs)
+        if (m.reqWorkVesselFlowStage !== 'confirm') return false;
+        return canConfirm || canUnconfirm;
+    }
+
     function spareApprovalState(record, department, opts = {}) {
         const st = getState();
         const user = spareInventoryUser(st);
@@ -11327,12 +11646,9 @@ const TVC_SpareMenu = (function () {
         const listMode = !!opts.listMode;
         const listEditing = !!opts.listEditing;
         const isHq = isReqListHqUser(st);
-        const canConfirmRequisitionNow = canConfirmRequisition(st, record);
         const canApproveRequisitionNow = canApproveRequisition(st, record);
-        const canUnconfirmRequisitionNow = listMode && listEditing
-            && canUnconfirmRequisition(st, record);
-        const canConfirmNow = hasKey && (canConfirmRequisitionNow || canUnconfirmRequisitionNow);
-        const canApproveNow = hasKey && canApproveRequisitionNow
+        const canConfirmNow = hasKey && reqWorkListConfirmCheckboxEnabled(st, record, listEditing);
+        const canApproveNow = hasKey && isHq && canApproveRequisitionNow
             && (!listMode || listEditing || isHq);
         return {
             isConfirmed,
@@ -11391,10 +11707,12 @@ const TVC_SpareMenu = (function () {
         const fs = String(q?.flowStage || '');
         if (fs === 'received' || q?.receivedImported) return 'received';
         if (reqListWorkflowLabel(req) === 'Received' && reqWorkHqReceivedImportComplete(req)) return 'received';
-        if (fs === 'purchase-order' || fs === 'order') return 'purchase-order';
+        if (fs === 'received-import') return 'received-import';
+        if (fs === 'ordered' || fs === 'order' || fs === 'purchase-order') return 'ordered';
         if (fs === 'reply-evaluation' || q?.replyExported) return 'reply-evaluation';
         if (fs === 'evaluation') return 'evaluation';
         if (fs === 'import-quote') return 'import-quote';
+        if (fs === 'quoted') return 'quoted';
         if (fs === 'export-quote') return 'export-quote';
         if (fs === 'request-quote') return 'request-quote';
         return 'requisition';
@@ -11404,22 +11722,58 @@ const TVC_SpareMenu = (function () {
         if (m.reqWorkHqEvalView) return 'evaluation';
         const resolved = reqWorkHqResolvedFlowStage(req);
         if (resolved === 'received') return 'received';
-        if (resolved === 'purchase-order') return 'purchase-order';
+        if (resolved === 'received-import') return 'received-import';
+        if (resolved === 'ordered') return 'ordered';
         if (resolved === 'reply-evaluation') return 'reply-evaluation';
         if (resolved === 'evaluation') return 'evaluation';
+        if (resolved === 'quoted') return 'quoted';
         if (m.reqWorkHqQuoteView) {
             const fs = req?.hq_quote?.flowStage;
             if (fs === 'import-quote' && reqWorkHqVendorQuoteImported(req)) return 'import-quote';
             if (fs === 'export-quote') return 'export-quote';
             return 'request-quote';
         }
+        if (resolved === 'import-quote') return 'import-quote';
         if (resolved === 'export-quote') return 'export-quote';
         return 'requisition';
     }
 
+    /** Purchase Order Export 완료 — Received Import 탭 활성화 기준 */
+    function reqWorkHqPurchaseOrderExportComplete(req) {
+        if (!req) return false;
+        const fs = String(req?.hq_quote?.flowStage || '');
+        return ['ordered', 'purchase-order', 'order', 'received-import', 'received'].includes(fs);
+    }
+
+    function reqWorkHqFlowStageEnabled(req, stage, hasDisplayedReq) {
+        if (!hasDisplayedReq || !req) return false;
+        switch (stage) {
+            case 'requisition':
+            case 'request-quote':
+                return true;
+            case 'export-quote':
+                return reqWorkHqQuoteSetupReady(req) || reqWorkHqQuoteExportComplete(req);
+            case 'quoted':
+            case 'import-quote':
+                return reqWorkHqQuoteExportComplete(req);
+            case 'evaluation':
+                return reqWorkHqImportQuoteComplete(req);
+            case 'purchase-order':
+                return reqWorkHqEvaluationReady(req);
+            case 'ordered':
+                return reqWorkHqPurchaseOrderExportComplete(req);
+            case 'received-import':
+                return reqWorkHqPurchaseOrderExportComplete(req) && !reqWorkHqReceivedImportComplete(req);
+            case 'received':
+                return reqWorkHqReceivedImportComplete(req);
+            default:
+                return false;
+        }
+    }
+
     /** HQ Requisition Work Flow tab labels */
     function reqWorkQuoteFlowLabels() {
-        return { selectVendor: 'Select Vendor', exportQuote: 'Request Quote' };
+        return { selectVendor: 'Select Vendor', exportQuote: 'Req Quote' };
     }
 
     function renderReqWorkVesselWorkflowBar(hasDisplayedReq = false, activeStage = 'report', req = null) {
@@ -11429,18 +11783,29 @@ const TVC_SpareMenu = (function () {
             const activeCls = stageId === activeStage ? ' spare-req-hq-flow-btn-active' : '';
             return `<button type="button" class="spare-req-hq-flow-btn${activeCls}" onclick="${onclick}"${enabled ? '' : ` disabled title="${escAttr(disabledTitle || 'Not available')}"`}${stageId === activeStage ? ' aria-current="step"' : ''}>${esc(label)}</button>`;
         };
+        const btnStacked = (stageId, sub, label, onclick, enabled = true, disabledTitle = '') => {
+            const activeCls = stageId === activeStage ? ' spare-req-hq-flow-btn-active' : '';
+            return `<button type="button" class="spare-req-hq-flow-btn spare-req-hq-flow-btn-stacked${activeCls}" onclick="${onclick}"${enabled ? '' : ` disabled title="${escAttr(disabledTitle || 'Not available')}"`}${stageId === activeStage ? ' aria-current="step"' : ''}><span class="spare-req-hq-flow-btn-sub">${esc(sub)}</span><span class="spare-req-hq-flow-btn-label">${esc(label)}</span></button>`;
+        };
         const arrow = '<span class="spare-req-hq-flow-arrow" aria-hidden="true">→</span>';
         const enabled = hasDisplayedReq;
+        const reportOk = enabled && reqVesselFlowStageEnabled(req, 'report');
         const confirmOk = enabled && reqVesselFlowStageEnabled(req, 'confirm');
         const submitOk = enabled && reqVesselFlowStageEnabled(req, 'submit');
-        const evalOk = enabled && reqVesselFlowStageEnabled(req, 'evaluated');
+        const submittedOk = enabled && reqVesselFlowStageEnabled(req, 'submitted');
+        const evalImportOk = enabled && reqVesselFlowStageEnabled(req, 'evaluation-import');
+        const evaluatedOk = enabled && reqVesselFlowStageEnabled(req, 'evaluated');
         const receivedOk = enabled && reqVesselFlowStageEnabled(req, 'received');
+        const receivedExportOk = enabled && reqVesselFlowStageEnabled(req, 'received-export');
         const steps = [
-            btn('report', 'Report', 'TVC_SpareMenu.vesselReportView()', enabled, enabled ? '' : 'Select a requisition first'),
-            btn('confirm', 'Confirm', 'TVC_SpareMenu.vesselConfirmView()', confirmOk, confirmOk ? '' : 'Report the requisition first'),
-            btn('submit', 'Submit', 'TVC_SpareMenu.vesselSubmitView()', submitOk, submitOk ? '' : 'Confirm the requisition first'),
-            btn('evaluated', 'Evaluated', 'TVC_SpareMenu.vesselEvaluatedView()', evalOk, evalOk ? '' : 'Import evaluation from HQ first'),
-            btn('received', 'Received', 'TVC_SpareMenu.vesselReceivedView()', receivedOk, receivedOk ? '' : 'Complete evaluation first'),
+            btn('report', 'Report', 'TVC_SpareMenu.vesselReportView()', reportOk, reportOk ? '' : reqVesselReportTabHint(req)),
+            btn('confirm', 'Confirm', 'TVC_SpareMenu.vesselConfirmView()', confirmOk, confirmOk ? '' : reqVesselConfirmTabHint(req)),
+            btnStacked('submit', '(Data Export)', 'Requisition', 'TVC_SpareMenu.vesselSubmitView()', submitOk, submitOk ? '' : 'Confirm the requisition first'),
+            btn('submitted', 'Submitted', 'TVC_SpareMenu.vesselSubmittedView()', submittedOk, submittedOk ? '' : reqVesselSubmittedTabHint(req)),
+            btnStacked('evaluation-import', '(Data Import)', 'Order', 'TVC_SpareMenu.vesselEvaluationImportView()', evalImportOk, evalImportOk ? '' : reqVesselEvaluationImportTabHint(req)),
+            btn('evaluated', 'Ordered', 'TVC_SpareMenu.vesselEvaluatedView()', evaluatedOk, evaluatedOk ? '' : reqVesselEvaluatedTabHint(req)),
+            btn('received', 'Received', 'TVC_SpareMenu.vesselReceivedView()', receivedOk, receivedOk ? '' : reqVesselReceivedTabHint(req)),
+            btnStacked('received-export', '(Data Export)', 'Received', 'TVC_SpareMenu.vesselReceivedExportView()', receivedExportOk, receivedExportOk ? '' : reqVesselReceivedExportTabHint(req)),
         ];
         return `<div id="reqWorkHqFlowBar" class="spare-req-hq-flow-bar" aria-label="Requisition Work Flow">
             <span class="spare-req-hq-flow-title">Requisition Work Flow</span>
@@ -11457,26 +11822,36 @@ const TVC_SpareMenu = (function () {
             const activeCls = stageId === activeStage ? ' spare-req-hq-flow-btn-active' : '';
             return `<button type="button" class="spare-req-hq-flow-btn${activeCls}" onclick="${onclick}"${enabled ? '' : ` disabled title="${escAttr(disabledTitle || 'Not available')}"`}${stageId === activeStage ? ' aria-current="step"' : ''}>${esc(label)}</button>`;
         };
+        const btnStacked = (stageId, sub, label, onclick, enabled = true, disabledTitle = '') => {
+            const activeCls = stageId === activeStage ? ' spare-req-hq-flow-btn-active' : '';
+            return `<button type="button" class="spare-req-hq-flow-btn spare-req-hq-flow-btn-stacked${activeCls}" onclick="${onclick}"${enabled ? '' : ` disabled title="${escAttr(disabledTitle || 'Not available')}"`}${stageId === activeStage ? ' aria-current="step"' : ''}><span class="spare-req-hq-flow-btn-sub">${esc(sub)}</span><span class="spare-req-hq-flow-btn-label">${esc(label)}</span></button>`;
+        };
         const arrow = '<span class="spare-req-hq-flow-arrow" aria-hidden="true">→</span>';
-        const reqQuoteEnabled = hasDisplayedReq;
+        const reqOk = hasDisplayedReq;
         const quoteExported = reqWorkHqQuoteExportComplete(req);
         const importQuoteDone = reqWorkHqImportQuoteComplete(req);
-        const replyEvalExported = reqWorkHqReplyEvalExportComplete(req);
+        const orderExported = reqWorkHqPurchaseOrderExportComplete(req);
         const receivedImported = reqWorkHqReceivedImportComplete(req);
-        const importExportHint = `Complete ${labels.exportQuote} first: export quotation ZIP before importing vendor quote`;
-        const importQuoteHint = 'Complete Import Quote first: enter vendor price or import quote';
-        const replyEvalHint = 'Export Reply Evaluation first';
-        const receivedHint = 'Import Received data from vessel first (Data Export & Import → Import → Received)';
+        const exportQuoteHint = 'Complete Select Vendor first: vendor, currency, and checked items';
+        const quotedHint = 'Export Req Quote first (Data Export)';
+        const importQuoteHint = 'Complete Req Quote export first';
+        const evalHint = 'Import Quotation first (Data Import)';
+        const orderHint = 'Complete Evaluation first';
+        const orderedHint = 'Export Order first (Data Export)';
+        const receivedImportHint = 'Export Order first (Data Export)';
+        const receivedHint = 'Import Received data first (Data Import)';
 
         const steps = [
-            btn('requisition', 'Requisition', 'TVC_SpareMenu.hqRequisitionView()', reqQuoteEnabled),
-            btn('request-quote', labels.selectVendor, 'TVC_SpareMenu.hqRequestQuoteView()', reqQuoteEnabled),
-            btn('export-quote', labels.exportQuote, 'TVC_SpareMenu.hqExportQuote()', reqQuoteEnabled, reqQuoteEnabled ? '' : 'Select a requisition first'),
-            btn('import-quote', 'Import Quote', 'TVC_SpareMenu.hqCheckQuotation()', reqQuoteEnabled && quoteExported, quoteExported ? '' : importExportHint),
-            btn('evaluation', 'Evaluation', 'TVC_SpareMenu.hqReplyCompanyAssessment()', reqQuoteEnabled && importQuoteDone, importQuoteDone ? '' : importQuoteHint),
-            btn('reply-evaluation', 'Reply Evaluation', 'TVC_SpareMenu.hqReplyEvaluationToVessel()', reqQuoteEnabled && importQuoteDone, importQuoteDone ? '' : importQuoteHint),
-            btn('purchase-order', 'Purchase Order', 'TVC_SpareMenu.hqPurchaseOrder()', reqQuoteEnabled && replyEvalExported, replyEvalExported ? '' : replyEvalHint),
-            btn('received', 'Received', 'TVC_SpareMenu.hqReceivedExport()', reqQuoteEnabled && receivedImported, receivedImported ? '' : receivedHint),
+            btn('requisition', 'Requisition', 'TVC_SpareMenu.hqRequisitionView()', reqOk),
+            btn('request-quote', labels.selectVendor, 'TVC_SpareMenu.hqRequestQuoteView()', reqOk),
+            btnStacked('export-quote', '(Data Export)', labels.exportQuote, 'TVC_SpareMenu.hqExportQuote()', reqWorkHqFlowStageEnabled(req, 'export-quote', reqOk), reqOk ? exportQuoteHint : 'Select a requisition first'),
+            btn('quoted', 'Reqtd Quote', 'TVC_SpareMenu.hqQuotedView()', reqWorkHqFlowStageEnabled(req, 'quoted', reqOk), quotedHint),
+            btnStacked('import-quote', '(Data Import)', 'Quotation', 'TVC_SpareMenu.hqCheckQuotation()', reqWorkHqFlowStageEnabled(req, 'import-quote', reqOk), importQuoteHint),
+            btn('evaluation', 'Evaluation', 'TVC_SpareMenu.hqReplyCompanyAssessment()', reqWorkHqFlowStageEnabled(req, 'evaluation', reqOk), evalHint),
+            btnStacked('purchase-order', '(Data Export)', 'Order', 'TVC_SpareMenu.hqPurchaseOrder()', reqWorkHqFlowStageEnabled(req, 'purchase-order', reqOk), orderHint),
+            btn('ordered', 'Ordered', 'TVC_SpareMenu.hqOrderedView()', reqWorkHqFlowStageEnabled(req, 'ordered', reqOk), orderedHint),
+            btnStacked('received-import', '(Data Import)', 'Received', 'TVC_SpareMenu.hqReceivedImportView()', reqWorkHqFlowStageEnabled(req, 'received-import', reqOk), receivedImportHint),
+            btn('received', 'Received', 'TVC_SpareMenu.hqReceivedView()', reqWorkHqFlowStageEnabled(req, 'received', reqOk), receivedHint),
         ];
         return `<div id="reqWorkHqFlowBar" class="spare-req-hq-flow-bar" aria-label="Requisition Work Flow">
             <span class="spare-req-hq-flow-title">Requisition Work Flow</span>
@@ -11504,6 +11879,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (bar && bar.outerHTML !== html) bar.outerHTML = html;
+        if (_reqWorkDraft?.id) syncReqWorkApprovalSection(_reqWorkDraft);
     }
 
     function syncReqWorkHqFlowBtns() {
@@ -11511,7 +11887,17 @@ const TVC_SpareMenu = (function () {
     }
 
     function renderReqWorkApprovalRow(req, opts = {}) {
-        return `<div class="spare-req-approval-row">${renderSpareApprovalSection(req, opts)}</div>`;
+        const st = getState();
+        const statusLabel = req ? reqListDisplayStatusLabel(req, st) : '';
+        return `<div class="spare-req-approval-row spare-req-approval-row--split">
+            <div class="spare-req-approval-left">${renderSpareApprovalSection(req, opts)}</div>
+            <div class="spare-req-approval-status spare-req-meta-row">
+                <span class="spare-req-meta-label">Status</span>
+                <div class="spare-req-meta-field">
+                    <input type="text" id="reqWorkStatus" class="spare-req-meta-input wr-ro" value="${esc(statusLabel)}" readonly tabindex="-1">
+                </div>
+            </div>
+        </div>`;
     }
 
     function consumeLogApprovalState(record, department, opts = {}) {
@@ -11561,6 +11947,10 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         const req = getReqWorkSession();
         if (!req?.id) return;
+        if (!reqWorkListConfirmCheckboxEnabled(st, req, m.reqWorkListEditing)) {
+            cfCb.checked = !cfCb.checked;
+            return;
+        }
         const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
 
         if (!cfCb.checked) {
@@ -11651,7 +12041,7 @@ const TVC_SpareMenu = (function () {
         const now = new Date().toISOString();
         let changed = false;
         const canConfirm = prefix === 'reqWork'
-            ? canConfirmRequisition(st, record)
+            ? reqWorkListConfirmCheckboxEnabled(st, record, modState(st).reqWorkListEditing)
             : (prefix === 'consumeLog' || prefix === 'consume')
             ? consumeLogCanConfirm(st, { ...record, department: dept })
             : TVC_RBAC.canConfirmDepartment(user, dept);
@@ -11666,7 +12056,7 @@ const TVC_SpareMenu = (function () {
             }
         }
         const canApprove = prefix === 'reqWork'
-            ? canApproveRequisition(st, record)
+            ? (isReqListHqUser(st) && canApproveRequisition(st, record))
             : (prefix === 'consumeLog' || prefix === 'consume')
             ? consumeLogCanApprove(st, { ...record, department: dept })
             : TVC_RBAC.canApproveHqReport(user);
@@ -11767,6 +12157,9 @@ const TVC_SpareMenu = (function () {
         const reportedByVal = resolveSpareReportedBy(req, spareInventoryUser(st));
         const today = new Date().toISOString().slice(0, 10);
         const reqType = reqListTypeKind(req);
+        const typeEditable = !preview && !docPreview && (!listMode || listEditing);
+        const typeDisabled = typeEditable ? '' : ' disabled';
+        const typeOnChange = typeEditable ? ' onchange="TVC_SpareMenu.captureReqWorkMeta()"' : '';
         const vesselRow = preview ? `<div class="spare-req-meta-row">
                         <label class="spare-req-meta-label">Vessel Name</label>
                         <div class="spare-req-meta-field">
@@ -11780,12 +12173,12 @@ const TVC_SpareMenu = (function () {
                                 <button type="button" id="reqWorkHistBtn" class="btn btn-sm spare-req-hist-btn" onclick="TVC_SpareMenu.toggleReqWorkHistList()">${reqWorkHistPickBtnLabel(!!opts.listMode)}</button>
                             </span>`;
         const histPanel = (preview || docPreview) ? '' : `<div id="reqWorkHistPanel" class="spare-req-hist-popover hidden" aria-hidden="true"></div>`;
-        const approvalSection = opts.listMode
+        const approvalSection = listMode
             ? renderReqWorkApprovalRow(req, {
                 prefix: 'reqWork',
                 department: req.department || opts.department,
                 listMode: true,
-                listEditing: !!modState(st).reqWorkListEditing,
+                listEditing,
             })
             : '';
         return `<section class="spare-req-work-meta" aria-label="Requisition information">
@@ -11824,11 +12217,11 @@ const TVC_SpareMenu = (function () {
                 </div>
                 <div class="spare-req-meta-col spare-req-meta-col-right">
                     <div class="spare-req-meta-row spare-req-meta-row-priority">
-                        <span class="spare-req-meta-label spare-req-meta-label-spacer" aria-hidden="true">&nbsp;</span>
+                        <span class="spare-req-meta-label">Type</span>
                         <div class="spare-req-meta-field spare-req-meta-priority">
-                            <label class="spare-req-priority-opt"><input type="radio" name="reqWorkPriority" value="URGENT"${reqType === 'URGENT' ? ' checked' : ''} onchange="TVC_SpareMenu.captureReqWorkMeta()"><span>Urgent</span></label>
-                            <label class="spare-req-priority-opt"><input type="radio" name="reqWorkPriority" value="ROUTINE"${reqType === 'ROUTINE' ? ' checked' : ''} onchange="TVC_SpareMenu.captureReqWorkMeta()"><span>Routine</span></label>
-                            <label class="spare-req-priority-opt"><input type="radio" name="reqWorkPriority" value="DOCK"${reqType === 'DOCK' ? ' checked' : ''} onchange="TVC_SpareMenu.captureReqWorkMeta()"><span>Dock Use</span></label>
+                            <label class="spare-req-priority-opt"><input type="radio" name="reqWorkPriority" value="URGENT"${reqType === 'URGENT' ? ' checked' : ''}${typeDisabled}${typeOnChange}><span>Urgent</span></label>
+                            <label class="spare-req-priority-opt"><input type="radio" name="reqWorkPriority" value="ROUTINE"${reqType === 'ROUTINE' ? ' checked' : ''}${typeDisabled}${typeOnChange}><span>Routine</span></label>
+                            <label class="spare-req-priority-opt"><input type="radio" name="reqWorkPriority" value="DOCK"${reqType === 'DOCK' ? ' checked' : ''}${typeDisabled}${typeOnChange}><span>Dock Use</span></label>
                         </div>
                     </div>
                     <div class="spare-req-meta-row spare-req-meta-row-audit">
@@ -12654,7 +13047,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(ctx.st);
         const isHq = !!(window.TVC_RBAC?.isHqAccount?.(ctx.st.user));
         const activeStage = reqWorkHqActiveFlowStage(m, ctx.req);
-        const hqFormStages = ['requisition', 'evaluation', 'reply-evaluation', 'received'];
+        const hqFormStages = ['requisition', 'evaluation', 'reply-evaluation', 'ordered', 'received'];
         if (isHq && isRequisitionListWindow(m) && hqFormStages.includes(activeStage)) {
             try {
                 await exportReqPreviewExcel(ctx.st, ctx.req, ctx.vesselName, {
@@ -17071,7 +17464,17 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                             rl.qty_received = (Number(rl.qty_received) || 0) + delivered.qty;
                         }
                     });
+                    const vf = ensureReqWorkVesselFlowState(req);
+                    vf.receiveSaved = true;
+                    vf.flowStage = 'received-export';
                     await TVC_Inventory.saveRequisition(req);
+                    if (isRequisitionListWindow(modState(getState()))
+                        && String(_reqWorkDraft?.id) === String(req.id)) {
+                        await loadRequisitionIntoListWindow(req.id, { preserveHistPopover: true });
+                        const m = modState(getState());
+                        m.reqWorkVesselFlowStage = 'received-export';
+                        syncReqWorkFlowBtns();
+                    }
                 }
             }
             closeReceiveModal();
@@ -18226,8 +18629,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         reqSheetExport, reqSheetPrint, onReqSheetSearchInput,
         exportRequisitionData, exportDeliveryData, exportPartsList, exportPartsListXlsx, buildPrintBody,
         viewRequisitionList, openNewRequisition,
-        hqRequestQuotation, hqRequisitionView, hqRequestQuoteView, hqExportQuote, hqCheckQuotation, hqReplyCompanyAssessment, hqReplyEvaluationToVessel, hqPurchaseOrder, hqReceivedExport, hqReviewReceivedParts,
-        vesselReportView, vesselConfirmView, vesselSubmitView, vesselEvaluatedView, vesselReceivedView,
+        hqRequestQuotation, hqRequisitionView, hqRequestQuoteView, hqExportQuote, hqQuotedView, hqCheckQuotation, hqReplyCompanyAssessment, hqReplyEvaluationToVessel, hqPurchaseOrder, hqOrderedView, hqReceivedImportView, hqReceivedView, hqReceivedExport, hqReviewReceivedParts,
+        vesselReportView, vesselConfirmView, vesselSubmitView, vesselSubmittedView, vesselEvaluationImportView, vesselEvaluatedView, vesselReceivedView, vesselReceivedExportView,
         syncReqWorkFlowBtns,
         toggleReqQuoteVendorPick, pickReqQuoteVendor, submitReqQuoteVendorAdd,
         toggleReqQuoteCurrencyPick, pickReqQuoteCurrency,
