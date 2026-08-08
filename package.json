@@ -27,6 +27,9 @@
     "verify-license": "node scripts/verify-license.mjs",
     "verify-all": "node scripts/verify-rbac.mjs && node scripts/verify-sync-vessel.mjs && node scripts/verify-license.mjs",
     "test-pms-master-roundtrip": "node scripts/test-pms-master-roundtrip.mjs",
+    "test-electron-four-modes": "node scripts/test-electron-four-modes.mjs",
+    "test-reported-by-sync": "node scripts/test-reported-by-sync.mjs",
+    "test-critical-postpone-confirm": "node scripts/test-critical-postpone-confirm.mjs",
     "test-vessel-engine-pms-workflow": "node scripts/test-vessel-engine-pms-workflow.mjs",
     "test-pms-group-equipment-headers": "node scripts/test-pms-group-equipment-headers.mjs"
   },

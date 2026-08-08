@@ -151,13 +151,33 @@ const TVC_PmsMasterExcel = (function () {
         await TVC_FileExport.save(blob, filename);
     }
 
-    async function masterExcelFilename(vesselId) {
+    function normDept(dept) {
+        const d = String(dept || '').trim().toUpperCase();
+        if (d !== 'DECK' && d !== 'ENGINE') throw new Error('Department must be DECK or ENGINE.');
+        return d;
+    }
+
+    function rowsForDepartment(rows, department) {
+        const dept = normDept(department);
+        const scoped = (rows || []).filter(r => String(r.department || '').toUpperCase() === dept);
+        const foreign = (rows || []).filter(r => {
+            const d = String(r.department || '').toUpperCase();
+            return d && d !== dept;
+        });
+        if (foreign.length) {
+            throw new Error(`Excel contains ${foreign[0].department} data; select ${dept} and use a ${dept}-only master file.`);
+        }
+        return scoped;
+    }
+
+    async function masterExcelFilename(vesselId, department) {
+        const dept = normDept(department);
         if (typeof TVC_Filename !== 'undefined') {
-            return TVC_Filename.buildFlat({ vesselId, type: 'pms_master', ext: 'xlsx' });
+            return TVC_Filename.build({ vesselId, type: 'pms_master', department: dept, ext: 'xlsx' });
         }
         const slug = String(vesselId || 'vessel').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'vessel';
         const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        return `${slug}_pms_master_${dateTag}_001.xlsx`;
+        return `${slug}_pms_master_${dept.toLowerCase()}_${dateTag}_001.xlsx`;
     }
 
     /** Renumber DECK job codes on export (26-001 → 01-001). ENGINE codes unchanged. */
@@ -219,7 +239,8 @@ const TVC_PmsMasterExcel = (function () {
         return s.includes('CRITICAL');
     }
 
-    async function loadExportData() {
+    async function loadExportData(department) {
+        const dept = normDept(department);
         const [jobs, groups, meta] = await Promise.all([
             TVC_DB.getAll('maintenance_jobs'),
             TVC_DB.getAll('maintenance_groups').catch(() => []),
@@ -229,13 +250,17 @@ const TVC_PmsMasterExcel = (function () {
         if (typeof TVC_Fleet !== 'undefined') {
             vesselId = TVC_Fleet.getSelected()?.name || TVC_Fleet.PILOT_VESSEL_ID || vesselId;
         }
-        return { jobs: renumberJobsForExport(jobs), groups, vesselId };
+        const scopedJobs = renumberJobsForExport(jobs).filter(j => String(j.department || '').toUpperCase() === dept);
+        const scopedGroups = (groups || []).filter(g => String(g.department || '').toUpperCase() === dept);
+        return { jobs: scopedJobs, groups: scopedGroups, vesselId, department: dept };
     }
 
     async function exportToWorkbook(opts = {}) {
         if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
-        const { jobs, groups, vesselId } = opts.jobs ? opts : await loadExportData();
-        const exportJobs = opts.jobs || jobs;
+        const department = normDept(opts.department);
+        const loaded = opts.jobs ? opts : await loadExportData(department);
+        const { jobs, groups, vesselId } = loaded;
+        const exportJobs = (opts.jobs || jobs).filter(j => String(j.department || '').toUpperCase() === department);
 
         const groupCounts = new Map();
         exportJobs.forEach(j => {
@@ -273,8 +298,8 @@ const TVC_PmsMasterExcel = (function () {
 
         const wsG = wb.addWorksheet('Group Headers', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsG, [
-            `Vessel: ${vesselId}  ·  PMS Master — Group Headers`,
-            'GROUP NO + GROUP NAME per department (each dept starts 01). Equipment defaults for the whole group.',
+            `Vessel: ${vesselId}  ·  PMS Master — ${department} — Group Headers`,
+            'GROUP NO + GROUP NAME for this department only.',
         ]);
         ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Critical Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Jobs (ref)'].forEach((h, i) => {
             wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
@@ -321,7 +346,7 @@ const TVC_PmsMasterExcel = (function () {
 
         const wsJ = wb.addWorksheet('Jobs', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsJ, [
-            `Vessel: ${vesselId}  ·  ${exportJobs.length} jobs`,
+            `Vessel: ${vesselId}  ·  ${department} — ${exportJobs.length} jobs`,
             'JOB_ID column is hidden (export only). Edit GROUP NO / JOB CODE freely — rows removed from this sheet are dropped on import (Work Report linked jobs are kept with temp code). New jobs: leave JOB_ID empty.',
         ], 14);
         const jHeaders = ['JOB_ID', 'DEPARTMENT', 'GROUP NO', 'GROUP NAME', '⚠', 'JOB CODE', 'SORT-1', 'SORT-2', 'JOB DETAIL', 'PERIOD', 'UNIT', 'P.I.C', 'NEXT DATE', 'LAST DONE'];
@@ -352,16 +377,18 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     async function exportToFile(opts = {}) {
-        const wb = await exportToWorkbook(opts);
-        const vesselId = opts.vesselId || (await loadExportData()).vesselId;
+        const department = normDept(opts.department);
+        const wb = await exportToWorkbook({ ...opts, department });
+        const vesselId = opts.vesselId || (await loadExportData(department)).vesselId;
         const buf = await wb.xlsx.writeBuffer();
-        const filename = await masterExcelFilename(vesselId);
+        const filename = await masterExcelFilename(vesselId, department);
         await downloadBlob(buf, filename);
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
                 type: 'EXPORT',
                 direction: 'PMS_MASTER',
                 scope: 'PMS',
+                department,
                 filename,
                 file_name: filename,
                 vessel_id: vesselId,
@@ -622,6 +649,96 @@ const TVC_PmsMasterExcel = (function () {
         return n;
     }
 
+    function deckJobUsesLegacyCatalog(job) {
+        if (String(job?.department || '').toUpperCase() !== 'DECK') return false;
+        const leg = legacyGroupNum(job.group);
+        return leg != null && DECK_LEGACY_MAP.has(leg);
+    }
+
+    /**
+     * Live DB — legacy DECK seed (26·28·… groups) → approved catalog (01·02·…).
+     * HQ/Master Excel Export only renumbered in the file; this aligns Vessel Deck PC on load.
+     */
+    async function applyDeckCatalogNormalization(jobs, groups) {
+        const pool = jobs || [];
+        const legacyDeck = pool.filter(deckJobUsesLegacyCatalog);
+        if (!legacyDeck.length) return { updated: 0, renamed: 0, groups: 0, spares: 0 };
+
+        const labelMap = new Map();
+        const normalized = renumberJobsForExport(pool);
+        const normById = new Map(
+            normalized.filter(j => String(j.department || '').toUpperCase() === 'DECK').map(j => [j.id, j])
+        );
+
+        const stamp = new Date().toISOString();
+        const changedJobs = [];
+        let renamed = 0;
+
+        for (const job of pool) {
+            if (!deckJobUsesLegacyCatalog(job)) continue;
+            const normJob = normById.get(job.id);
+            if (!normJob) continue;
+
+            const oldCode = job.job_code;
+            const oldGroup = job.group;
+            job.group = normJob.group;
+
+            if (oldCode !== normJob.job_code) {
+                await cascadeJobCodeRename(oldCode, normJob.job_code, job.id);
+                job.job_code = normJob.job_code;
+                renamed++;
+            }
+            if (norm(oldGroup) !== norm(job.group)) {
+                labelMap.set(norm(oldGroup), job.group);
+            }
+            job.catalog_normalized_at = stamp;
+            job.updated_at = stamp;
+            changedJobs.push(job);
+        }
+
+        if (changedJobs.length) await TVC_DB.bulkPut('maintenance_jobs', changedJobs);
+
+        const changedGroups = [];
+        for (const g of groups || []) {
+            if (String(g.department || '').toUpperCase() !== 'DECK' || norm(g.item_sort1)) continue;
+            const leg = legacyGroupNum(g.label);
+            if (leg == null || !DECK_LEGACY_MAP.has(leg)) continue;
+            const resolved = resolveGroup('DECK', g.label);
+            if (norm(g.label) === norm(resolved.label)) continue;
+            labelMap.set(norm(g.label), resolved.label);
+            g.label = resolved.label;
+            g.updated_at = stamp;
+            changedGroups.push(g);
+        }
+        if (changedGroups.length) await TVC_DB.bulkPut('maintenance_groups', changedGroups);
+
+        let sparesUpdated = 0;
+        if (labelMap.size) {
+            const spares = await TVC_DB.getAll('spare_parts').catch(() => []);
+            const spareChanges = [];
+            for (const s of spares) {
+                const cat = String(s.category || '').toUpperCase();
+                if (cat && cat !== 'DECK') continue;
+                const mapped = labelMap.get(norm(s.group));
+                if (!mapped) continue;
+                s.group = mapped;
+                if (!s.category) s.category = 'DECK';
+                spareChanges.push(s);
+            }
+            if (spareChanges.length) {
+                await TVC_DB.bulkPut('spare_parts', spareChanges);
+                sparesUpdated = spareChanges.length;
+            }
+        }
+
+        await pruneEmptyGroupDefs(pool);
+
+        if (changedJobs.length || changedGroups.length || sparesUpdated) {
+            console.info(`[TVC] DECK catalog normalized: jobs=${changedJobs.length}, codes renamed=${renamed}, groups=${changedGroups.length}, spares=${sparesUpdated}`);
+        }
+        return { updated: changedJobs.length, renamed, groups: changedGroups.length, spares: sparesUpdated };
+    }
+
     function groupDefId(dept, label, itemSort1) {
         const base = `${dept}|${norm(label)}|${norm(itemSort1 || '')}`;
         return 'grp-' + base.replace(/[^\w|.-]/g, '_').slice(0, 80);
@@ -681,17 +798,18 @@ const TVC_PmsMasterExcel = (function () {
         return Object.values(components);
     }
 
-    async function importFromWorkbook(wb, user) {
+    async function importFromWorkbook(wb, user, opts = {}) {
         TVC_RBAC.assertModifyOriginalPlan(user);
+        const department = normDept(opts.department);
         const wsG = wb.getWorksheet('Group Headers');
         const wsE = wb.getWorksheet('Equipment Headers');
         const wsJ = wb.getWorksheet('Jobs');
         if (!wsJ) throw new Error('Jobs 시트를 찾을 수 없습니다.');
 
-        const groupRows = wsG ? parseGroupRows(wsG) : [];
-        const equipRows = wsE ? parseEquipmentRows(wsE) : [];
-        const jobRows = normalizeImportJobRows(parseJobRows(wsJ));
-        if (!jobRows.length) throw new Error('Jobs 시트에 데이터가 없습니다.');
+        const groupRows = rowsForDepartment(wsG ? parseGroupRows(wsG) : [], department);
+        const equipRows = rowsForDepartment(wsE ? parseEquipmentRows(wsE) : [], department);
+        const jobRows = rowsForDepartment(normalizeImportJobRows(parseJobRows(wsJ)), department);
+        if (!jobRows.length) throw new Error(`Jobs 시트에 ${department} 데이터가 없습니다.`);
 
         for (const g of groupRows) await upsertGroupDef(g, null);
         for (const e of equipRows) await upsertGroupDef(e, e.item_sort1);
@@ -823,18 +941,19 @@ const TVC_PmsMasterExcel = (function () {
         };
     }
 
-    async function importFromFile(file, user) {
+    async function importFromFile(file, user, opts = {}) {
         if (!file) throw new Error('파일이 없습니다.');
         if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(await file.arrayBuffer());
-        return importFromWorkbook(wb, user);
+        return importFromWorkbook(wb, user, opts);
     }
 
     return {
         exportToFile, exportToWorkbook, importFromFile, importFromWorkbook,
         buildGroupLabel, splitGroupLabel, resolveGroup, renumberJobsForExport,
         isLegacyDeckGroupLabel, pruneEmptyGroupDefs, findImportJobMatch, importRowMatchesJob,
+        applyDeckCatalogNormalization, deckJobUsesLegacyCatalog,
         masterExcelFilename,
         DECK_LEGACY_CATALOG,
     };

@@ -1263,7 +1263,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     flex-shrink: 0;
 }
 #workReportModal,
-#defectReportModal {
+#defectReportModal,
+#workPermitModal {
     overflow: auto;
     align-items: flex-start;
     justify-content: center;
@@ -1279,8 +1280,18 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     visibility: hidden;
 }
 #workReportModal .modal-box.wr-modal,
-#defectReportModal .modal-box.wr-modal {
+#defectReportModal .modal-box.wr-modal,
+#workPermitModal .modal-box.wr-modal {
     margin: auto;
+}
+#defectReportModal .modal-box.wr-modal.spare-req-work-modal,
+#workPermitModal .modal-box.wr-modal.spare-req-work-modal {
+    width: 1000px;
+    max-width: 1000px;
+    min-width: 1000px;
+    height: min(92vh, 920px);
+    min-height: min(92vh, 920px);
+    max-height: 92vh;
 }
 .modal-box.wr-modal .wr-maint-approval { flex-wrap: nowrap; }
 #workReportBody {
@@ -1296,7 +1307,10 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 #workReportBody > .modal-actions,
 #defectReportBody > .df-modal-inner > .wr-titlebar,
 #defectReportBody > .df-modal-inner > .wr-pagetabs-bar,
-#defectReportBody > .df-modal-inner > .modal-actions {
+#defectReportBody > .df-modal-inner > .modal-actions,
+#workPermitBody > .df-modal-inner > .wr-titlebar,
+#workPermitBody > .df-modal-inner > .wr-pagetabs-bar,
+#workPermitBody > .df-modal-inner > .modal-actions {
     flex-shrink: 0;
 }
 #defectReportBody {
@@ -1317,6 +1331,43 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     flex: 1;
     min-height: 0;
     overflow: auto;
+}
+#workPermitBody {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#workPermitBody > .df-modal-inner {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#workPermitBody > .df-modal-inner > .wr-page {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+}
+#workPermitBody .wr-titlebar.wp-list-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 48px 10px 14px;
+}
+#workPermitBody .wr-titlebar.wp-list-head .wp-list-head-title {
+    font-size: inherit;
+    font-weight: inherit;
+    margin: 0;
+}
+#workPermitModal .modal-x {
+    top: 10px;
+    right: 12px;
+    z-index: 80;
+    color: #fff;
 }
 #workReportBody > .wr-page {
     flex: 1;
@@ -1354,7 +1405,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     margin-top: 0;
 }
 .wr-spare-meta-form .wr-maint-job-pick,
-#defectReportBody .wr-maint-job-pick {
+#defectReportBody .wr-maint-job-pick,
+#workPermitBody .wr-maint-job-pick {
     width: 100%;
     box-sizing: border-box;
     padding: 6px 8px;
@@ -1374,17 +1426,20 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     cursor: pointer;
 }
 .wr-page2-job-rows,
-#defectReportBody .df-page1-job-rows {
+#defectReportBody .df-page1-job-rows,
+#workPermitBody .df-page1-job-rows {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 .wr-spare-meta-form .wr-page2-job-grid-batch,
-#defectReportBody .df-maint-job-grid-batch {
+#defectReportBody .df-maint-job-grid-batch,
+#workPermitBody .df-maint-job-grid-batch {
     grid-template-columns: repeat(4, minmax(0, 1fr)) 36px;
 }
 .wr-spare-meta-form .wr-page2-job-row-act,
-#defectReportBody .df-maint-job-row-act {
+#defectReportBody .df-maint-job-row-act,
+#workPermitBody .df-maint-job-row-act {
     justify-content: flex-end;
 }
 .wr-spare-work-layout {
@@ -1534,9 +1589,11 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     padding: 12px 14px; box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
 }
 .wr-maint-body { display: flex; flex-direction: column; gap: 0; }
-#defectReportBody .wr-maint-body { gap: 10px; }
+#defectReportBody .wr-maint-body,
+#workPermitBody .wr-maint-body { gap: 10px; }
 .wr-maint-grid-gap { margin-top: 12px; }
-#defectReportBody .wr-maint-body > .wr-maint-grid-gap { margin-top: 0; }
+#defectReportBody .wr-maint-body > .wr-maint-grid-gap,
+#workPermitBody .wr-maint-body > .wr-maint-grid-gap { margin-top: 0; }
 .wr-maint-grid { display: grid; gap: 10px 12px; }
 .wr-maint-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wr-maint-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1640,8 +1697,10 @@ input.tvc-date-input::placeholder {
     border-color: #e2e8f0;
 }
 #workReportBody .wr-page > .wr-maint-approval,
-#defectReportBody .wr-page > .wr-maint-approval { margin-bottom: 10px; }
-#defectReportBody .wr-maint-form > .wr-maint-approval { margin-bottom: 0; }
+#defectReportBody .wr-page > .wr-maint-approval,
+#workPermitBody .wr-page > .wr-maint-approval { margin-bottom: 10px; }
+#defectReportBody .wr-maint-form > .wr-maint-approval,
+#workPermitBody .wr-maint-form > .wr-maint-approval { margin-bottom: 0; }
 .wr-maint-approval .wr-maint-date,
 .wr-maint-approval .wr-ro {
     padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 5px;
@@ -5121,6 +5180,32 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-consume-log-table col.cl-col-reported { width: 88px; }
 .spare-consume-log-table col.cl-col-status { width: 96px; }
 .spare-consume-log-table col.cl-col-total { width: 56px; }
+/* Work Permit list — Work History columns through Status (no Total Data) */
+.wp-list-table col.wp-col-chk { width: 32px; }
+.wp-list-table col.wp-col-type { width: 52px; }
+.wp-list-table col.wp-col-file { width: 115px; }
+.wp-list-table col.wp-col-crit { width: 36px; }
+.wp-list-table col.wp-col-job { width: 72px; }
+.wp-list-table col.wp-col-sort1 { width: auto; min-width: 130px; }
+.wp-list-table col.wp-col-sort2 { width: auto; min-width: 130px; }
+.wp-list-table col.wp-col-reported { width: 88px; }
+.wp-list-table col.wp-col-status { width: 96px; }
+.wp-list-table .hist-type-wp .hist-type-mark { background: #6b46c1; }
+.wp-list-table .wp-st-Reported { background: #3182ce; }
+.wp-list-table .wp-st-Confirmed { background: #d97706; }
+.wp-list-table .wp-st-Approved { background: #16a34a; }
+.wp-list-table .wp-st-Submitted { background: #d97706; }
+.wp-list-panel .spare-data-table.wp-list-table { min-width: 860px; }
+#workPermitBody .wp-meta-form .spare-req-hist-popover {
+    width: 100%;
+    max-width: 100%;
+}
+#workPermitBody .wp-meta-form .spare-req-hist-popover .spare-req-list-table,
+#workPermitBody .wp-meta-form .spare-req-hist-popover .wp-list-table {
+    width: 100%;
+    min-width: 0;
+    max-width: 960px;
+}
 .spare-consume-log-panel .spare-data-table.spare-consume-log-table {
     min-width: 860px;
 }
@@ -5279,7 +5364,9 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 
 .spare-req-work-modal-wrap { padding: 12px; }
-.spare-req-work-modal {
+#spareReqWorkModal .modal-box.spare-req-work-modal,
+#spareConsumeModal .modal-box.spare-req-work-modal,
+#spareReceiveModal .modal-box.spare-req-work-modal {
     width: min(98vw, 1560px);
     max-width: 98vw;
     height: min(92vh, 920px);
@@ -5338,8 +5425,8 @@ label.spare-file-pick input[type=file] { display: none; }
 #spareConsumeModal .spare-req-work-layout .tree-panel {
     max-height: none;
 }
-/* Work Report / Defect Report override spare-req-work-modal fluid width */
-.modal-box.wr-modal.spare-req-work-modal {
+/* Work Report — wider spare-req-work-modal; Defect / Work Permit stay 1000px via #id rules above */
+#workReportModal .modal-box.wr-modal.spare-req-work-modal {
     width: min(98vw, 1400px);
     max-width: min(98vw, 1400px);
     min-width: 0;
@@ -7568,6 +7655,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     .modal-box { max-height: 92vh; border-radius: 12px 12px 0 0; }
     #workReportModal,
     #defectReportModal,
+    #workPermitModal,
     #spareReqListModal,
     #spareReqWorkModal,
     #spareConsumeModal,
@@ -7578,6 +7666,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     }
     #workReportModal .modal-box.wr-modal,
     #defectReportModal .modal-box.wr-modal,
+    #workPermitModal .modal-box.wr-modal,
     #spareConsumeModal.is-consume-list-window .modal-box.spare-req-work-modal,
     #spareConsumeLogModal .modal-box.spare-req-list-modal {
         width: 1000px;

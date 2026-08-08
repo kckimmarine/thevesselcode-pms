@@ -68,7 +68,7 @@ const TVC_RunHours = (function () {
             } else if (revertSnapshot) {
                 updateBtn.title = 'Running Hours update is complete. Use Revert to update again.';
             } else if (!inputEditMode && ctx?.allWorkHistoryConfirmed && !ctx.allWorkHistoryConfirmed()) {
-                updateBtn.title = 'Work History: confirm Maintenance/Postpone; critical Postpone must be Submitted before Update. (Defect excluded)';
+                updateBtn.title = 'Work History: confirm Maintenance/Postpone before Update. (Defect excluded)';
             } else if (inputEditMode) {
                 updateBtn.title = 'Enter values, then click Apply Update to save.';
             } else {
@@ -195,8 +195,8 @@ const TVC_RunHours = (function () {
                         : 0);
                 await TVC_Dialog.alert(
                     `Monthly prep: ${unconfirmed} unfinished Work History item(s)\n` +
-                    '· Maintenance / non-critical Postpone → Confirm\n' +
-                    '· Critical Postpone → Confirm then Submitted (Export)\n' +
+                    '· Maintenance / Postpone → Confirm\n' +
+                    '· Critical Postpone: Confirm updates Work Plan; Company approval via Export\n' +
                     '· Defect reports are separate (not an RH gate)\n' +
                     'Complete them before Running Hours Update.'
                 );

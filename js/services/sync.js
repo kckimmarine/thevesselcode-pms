@@ -375,6 +375,20 @@ const TVC_Sync = (function () {
             return inTs >= exTs;
         };
 
+        const AUTHOR_PRESERVE_FIELDS = [
+            'reporter_name', 'reporter_username', 'reported_by', 'reporter_role',
+            'made_by', 'created_by', 'created_by_username', 'creator_name', 'operator_id', 'operator_name',
+        ];
+        const preserveAuthorFields = (existing, incoming) => {
+            for (const f of AUTHOR_PRESERVE_FIELDS) {
+                const ex = existing?.[f];
+                const inc = incoming?.[f];
+                if (ex != null && String(ex).trim() && (inc == null || !String(inc).trim())) {
+                    incoming[f] = ex;
+                }
+            }
+        };
+
         const mergeStore = async (storeName, rows, kind, keyField = 'id') => {
             if (!rows?.length) return;
             for (const incoming of rows) {
@@ -387,6 +401,7 @@ const TVC_Sync = (function () {
                     continue;
                 }
                 if (importAuthoritative || shouldApplyIncoming(existing, incoming)) {
+                    preserveAuthorFields(existing, incoming);
                     Object.assign(existing, incoming);
                     stampImported(existing, kind);
                     await TVC_DB.put(storeName, existing);

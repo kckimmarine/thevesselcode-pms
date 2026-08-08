@@ -1,5 +1,5 @@
 /* SPARE Master Excel — Export / Import (Group · Equipment · Spare Parts)
- * Filename: incheonchemi_spare_master_YYYYMMDD_001.xlsx
+ * Filename: {vessel}_spare_master_{deck|engine}_{YYYYMMDD}_{seq}.xlsx
  */
 const TVC_SpareMasterExcel = (function () {
     const NAVY = 'FF1A365D';
@@ -164,13 +164,33 @@ const TVC_SpareMasterExcel = (function () {
         await TVC_FileExport.save(blob, filename);
     }
 
-    async function masterExcelFilename(vesselId) {
+    async function masterExcelFilename(vesselId, department) {
+        const dept = normDept(department);
         if (typeof TVC_Filename !== 'undefined') {
-            return TVC_Filename.buildFlat({ vesselId, type: 'spare_master', ext: 'xlsx' });
+            return TVC_Filename.build({ vesselId, type: 'spare_master', department: dept, ext: 'xlsx' });
         }
         const slug = String(vesselId || 'vessel').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'vessel';
         const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '');
-        return `${slug}_spare_master_${dateTag}_001.xlsx`;
+        return `${slug}_spare_master_${dept.toLowerCase()}_${dateTag}_001.xlsx`;
+    }
+
+    function normDept(dept) {
+        const d = String(dept || '').trim().toUpperCase();
+        if (d !== 'DECK' && d !== 'ENGINE') throw new Error('Department must be DECK or ENGINE.');
+        return d;
+    }
+
+    function rowsForDepartment(rows, department) {
+        const dept = normDept(department);
+        const scoped = (rows || []).filter(r => String(r.department || '').toUpperCase() === dept);
+        const foreign = (rows || []).filter(r => {
+            const d = String(r.department || '').toUpperCase();
+            return d && d !== dept;
+        });
+        if (foreign.length) {
+            throw new Error(`Excel contains ${foreign[0].department} data; select ${dept} and use a ${dept}-only master file.`);
+        }
+        return scoped;
     }
 
     function canonSpare(row) {
@@ -195,7 +215,9 @@ const TVC_SpareMasterExcel = (function () {
             const codeNo = parseInt(m[1], 10);
             const node = groupNodes.find(n => {
                 const gm = norm(n.label).match(/^(\d{1,2})\./);
-                return gm && parseInt(gm[1], 10) === codeNo;
+                if (!gm || parseInt(gm[1], 10) !== codeNo) return false;
+                if (cat === 'ENGINE' || cat === 'DECK') return n.department === cat;
+                return true;
             });
             if (node?.department) return node.department;
         }
@@ -307,7 +329,8 @@ const TVC_SpareMasterExcel = (function () {
         return {};
     }
 
-    async function loadExportData() {
+    async function loadExportData(department) {
+        const dept = normDept(department);
         const [spares, groups, jobs, meta] = await Promise.all([
             TVC_DB.getAll('spare_parts'),
             TVC_DB.getAll('maintenance_groups').catch(() => []),
@@ -318,30 +341,38 @@ const TVC_SpareMasterExcel = (function () {
         if (typeof TVC_Fleet !== 'undefined') {
             vesselId = TVC_Fleet.getSelected()?.name || TVC_Fleet.PILOT_VESSEL_ID || vesselId;
         }
+        const scopedJobs = (jobs || []).filter(j => String(j.department || '').toUpperCase() === dept);
+        const scopedGroups = (groups || []).filter(g => String(g.department || '').toUpperCase() === dept);
         const idxState = {
-            jobs: jobs || [],
-            groups: groups || [],
+            jobs: scopedJobs,
+            groups: scopedGroups,
             components: [],
             spares: spares || [],
             reports: [],
         };
         const groupNodes = (typeof TVC_Indexes !== 'undefined')
             ? TVC_Indexes.build(idxState).groupNodes
-            : (groups || []).filter(g => !g.item_sort1).map(g => ({ label: g.label, department: g.department }));
+            : scopedGroups.filter(g => !g.item_sort1).map(g => ({ label: g.label, department: g.department }));
+        const scopedSpares = (spares || []).map(canonSpare).filter(s => spareDepartment(s, groupNodes) === dept);
         return {
-            spares: (spares || []).map(canonSpare),
-            groups: groups || [],
-            jobs: jobs || [],
+            spares: scopedSpares,
+            groups: scopedGroups,
+            jobs: scopedJobs,
             groupNodes,
             vesselId,
+            department: dept,
         };
     }
 
     async function exportToWorkbook(opts = {}) {
         if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
-        const data = opts.spares ? { ...opts, jobs: opts.jobs || [], groups: opts.groups || [] } : await loadExportData();
-        const { spares, groups, jobs, groupNodes, vesselId } = data;
-        const exportSpares = (opts.spares || spares || []).map(canonSpare);
+        const department = normDept(opts.department);
+        const data = opts.spares
+            ? { ...opts, department, jobs: opts.jobs || [], groups: opts.groups || [] }
+            : await loadExportData(department);
+        const { groups, jobs, groupNodes, vesselId } = data;
+        const exportSpares = (opts.spares || data.spares || []).map(canonSpare)
+            .filter(s => spareDepartment(s, groupNodes) === department);
 
         const groupCounts = collectExportGroupCounts(exportSpares, groups, jobs, groupNodes);
 
@@ -360,8 +391,8 @@ const TVC_SpareMasterExcel = (function () {
 
         const wsG = wb.addWorksheet('Group Headers', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         addMetaRows(wsG, [
-            `Vessel: ${vesselId}  ·  SPARE Master — Group Headers`,
-            'Live DB snapshot: SPARE/PMS group tree edits + spare item CRUD. Re-export after UI changes.',
+            `Vessel: ${vesselId}  ·  SPARE Master — ${department} — Group Headers`,
+            'Live DB snapshot for this department only. Re-export after UI changes.',
         ]);
         ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Critical Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Parts (ref)'].forEach((h, i) => {
             wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
@@ -392,7 +423,7 @@ const TVC_SpareMasterExcel = (function () {
         });
         styleHeaderRow(wsE.getRow(HDR_ROW), GREEN);
         let eqRow = 0;
-        (groups || []).filter(g => norm(g.item_sort1)).forEach(g => {
+        (groups || []).filter(g => norm(g.item_sort1) && String(g.department || '').toUpperCase() === department).forEach(g => {
             const sg = isSpareGenEngineGroup(g.label)
                 ? { no: SPARE_GEN_ENGINE_NO, name: SPARE_GEN_ENGINE_NAME }
                 : splitGroupLabel(g.label);
@@ -410,7 +441,7 @@ const TVC_SpareMasterExcel = (function () {
 
         const wsP = wb.addWorksheet('Spare Parts', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         addMetaRows(wsP, [
-            `Vessel: ${vesselId}  ·  ${exportSpares.length} spare parts`,
+            `Vessel: ${vesselId}  ·  ${department} — ${exportSpares.length} spare parts`,
             'SPARE_ID hidden. Generator Engine parts export as GROUP 03 · GENERATOR ENGINE (not PMS 03/04/05 split).',
         ], 13);
         const pHeaders = ['SPARE_ID', 'DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Code', 'Class', 'Dwg No.', 'Part No.', 'Items', 'Unit', 'Work', 'Std', 'Rob'];
@@ -443,16 +474,18 @@ const TVC_SpareMasterExcel = (function () {
     }
 
     async function exportToFile(opts = {}) {
-        const wb = await exportToWorkbook(opts);
-        const vesselId = opts.vesselId || (await loadExportData()).vesselId;
+        const department = normDept(opts.department);
+        const wb = await exportToWorkbook({ ...opts, department });
+        const vesselId = opts.vesselId || (await loadExportData(department)).vesselId;
         const buf = await wb.xlsx.writeBuffer();
-        const filename = await masterExcelFilename(vesselId);
+        const filename = await masterExcelFilename(vesselId, department);
         await downloadBlob(buf, filename);
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
                 type: 'EXPORT',
                 direction: 'SPARE_MASTER',
                 scope: 'SPARE',
+                department,
                 filename,
                 file_name: filename,
                 vessel_id: vesselId,
@@ -595,7 +628,7 @@ const TVC_SpareMasterExcel = (function () {
         return null;
     }
 
-    async function importFromWorkbook(wb, user) {
+    async function importFromWorkbook(wb, user, opts = {}) {
         const canImport = TVC_RBAC.isHqAccount(user)
             ? TVC_RBAC.canModifyOriginalPlan(user)
             : (TVC_RBAC.isMaintPlanEditor(user) && TVC_RBAC.canModifySpareInventory(user));
@@ -603,23 +636,28 @@ const TVC_SpareMasterExcel = (function () {
             throw Object.assign(new Error('SPARE Master Import는 Chief Engineer, Chief Officer, Captain(Master), 또는 HQ Superintendent만 사용할 수 있습니다.'), { code: 'PERMISSION_DENIED' });
         }
         if (TVC_RBAC.isHqAccount(user)) TVC_RBAC.assertModifyOriginalPlan(user);
+        const department = normDept(opts.department);
 
         const wsG = wb.getWorksheet('Group Headers');
         const wsE = wb.getWorksheet('Equipment Headers');
         const wsP = wb.getWorksheet('Spare Parts');
         if (!wsP) throw new Error('Spare Parts 시트를 찾을 수 없습니다.');
 
-        const groupRows = wsG ? parseGroupRows(wsG) : [];
-        const equipRows = wsE ? parseEquipmentRows(wsE) : [];
-        const spareRows = parseSpareRows(wsP);
-        if (!spareRows.length) throw new Error('Spare Parts 시트에 데이터가 없습니다.');
+        const groupRows = rowsForDepartment(wsG ? parseGroupRows(wsG) : [], department);
+        const equipRows = rowsForDepartment(wsE ? parseEquipmentRows(wsE) : [], department);
+        const spareRows = rowsForDepartment(parseSpareRows(wsP), department);
+        if (!spareRows.length) throw new Error(`Spare Parts 시트에 ${department} 데이터가 없습니다.`);
 
         const [groups, groupNodes, jobs] = await Promise.all([
             TVC_DB.getAll('maintenance_groups').catch(() => []),
-            loadExportData().then(d => d.groupNodes).catch(() => []),
+            loadExportData(department).then(d => d.groupNodes).catch(() => []),
             TVC_DB.getAll('maintenance_jobs').catch(() => []),
         ]);
-        const importCtx = { groups, groupNodes, jobs };
+        const importCtx = {
+            groups: (groups || []).filter(g => String(g.department || '').toUpperCase() === department),
+            groupNodes,
+            jobs: (jobs || []).filter(j => String(j.department || '').toUpperCase() === department),
+        };
 
         for (const g of groupRows) await upsertSpareGroupDef(g, null, importCtx);
         for (const e of equipRows) await upsertSpareGroupDef(e, e.item_sort1, importCtx);
@@ -641,7 +679,7 @@ const TVC_SpareMasterExcel = (function () {
         let updated = 0;
 
         for (const row of spareRows) {
-            if (!row.department) row.department = 'ENGINE';
+            row.department = department;
             let spare = findSpareMatch(row, byId, byCode, byPart);
             const now = new Date().toISOString();
 
@@ -721,12 +759,12 @@ const TVC_SpareMasterExcel = (function () {
         return { created, updated, groups: groupRows.length, equipment: equipRows.length, parts: spareRows.length };
     }
 
-    async function importFromFile(file, user) {
+    async function importFromFile(file, user, opts = {}) {
         if (!file) throw new Error('파일이 없습니다.');
         if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(await file.arrayBuffer());
-        return importFromWorkbook(wb, user);
+        return importFromWorkbook(wb, user, opts);
     }
 
     return {

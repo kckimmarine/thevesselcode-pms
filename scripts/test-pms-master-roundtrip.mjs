@@ -152,6 +152,8 @@ function loadPmsMasterExcel() {
 
 const CE_USER = { username: 'ce', display_name: 'Chief engineer', role: 'SHIP_CHIEF', department: 'ENGINE' };
 const HQ_USER = { username: 'hq', display_name: 'Superintendent', role: 'HQ_SUPERVISOR', account_type: 'HQ' };
+const CAPTAIN_USER = { username: 'captain', display_name: 'Captain', role: 'SHIP_CAPTAIN', department: 'DECK', station: 'CAPTAIN' };
+const CO_USER = { username: 'co', display_name: 'Chief officer', role: 'SHIP_CAPTAIN', department: 'DECK', station: 'CCR' };
 
 let pass = 0;
 let fail = 0;
@@ -170,16 +172,46 @@ async function runScenario(name, fn) {
     await fn();
 }
 
-async function exportImportCycle(Pms, db, user, mutateFn) {
-    const jobs = db.cloneJobs();
-    const groups = await db.getAll('maintenance_groups');
-    const wb = await Pms.exportToWorkbook({ jobs: Pms.renumberJobsForExport(jobs), groups, vesselId: 'INCHEON CHEMI' });
+async function exportEngineWorkbook(Pms, db) {
+    const jobs = db.cloneJobs().filter(j => j.department === 'ENGINE');
+    const groups = (await db.getAll('maintenance_groups')).filter(g => g.department === 'ENGINE');
+    return Pms.exportToWorkbook({
+        jobs: Pms.renumberJobsForExport(jobs),
+        groups,
+        vesselId: 'INCHEON CHEMI',
+        department: 'ENGINE',
+    });
+}
+
+async function exportDeckWorkbook(Pms, db) {
+    const jobs = db.cloneJobs().filter(j => j.department === 'DECK');
+    const groups = (await db.getAll('maintenance_groups')).filter(g => g.department === 'DECK');
+    return Pms.exportToWorkbook({
+        jobs: Pms.renumberJobsForExport(jobs),
+        groups,
+        vesselId: 'INCHEON CHEMI',
+        department: 'DECK',
+    });
+}
+
+async function exportImportCycle(Pms, db, user, mutateFn, department = 'ENGINE') {
+    const wb = department === 'DECK'
+        ? await exportDeckWorkbook(Pms, db)
+        : await exportEngineWorkbook(Pms, db);
     if (mutateFn) await mutateFn(wb);
     global.TVC_DB = db;
-    const result = await Pms.importFromWorkbook(wb, user);
+    const result = await Pms.importFromWorkbook(wb, user, { department });
     const after = db.cloneJobs();
     normalizeGroupDepartments(after);
     return { result, after, wb };
+}
+
+async function importWorkbookToDb(Pms, db, wb, user, department) {
+    global.TVC_DB = db;
+    const result = await Pms.importFromWorkbook(wb, user, { department });
+    const after = db.cloneJobs();
+    normalizeGroupDepartments(after);
+    return { result, after };
 }
 
 function setJobCell(ws, rowNo, patch) {
@@ -225,7 +257,7 @@ async function main() {
         assert('import completes', result.jobs > 0);
         assert('job count preserved', after.length === before, `before=${before} after=${after.length}`);
         assert('meta flag set', !!(await db.getMeta(TVC_META_KEYS.PMS_MASTER_IMPORTED)));
-        assert('imported jobs stamped', after.every(j => j.master_import_at));
+        assert('imported ENGINE jobs stamped', after.filter(j => j.department === 'ENGINE').every(j => j.master_import_at));
     });
 
     await runScenario('2) ENGINE group 26 · F.O TANK stays ENGINE after import + load normalize', async () => {
@@ -278,7 +310,7 @@ async function main() {
             pic: '1/E',
         };
         const db = createMockDb({ maintenance_jobs: [localJob], maintenance_groups: [], ship_components: [] });
-        const wb = await Pms.exportToWorkbook({ jobs: [], groups: [], vesselId: 'INCHEON CHEMI' });
+        const wb = await Pms.exportToWorkbook({ jobs: [], groups: [], vesselId: 'INCHEON CHEMI', department: 'ENGINE' });
         const wsJ = wb.getWorksheet('Jobs');
         const rowNo = 6;
         setJobCell(wsJ, rowNo, {
@@ -290,7 +322,7 @@ async function main() {
             detail: 'ENGINE LOCAL FO TANK CHECK',
         });
         global.TVC_DB = db;
-        await Pms.importFromWorkbook(wb, CE_USER);
+        await Pms.importFromWorkbook(wb, CE_USER, { department: 'ENGINE' });
         const after = db.cloneJobs();
         normalizeGroupDepartments(after);
         const hits = after.filter(j => j.job_detail === 'ENGINE LOCAL FO TANK CHECK');
@@ -335,14 +367,143 @@ async function main() {
                 idx++;
                 setJobCell(wsJ, n, { groupNo: '01', groupName: 'LSA/FFE', jobCode: `01-${String(idx).padStart(3, '0')}` });
             });
-        });
+        }, 'DECK');
         const lsa001 = after.find(j => j.department === 'DECK' && j.job_code === '01-001');
         assert('import succeeds', result.jobs > 0);
         assert('LSA/FFE 01-001 exists', !!lsa001);
         assert('CARGO TANK jobs removed', !after.some(j => j.department === 'DECK' && norm(j.group).includes('CARGO TANK MONITORING')));
     });
 
-    await runScenario('5) Legacy combined group 26 still splits by job code (pre-master seed)', async () => {
+    await runScenario('5) Vessel Engine — rename group, delete jobs, add group (same PC import)', async () => {
+        const db = createMockDb(seed);
+        const beforeEngine = db.cloneJobs().filter(j => j.department === 'ENGINE').length;
+        const sample24 = db.cloneJobs().find(j => j.department === 'ENGINE' && String(j.group).includes('24.') && j.job_code === '24-001');
+        assert('seed has ENGINE 24-001', !!sample24, sample24?.group);
+
+        const { result, after, wb } = await exportImportCycle(Pms, db, CE_USER, async (workbook) => {
+            const wsJ = workbook.getWorksheet('Jobs');
+            const wsG = workbook.getWorksheet('Group Headers');
+            const renameFrom = 'CARGO EQUIPMENTS';
+            const renameToNo = '88';
+            const renameToName = 'CARGO EQUIPMENTS RENAMED';
+            const newGroupNo = '99';
+            const newGroupName = 'TEST ENGINE GROUP';
+
+            wsJ.eachRow((row, n) => {
+                if (n < 6) return;
+                if (String(row.getCell(2).value || '').toUpperCase() !== 'ENGINE') return;
+                const gname = String(row.getCell(4).value || '').toUpperCase();
+                if (gname.includes(renameFrom)) {
+                    setJobCell(wsJ, n, {
+                        groupNo: renameToNo,
+                        groupName: renameToName,
+                        jobCode: String(row.getCell(6).value || '').replace(/^24-/, `${renameToNo}-`),
+                    });
+                }
+            });
+
+            const rowsToDrop = [];
+            wsJ.eachRow((row, n) => {
+                if (n < 6) return;
+                if (String(row.getCell(2).value || '').toUpperCase() !== 'ENGINE') return;
+                const code = String(row.getCell(6).value || '');
+                if (code === '88-002' || code === '88-003') rowsToDrop.push(n);
+            });
+            rowsToDrop.sort((a, b) => b - a).forEach(n => wsJ.spliceRows(n, 1));
+
+            wsG.eachRow((row, n) => {
+                if (n < 6) return;
+                if (String(row.getCell(1).value || '').toUpperCase() !== 'ENGINE') return;
+                const name = String(row.getCell(3).value || '').toUpperCase();
+                if (name.includes(renameFrom)) {
+                    row.getCell(2).value = renameToNo;
+                    row.getCell(3).value = renameToName;
+                }
+            });
+
+            let lastJobRow = 5;
+            wsJ.eachRow((row, n) => { if (n >= 6) lastJobRow = n; });
+            setJobCell(wsJ, lastJobRow + 1, {
+                jobId: '',
+                department: 'ENGINE',
+                groupNo: newGroupNo,
+                groupName: newGroupName,
+                jobCode: '99-001',
+                detail: 'SIMULATION NEW JOB',
+            });
+            let lastGroupRow = 5;
+            wsG.eachRow((row, n) => { if (n >= 6) lastGroupRow = n; });
+            addGroupHeader(wsG, lastGroupRow + 1, {
+                department: 'ENGINE', groupNo: newGroupNo, groupName: newGroupName, jobs: 1,
+            });
+        }, 'ENGINE');
+
+        const outPath = path.join(ROOT, 'data', '_test-pms-master-engine-mutated.xlsx');
+        await wb.xlsx.writeFile(outPath);
+
+        const renamed = after.find(j => j.department === 'ENGINE' && j.job_code === '88-001');
+        const deleted = after.filter(j => j.department === 'ENGINE' && (j.job_code === '88-002' || j.job_code === '88-003'));
+        const added = after.find(j => j.department === 'ENGINE' && j.job_code === '99-001');
+        const deckUntouched = db.cloneJobs().filter(j => j.department === 'DECK').length;
+
+        assert('import completes', result.jobs > 0);
+        assert('group rename applied (88-001)', !!renamed && norm(renamed.group).includes('CARGO EQUIPMENTS RENAMED'));
+        assert('deleted jobs removed', deleted.length === 0);
+        assert('new group/job added (99-001)', !!added && added.job_detail === 'SIMULATION NEW JOB');
+        assert('DECK jobs untouched on Engine PC', deckUntouched > 0);
+        assert('ENGINE job count changed', after.filter(j => j.department === 'ENGINE').length !== beforeEngine);
+        assert('mutated workbook saved', fs.existsSync(outPath), outPath);
+    });
+
+    await runScenario('6) Cross-PC — Engine Excel → HQ / Master import (file handoff)', async () => {
+        const enginePc = createMockDb(seed);
+        const hqPc = createMockDb(seed);
+        const masterPc = createMockDb(seed);
+        const deckBeforeHq = hqPc.cloneJobs().filter(j => j.department === 'DECK').length;
+        const deckBeforeMaster = masterPc.cloneJobs().filter(j => j.department === 'DECK').length;
+
+        const wb = await exportEngineWorkbook(Pms, enginePc);
+        const wsJ = wb.getWorksheet('Jobs');
+        const wsG = wb.getWorksheet('Group Headers');
+        setJobCell(wsJ, 6, {
+            groupNo: '77',
+            groupName: 'CROSS PC GROUP',
+            jobCode: '77-001',
+            detail: 'CROSS PC TEST JOB',
+        });
+        addGroupHeader(wsG, wsG.lastRow.number + 1, {
+            department: 'ENGINE', groupNo: '77', groupName: 'CROSS PC GROUP', jobs: 1,
+        });
+        const handoffPath = path.join(ROOT, 'data', '_test-pms-master-engine-crosspc.xlsx');
+        await wb.xlsx.writeFile(handoffPath);
+
+        const { after: hqAfter } = await importWorkbookToDb(Pms, hqPc, wb, HQ_USER, 'ENGINE');
+        const { after: masterAfter } = await importWorkbookToDb(Pms, masterPc, wb, CAPTAIN_USER, 'ENGINE');
+
+        const hqHit = hqAfter.find(j => j.job_code === '77-001' && j.department === 'ENGINE');
+        const masterHit = masterAfter.find(j => j.job_code === '77-001' && j.department === 'ENGINE');
+
+        assert('handoff file written', fs.existsSync(handoffPath));
+        assert('HQ import creates 77-001', !!hqHit && hqHit.job_detail === 'CROSS PC TEST JOB');
+        assert('Master import creates 77-001', !!masterHit && masterHit.job_detail === 'CROSS PC TEST JOB');
+        assert('HQ DECK untouched', hqPc.cloneJobs().filter(j => j.department === 'DECK').length === deckBeforeHq);
+        assert('Master DECK untouched', masterPc.cloneJobs().filter(j => j.department === 'DECK').length === deckBeforeMaster);
+    });
+
+    await runScenario('7) Deck PC rejects ENGINE-only file when DECK selected', async () => {
+        const db = createMockDb(seed);
+        const wb = await exportEngineWorkbook(Pms, db);
+        global.TVC_DB = db;
+        let errMsg = '';
+        try {
+            await Pms.importFromWorkbook(wb, CO_USER, { department: 'DECK' });
+        } catch (e) {
+            errMsg = e.message || '';
+        }
+        assert('DECK import rejects ENGINE file', /ENGINE data|ENGINE-only|contains ENGINE/i.test(errMsg), errMsg);
+    });
+
+    await runScenario('8) Legacy combined group 26 still splits by job code (pre-master seed)', async () => {
         const legacySeed = {
             maintenance_jobs: [{
                 id: 'legacy-26-001',

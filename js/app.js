@@ -17,7 +17,7 @@ const TVC_App = (function () {
 
     let state = {
         user: null,
-        components: [], jobs: [], groups: [], spares: [], reports: [], defectCases: [],
+        components: [], jobs: [], groups: [], spares: [], reports: [], defectCases: [], workPermits: [],
         idx: null,
         selectedGroupKey: null,
         treeSearch: '',
@@ -47,7 +47,7 @@ const TVC_App = (function () {
         _wrFromHistory: false,
         department: 'ENGINE',
         station: null,                     // CCR | ECR | CAPTAIN
-        captainView: 'all',                // all | deck | engine (Captain Hub dashboard)
+        captainView: 'deck',               // deck | engine (Captain Hub dashboard)
         space: 'SHIP',                     // 데이터 공간: 'HQ' | 'SHIP' (Export/Import로만 상호 동기화)
         currentTab: 'menu',
         histView: 'workReport',
@@ -126,28 +126,28 @@ const TVC_App = (function () {
         if (state._deferredBootRunning || state._deferredBootDone) return;
         state._deferredBootRunning = true;
         try {
-            try {
-                const sync = await TVC_DB.SparePart.syncOnBoot();
-                if (sync.migrated) console.info('[SPICS] syncOnBoot migrated', sync.migrated, '/', sync.total);
-            } catch (e) { console.warn('[SPICS] syncOnBoot', e); }
-            try { await TVC_DataPurge.run(); } catch (e) { console.warn('[TVC_DataPurge]', e); }
-            try {
-                const reqPurge = await TVC_DataPurge.purgeAllRequisitionsOnce();
-                if (reqPurge?.requisitions) {
-                    state.spareModule = state.spareModule || {};
-                    state.spareModule.selectedReqId = null;
-                    state.spareModule.showReqPanel = false;
-                }
-            } catch (e) { console.warn('[TVC_DataPurge] requisitions', e); }
-            try {
-                const repPurge = await TVC_DataPurge.purgeAllReportsForTestingOnce();
-                if (repPurge?.workReports || repPurge?.defectCases) {
-                    state._histSelReportId = null;
-                    state._histChecked = {};
-                    state._wrReportId = null;
-                }
-            } catch (e) { console.warn('[TVC_DataPurge] reports', e); }
-            try { await TVC_Fleet.ensureFleet(); } catch (e) { console.warn('[TVC_Fleet]', e); }
+        try {
+            const sync = await TVC_DB.SparePart.syncOnBoot();
+            if (sync.migrated) console.info('[SPICS] syncOnBoot migrated', sync.migrated, '/', sync.total);
+        } catch (e) { console.warn('[SPICS] syncOnBoot', e); }
+        try { await TVC_DataPurge.run(); } catch (e) { console.warn('[TVC_DataPurge]', e); }
+        try {
+            const reqPurge = await TVC_DataPurge.purgeAllRequisitionsOnce();
+            if (reqPurge?.requisitions) {
+                state.spareModule = state.spareModule || {};
+                state.spareModule.selectedReqId = null;
+                state.spareModule.showReqPanel = false;
+            }
+        } catch (e) { console.warn('[TVC_DataPurge] requisitions', e); }
+        try {
+            const repPurge = await TVC_DataPurge.purgeAllReportsForTestingOnce();
+            if (repPurge?.workReports || repPurge?.defectCases) {
+                state._histSelReportId = null;
+                state._histChecked = {};
+                state._wrReportId = null;
+            }
+        } catch (e) { console.warn('[TVC_DataPurge] reports', e); }
+        try { await TVC_Fleet.ensureFleet(); } catch (e) { console.warn('[TVC_Fleet]', e); }
 
             const seed = await TVC_Seed.ensureSeed();
             if (seed.needFile) document.getElementById('seedBanner')?.classList.remove('hidden');
@@ -208,7 +208,7 @@ const TVC_App = (function () {
             bindTabSearchClearInputs();
             try { TVC_ListFilters?.init(); } catch (e) { console.error('[TVC] ListFilters init', e); }
 
-            const sessionUser = await TVC_Auth.refreshSessionFromDb();
+        const sessionUser = await TVC_Auth.refreshSessionFromDb();
             try {
                 TVC_RunHours.init({
                     getState: () => state,
@@ -226,19 +226,22 @@ const TVC_App = (function () {
                 });
             } catch (e) { console.error('[TVC] RunHours init', e); }
             try {
-                TVC_SpareMenu.init({ getState: () => state, refresh: refreshAll });
+        TVC_SpareMenu.init({ getState: () => state, refresh: refreshAll });
             } catch (e) { console.error('[TVC] SpareMenu init', e); }
             try {
-                TVC_DefectReport.init({ getState: () => state, refresh: refreshAll });
+        TVC_DefectReport.init({ getState: () => state, refresh: refreshAll });
             } catch (e) { console.error('[TVC] DefectReport init', e); }
             try {
-                TVC_OutstandingTasks.init({
-                    getState: () => state,
-                    deptJobs,
-                    jobMatchesActualFilter,
-                    jobActualStatusKind,
+        TVC_WorkPermitReport.init({ getState: () => state, refresh: refreshAll });
+            } catch (e) { console.error('[TVC] WorkPermit init', e); }
+            try {
+        TVC_OutstandingTasks.init({
+            getState: () => state,
+            deptJobs,
+            jobMatchesActualFilter,
+            jobActualStatusKind,
                     jobShowsCriticalEquipmentMark,
-                    menuNavigate,
+            menuNavigate,
                     menuAction,
                     rhUpdateGateApplies,
                     isRhUpdateCommitted,
@@ -248,21 +251,21 @@ const TVC_App = (function () {
                     monthlyRhGatePendingReason,
                 });
             } catch (e) { console.error('[TVC] OutstandingTasks init', e); }
-            window.addEventListener('tvc:spics-requisition-suggest', (e) => {
-                state.spicsAlerts = e.detail?.alerts || [];
-                renderSpicsAlertBanner();
+        window.addEventListener('tvc:spics-requisition-suggest', (e) => {
+            state.spicsAlerts = e.detail?.alerts || [];
+            renderSpicsAlertBanner();
                 TVC_SpareMenu.suggestRequisition?.(e.detail?.alerts || []);
-                if (state.currentTab === 'actual') renderActualPlan();
-            });
-            window.addEventListener('tvc:spics-low-stock', (e) => {
-                state.spicsAlerts = e.detail?.alerts || [];
-                renderSpicsAlertBanner();
-                if (state.currentTab === 'actual') renderActualPlan();
-            });
+            if (state.currentTab === 'actual') renderActualPlan();
+        });
+        window.addEventListener('tvc:spics-low-stock', (e) => {
+            state.spicsAlerts = e.detail?.alerts || [];
+            renderSpicsAlertBanner();
+            if (state.currentTab === 'actual') renderActualPlan();
+        });
 
             runDeferredBoot().catch(e => console.warn('[TVC] deferred boot', e));
 
-            const user = sessionUser || TVC_Auth.getCurrentUser();
+        const user = sessionUser || TVC_Auth.getCurrentUser();
             if (user) {
                 // Auto-login must not block login UI unlock (loadData can take several seconds).
                 onLogin(user).catch(e => {
@@ -394,10 +397,8 @@ const TVC_App = (function () {
         const dirty = [];
         (state.reports || []).forEach(r => {
             TVC_WorkReport.fromLegacy(r);
-            const approvedCriticalPostpone = r.work_type === 'POSTPONE'
-                && postponeRequiresCompanyApproval(r)
-                && TVC_RBAC.isApprovedStatus(r.status, r.is_locked);
-            if (!TVC_RBAC.isReportedStatus(r.status) && !TVC_RBAC.isConfirmedStatus(r.status) && !approvedCriticalPostpone) return;
+            if (!TVC_RBAC.isReportedStatus(r.status) && !TVC_RBAC.isConfirmedStatus(r.status)
+                && !TVC_RBAC.isApprovedStatus(r.status, r.is_locked)) return;
             (r.job_items || []).forEach(item => {
                 const job = jobById.get(item.maintenance_job_id);
                 if (!job) return;
@@ -407,8 +408,6 @@ const TVC_App = (function () {
                         r.approved_postpone_date || r.postpone_date || form.postponeDate || '',
                     ).slice(0, 10);
                     if (!postponeDate) return;
-                    const needsApproval = postponeRequiresCompanyApproval(r);
-                    if (needsApproval && !TVC_RBAC.isApprovedStatus(r.status, r.is_locked)) return;
                     const overdue = new Date(postponeDate) < new Date(new Date().toDateString());
                     if (job.next_date === postponeDate && job.schedule_basis === 'POSTPONE' && !!job.is_overdue === overdue) return;
                     job.next_date = postponeDate;
@@ -506,10 +505,14 @@ const TVC_App = (function () {
         const allJobs = await TVC_DB.getAll('maintenance_jobs');
         const allGroups = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         await normalizeGroupDepartments(allJobs, allComponents, allGroups);
+        if (typeof TVC_PmsMasterExcel !== 'undefined' && TVC_PmsMasterExcel.applyDeckCatalogNormalization) {
+            await TVC_PmsMasterExcel.applyDeckCatalogNormalization(allJobs, allGroups);
+        }
         state._allJobs = allJobs;
         state._allGroups = allGroups;
         const allReports = await TVC_DB.getAll('daily_work_reports');
         const allDefects = await TVC_DB.getAll('defect_cases').catch(() => []);
+        const allWorkPermits = await TVC_DB.getAll('work_permits').catch(() => []);
         state.spares = await TVC_DB.SparePart.listAll().catch(() =>
             TVC_DB.getAll('spare_parts').then(rows => rows.map(TVC_SpareSchema.fromRow)));
 
@@ -539,12 +542,14 @@ const TVC_App = (function () {
             const deptCodes = new Set(state.jobs.map(j => j.job_code));
             state.reports = allReports.filter(r => TVC_WorkReport.belongsToJobCodeSet(r, deptCodes));
             state.defectCases = allDefects.filter(d => TVC_DefectCase.belongsToDepartment(d, dept));
+            state.workPermits = allWorkPermits.filter(w => TVC_WorkPermit.belongsToDepartment(w, dept));
         } else if (isCaptainHub) {
             state.jobs = allJobs;
             state.components = allComponents;
             state.groups = allGroups;
             state.reports = allReports;
             state.defectCases = allDefects;
+            state.workPermits = allWorkPermits;
         } else {
             state.jobs = allJobs;
             state.components = allComponents;
@@ -582,24 +587,15 @@ const TVC_App = (function () {
                     || (d.status === TVC_DefectCase.Status.DRAFT && d.visible_in_list !== false)) &&
                 (!state.selectedVesselId || d.vessel_id === state.selectedVesselId)
             );
+            state.workPermits = allWorkPermits.filter(w =>
+                (w.hq_synced === true || w.visible_in_list !== false)
+                && (!state.selectedVesselId || w.vessel_id === state.selectedVesselId)
+            );
         }
         state.reports.forEach(r => TVC_WorkReport.fromLegacy(r));
         await applyActiveReportSchedules();
         await applyDefectClearedSchedules();
         state.idx = TVC_Indexes.build(state);
-        if (typeof TVC_Space !== 'undefined' && TVC_Space.isEngineVesselMode(state.user)) {
-            const spareJobs = allJobs.filter(j => j.department === 'ENGINE' || j.department === 'DECK');
-            const spareGroups = allGroups.filter(g => g.department === 'ENGINE' || g.department === 'DECK');
-            state.idx.spareGroupNodes = TVC_Indexes.build({
-                jobs: spareJobs,
-                groups: spareGroups,
-                components: [],
-                spares: state.spares,
-                reports: [],
-            }).groupNodes;
-        } else {
-            state.idx.spareGroupNodes = null;
-        }
         assertDeptIsolation();
         await backfillOriginalNextDates(state.jobs);
         // run-hour 미적용 작업 — Original Plan 기준 Due Date 스냅샷
@@ -655,8 +651,10 @@ const TVC_App = (function () {
         const isHq = TVC_RBAC.isHqAccount(state.user);
         state.space = isHq ? 'HQ' : 'SHIP';
         state.station = state.user.station || null;
-        state.department = isHq ? null : (TVC_Space.isCaptainHub(state.user) ? null : (state.user.department || null));
-        state.captainView = 'all';
+        state.department = isHq || TVC_Space.isCaptainHub(state.user)
+            ? 'DECK'
+            : (state.user.department || 'ENGINE');
+        state.captainView = state.department === 'ENGINE' ? 'engine' : 'deck';
         state.selectedGroupKey = null;
         state.search = '';
         updateUserBar(state.user);
@@ -682,6 +680,7 @@ const TVC_App = (function () {
         document.getElementById('appShell')?.classList.add('hidden');
         document.getElementById('loginScreen')?.classList.remove('hidden');
         setLoginBusy(false);
+        syncWindowTitle(null);
     }
     function showApp() {
         document.getElementById('loginScreen')?.classList.add('hidden');
@@ -730,6 +729,25 @@ const TVC_App = (function () {
     function rerenderCurrentTab() { (TAB_RENDERERS[state.currentTab] || renderMainMenu)(); }
 
     // ── Header / role UI ─────────────────────────────────────────────
+    const WINDOW_TITLE_BASE = 'THE VESSEL CODE — TVC-PMS';
+
+    function resolveWindowTitleSuffix(user) {
+        if (!user) return '';
+        if (TVC_RBAC.isHqAccount(user)) return 'HQ';
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) return 'MASTER';
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isDeckVesselMode(user)) return 'DECK';
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isEngineVesselMode(user)) return 'ENGINE';
+        const dept = String(user.department || '').toUpperCase();
+        if (dept === 'DECK') return 'DECK';
+        if (dept === 'ENGINE') return 'ENGINE';
+        return '';
+    }
+
+    function syncWindowTitle(user) {
+        const suffix = resolveWindowTitleSuffix(user);
+        document.title = suffix ? `${WINDOW_TITLE_BASE} ${suffix}` : WINDOW_TITLE_BASE;
+    }
+
     function updateUserBar(user) {
         const badge = typeof TVC_Space !== 'undefined'
             ? TVC_Space.getModeBadge(user)
@@ -747,6 +765,7 @@ const TVC_App = (function () {
             el.textContent = v ? `Vessel: ${v.name} (${v.id})` : `Vessel: ${user.vessel_id}`;
         });
         populateShipHeader(user);
+        syncWindowTitle(user);
     }
 
     async function populateShipHeader(user) {
@@ -846,11 +865,12 @@ const TVC_App = (function () {
 
     // ── Department toggle & global filter ────────────────────────────
     function deptJobs() {
-        if (!state.department) return state.jobs;   // All (HQ)
-        return state.jobs.filter(j => j.department === state.department);
+        const dept = String(state.department || state.user?.department || '').toUpperCase();
+        if (!dept) return state.jobs;
+        return state.jobs.filter(j => j.department === dept);
     }
 
-    /** HQ / Captain Hub: All/Deck/Engine 토글. Station PC는 고정 부서 라벨만 노출. */
+    /** HQ / Captain Hub: Deck / Engine only (no All). Station PC는 고정 부서 라벨만 노출. */
     function renderDeptToggles(user) {
         if (!user) return;
         const canSwitch = typeof TVC_Space !== 'undefined'
@@ -858,11 +878,10 @@ const TVC_App = (function () {
             : TVC_RBAC.isHqAccount(user);
         document.querySelectorAll('.dept-toggle').forEach(group => {
             if (canSwitch) {
-                const opts = [{ v: null, l: 'All' }, { v: 'DECK', l: 'Deck' }, { v: 'ENGINE', l: 'Engine' }];
+                const opts = [{ v: 'DECK', l: 'Deck' }, { v: 'ENGINE', l: 'Engine' }];
             const btns = opts.map(o => {
                 const active = state.department === o.v ? ' active' : '';
-                const arg = o.v ? `'${o.v}'` : 'null';
-                return `<button class="dept-btn${active}" data-dept="${o.v || ''}" onclick="TVC_App.setDepartment(${arg})">${o.l}</button>`;
+                    return `<button class="dept-btn${active}" data-dept="${o.v}" onclick="TVC_App.setDepartment('${o.v}')">${o.l}</button>`;
             }).join('');
                 group.innerHTML = '<span class="dept-label">Department</span>' + btns;
             } else {
@@ -898,7 +917,7 @@ const TVC_App = (function () {
             return;
         }
         state.department = dept;
-        state.captainView = dept === 'DECK' ? 'deck' : dept === 'ENGINE' ? 'engine' : 'all';
+        state.captainView = dept === 'DECK' ? 'deck' : 'engine';
         state.selectedGroupKey = null;
         renderDeptToggles(state.user);
         renderCaptainViewDashboard();
@@ -909,10 +928,9 @@ const TVC_App = (function () {
         state.captainView = view;
         if (view === 'deck') setDepartment('DECK');
         else if (view === 'engine') setDepartment('ENGINE');
-        else setDepartment(null);
     }
 
-    /** Captain Hub — All / Deck / Engine 모니터링 대시보드 뼈대 */
+    /** Captain Hub — Deck / Engine 모니터링 대시보드 */
     function renderCaptainViewDashboard() {
         const host = document.getElementById('captainViewDashboard');
         if (!host || !state.user) return;
@@ -929,15 +947,14 @@ const TVC_App = (function () {
         const engPending = state.reports.filter(r => repSt(r) === 'REPORTED' && reportDept(r) === 'ENGINE').length;
         const deckJobs = state.jobs.filter(j => j.department === 'DECK');
         const engJobs = state.jobs.filter(j => j.department === 'ENGINE');
-        const v = state.captainView || 'all';
+        const v = state.captainView || 'deck';
 
         host.innerHTML = `
             <div class="captain-dash-head">
                 <span class="captain-dash-title">⚓ Captain Hub — Vessel Overview</span>
-                <span class="captain-dash-sub">All / Deck / Engine 구역 모니터링</span>
+                <span class="captain-dash-sub">Deck / Engine 구역 모니터링</span>
             </div>
             <div class="captain-view-tabs" role="tablist" aria-label="Vessel view">
-                <button type="button" class="captain-view-btn${v === 'all' ? ' active' : ''}" onclick="TVC_App.setCaptainView('all')">All</button>
                 <button type="button" class="captain-view-btn${v === 'engine' ? ' active' : ''}" onclick="TVC_App.setCaptainView('engine')">Engine</button>
                 <button type="button" class="captain-view-btn${v === 'deck' ? ' active' : ''}" onclick="TVC_App.setCaptainView('deck')">Deck</button>
             </div>
@@ -1068,6 +1085,28 @@ const TVC_App = (function () {
         return /JOB CODE\s*(선택|选择)/i.test(s) || /^Select JOB CODE$/i.test(s);
     }
 
+    /** job_code lookup — always prefer department when known (ENGINE·DECK may share codes). */
+    function resolveJobByCode(code, department) {
+        const c = String(code || '').trim();
+        if (!c) return null;
+        const dept = String(department || '').trim().toUpperCase();
+        const pools = [];
+        if (state.idx?.jobById) pools.push([...state.idx.jobById.values()]);
+        if (state.jobs?.length) pools.push(state.jobs);
+        if (state._allJobs?.length) pools.push(state._allJobs);
+        for (const pool of pools) {
+            if (dept) {
+                const hit = pool.find(j => j.job_code === c && String(j.department || '').toUpperCase() === dept);
+                if (hit) return hit;
+            }
+        }
+        for (const pool of pools) {
+            const hit = pool.find(j => j.job_code === c);
+            if (hit) return hit;
+        }
+        return null;
+    }
+
     function defectEffectiveJobCode(dc) {
         const items = dc?.job_items;
         if (Array.isArray(items)) {
@@ -1087,7 +1126,7 @@ const TVC_App = (function () {
     function defectHistoryColumns(dc) {
         if (defectHistoryHasJob(dc)) {
             const job = state.idx?.jobById.get(dc.maintenance_job_id)
-                || state.jobs.find(j => j.job_code === defectEffectiveJobCode(dc));
+                || resolveJobByCode(defectEffectiveJobCode(dc), dc.department);
             const jobCode = defectEffectiveJobCode(dc) || job?.job_code || '';
             return {
                 jobCode,
@@ -1942,10 +1981,12 @@ const TVC_App = (function () {
 
         const shipDailyItems = [
             { label: 'Check Work Plan', tag: 'D', action: "TVC_App.menuAction('checkPlan')", badge: c.overdue, badgeTone: 'red' },
+            { label: 'View Work Permit List (Critical Equipment)', tag: 'C', action: "TVC_App.menuAction('workPermitList')" },
             { label: 'Confirm Work Report', tag: 'B', action: "TVC_App.menuAction('approveReport')", badge: c.pending, badgeTone: 'amber', feature: 'showApprovalQueue' },
             { label: 'Make Defect Report', tag: 'C', action: "TVC_App.menuAction('defectReport')", feature: 'showDefectReport' },
         ];
         const hqDailyItems = [
+            { label: 'View Work Permit List (Critical Equipment)', tag: 'C', action: "TVC_App.menuAction('workPermitList')" },
             { label: 'Approve Defect Report', tag: 'B', action: "TVC_App.menuAction('approveDefectReport')", badge: c.defectPending, badgeTone: 'amber' },
             { label: 'Approve Postpone Report', tag: 'B', action: "TVC_App.menuAction('approvePostponeReport')", badge: c.postponePending, badgeTone: 'amber' },
         ];
@@ -1955,7 +1996,7 @@ const TVC_App = (function () {
             const hqMonthlyItems = [
                 ...(runningHoursMenuVisible() ? [{ label: 'Check Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" }] : []),
                 { label: 'Approve Reports', tag: 'B', action: "TVC_App.menuAction('approveReports')", badge: c.reportsPending, badgeTone: 'amber' },
-                { label: 'Approve Work Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
+                    { label: 'Approve Work Plan', tag: 'B', action: "TVC_App.menuAction('approveOriginalPlan')" },
             ];
         return [
                 { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: hqDailyItems },
@@ -2006,10 +2047,10 @@ const TVC_App = (function () {
             : null;
         const isAuthor = role === TVC_RBAC.Role.SHIP_OFFICER;
         return [
-            { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
+                    { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
             { label: 'Data Export & Import', tag: 'C', action: 'TVC_App.openMenuXferMenu()', feature: 'showDataXfer' },
             ...(isAuthor ? [] : [
-                { label: 'View Data History', tag: 'C', action: 'TVC_App.openMenuHistoryModal()' },
+            { label: 'View Data History', tag: 'C', action: 'TVC_App.openMenuHistoryModal()' },
             ]),
         ];
     }
@@ -2203,10 +2244,10 @@ const TVC_App = (function () {
                     <td>${esc(dt || '—')}</td>
                     <td class="menu-xfer-file">${menuXferRowExportFilename(row, lookup, 'defect')}</td>
                 </tr>`;
-            }).join('');
+        }).join('');
         }
         return `
-            <p class="spare-sync-hint">Select <strong>Confirmed</strong> defect reports to export → <strong>${esc(dest)}</strong></p>
+            <p class="spare-sync-hint">Check the defect reports to export → <strong>${esc(dest)}</strong> (Confirmed only)</p>
             <p class="spare-sync-note muted">${rows.length} in list · ${selectable.length} selectable (Confirmed, not yet Submitted). Same scope as Work History / Defect tab.</p>
             <div class="search-field-wrap menu-xfer-defect-search">
                 <input type="text" class="search-input" id="menuXferDefectSearch" placeholder="Search File No / Job Code / SORT…" value="${escAttr(_menuXfer.defectSearch || '')}">
@@ -2555,7 +2596,7 @@ const TVC_App = (function () {
                 : step === 'export-defect-select' ? '3. Export — select defects'
                     : step === 'export-postpone-select' ? '3. Export — select postpone reports'
                         : step === 'export-monthly-ready' ? '3. Export — monthly report'
-                            : '2. Import — select file';
+                    : '2. Import — select file';
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeMenuXferMenu()">×</button>
             <h3 class="spare-sync-title">Data Export &amp; Import</h3>
@@ -2735,8 +2776,8 @@ const TVC_App = (function () {
         let exported = 0;
         for (const c of scoped) {
             await exportSelectedDefectCase(user, c);
-            exported++;
-        }
+                exported++;
+            }
         if (!exported) throw new Error('No Confirmed defect reports ready to export.');
 
         await refreshAll();
@@ -2881,7 +2922,7 @@ const TVC_App = (function () {
         if (user.department) {
             await run(user.department);
         } else if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) {
-            await run('ALL');
+            await run(requireAppDepartment());
         } else {
             pickDepartmentThen('Import할 부서를 선택하세요 (DECK / ENGINE)', run);
         }
@@ -3068,8 +3109,8 @@ const TVC_App = (function () {
         if (it.textOnly) {
             return `<p class="spare-flow-note">${esc(it.label)}</p>`;
         }
-        const badge = (it.badge != null && it.badge > 0)
-            ? `<span class="mi-badge mi-${it.badgeTone || 'blue'}">${it.badge}</span>` : '';
+                    const badge = (it.badge != null && it.badge > 0)
+                        ? `<span class="mi-badge mi-${it.badgeTone || 'blue'}">${it.badge}</span>` : '';
         const label = `<span class="mi-label">${esc(it.label)}</span>`;
         if (opts.locked) {
             const tip = esc(opts.disabledTitle || 'Original Plan Update는 현재 사용할 수 없습니다.');
@@ -3416,6 +3457,9 @@ const TVC_App = (function () {
                 if (state.selectedJobId) TVC_DefectReport.openNewFromJob(state.selectedJobId);
                 else TVC_DefectReport.openNewBlank();
                 break;
+            case 'workPermitList':
+                TVC_WorkPermitReport.openListModal();
+                break;
             case 'approveReports':
                 openHqApproveReports();
                 break;
@@ -3591,13 +3635,15 @@ const TVC_App = (function () {
         return canEditOriginalPlanItems() && TVC_RBAC.isHqAccount(state.user);
     }
 
+    /** PMS/SPARE Master Excel — plan lock과 무관, ce/co/captain/hq + 부서 토글(DECK|ENGINE) 필수 */
     function canPmsMasterExcel() {
-        return canEditOriginalPlanItems();
+        if (!state.user) return false;
+        return TVC_RBAC.canModifyOriginalPlan(state.user);
     }
 
     function canSpareMasterExcel() {
         if (!state.user) return false;
-        if (TVC_RBAC.isHqAccount(state.user)) return canEditOriginalPlanItems();
+        if (TVC_RBAC.isHqAccount(state.user)) return TVC_RBAC.canModifyOriginalPlan(state.user);
         return TVC_RBAC.isMaintPlanEditor(state.user) && TVC_RBAC.canModifySpareInventory(state.user);
     }
 
@@ -3742,7 +3788,7 @@ const TVC_App = (function () {
         const hasSel = !!state.selectedJobId;
         let tip = '';
         if (!canEdit && canShow) {
-            tip = getOriginalPlanLockMessage(getPlanLockDept()) || '권한 없음';
+                tip = getOriginalPlanLockMessage(getPlanLockDept()) || '권한 없음';
         } else if (!canShow) {
             tip = origPlanEditDeniedMessage();
         }
@@ -4420,28 +4466,28 @@ const TVC_App = (function () {
         } else {
             showPlanCalc(true);
             const start = Date.now();
-            const calcPromise = TVC_PMS.updateMaintenanceSchedule(state, { persist: false })
-                .catch(e => { calcError = e; });
+        const calcPromise = TVC_PMS.updateMaintenanceSchedule(state, { persist: false })
+            .catch(e => { calcError = e; });
 
-            const fill = document.getElementById('planCalcFill');
-            await new Promise(resolve => {
-                if (_planCalcTimer) clearInterval(_planCalcTimer);
-                _planCalcTimer = setInterval(() => {
-                    const elapsed = Date.now() - start;
-                    const pct = Math.min(100, Math.round((elapsed / PLAN_CALC_MS) * 100));
-                    if (fill) fill.style.width = pct + '%';
-                    if (elapsed >= PLAN_CALC_MS) {
-                        clearInterval(_planCalcTimer);
-                        _planCalcTimer = null;
-                        resolve();
-                    }
-                }, 50);
-            });
+        const fill = document.getElementById('planCalcFill');
+        await new Promise(resolve => {
+            if (_planCalcTimer) clearInterval(_planCalcTimer);
+            _planCalcTimer = setInterval(() => {
+                const elapsed = Date.now() - start;
+                const pct = Math.min(100, Math.round((elapsed / PLAN_CALC_MS) * 100));
+                if (fill) fill.style.width = pct + '%';
+                if (elapsed >= PLAN_CALC_MS) {
+                    clearInterval(_planCalcTimer);
+                    _planCalcTimer = null;
+                    resolve();
+                }
+            }, 50);
+        });
 
-            await calcPromise;
-            if (fill) fill.style.width = '100%';
-            await new Promise(r => setTimeout(r, 200));
-            showPlanCalc(false);
+        await calcPromise;
+        if (fill) fill.style.width = '100%';
+        await new Promise(r => setTimeout(r, 200));
+        showPlanCalc(false);
         }
 
         if (calcError) {
@@ -4493,11 +4539,11 @@ const TVC_App = (function () {
             const chevron = collapsed ? '▸' : '▾';
             html += `<div class="tree-dept tree-dept-toggle" role="button" tabindex="0" onclick="TVC_App.toggleTreeDept('${escAttr(dept)}')"><span class="tree-dept-chevron" aria-hidden="true">${chevron}</span><span>${esc(dept)}</span></div>`;
             if (!collapsed) {
-                nodes.forEach(n => {
-                    const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
-                    const sel = state.selectedGroupKey === n.key ? ' selected' : '';
-                    html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_App.selectGroup('${escAttr(n.key)}')"><span>${esc(n.label)}</span>${emptyTag}</div>`;
-                });
+            nodes.forEach(n => {
+                const emptyTag = n.isEmpty ? `<span class="tree-empty-tag" title="작업 항목 없음">0</span>` : '';
+                const sel = state.selectedGroupKey === n.key ? ' selected' : '';
+                html += `<div class="tree-node${sel}${n.isEmpty ? ' tree-node-empty' : ''}" onclick="TVC_App.selectGroup('${escAttr(n.key)}')"><span>${esc(n.label)}</span>${emptyTag}</div>`;
+            });
             }
         });
         root.innerHTML = html;
@@ -5038,11 +5084,11 @@ const TVC_App = (function () {
         const consumed = [];
         jobWorkHistoryEntries(jobId).forEach(entry => {
             if (entry.source === 'report') {
-                const { report: r, item } = entry;
-                if (!r || !item) return;
-                const parts = item.used_parts?.length ? item.used_parts : (r.is_batch ? [] : (r.used_parts || []));
+            const { report: r, item } = entry;
+            if (!r || !item) return;
+            const parts = item.used_parts?.length ? item.used_parts : (r.is_batch ? [] : (r.used_parts || []));
                 const dt = formatCmaxsHistDate(listReportedDateStr(r));
-                parts.forEach(u => {
+            parts.forEach(u => {
                     const s = spareById.get(u.spare_part_id) || {};
                     consumed.push({
                         date: dt,
@@ -5201,8 +5247,8 @@ const TVC_App = (function () {
     /**
      * Engine Monthly → Update Running Hours 게이트.
      * - Defect: 제외 (별도 관리)
-     * - Maintenance / non-critical Postpone: Confirmed+
-     * - Critical Postpone: Submitted+ (HQ Approve는 Monthly 회신까지 대기 가능)
+     * - Maintenance / Postpone (일반·Critical): Confirmed+
+     * - Critical Postpone: Work Plan은 Confirm 시 반영 · Company Approved는 Export/검사용
      */
     function isMonthlyRhGateEntryReady(entry) {
         if (!entry || isHistDefectEntry(entry)) return true;
@@ -5210,9 +5256,6 @@ const TVC_App = (function () {
         if (!report) return false;
         TVC_WorkReport.fromLegacy(report);
         const label = workReportListWorkflowStatus(report);
-        if (postponeRequiresCompanyApproval(report)) {
-            return label === 'Submitted' || label === 'Approved';
-        }
         if (label !== 'Confirmed' && label !== 'Submitted' && label !== 'Approved') return false;
         const itemSt = entry.item
             ? TVC_RBAC.normalizeReportStatus(entry.item.status, report.is_locked)
@@ -5227,15 +5270,11 @@ const TVC_App = (function () {
         if (!report) return 'Missing report';
         TVC_WorkReport.fromLegacy(report);
         const label = workReportListWorkflowStatus(report);
-        const critical = postponeRequiresCompanyApproval(report);
-        if (critical) {
-            if (label === 'Reported') return 'Critical Postpone — Confirm, then Export (Submitted)';
-            if (label === 'Confirmed') return 'Critical Postpone — Export to Submitted (Approve can wait)';
-            return '';
-        }
         if (label === 'Reported' || (entry.item && TVC_RBAC.normalizeReportStatus(entry.item.status, report.is_locked) === 'REPORTED')) {
             return report.work_type === 'POSTPONE'
-                ? 'Postpone — Confirm required'
+                ? (postponeRequiresCompanyApproval(report)
+                    ? 'Critical Postpone — Confirm required (Company approval via Export)'
+                    : 'Postpone — Confirm required')
                 : 'Maintenance — Confirm required';
         }
         return '';
@@ -5246,7 +5285,7 @@ const TVC_App = (function () {
     }
 
     function allWorkHistoryConfirmed() {
-        // RH gate: monthly readiness (excludes Defect; Critical Postpone needs Submitted)
+        // RH gate: monthly readiness (excludes Defect; Maintenance/Postpone Confirmed+)
         return getMonthlyRhGatePendingEntries().length === 0;
     }
 
@@ -6580,7 +6619,7 @@ const TVC_App = (function () {
         } else if (opts.fromHistory || opts.view) {
             state._wrReadonly = true;
         } else {
-            state._wrReadonly = !canModifyHistEntry(histEntry);
+        state._wrReadonly = !canModifyHistEntry(histEntry);
         }
         state._wrForm = { ...(item?.form || rep.report_form || {}) };
         state._wrUsedParts = enrichUsedParts(item?.used_parts || rep.used_parts || []);
@@ -6705,7 +6744,7 @@ const TVC_App = (function () {
         if (!job) return null;
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
         const today = new Date().toISOString().slice(0, 10);
-        const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getReportedByLabel(state.user);
+        const reportedByName = workReportReportedByName(rep);
         const isRepConfirmed = !!rep && TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked);
         const isRepApproved = !!rep && reportIsApproved(rep);
         const canConfirmNow = !!rep && TVC_RBAC.isReportedStatus(rep.status, rep.is_locked)
@@ -6800,7 +6839,7 @@ const TVC_App = (function () {
                 const saved = state.reports.find(r => r.id === rep.id) || rep;
                 reloadWorkReportViewFromDb(saved, job);
                 state._wrReadonly = false;
-                renderWorkReportModal();
+        renderWorkReportModal();
                 await TVC_Dialog.alert(`${job.job_code} report unconfirmed. (Returned to Reported)`);
             } catch (e) {
                 cfCb.checked = true;
@@ -6820,7 +6859,7 @@ const TVC_App = (function () {
             renderWorkReportModal();
             const msg = rep.work_type === 'POSTPONE'
                 ? (postponeRequiresCompanyApproval(saved)
-                    ? `${job.job_code} critical postpone report confirmed. (Awaiting company approval / export)`
+                    ? `${job.job_code} critical postpone report confirmed. (NEXT DATE updated · Awaiting company approval / export)`
                     : `${job.job_code} postpone report confirmed. (NEXT DATE updated)`)
                 : `${job.job_code} report confirmed. (Stock deduction · LAST DONE / NEXT DATE update)`;
             await TVC_Dialog.alert(msg);
@@ -7098,11 +7137,15 @@ const TVC_App = (function () {
     }
 
     function fileNoPickPanelId(target) {
-        return target === 'df' ? 'dfFileNoPickPanel' : 'wrFileNoPickPanel';
+        if (target === 'df') return 'dfFileNoPickPanel';
+        if (target === 'wp') return 'wpFileNoPickPanel';
+        return 'wrFileNoPickPanel';
     }
 
     function fileNoPickBtnId(target) {
-        return target === 'df' ? 'dfFileNoPickBtn' : 'wrFileNoPickBtn';
+        if (target === 'df') return 'dfFileNoPickBtn';
+        if (target === 'wp') return 'wpFileNoPickBtn';
+        return 'wrFileNoPickBtn';
     }
 
     function positionFileNoPickPopover(target) {
@@ -7115,7 +7158,7 @@ const TVC_App = (function () {
     }
 
     function closeFileNoPickPopover() {
-        ['wr', 'df'].forEach(target => {
+        ['wr', 'df', 'wp'].forEach(target => {
             const panel = document.getElementById(fileNoPickPanelId(target));
             const btn = document.getElementById(fileNoPickBtnId(target));
             const anchor = panel?.closest('.wr-file-no-anchor');
@@ -7146,7 +7189,8 @@ const TVC_App = (function () {
         state._fileNoPickSearch = '';
         state._fileNoPickOpen = true;
         if (nextTarget === 'wr') captureWorkReportForm();
-        else TVC_DefectReport.captureDfFormFields?.();
+        else if (nextTarget === 'df') TVC_DefectReport.captureDfFormFields?.();
+        else TVC_WorkPermitReport.captureWpFormFields?.();
         panel.innerHTML = renderFileNoPickPopoverBody();
         panel.classList.remove('hidden');
         panel.setAttribute('aria-hidden', 'false');
@@ -7174,6 +7218,8 @@ const TVC_App = (function () {
         const val = String(fileNo || '').trim();
         if (state._fileNoPickTarget === 'df') {
             TVC_DefectReport.applyFileNoFromPicker?.(val);
+        } else if (state._fileNoPickTarget === 'wp') {
+            TVC_WorkPermitReport.applyFileNoFromPicker?.(val);
         } else {
             state._wrForm = state._wrForm || {};
             state._wrForm.fileNo = val;
@@ -7603,7 +7649,7 @@ const TVC_App = (function () {
         if (!job) return '';
         const today = new Date().toISOString().slice(0, 10);
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
-        const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getReportedByLabel(state.user);
+        const reportedByName = workReportReportedByName(rep);
         return TVC_SpareMenu.renderWrSparePage2Html(job, ro, buildWrPage2Meta(job, reportedByName, today));
     }
 
@@ -7825,7 +7871,7 @@ const TVC_App = (function () {
         const hqDirectApprove = !!rep && !isRepApproved && TVC_RBAC.canHqDirectApprove(state.user, rep);
         const canApproveNow = !!rep && !isRepApproved && TVC_RBAC.canApproveHqReport(state.user)
             && (isRepConfirmed || hqDirectApprove);
-        const reportedByName = rep ? reporterLabel(rep.reporter_name) : TVC_RBAC.getReportedByLabel(state.user);
+        const reportedByName = workReportReportedByName(rep);
         const confirmedByVal = isRepConfirmed
             ? (TVC_RBAC.resolveConfirmByLabel?.(rep?.confirmed_by, job.department, state.user) || '')
             : '';
@@ -7988,7 +8034,7 @@ const TVC_App = (function () {
                 await refreshAll();
                 const msg = rep.work_type === 'POSTPONE'
                     ? (postponeRequiresCompanyApproval(rep)
-                        ? `${rep.job_code} critical postpone report confirmed. (Awaiting company approval / export)`
+                        ? `${rep.job_code} critical postpone report confirmed. (NEXT DATE updated · Awaiting company approval / export)`
                         : `${rep.job_code} postpone report confirmed. (NEXT DATE updated)`)
                     : `${rep.job_code} report confirmed. (Stock deduction · LAST DONE / NEXT DATE update)`;
                 await TVC_Dialog.alert(msg);
@@ -8585,9 +8631,9 @@ const TVC_App = (function () {
             }
             setLoginBusy(true, 'Signing in…');
             const loginMode = document.getElementById('loginDept')?.value || '';
-            const r = await TVC_Auth.login(
-                document.getElementById('loginUser').value,
-                document.getElementById('loginPass').value,
+        const r = await TVC_Auth.login(
+            document.getElementById('loginUser').value,
+            document.getElementById('loginPass').value,
                 loginMode
             );
             if (errEl) errEl.textContent = r.ok ? '' : (r.error || 'Sign in failed');
@@ -8873,11 +8919,20 @@ const TVC_App = (function () {
             });
         });
     }
+    function requireAppDepartment() {
+        const dept = String(state.department || state.user?.department || '').toUpperCase();
+        if (dept !== 'DECK' && dept !== 'ENGINE') {
+            throw new Error('Select Deck or Engine department first.');
+        }
+        return dept;
+    }
+
     async function exportPmsMasterExcel() {
         if (!canPmsMasterExcel()) await TVC_Dialog.alert(pmsMasterExcelDeniedMessage());
         if (typeof TVC_PmsMasterExcel === 'undefined') await TVC_Dialog.alert('PMS Master Export를 사용할 수 없습니다.');
         try {
-            await TVC_PmsMasterExcel.exportToFile();
+            const department = requireAppDepartment();
+            await TVC_PmsMasterExcel.exportToFile({ department });
         } catch (e) {
             await TVC_Dialog.alert(e.message || 'Export failed');
         }
@@ -8895,7 +8950,8 @@ const TVC_App = (function () {
         if (typeof TVC_PmsMasterExcel === 'undefined') await TVC_Dialog.alert('PMS Master Import를 사용할 수 없습니다.');
         if (!await TVC_Dialog.confirm({ message: `Import PMS Master Excel?\n\n${file.name}\n\nExcel 기준으로 Group · Equipment · Jobs를 반영합니다.\n시트에서 제거된 job은 삭제됩니다 (Work Report 연결 job은 임시 CODE로 유지).\n권장: Import 전 Database Backup.\n\nContinue?` })) return;
         try {
-            const r = await TVC_PmsMasterExcel.importFromFile(file, user);
+            const department = requireAppDepartment();
+            const r = await TVC_PmsMasterExcel.importFromFile(file, user, { department });
             await refreshAll();
             const orphanLine = (r.removed || r.detached)
                 ? `\n제외: ${r.removed || 0} · Work Report 격리: ${r.detached || 0}`
@@ -8910,7 +8966,8 @@ const TVC_App = (function () {
         if (!canSpareMasterExcel()) await TVC_Dialog.alert(spareMasterExcelDeniedMessage());
         if (typeof TVC_SpareMasterExcel === 'undefined') await TVC_Dialog.alert('SPARE Master Export를 사용할 수 없습니다.');
         try {
-            await TVC_SpareMasterExcel.exportToFile();
+            const department = requireAppDepartment();
+            await TVC_SpareMasterExcel.exportToFile({ department });
         } catch (e) {
             await TVC_Dialog.alert(e.message || 'Export failed');
         }
@@ -8929,7 +8986,8 @@ const TVC_App = (function () {
         const backupHint = '권장: Import 전 If Necessary → Database Backup & Restore로 SPARE 백업을 먼저 수행하세요.';
         if (!await TVC_Dialog.confirm({ message: `Import SPARE Master Excel?\n\n${file.name}\n\nGroup Headers, Equipment Headers, and Spare Parts will be updated.\n${backupHint}\n\nContinue?` })) return;
         try {
-            const r = await TVC_SpareMasterExcel.importFromFile(file, user);
+            const department = requireAppDepartment();
+            const r = await TVC_SpareMasterExcel.importFromFile(file, user, { department });
             if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache();
             await refreshAll();
             await TVC_Dialog.alert(`Import 완료\n\nSpare Parts: ${r.parts}행 (신규 ${r.created}, 수정 ${r.updated})\nGroups: ${r.groups} · Equipment: ${r.equipment}`);
@@ -8944,6 +9002,16 @@ const TVC_App = (function () {
     function reporterLabel(name) {
         return TVC_RBAC.normalizeReportedByLabel(name);
     }
+
+    /** PMS Work Report — 최초 작성 계정 Reported by (신규 작성 시에만 현재 접속자) */
+    function workReportReportedByName(rep) {
+        if (rep) {
+            const fromRecord = TVC_RBAC.getReportedByLabelForWorkReport?.(rep);
+            if (fromRecord) return fromRecord;
+            if (rep.reporter_name) return reporterLabel(rep.reporter_name);
+        }
+        return TVC_RBAC.getReportedByLabel(state.user);
+    }
     function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 
     return {
@@ -8954,7 +9022,7 @@ const TVC_App = (function () {
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
         jobShowsCriticalEquipmentMark,
         reportMatchesPostponeAwaitingApproval,
-        getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs,
+        getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs, resolveJobByCode,
         renderSectionCard,
         openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab,
         enterWorkProcedureEdit, cancelWorkProcedureEdit, saveWorkProcedure, uploadWorkProcedureAttachment, removeWorkProcedureAttachment,

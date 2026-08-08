@@ -435,33 +435,28 @@ const TVC_SpareMenu = (function () {
         return user.department === 'ENGINE';
     }
 
-    /** Engine vessel: idx may include cross-dept nodes for Captain Hub (All); tree filters by st.department. */
+    /** SPARE GROUP Tree — PMS Group Tree(idx.groupNodes)와 동일 소스, 부서 필터는 spareGroupTreeIncludesDept */
     function spareGroupTreeNodes(st) {
-        if (isEngineVesselMode(st) && Array.isArray(st.idx?.spareGroupNodes)) {
-            return st.idx.spareGroupNodes;
-        }
         return st.idx?.groupNodes || [];
     }
 
     function findSpareGroupNode(st, key) {
         if (!key) return null;
+        if (key === MERGED_GEN_ENGINE_KEY) {
+            return {
+                key: MERGED_GEN_ENGINE_KEY,
+                department: 'ENGINE',
+                label: MERGED_GEN_ENGINE_LABEL,
+                isMerged: true,
+            };
+        }
         return spareGroupTreeNodes(st).find(n => n.key === key) || null;
     }
 
     function ensureSpareGroupNodes(st) {
-        if (!isEngineVesselMode(st) || !st.idx || Array.isArray(st.idx.spareGroupNodes)) return;
-        const allJobs = st._allJobs || st.jobs || [];
-        const allGroups = st._allGroups || st.groups || [];
-        const spareJobs = allJobs.filter(j => j.department === 'ENGINE' || j.department === 'DECK');
-        const spareGroups = allGroups.filter(g => g.department === 'ENGINE' || g.department === 'DECK');
-        if (!spareJobs.length && !spareGroups.length) return;
-        st.idx.spareGroupNodes = TVC_Indexes.build({
-            jobs: spareJobs,
-            groups: spareGroups,
-            components: [],
-            spares: st.spares || [],
-            reports: [],
-        }).groupNodes;
+        if (!st?.idx && (st?.jobs || []).length && window.TVC_Indexes) {
+            st.idx = TVC_Indexes.build(st);
+        }
     }
 
     /** SPARE GROUP Tree — 부서별 표시 (Work Plan 트리와 동일하게 DECK/ENGINE 분리) */
@@ -490,15 +485,22 @@ const TVC_SpareMenu = (function () {
 
     function syncSpareGroupSelection() {
         const st = getState();
+        const m = modState(st);
+        // Group tree selection cleared the focused spare — drop stale group-header edit for another key.
+        if (m.groupHeaderEdit && m.groupHeaderEditKey !== st.selectedGroupKey) {
+            m.groupHeaderEdit = false;
+            m.groupHeaderDraft = null;
+            m.groupHeaderEditKey = null;
+        }
         _cachedList = filteredSpares(st);
         renderSpareGroupTree();
+        refreshSpareEditBlock();
         if (vl) vl.refresh();
         else mountVirtualList();
         renderSpareFilterDashboard();
         syncSpareToolbarUi();
         syncSpareItemHistoryBtns();
         updateSpareHeadCheckAll();
-        const m = modState(st);
         if (m.panelOpen && getFocusedSpareId(st)) {
             vesselScope().then(({ canRequisition, canModify }) =>
                 renderDetailPanel(getFocusedSpareId(st), canRequisition, canModify));
@@ -524,17 +526,7 @@ const TVC_SpareMenu = (function () {
         return st.department;
     }
 
-    /** Vessel Mode - Deck: SPARE 탭은 표시하되 GROUP Tree는 비움 */
-    function isDeckSpareTreeEmpty(st) {
-        return typeof TVC_Space !== 'undefined' && TVC_Space.isDeckVesselMode(st?.user);
-    }
-
-    function renderEmptySpareGroupTreeHtml(st, selectAllAction) {
-        const allSelected = !st.selectedGroupKey;
-        return `<div class="tree-node${allSelected ? ' selected' : ''}" onclick="${selectAllAction}"><span>📋 All Groups</span></div>`;
-    }
-
-    /** SPARE GROUP Tree — 03/04/05 Generator Engine → 03. GENERATOR ENGINE (SPARE 통합) */
+    /** Spare list department scope — selected group dept wins over session dept. */
     const MERGED_GEN_ENGINE_KEY = '__SPARE_MERGE_03_05_GENERATOR__';
     const MERGED_GEN_ENGINE_LABEL = '03. GENERATOR ENGINE';
     const MERGED_GEN_ENGINE_PREFIXES = new Set(['03.', '04.', '05.']);
@@ -3244,10 +3236,16 @@ const TVC_SpareMenu = (function () {
     }
 
     function wrQtyCellHtml(s, sid, ro = false) {
-        const line = _wrSpareLineBySpareId?.get(wrSpareIdKey(s.id));
-        if (!line) return ro ? '0' : `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-wr-qty-input" value="0" disabled
+        const m = modState(getState());
+        const sidKey = wrSpareIdKey(s.id);
+        const line = _wrSpareLineBySpareId?.get(sidKey);
+        const focused = wrSpareIdKey(m.wrSpareFocusedId) === sidKey;
+        const cosEditable = line || (m.wrSpareCosOnFocus && focused);
+        if (!cosEditable) {
+            return ro ? '0' : `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-wr-qty-input" value="0" disabled
             onclick="event.stopPropagation()" onmousedown="event.stopPropagation()">`;
-        const qty = Number(line.qty_used) || 0;
+        }
+        const qty = line ? Number(line.qty_used) || 0 : 0;
         if (ro) return String(qty);
         return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-wr-qty-input" value="${qty}"
             onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
@@ -3521,12 +3519,6 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const root = document.getElementById('spareGroupTree');
         if (!root) return;
-        if (isDeckSpareTreeEmpty(st)) {
-            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_App.selectGroup(null)");
-            const searchEl = document.getElementById('spareTreeSearch');
-            if (searchEl && document.activeElement !== searchEl) searchEl.value = st.treeSearch || '';
-            return;
-        }
         if (st.selectedGroupKey === CRITICAL_GROUP_KEY) st.selectedGroupKey = null;
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
@@ -3600,10 +3592,13 @@ const TVC_SpareMenu = (function () {
     }
 
     function spareMatchesGroup(s, node) {
+        if (!node) return false;
+        const spareDept = String(s.category || s.department || '').trim().toUpperCase();
+        const nodeDept = String(node.department || '').trim().toUpperCase();
+        if (spareDept && nodeDept && spareDept !== nodeDept) return false;
         const spareGroup = String(s.group || '').trim().toLowerCase();
         const nodeLabel = String(node.label || '').trim().toLowerCase();
         if (spareGroup && nodeLabel && spareGroup === nodeLabel) return true;
-        // 코드 앞자리(예: 01-...)가 그룹 번호(예: 01. MAIN ENGINE)와 같으면 해당 그룹에도 포함
         const nodeNo = pmsGroupSortNo(node.label);
         const codeNo = spareCodeGroupNo(s);
         if (nodeNo != null && codeNo != null && nodeNo === codeNo) return true;
@@ -3733,7 +3728,7 @@ const TVC_SpareMenu = (function () {
         if (!st.selectedGroupKey) return '';
         if (st.selectedGroupKey === CRITICAL_GROUP_KEY) return 'Critical Equipment';
         if (st.selectedGroupKey === MERGED_GEN_ENGINE_KEY) return MERGED_GEN_ENGINE_LABEL;
-        const node = st.idx?.groupNodes?.find(n => n.key === st.selectedGroupKey);
+        const node = findSpareGroupNode(st, st.selectedGroupKey);
         return node?.label || '';
     }
 
@@ -4240,7 +4235,8 @@ const TVC_SpareMenu = (function () {
                 : ctx === 'receive' ? 'TVC_SpareMenu.receiveToggleRow'
                 : ctx === 'wrSpare' ? 'TVC_SpareMenu.wrSpareToggleRow' : 'TVC_App.toggleSpareRow';
         const dblFn = `TVC_SpareMenu.openSpareItemHistory('${sid}')`;
-        const dblAttr = (ctx === 'reqWork' || ctx === 'receive' || ctx === 'consume') ? '' : ` ondblclick="event.preventDefault();${dblFn}"`;
+        const skipDblHist = ctx === 'wrSpare' && modState(getState()).wrSpareNoDblClickHistory;
+        const dblAttr = (ctx === 'reqWork' || ctx === 'receive' || ctx === 'consume' || skipDblHist) ? '' : ` ondblclick="event.preventDefault();${dblFn}"`;
         const colgroup = ctx === 'reqWork' ? reqWorkActiveColgroup()
             : ctx === 'consume' ? SPARE_CONSUME_COLGROUP
                 : ctx === 'receive' ? SPARE_RECEIVE_COLGROUP
@@ -6655,6 +6651,7 @@ const TVC_SpareMenu = (function () {
             consumed_date: log.consumed_date || '',
             made_on: log.made_on || '',
             made_by: log.made_by || '',
+            created_by_username: log.created_by_username || '',
             file_no: page1.file_no || '',
             voy_no: page1.voy_no || '',
             place: page1.place || '',
@@ -8898,7 +8895,6 @@ const TVC_SpareMenu = (function () {
     }
 
     function renderSpareTreeActionBtns(st) {
-        if (isDeckSpareTreeEmpty(st)) return '';
         if (!canEditGroupHeader(st)) return '';
         const canDelete = canDeleteSelectedGroup(st);
         return `<span class="spare-tree-actions">
@@ -11205,10 +11201,6 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const root = document.getElementById('reqWorkGroupTree');
         if (!root) return;
-        if (isDeckSpareTreeEmpty(st)) {
-            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_SpareMenu.reqWorkSelectGroup(null)");
-            return;
-        }
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -11556,6 +11548,18 @@ const TVC_SpareMenu = (function () {
     }
 
     /** Reported by — 작성 계정 우선, 없으면 현재 접속자 */
+    function ensureConsumeReportedByAuthor(draft, user) {
+        if (!draft) return;
+        const fromAuthor = window.TVC_RBAC?.getReportedByLabelForAuthor?.(draft) || '';
+        if (fromAuthor) {
+            draft.made_by = fromAuthor;
+            return;
+        }
+        if (String(draft.made_by || '').trim()) return;
+        const label = spareReportedByForUser(user);
+        if (label) draft.made_by = label;
+    }
+
     function resolveSpareReportedBy(record, user) {
         const fromAuthor = spareReportedByForAuthor(record);
         if (fromAuthor) return fromAuthor;
@@ -13819,6 +13823,7 @@ const TVC_SpareMenu = (function () {
             consumed_date: today,
             made_on: today,
             made_by: spareReportedByForUser(user),
+            created_by_username: user?.username || '',
             reporter_role: user ? (TVC_RBAC.resolveUserRole(user) || user.role || '') : '',
             file_no: '',
             voy_no: '',
@@ -13977,7 +13982,7 @@ const TVC_SpareMenu = (function () {
         const g = (id) => document.getElementById(id)?.value ?? '';
         draft.consumed_date = g('consumeDate');
         draft.made_on = g('consumeMadeOn');
-        draft.made_by = resolveSpareReportedBy(draft, spareInventoryUser(getState()));
+        ensureConsumeReportedByAuthor(draft, spareInventoryUser(getState()));
         draft.file_no = g('consumeFileNo');
         draft.voy_no = g('consumeVoyNo');
         draft.place = g('consumePlace');
@@ -14799,10 +14804,6 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const root = document.getElementById('consumeGroupTree');
         if (!root) return;
-        if (isDeckSpareTreeEmpty(st)) {
-            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_SpareMenu.consumeSelectGroup(null)");
-            return;
-        }
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -15222,7 +15223,7 @@ const TVC_SpareMenu = (function () {
 
         return `<section class="wr-maint-card wr-maint-body wr-spare-meta-form" aria-label="Work report job context">
             <div class="wr-maint-grid wr-maint-grid-3">
-                ${fld('Work Date', roInp('date', meta.workDate || ''))}
+                ${fld(meta.workDateLabel || 'Work Date', roInp('date', meta.workDate || ''))}
                 ${fld('Reported Date', roInp('date', meta.reportDate || ''))}
                 ${fld('Reported by', roInp('text', meta.reportedBy || ''))}
                 ${fld('PMS Group No.', roInp('text', pmsLabel), 'wr-maint-span-all')}
@@ -15448,10 +15449,6 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const st = getState();
         const root = document.getElementById('wrSpareGroupTree');
         if (!root) return;
-        if (isDeckSpareTreeEmpty(st)) {
-            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_SpareMenu.wrSpareSelectGroup(null)");
-            return;
-        }
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -15695,6 +15692,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     function wrSpareFocusRow(spareId) {
         setFocusedSpareId(getState(), spareId || null);
         refreshWrSpareListRows();
+        syncSpareItemHistoryBtns();
     }
 
     function wrSpareToggleRow(spareId, checked) {
@@ -15754,11 +15752,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         refreshWrSpareListRows();
     }
 
-    function initWrSparePage2(ro) {
+    function initWrSparePage2(ro, opts = {}) {
         const st = getState();
         const m = modState(st);
         m.wrSpareOpen = true;
         m.wrSpareReadonly = !!ro;
+        m.wrSpareCosOnFocus = !!opts.cosOnFocus;
+        m.wrSpareNoDblClickHistory = !!opts.noDblClickHistory;
         const isPreview = wrSparePreviewMode(st, ro);
         if (isPreview) {
             m.wrSpareShowSelectedOnly = true;
@@ -15808,6 +15808,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const m = modState(getState());
         m.wrSpareOpen = false;
         m.wrSpareTreeOpen = false;
+        m.wrSpareCosOnFocus = false;
+        m.wrSpareNoDblClickHistory = false;
         unbindWrSpareTreePopover();
         if (vlWrSpare) {
             vlWrSpare.destroy();
@@ -15941,7 +15943,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const spareComments = meta.spareShipComments ?? meta.shipComments ?? '';
         return `<section class="wr-maint-card wr-maint-body wr-spare-meta-form" aria-label="Work report job context">
             <div class="wr-maint-grid wr-maint-grid-3">
-                ${fld('Work Date', roInp('date', meta.workDate || ''))}
+                ${fld(meta.workDateLabel || 'Work Date', roInp('date', meta.workDate || ''))}
                 ${fld('Reported Date', roInp('date', meta.reportDate || ''))}
                 ${fld('Reported by', roInp('text', meta.reportedBy || ''))}
                 ${fld('PMS Group No.', roInp('text', pmsLabel), 'wr-maint-span-all')}
@@ -16422,6 +16424,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             ships_comments: shipsComments,
             made_on: draft.made_on || '',
             made_by: draft.made_by || '',
+            created_by_username: draft.created_by_username
+                || (draft.log_id ? '' : (user?.username || '')),
             reporter_role: draft.reporter_role
                 || (user && TVC_RBAC.isHqAccount(user)
                     ? (TVC_RBAC.resolveUserRole(user) || user.role || TVC_RBAC.Role.HQ_SUPERVISOR)
@@ -16900,7 +16904,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         draft.requisition_id = reqId || null;
         draft.received_date = g('receiveDate');
         draft.deliver_port = g('receiveDeliverPort');
-        draft.made_by = resolveSpareReportedBy(draft, spareInventoryUser(getState()));
+        ensureConsumeReportedByAuthor(draft, spareInventoryUser(getState()));
         draft.ships_comments = g('receiveShipComments');
         draft.vendor_comments = g('receiveVendorComments');
     }
@@ -17136,10 +17140,6 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const st = getState();
         const root = document.getElementById('receiveGroupTree');
         if (!root) return;
-        if (isDeckSpareTreeEmpty(st)) {
-            root.innerHTML = renderEmptySpareGroupTreeHtml(st, "TVC_SpareMenu.receiveSelectGroup(null)");
-            return;
-        }
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
         }
@@ -18325,7 +18325,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             code_no: '', remarks: '', priority: 'ROUTINE', dock_use: false,
             deliver_date_from: '', deliver_date_to: '', deliver_port: '',
             ships_comments: '', vendor_comments: '',
-            made_on: '', made_by: '',
+            made_on: reqListReportedDateToday(), made_by: '',
             assessed_on: '', assessed_by: '',
             ordered_on: '', ordered_by: '',
             received_on: '', received_date: '', received_port: '',

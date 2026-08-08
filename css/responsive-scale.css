@@ -247,7 +247,8 @@ body {
 }
 
 #workReportModal .modal-box.wr-modal,
-#defectReportModal .modal-box.wr-modal {
+#defectReportModal .modal-box.wr-modal,
+#workPermitModal .modal-box.wr-modal {
     width: 1000px !important;
     max-width: 1000px !important;
     min-width: 1000px !important;

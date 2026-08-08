@@ -15,8 +15,8 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260807-workflow-10tab">
-    <link rel="stylesheet" href="css/responsive-scale.css?v=20260806-docx-fixes">
+    <link rel="stylesheet" href="css/app.css?v=20260808-wp-job-rows">
+    <link rel="stylesheet" href="css/responsive-scale.css?v=20260808-wp-modal-size">
 </head>
 <body>
 
@@ -581,6 +581,12 @@
         <div id="defectReportBody"></div>
     </div>
 </div>
+<div id="workPermitModal" class="modal hidden spare-req-work-modal-wrap" onclick="if(event.target===this)TVC_WorkPermitReport.requestCloseModal()">
+    <div class="modal-box wr-modal spare-req-work-modal" onclick="event.stopPropagation()">
+        <button class="modal-x" onclick="TVC_WorkPermitReport.requestCloseModal()">×</button>
+        <div id="workPermitBody"></div>
+    </div>
+</div>
 <div id="tvcDialogModal" class="modal hidden tvc-dialog-modal" onclick="if(event.target===this)TVC_Dialog.dismiss()">
     <div class="modal-box tvc-dialog-box" onclick="event.stopPropagation()">
         <h3 id="tvcDialogTitle" class="tvc-dialog-title hidden"></h3>
@@ -611,8 +617,8 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/rbac.js?v=20260806-reported-by"></script>
-<script src="js/core/schema.js?v=20260727-df-schedule-wp-hist"></script>
+<script src="js/rbac.js?v=20260808-reported-by"></script>
+<script src="js/core/schema.js?v=20260808-work-permit"></script>
 <script src="js/core/db.js?v=20260806-req-sort"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260721-stock-ledger"></script>
@@ -620,11 +626,11 @@
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js"></script>
 <script src="js/ui/dialog.js?v=20260804-dialog"></script>
-<script src="js/ui/runHours.js?v=20260804-dialog"></script>
+<script src="js/ui/runHours.js?v=20260808-critical-postpone"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
 <script src="js/core/filename.js?v=20260806-docx-fixes"></script>
 <script src="js/services/spareSync.js?v=20260806-req-excel"></script>
-<script src="js/ui/spareMenu.js?v=20260808-flow-backnav2"></script>
+<script src="js/ui/spareMenu.js?v=20260808-wp-list-ui"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -635,25 +641,27 @@
 <script src="js/license.js?v=20260803-electron-license"></script>
 <script src="js/services/fileExport.js?v=20260804-settings"></script>
 <script src="js/auth.js?v=20260804-dialog"></script>
-<script src="js/services/transaction.js?v=20260806-confirm-label"></script>
+<script src="js/services/transaction.js?v=20260808-critical-postpone"></script>
 <script src="js/services/maintenancePlan.js?v=20260729-pms-master"></script>
-<script src="js/services/pmsMasterExcel.js?v=20260805-engine-import"></script>
-<script src="js/services/spareMasterExcel.js?v=20260804-spare-export-live"></script>
+<script src="js/services/pmsMasterExcel.js?v=20260808-deck-catalog"></script>
+<script src="js/services/spareMasterExcel.js?v=20260808-dept-boundary"></script>
 <script src="js/services/defectCase.js?v=20260806-confirm-unconfirm"></script>
+<script src="js/services/workPermitCase.js?v=20260808-work-permit"></script>
 <script src="js/services/defectSync.js?v=20260804-hist-filename"></script>
 <script src="js/services/postponeSync.js?v=20260804-hist-filename"></script>
-<script src="js/services/sync.js?v=20260806-docx-fixes"></script>
+<script src="js/services/sync.js?v=20260808-reported-by"></script>
 <script src="js/services/masterBackup.js?v=20260804-dialog"></script>
 <script src="js/services/stationSync.js?v=20260728-data-xfer"></script>
 <script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
 <script src="js/services/fleet.js?v=20260728-fleet-imo"></script>
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
-<script src="js/ui/listFilters.js?v=20260803-act-critical"></script>
+<script src="js/ui/listFilters.js?v=20260808-wp-list-ui"></script>
 <script src="js/ui/defectReport.js?v=20260806-confirm-label"></script>
+<script src="js/ui/workPermit.js?v=20260808-wp-job-rows"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260804-pms-scope"></script>
-<script src="js/app.js?v=20260806-confirm-label"></script>
+<script src="js/app.js?v=20260808-wp-defect-ui"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

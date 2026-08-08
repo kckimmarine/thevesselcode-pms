@@ -22,6 +22,7 @@ const TVC_ListFilters = (function () {
         if (tab === 'actual') return 'actListFilterBtn';
         if (tab === 'history') return 'histListFilterBtn';
         if (tab === 'consumeLog') return 'consumeLogListFilterBtn';
+        if (tab === 'workPermit') return 'wpListFilterBtn';
         if (tab === 'reqList') {
             const histBtn = document.getElementById('reqHistListFilterBtn');
             if (histBtn && histBtn.getClientRects().length > 0) return 'reqHistListFilterBtn';
@@ -34,6 +35,12 @@ const TVC_ListFilters = (function () {
         return typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.getConsumeLogListFilters
             ? TVC_SpareMenu.getConsumeLogListFilters()
             : { groupKeys: [], type: 'all' };
+    }
+
+    function wpListFilterState() {
+        return typeof TVC_WorkPermitReport !== 'undefined' && TVC_WorkPermitReport.getWpListFilters
+            ? TVC_WorkPermitReport.getWpListFilters()
+            : { groupKeys: [], status: 'all' };
     }
 
     function reqListFilterState() {
@@ -60,6 +67,9 @@ const TVC_ListFilters = (function () {
         }
         if (tab === 'consumeLog') {
             return (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0);
+        }
+        if (tab === 'workPermit') {
+            return (f.groupKeys?.length || 0) + (f.status && f.status !== 'all' ? 1 : 0);
         }
         if (tab === 'reqList') {
             return (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0);
@@ -226,6 +236,8 @@ const TVC_ListFilters = (function () {
         let n = 0;
         if (tab === 'consumeLog') {
             n = activeCount('consumeLog', { listFilters: { consumeLog: consumeLogFilterState() } });
+        } else if (tab === 'workPermit') {
+            n = activeCount('workPermit', { listFilters: { workPermit: wpListFilterState() } });
         } else if (tab === 'reqList') {
             n = activeCount('reqList', { listFilters: { reqList: reqListFilterState() } });
         } else {
@@ -275,8 +287,8 @@ const TVC_ListFilters = (function () {
         const btnId = filterBtnId(tab);
         const btn = btnId ? document.getElementById(btnId) : null;
         if (!pop || !btn) return;
-        if (tab !== 'consumeLog' && tab !== 'reqList' && !TVC_App?.getListFilterState) return;
-        pop.classList.toggle('list-filter-pop-history', tab === 'history' || tab === 'consumeLog' || tab === 'reqList');
+        if (tab !== 'consumeLog' && tab !== 'workPermit' && tab !== 'reqList' && !TVC_App?.getListFilterState) return;
+        pop.classList.toggle('list-filter-pop-history', tab === 'history' || tab === 'consumeLog' || tab === 'workPermit' || tab === 'reqList');
         const state = {
             listFilters: TVC_App?.getListFilterState?.() || {},
             department: TVC_App?.getAppDepartment?.(),
@@ -286,7 +298,8 @@ const TVC_ListFilters = (function () {
             jobs: TVC_App?.getAppJobs?.(),
         };
         const f = tab === 'consumeLog' ? consumeLogFilterState()
-            : (tab === 'reqList' ? reqListFilterState() : filters(state, tab));
+            : (tab === 'reqList' ? reqListFilterState()
+                : (tab === 'workPermit' ? wpListFilterState() : filters(state, tab)));
 
         if (tab === 'actual') {
             const sections = workPlanPicSections(state);
@@ -324,6 +337,23 @@ const TVC_ListFilters = (function () {
                     <div class="list-filter-section-title">Report type</div>
                     <div class="list-filter-type-seg">
                         ${types.map(t => `<button type="button" class="list-filter-type-btn${curType === t ? ' active' : ''}" data-hist-type="${t}">${TYPE_LABELS[t]}</button>`).join('')}
+                    </div>
+                </div>
+                ${renderGroupPanel(f, tab)}
+                <div class="list-filter-actions">
+                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
+                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
+                </div>`;
+        } else if (tab === 'workPermit') {
+            const statuses = ['all', 'reported', 'confirmed', 'approved'];
+            const WP_STATUS_LABELS = { all: 'All', reported: 'Reported', confirmed: 'Confirmed', approved: 'Approved' };
+            const curStatus = f.status || 'all';
+            pop.innerHTML = `
+                ${popCloseBtnHtml()}
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Status</div>
+                    <div class="list-filter-type-seg">
+                        ${statuses.map(t => `<button type="button" class="list-filter-type-btn${curStatus === t ? ' active' : ''}" data-wp-status="${t}">${WP_STATUS_LABELS[t]}</button>`).join('')}
                     </div>
                 </div>
                 ${renderGroupPanel(f, tab)}
@@ -389,6 +419,12 @@ const TVC_ListFilters = (function () {
         pop.querySelectorAll('[data-hist-type]').forEach(btn => {
             btn.addEventListener('click', () => {
                 pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+            });
+        });
+        pop.querySelectorAll('[data-wp-status]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                pop.querySelectorAll('[data-wp-status]').forEach(b => b.classList.remove('active'));
                 btn.classList.add('active');
             });
         });
@@ -458,9 +494,11 @@ const TVC_ListFilters = (function () {
 
     function resetPopoverForm(tab, pop) {
         pop.querySelectorAll('input[type="checkbox"]').forEach(el => { el.checked = false; });
-        if (tab === 'history' || tab === 'consumeLog' || tab === 'reqList') {
+        if (tab === 'history' || tab === 'consumeLog' || tab === 'workPermit' || tab === 'reqList') {
             pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
             pop.querySelector('[data-hist-type="all"]')?.classList.add('active');
+            pop.querySelectorAll('[data-wp-status]').forEach(b => b.classList.remove('active'));
+            pop.querySelector('[data-wp-status="all"]')?.classList.add('active');
         }
         const gs = pop.querySelector('.list-filter-group-search');
         if (gs) {
@@ -489,6 +527,11 @@ const TVC_ListFilters = (function () {
             const typeBtn = pop.querySelector('[data-hist-type].active');
             const type = typeBtn?.dataset.histType || 'all';
             TVC_SpareMenu?.setConsumeLogListFilters?.({ groupKeys, type });
+        } else if (tab === 'workPermit') {
+            const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
+            const statusBtn = pop.querySelector('[data-wp-status].active');
+            const status = statusBtn?.dataset.wpStatus || 'all';
+            TVC_WorkPermitReport?.setWpListFilters?.({ groupKeys, status });
         } else if (tab === 'reqList') {
             const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
             const typeBtn = pop.querySelector('[data-hist-type].active');

@@ -95,17 +95,11 @@ const TVC_Transaction = (function () {
         return false;
     }
 
-    function criticalPostponeScheduleBlocked(report, job) {
-        return reportRequiresCompanyPostponeApproval(report, job)
-            && !TVC_RBAC.isApprovedStatus(report.status, report.is_locked);
-    }
-
     async function applyWorkReportJobSchedule(api, job, item, report, opts = {}) {
         if (!job || !item || !report) return job;
         maybeSnapshotJobState(item, job, opts.snapshotPrev);
 
         if (report.work_type === 'POSTPONE' || item.status === 'CONFIRMED' || item.status === 'POSTPONED') {
-            if (criticalPostponeScheduleBlocked(report, job)) return job;
             const postponeDate = String(
                 report.approved_postpone_date || report.postpone_date || item.form?.postponeDate || '',
             ).slice(0, 10);
@@ -177,6 +171,7 @@ const TVC_Transaction = (function () {
                 work_date: payload.workDate || null,
                 description: payload.description || job.job_detail || job.item_sort2,
                 reported_by: user.id,
+                reporter_username: String(user.username || '').toLowerCase(),
                 reporter_name: TVC_RBAC.getReportedByLabel(user),
                 reporter_role: TVC_RBAC.resolveUserRole(user) || user.role || '',
                 used_parts: payload.usedParts || [],
@@ -193,9 +188,10 @@ const TVC_Transaction = (function () {
             }
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             await api.put('daily_work_reports', report);
-            const scheduleNote = report.work_type === 'POSTPONE' && report.requires_company_approval
-                ? 'Critical postpone — schedule pending Company approval'
+            const postponeNote = report.work_type === 'POSTPONE'
+                ? `NEXT ${job.next_date || '—'}${report.requires_company_approval ? ' · awaiting Company approval' : ''}`
                 : `LAST DONE ${job.last_done || '—'} · NEXT ${job.next_date || '—'}`;
+            const scheduleNote = postponeNote;
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
                 log: `📋 [${status}] ${job.job_code} (${report.work_type}) — ${scheduleNote} — ${user.display_name}`,
@@ -235,6 +231,7 @@ const TVC_Transaction = (function () {
                 work_date: payload.workDate || null,
                 description: payload.description || `Batch report (${jobItems.length} jobs)`,
                 reported_by: user.id,
+                reporter_username: String(user.username || '').toLowerCase(),
                 reporter_name: TVC_RBAC.getReportedByLabel(user),
                 reporter_role: TVC_RBAC.resolveUserRole(user) || user.role || '',
                 used_parts: [],
@@ -305,8 +302,8 @@ const TVC_Transaction = (function () {
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             markPending(report);
             await api.put('daily_work_reports', report);
-            const modScheduleNote = report.work_type === 'POSTPONE' && report.requires_company_approval
-                ? 'Critical postpone — schedule pending Company approval'
+            const modScheduleNote = report.work_type === 'POSTPONE'
+                ? `NEXT DATE 반영${report.requires_company_approval ? ' · awaiting Company approval' : ''}`
                 : 'LAST DONE/NEXT DATE 반영';
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
@@ -546,10 +543,11 @@ const TVC_Transaction = (function () {
 
             const codes = reportedItems.map(i => i.job_code).join(', ');
             let scheduleNote;
-            if (isPostpone && report.requires_company_approval) {
-                scheduleNote = 'Critical postpone — awaiting Company approval (schedule pending)';
-            } else if (isPostpone) {
-                scheduleNote = `NEXT DATE → ${report.postpone_date || reportedItems[0]?.form?.postponeDate || '—'}`;
+            if (isPostpone) {
+                const pd = report.postpone_date || reportedItems[0]?.form?.postponeDate || '—';
+                scheduleNote = report.requires_company_approval
+                    ? `NEXT DATE → ${pd} · awaiting Company approval`
+                    : `NEXT DATE → ${pd}`;
             } else {
                 scheduleNote = `LAST DONE ${report.job_items.find(i => i.status === 'CONFIRMED')?.form?.lastMaintDate || report.work_date || now().slice(0, 10)}`;
             }

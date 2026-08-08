@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 8, // v8: defect_cases (Defect / Trouble Report Case)
+    DB_VERSION: 9, // v9: work_permits (Critical Equipment Work Permit)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -27,6 +27,7 @@ const TVC_SCHEMA = {
         inventory_history: { keyPath: 'id' },              // SPICS 입·출고 전용 이력
         consume_logs: { keyPath: 'id' },                   // Consumed Parts 일지 (배치)
         defect_cases: { keyPath: 'id' },                   // Defect (Trouble) Report Case
+        work_permits: { keyPath: 'id' },                   // Critical Equipment Work Permit
     },
     INDEXES: {
         users: [{ name: 'username', keyPath: 'username', unique: true }],
@@ -84,6 +85,13 @@ const TVC_SCHEMA = {
             { name: 'by_sync', keyPath: 'sync_status' },
             { name: 'by_vessel', keyPath: 'vessel_id' },
             { name: 'by_case_no', keyPath: 'case_no' },
+            { name: 'by_department', keyPath: 'department' },
+        ],
+        work_permits: [
+            { name: 'by_status', keyPath: 'status' },
+            { name: 'by_sync', keyPath: 'sync_status' },
+            { name: 'by_vessel', keyPath: 'vessel_id' },
+            { name: 'by_permit_no', keyPath: 'permit_no' },
             { name: 'by_department', keyPath: 'department' },
         ],
     },
@@ -897,6 +905,89 @@ const TVC_DefectCase = (function () {
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, belongsToDepartment,
         listWorkflowStatus, listWorkflowTone, canModifyListWorkflow, canDeleteListWorkflow, isShipVerificationEditable,
+    };
+})();
+
+/**
+ * WorkPermit — work_permits (Critical Equipment planned maintenance permit)
+ */
+const TVC_WorkPermit = (function () {
+    const SCHEMA_VERSION = 1;
+    const Status = { DRAFT: 'DRAFT', ACTIVE: 'ACTIVE' };
+
+    function blank(overrides = {}) {
+        const today = new Date().toISOString().slice(0, 10);
+        return {
+            id: overrides.id || `WP-${Date.now()}`,
+            schema_version: SCHEMA_VERSION,
+            permit_no: overrides.permit_no || '',
+            vessel_id: overrides.vessel_id || '',
+            department: overrides.department || '',
+            maintenance_job_id: overrides.maintenance_job_id || '',
+            job_code: overrides.job_code || '',
+            pms_group_no: overrides.pms_group_no || '',
+            pms_group_key: overrides.pms_group_key || '',
+            pms_job_code: overrides.pms_job_code || '',
+            item_sort1: overrides.item_sort1 || '',
+            item_sort2: overrides.item_sort2 || '',
+            job_detail: overrides.job_detail || '',
+            job_name: overrides.job_name || '',
+            file_no: overrides.file_no || '',
+            voy_no: overrides.voy_no || '',
+            place: overrides.place || '',
+            plan_date: overrides.plan_date || today,
+            report_date: overrides.report_date || today,
+            reported_by: overrides.reported_by || '',
+            reporter_username: overrides.reporter_username || '',
+            reporter_name: overrides.reporter_name || '',
+            maker: overrides.maker || '',
+            model_type: overrides.model_type || '',
+            capacity: overrides.capacity || '',
+            serial_no: overrides.serial_no || '',
+            last_maintenance_date: overrides.last_maintenance_date || '',
+            rh_since_last_maintenance: overrides.rh_since_last_maintenance ?? '',
+            total_run_hrs: overrides.total_run_hrs ?? '0',
+            outline_work_permit: overrides.outline_work_permit || '',
+            checked_estimated_spare_parts: overrides.checked_estimated_spare_parts === true,
+            estimated_parts: Array.isArray(overrides.estimated_parts) ? overrides.estimated_parts : [],
+            job_items: Array.isArray(overrides.job_items) ? overrides.job_items : [],
+            confirmed_by: overrides.confirmed_by || '',
+            confirmed_at: overrides.confirmed_at || '',
+            approved_by: overrides.approved_by || '',
+            approved_at: overrides.approved_at || '',
+            status: overrides.status || Status.DRAFT,
+            visible_in_list: overrides.visible_in_list !== false,
+            sync_status: 'LOCAL',
+            updated_at: new Date().toISOString(),
+            created_at: overrides.created_at || new Date().toISOString(),
+        };
+    }
+
+    function listWorkflowStatus(row) {
+        if (row.approved_at || row.approved_by) return 'Approved';
+        if (row.sync_status === 'SYNCED') return 'Submitted';
+        if (row.confirmed_at || row.confirmed_by) return 'Confirmed';
+        return 'Reported';
+    }
+
+    function canModifyListWorkflow(row) {
+        if (!row || row.approved_at || row.approved_by) return false;
+        if (row.sync_status === 'SYNCED') return false;
+        return true;
+    }
+
+    function canDeleteListWorkflow(row) {
+        return canModifyListWorkflow(row);
+    }
+
+    function belongsToDepartment(row, dept) {
+        if (!dept) return true;
+        return String(row?.department || '').toUpperCase() === String(dept).toUpperCase();
+    }
+
+    return {
+        SCHEMA_VERSION, Status, blank, listWorkflowStatus,
+        canModifyListWorkflow, canDeleteListWorkflow, belongsToDepartment,
     };
 })();
 

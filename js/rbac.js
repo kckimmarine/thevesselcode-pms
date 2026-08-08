@@ -456,16 +456,39 @@ const TVC_RBAC = (function () {
     /** Requisition / SPARE — 작성 계정(created_by)만으로 Reported by 직책 (made_by 무시) */
     function getReportedByLabelForAuthor(record) {
         if (!record) return '';
-        const uname = String(record.created_by_username || '').trim().toLowerCase();
+        const uname = String(
+            record.created_by_username
+            || record.reporter_username
+            || record.author_username
+            || record.made_by_username
+            || ''
+        ).trim().toLowerCase();
         if (uname) {
             const title = getAccountTitle(uname);
             if (title && title !== 'User') return title;
             return getReportedByLabel({ username: uname });
         }
-        const mappedUname = DEMO_USER_ID_TO_USERNAME[String(record.created_by || '').trim()];
-        if (mappedUname) {
-            return getAccountTitle(mappedUname) || getReportedByLabel({ username: mappedUname });
+        for (const idField of ['created_by', 'reported_by', 'operator_id']) {
+            const raw = String(record[idField] || '').trim();
+            if (!raw) continue;
+            const mapped = DEMO_USER_ID_TO_USERNAME[raw];
+            if (mapped) {
+                return getAccountTitle(mapped) || getReportedByLabel({ username: mapped });
+            }
+            if (/^[a-z][a-z0-9_-]*$/i.test(raw) && getAccountTitle(raw.toLowerCase()) !== 'User') {
+                return getAccountTitle(raw.toLowerCase()) || getReportedByLabel({ username: raw.toLowerCase() });
+            }
         }
+        return '';
+    }
+
+    /** PMS Work Report — 최초 작성 계정 기준 Reported by */
+    function getReportedByLabelForWorkReport(record) {
+        if (!record) return '';
+        const fromAuthor = getReportedByLabelForAuthor(record);
+        if (fromAuthor) return fromAuthor;
+        const saved = normalizeReportedByLabel(record.reporter_name);
+        if (saved) return saved;
         return '';
     }
 
@@ -556,7 +579,7 @@ const TVC_RBAC = (function () {
 
     return {
         AccountType, Role, Department, ReportStatus, Action,
-        can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForRecord, normalizeReportedByLabel,
+        can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForWorkReport, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
         isShipAccount, isHqAccount, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
