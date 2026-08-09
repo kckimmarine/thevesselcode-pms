@@ -201,7 +201,7 @@ const TVC_Transaction = (function () {
         });
     }
 
-    /** 다중 Job — Batch Work Report 제출 */
+    /** 다중 Job — Work Report 제출 */
     async function submitBatchReport(user, payload) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.CREATE_DAILY_REPORT);
         const entries = payload.items || [];
@@ -229,7 +229,7 @@ const TVC_Transaction = (function () {
                 work_type: payload.workType || 'MAINTENANCE',
                 report_date: payload.reportDate || now().slice(0, 10),
                 work_date: payload.workDate || null,
-                description: payload.description || `Batch report (${jobItems.length} jobs)`,
+                description: payload.description || `Work Report (${jobItems.length} jobs)`,
                 reported_by: user.id,
                 reporter_username: String(user.username || '').toLowerCase(),
                 reporter_name: TVC_RBAC.getReportedByLabel(user),

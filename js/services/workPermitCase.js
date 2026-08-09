@@ -94,10 +94,11 @@ const TVC_WorkPermitCaseService = (function () {
             'item_sort1', 'item_sort2', 'job_detail', 'job_name',
             'maker', 'model_type', 'capacity', 'serial_no',
             'last_maintenance_date', 'rh_since_last_maintenance', 'total_run_hrs',
-            'outline_work_permit', 'checked_estimated_spare_parts',
+            'outline_work_permit', 'company_comment', 'checked_estimated_spare_parts',
             'estimated_parts', 'job_items',
         ];
         fields.forEach(k => {
+            if (k === 'company_comment' && !TVC_RBAC.isHqAccount(user)) return;
             if (payload[k] !== undefined) row[k] = payload[k];
         });
         row.checked_estimated_spare_parts = payload.checked_estimated_spare_parts === true
@@ -114,7 +115,7 @@ const TVC_WorkPermitCaseService = (function () {
         return row;
     }
 
-    async function saveApprovalMeta(user, id, { confirm, approve, unconfirm } = {}) {
+    async function saveApprovalMeta(user, id, { confirm, approve, unconfirm, company_comment } = {}) {
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Permit not found.'), { code: 'NOT_FOUND' });
         const today = now().slice(0, 10);
@@ -154,6 +155,24 @@ const TVC_WorkPermitCaseService = (function () {
             row.approved_by = TVC_RBAC.getReportedByLabel(user) || user.display_name || 'Company';
             row.approved_at = today;
         }
+        if (company_comment !== undefined && TVC_RBAC.isHqAccount(user)) {
+            row.company_comment = String(company_comment ?? '');
+        }
+        markPending(row);
+        await TVC_DB.put('work_permits', row);
+        return row;
+    }
+
+    async function saveCompanyComment(user, id, comment) {
+        if (!TVC_RBAC.isHqAccount(user)) {
+            throw Object.assign(new Error('HQ only.'), { code: 'FORBIDDEN' });
+        }
+        const row = await get(id);
+        if (!row) throw Object.assign(new Error('Permit not found.'), { code: 'NOT_FOUND' });
+        if (row.sync_status === 'SYNCED') {
+            throw Object.assign(new Error('Reply already exported — Company Comments cannot be changed.'), { code: 'LOCKED' });
+        }
+        row.company_comment = String(comment ?? '');
         markPending(row);
         await TVC_DB.put('work_permits', row);
         return row;
@@ -162,10 +181,12 @@ const TVC_WorkPermitCaseService = (function () {
     async function deleteCase(user, id) {
         const row = await get(id);
         if (!row) return;
-        if (!TVC_WorkPermit.canDeleteListWorkflow(row)) {
+        const hqImportedCleanup = user && TVC_RBAC.isHqAccount(user) && row.hq_synced
+            && (row.approved_at || row.approved_by) && row.sync_status !== 'SYNCED';
+        if (!hqImportedCleanup && !TVC_WorkPermit.canDeleteListWorkflow(row)) {
             throw Object.assign(new Error('Cannot delete this permit.'), { code: 'LOCKED' });
         }
-        if (user?.department && row.department && user.department !== row.department) {
+        if (!hqImportedCleanup && user?.department && row.department && user.department !== row.department) {
             throw Object.assign(new Error('Department forbidden.'), { code: 'FORBIDDEN' });
         }
         await TVC_DB.del('work_permits', id);
@@ -177,7 +198,7 @@ const TVC_WorkPermitCaseService = (function () {
     }
 
     return {
-        get, saveDraft, saveApprovalMeta, deleteCase, createFromJob,
+        get, saveDraft, saveApprovalMeta, saveCompanyComment, deleteCase, createFromJob,
         resolveVesselId, nextPermitNo, markPending,
     };
 })();

@@ -1,6 +1,7 @@
 /** Modal drag — grab navy title bars (e.g. .wr-titlebar) to reposition within viewport */
 window.TVC_ModalDrag = (function () {
     const HANDLE_SEL = '.wr-titlebar, .modal-drag-handle';
+    const NO_DRAG_MODAL_IDS = new Set(['workReportModal', 'defectReportModal', 'workPermitModal']);
     let drag = null;
 
     function resetBox(box) {
@@ -35,6 +36,7 @@ window.TVC_ModalDrag = (function () {
         const box = handle.closest('.modal-box');
         const modal = box?.closest('.modal');
         if (!box || !modal || modal.classList.contains('hidden')) return;
+        if (NO_DRAG_MODAL_IDS.has(modal.id) || handle.classList.contains('modal-no-drag')) return;
 
         e.preventDefault();
         const rect = box.getBoundingClientRect();

@@ -1427,10 +1427,16 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .wr-page2-job-rows,
 #defectReportBody .df-page1-job-rows,
-#workPermitBody .df-page1-job-rows {
+#workPermitBody .df-page1-job-rows,
+#workReportBody .df-page1-job-rows {
     display: flex;
     flex-direction: column;
     gap: 10px;
+}
+#defectReportBody .df-page1-job-rows .wr-maint-grid-gap,
+#workPermitBody .df-page1-job-rows .wr-maint-grid-gap,
+#workReportBody .df-page1-job-rows .wr-maint-grid-gap {
+    margin-top: 0;
 }
 .wr-spare-meta-form .wr-page2-job-grid-batch,
 #defectReportBody .df-maint-job-grid-batch,
@@ -1557,6 +1563,18 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     cursor: grab; user-select: none; touch-action: none;
 }
 .wr-titlebar:active { cursor: grabbing; }
+#workReportModal .wr-titlebar,
+#defectReportModal .wr-titlebar,
+#workPermitModal .wr-titlebar {
+    cursor: default;
+    touch-action: auto;
+    user-select: text;
+}
+#workReportModal .wr-titlebar:active,
+#defectReportModal .wr-titlebar:active,
+#workPermitModal .wr-titlebar:active {
+    cursor: default;
+}
 .modal-box.modal-is-dragged { transition: none; }
 .wr-tabsel { display: flex; gap: 18px; padding: 8px 14px 0; background: #edf2f7; }
 .wr-radio { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; color: #4a5568; cursor: pointer; padding-bottom: 6px; border-bottom: 3px solid transparent; }
@@ -1590,10 +1608,12 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .wr-maint-body { display: flex; flex-direction: column; gap: 0; }
 #defectReportBody .wr-maint-body,
-#workPermitBody .wr-maint-body { gap: 10px; }
+#workPermitBody .wr-maint-body,
+#workReportBody .wr-maint-body { gap: 10px; }
 .wr-maint-grid-gap { margin-top: 12px; }
 #defectReportBody .wr-maint-body > .wr-maint-grid-gap,
-#workPermitBody .wr-maint-body > .wr-maint-grid-gap { margin-top: 0; }
+#workPermitBody .wr-maint-body > .wr-maint-grid-gap,
+#workReportBody .wr-maint-body > .wr-maint-grid-gap { margin-top: 0; }
 .wr-maint-grid { display: grid; gap: 10px 12px; }
 .wr-maint-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wr-maint-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -1840,10 +1860,21 @@ input.tvc-date-input::placeholder {
 .wr-maint-batch-h {
     font-size: 10px;
     font-weight: 700;
-    color: #718096;
+    color: #1a202c;
     text-transform: uppercase;
     letter-spacing: .03em;
 }
+.wr-maint-job-col-head {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1a202c;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+}
+.wr-maint-job-rows-header { margin-bottom: 2px; }
+.wr-batch-job-rows .wr-maint-batch-job-row { cursor: pointer; }
+.wr-batch-job-rows .wr-maint-batch-job-row:hover { background: #f7fafc; }
+.wr-batch-job-rows .wr-maint-batch-job-row-active { background: #e8f1ff !important; }
 .wr-maint-batch-job-row {
     padding: 7px 10px;
     border-bottom: 1px solid #edf2f7;
@@ -1863,6 +1894,11 @@ input.tvc-date-input::placeholder {
     color: #2d3748;
 }
 .wr-maint-batch-cell .wr-maint-batch-code { font-weight: 700; color: var(--navy); }
+.wr-maint-field-nolabel label { display: none; }
+.wr-maint-field-nolabel { gap: 0; }
+.wr-page2-job-header { margin-bottom: 2px; }
+.wr-page2-job-header .wr-maint-batch-h { padding-bottom: 0; }
+.wr-page2-job-header .wr-maint-job-col-head { padding-bottom: 0; }
 @media (max-width: 900px) {
     .wr-maint-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .wr-maint-grid-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -2263,6 +2299,25 @@ input.tvc-date-input::placeholder {
 .file-no-pick-table .hist-type-defect .hist-type-mark { background: #c05621; }
 .file-no-pick-table .hist-type-postpone .hist-type-mark { background: #805ad5; }
 .file-no-pick-table .hist-type-maint .hist-type-mark { background: #2b6cb0; }
+.file-no-pick-table .hist-crit-h,
+.file-no-pick-table .hist-crit {
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    text-align: center;
+    padding: 4px 2px;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+.file-no-pick-table .hist-crit .plan-crit-mark { display: block; margin: 0 auto; }
+.file-no-pick-table .hist-th-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.1;
+    gap: 1px;
+}
 
 #tabContent { background: var(--bg); min-height: 60vh; }
 .tab-pane { animation: fade .15s ease; }
@@ -2628,6 +2683,7 @@ input.tvc-date-input::placeholder {
 .hist-table .hist-type-defect .hist-type-mark { background: #c05621; }
 .hist-table .hist-type-postpone .hist-type-mark { background: #805ad5; }
 .hist-table .hist-type-maint .hist-type-mark { background: #2b6cb0; }
+.hist-table .hist-type-wp .hist-type-mark { background: #0d9488; }
 .list-filter-wrap { position: relative; flex-shrink: 0; }
 .list-filter-btn { min-width: 64px; background: #edf2f7; color: #4a5568; border: 1px solid #cbd5e0; }
 .list-filter-btn:hover { background: #e2e8f0; }
@@ -4553,8 +4609,8 @@ label.spare-file-pick input[type=file] { display: none; }
     display: block;
     font-size: 10px;
     font-weight: 700;
-    color: #475569;
-    letter-spacing: 0.05em;
+    color: #1a202c;
+    letter-spacing: 0.03em;
     margin-bottom: 5px;
     text-transform: uppercase;
 }
@@ -5005,6 +5061,12 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-req-hist-popover .spare-req-list-body-table tbody tr.sr-req-sel:hover td {
     background: rgba(66, 153, 225, 0.45) !important;
 }
+#wpHistListScroll .wp-list-table tbody tr.sr-req-sel td {
+    background: #e8f1ff !important;
+}
+#wpHistListScroll .wp-list-table tbody tr.sr-req-sel:hover td {
+    background: #dbeafe !important;
+}
 .spare-req-hist-list-scroll:focus {
     outline: none;
 }
@@ -5190,7 +5252,6 @@ label.spare-file-pick input[type=file] { display: none; }
 .wp-list-table col.wp-col-sort2 { width: auto; min-width: 130px; }
 .wp-list-table col.wp-col-reported { width: 88px; }
 .wp-list-table col.wp-col-status { width: 96px; }
-.wp-list-table .hist-type-wp .hist-type-mark { background: #6b46c1; }
 .wp-list-table .wp-st-Reported { background: #3182ce; }
 .wp-list-table .wp-st-Confirmed { background: #d97706; }
 .wp-list-table .wp-st-Approved { background: #16a34a; }
@@ -5319,6 +5380,7 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-consume-log-table .hist-type-maint .hist-type-mark { background: #2b6cb0; }
 .spare-consume-log-table .hist-type-consume .hist-type-mark { background: #2f855a; }
 .spare-consume-log-table .hist-type-postpone .hist-type-mark { background: #805ad5; }
+.spare-consume-log-table .hist-type-wp .hist-type-mark { background: #0d9488; }
 .spare-consume-log-table .spare-consume-log-file {
     text-align: center;
     white-space: nowrap;
@@ -6464,7 +6526,7 @@ label.spare-file-pick input[type=file] { display: none; }
 #spareReceiveModal .spare-receive-work-layout .spare-req-table-wide {
     min-width: 0;
 }
-/* Received Spare Parts — meta + list panel (Consumed / New Requisition family) */
+/* Spare Parts Requisition — received qty meta + list panel (Consumption Report family) */
 .spare-receive-meta-form {
     margin-bottom: 12px;
 }
@@ -7138,7 +7200,7 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 .spare-sync-back { margin-right: auto; }
 
-.menu-xfer-wide { max-width: min(980px, 96vw); }
+.menu-xfer-wide { max-width: min(1080px, 96vw); }
 .menu-xfer-table-wrap {
     max-height: 280px;
     overflow: auto;
@@ -7146,18 +7208,64 @@ label.spare-file-pick input[type=file] { display: none; }
     border: 1px solid #e2e8f0;
     border-radius: 8px;
 }
-.menu-xfer-defect-table {
-    min-width: 920px;
+.menu-xfer-defect-table,
+.menu-xfer-postpone-table,
+.menu-xfer-work-permit-table {
+    min-width: 1060px;
 }
 .menu-xfer-table col.menu-xfer-col-chk { width: 32px; }
-.menu-xfer-table col.menu-xfer-col-file-no { width: 72px; }
 .menu-xfer-table col.menu-xfer-col-type { width: 40px; }
-.menu-xfer-table col.menu-xfer-col-warn { width: 28px; }
+.menu-xfer-table col.menu-xfer-col-file-no { width: 72px; }
+.menu-xfer-table col.menu-xfer-col-warn { width: 32px; }
 .menu-xfer-table col.menu-xfer-col-job { width: 72px; }
-.menu-xfer-table col.menu-xfer-col-sort { width: 140px; }
+.menu-xfer-table col.menu-xfer-col-sort { width: 120px; }
+.menu-xfer-table col.menu-xfer-col-sort2 { width: 120px; }
 .menu-xfer-table col.menu-xfer-col-status { width: 72px; }
 .menu-xfer-table col.menu-xfer-col-date { width: 88px; }
 .menu-xfer-table col.menu-xfer-col-filename { width: 180px; }
+.menu-xfer-table .hist-type-h,
+.menu-xfer-table .hist-type {
+    width: 40px;
+    min-width: 40px;
+    text-align: center;
+    padding: 4px 2px;
+    vertical-align: middle;
+}
+.menu-xfer-table .hist-crit-h,
+.menu-xfer-table .hist-crit {
+    width: 32px;
+    min-width: 32px;
+    max-width: 32px;
+    text-align: center;
+    padding: 4px 2px;
+    vertical-align: middle;
+    box-sizing: border-box;
+}
+.menu-xfer-table .hist-crit .plan-crit-mark { display: block; margin: 0 auto; }
+.menu-xfer-table .hist-th-stack {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    line-height: 1.1;
+    gap: 1px;
+}
+.menu-xfer-table .hist-type-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+}
+.menu-xfer-table .hist-type-defect .hist-type-mark { background: #c05621; }
+.menu-xfer-table .hist-type-postpone .hist-type-mark { background: #805ad5; }
+.menu-xfer-table .hist-type-maint .hist-type-mark { background: #2b6cb0; }
+.menu-xfer-table .hist-type-wp .hist-type-mark { background: #0d9488; }
 .menu-xfer-block-msg {
     margin: 0 0 10px;
     padding: 10px 12px;
@@ -7711,7 +7819,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     .dept-btn { padding: 6px 10px; font-size: 12px; }
 }
 
-/* ── Defect (Trouble) Report Case ───────────────────────────────── */
+/* ── Defect Report Case ───────────────────────────────── */
 .defect-inbox-panel {
     margin-top: 14px;
     padding: 12px 14px;

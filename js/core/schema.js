@@ -26,7 +26,7 @@ const TVC_SCHEMA = {
         requisitions: { keyPath: 'id' },                   // 부품 청구서(Requisition)
         inventory_history: { keyPath: 'id' },              // SPICS 입·출고 전용 이력
         consume_logs: { keyPath: 'id' },                   // Consumed Parts 일지 (배치)
-        defect_cases: { keyPath: 'id' },                   // Defect (Trouble) Report Case
+        defect_cases: { keyPath: 'id' },                   // Defect Report Case
         work_permits: { keyPath: 'id' },                   // Critical Equipment Work Permit
     },
     INDEXES: {
@@ -594,16 +594,39 @@ const TVC_WorkReport = (function () {
     function buildRecord(base, jobItems) {
         const items = jobItems.map(i => ({ ...i }));
         const codes = items.map(i => i.job_code).filter(Boolean);
-        const first = items[0] || {};
+        const primary = primaryJobItem({ job_items: items }) || items[0] || {};
         return {
             ...base,
             job_codes: codes,
             job_items: items,
             is_batch: codes.length > 1,
-            job_code: codes.length > 1 ? codes.join(', ') : (first.job_code || base.job_code || ''),
-            maintenance_job_id: first.maintenance_job_id || base.maintenance_job_id,
+            job_code: codes.length > 1 ? (primary.job_code || codes.join(', ')) : (primary.job_code || base.job_code || ''),
+            maintenance_job_id: primary.maintenance_job_id || base.maintenance_job_id,
             status: aggregateStatus(items),
         };
+    }
+
+    /** JOB CODE 정렬 (01-003 vs 01-010) */
+    function compareJobCodes(a, b) {
+        const parse = (code) => {
+            const s = String(code || '').trim();
+            const m = s.match(/^(\d+)\s*-\s*(\d+)/);
+            if (m) return [parseInt(m[1], 10), parseInt(m[2], 10)];
+            return [Number.MAX_SAFE_INTEGER, Number.MAX_SAFE_INTEGER, s];
+        };
+        const pa = parse(a);
+        const pb = parse(b);
+        for (let i = 0; i < 2; i++) {
+            if (pa[i] !== pb[i]) return pa[i] - pb[i];
+        }
+        return String(a || '').localeCompare(String(b || ''));
+    }
+
+    /** 다중 JOB Work Report — 가장 빠른(작은) JOB CODE 항목 */
+    function primaryJobItem(report) {
+        const items = getJobItems(report);
+        if (!items.length) return null;
+        return [...items].sort((x, y) => compareJobCodes(x.job_code, y.job_code))[0];
     }
 
     return {
@@ -618,11 +641,13 @@ const TVC_WorkReport = (function () {
         findItem,
         hasPendingJob,
         buildRecord,
+        compareJobCodes,
+        primaryJobItem,
     };
 })();
 
 /**
- * DefectCase — defect_cases 레코드 계약 (Defect / Trouble Report 서식 매핑)
+ * DefectCase — defect_cases 레코드 계약 (Defect Report 서식 매핑)
  * Phase 1: 선박 보고 (긴급) · Phase 2: 회사 초기 검토/작업허가 (긴급)
  * Phase 3·4: 완료 확인·종결 (후속)
  */
@@ -818,7 +843,7 @@ const TVC_DefectCase = (function () {
 
     function validatePhase3(row) {
         const missing = [];
-        if (!String(row.ship_verified_after_clear || '').trim()) missing.push('Verification (after trouble cleared)');
+        if (!String(row.ship_verified_after_clear || '').trim()) missing.push('Verification (after defect cleared)');
         if (!String(row.ship_verified_by || '').trim()) missing.push('Verified by');
         if (!String(row.ship_verified_date || '').trim()) missing.push('Verification Date');
         return { ok: !missing.length, missing };
@@ -948,6 +973,7 @@ const TVC_WorkPermit = (function () {
             rh_since_last_maintenance: overrides.rh_since_last_maintenance ?? '',
             total_run_hrs: overrides.total_run_hrs ?? '0',
             outline_work_permit: overrides.outline_work_permit || '',
+            company_comment: overrides.company_comment || '',
             checked_estimated_spare_parts: overrides.checked_estimated_spare_parts === true,
             estimated_parts: Array.isArray(overrides.estimated_parts) ? overrides.estimated_parts : [],
             job_items: Array.isArray(overrides.job_items) ? overrides.job_items : [],
@@ -977,6 +1003,12 @@ const TVC_WorkPermit = (function () {
     }
 
     function canDeleteListWorkflow(row) {
+        if (!row) return false;
+        const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser() : null;
+        if (user && TVC_RBAC.isHqAccount(user) && row.hq_synced
+            && (row.approved_at || row.approved_by) && row.sync_status !== 'SYNCED') {
+            return true;
+        }
         return canModifyListWorkflow(row);
     }
 

@@ -426,7 +426,7 @@ const TVC_WorkPermitReport = (function () {
         }
         applyWpGroupHeader(getState(), draft, groupKey, groupLabel);
         closeWpPickMenu(document.getElementById('wpGroupPick'));
-        refreshWorkPermitModal();
+        refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
     }
 
     function pickWpJobForRow(jobId) {
@@ -438,7 +438,7 @@ const TVC_WorkPermitReport = (function () {
         if (!job || !TVC_App?.jobShowsCriticalEquipmentMark?.(job)) return;
         applyWpJobPickToDraft(draft, job, _wpActiveJobRowIndex || 0);
         closeWpJobRowPickMenu();
-        refreshWorkPermitModal();
+        refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
     }
 
     function clearWpJobRow() {
@@ -458,7 +458,7 @@ const TVC_WorkPermitReport = (function () {
         }
         syncWpPrimaryJobFromItems(draft);
         closeWpJobRowPickMenu();
-        refreshWorkPermitModal();
+        refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
     }
 
     function addWpJobRow() {
@@ -468,7 +468,7 @@ const TVC_WorkPermitReport = (function () {
         const draft = ensureWpDraft(getModalRow() || {});
         ensureWpJobItems(draft);
         draft.job_items.push(TVC_SpareMenu.newConsumeJobRow());
-        refreshWorkPermitModal();
+        refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
     }
 
     function removeWpJobRow(idx) {
@@ -483,7 +483,7 @@ const TVC_WorkPermitReport = (function () {
             _wpActiveJobRowIndex = Math.max(0, draft.job_items.length - 1);
         }
         syncWpPrimaryJobFromItems(draft);
-        refreshWorkPermitModal();
+        refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
     }
 
     function renderWpGroupPick(row, ro) {
@@ -511,8 +511,11 @@ const TVC_WorkPermitReport = (function () {
     function renderWpMaintJobRowHtml(item, idx, opts = {}) {
         const ro = !!opts.readonly;
         const batch = !!opts.batch;
+        const hideLabels = !!opts.hideLabels;
         const jobDisabled = !opts.groupKey;
-        const fld = (label, inner) => `<div class="wr-maint-field"><label>${label}</label>${inner}</div>`;
+        const fld = (label, inner) => hideLabels
+            ? `<div class="wr-maint-field wr-maint-field-nolabel">${inner}</div>`
+            : `<div class="wr-maint-field"><label>${label}</label>${inner}</div>`;
         const roInp = (val, field) => field
             ? `<input class="wr-ro" data-field="${field}" value="${esc(val || '')}" readonly tabindex="-1">`
             : `<input class="wr-ro" value="${esc(val || '')}" readonly tabindex="-1">`;
@@ -527,7 +530,7 @@ const TVC_WorkPermitReport = (function () {
                 <input type="hidden" data-field="job_code" value="${escAttr(item.job_code || '')}">`;
         }
         const actCol = batch && !ro && (opts.rowCount || 0) > 1
-            ? `<div class="wr-maint-field df-maint-job-row-act"><label aria-hidden="true">&nbsp;</label><button type="button" class="btn btn-sm spare-consume-job-row-rm" onclick="TVC_WorkPermitReport.removeWpJobRow(${idx})" title="Remove job row" aria-label="Remove job row">×</button></div>`
+            ? `<div class="wr-maint-field df-maint-job-row-act${hideLabels ? ' wr-maint-field-nolabel' : ''}">${hideLabels ? '' : '<label aria-hidden="true">&nbsp;</label>'}<button type="button" class="btn btn-sm spare-consume-job-row-rm" onclick="TVC_WorkPermitReport.removeWpJobRow(${idx})" title="Remove job row" aria-label="Remove job row">×</button></div>`
             : '';
         const gapCls = idx === 0 ? ' wr-maint-grid-gap' : '';
         const gridCols = actCol ? ' wr-maint-grid-4 df-maint-job-grid-batch' : ' wr-maint-grid-4';
@@ -545,11 +548,16 @@ const TVC_WorkPermitReport = (function () {
         const draft = getState()._wpDraft || row;
         const items = draft.job_items || [];
         const groupKey = wpGroupKey(row);
+        const multiJob = items.length > 1 || (!ro && !!groupKey);
+        const header = multiJob && TVC_SpareMenu.renderMaintJobRowsHeaderHtml
+            ? TVC_SpareMenu.renderMaintJobRowsHeaderHtml({ withActionCol: !ro && items.length > 1 })
+            : '';
         const rows = items.map((item, idx) => renderWpMaintJobRowHtml(item, idx, {
             readonly: ro,
             batch: !ro,
             groupKey,
             rowCount: items.length,
+            hideLabels: multiJob,
         })).join('');
         const addBtn = !ro && groupKey
             ? `<div class="spare-consume-meta-job-add">
@@ -567,7 +575,7 @@ const TVC_WorkPermitReport = (function () {
                 </div>
             </div>`
             : '';
-        return `<div class="df-page1-job-rows wr-maint-span-all" id="wpJobRows">${rows}${addBtn}</div>${pickHost}`;
+        return `<div class="df-page1-job-rows wr-maint-span-all" id="wpJobRows">${header}${rows}${addBtn}</div>${pickHost}`;
     }
 
     const WP_LIST_COLGROUP = `<colgroup>
@@ -605,6 +613,44 @@ const TVC_WorkPermitReport = (function () {
         });
     }
 
+    function wpCheckedConfirmableIds() {
+        const s = getState();
+        const allRows = filteredPermits();
+        return wpCheckedIds().filter(id => {
+            const r = allRows.find(x => x.id === id) || (s.workPermits || []).find(x => x.id === id);
+            return r && isPermitConfirmable(r);
+        });
+    }
+
+    function wpListActionState() {
+        const s = getState();
+        const user = s.user;
+        const isHqUser = isHq();
+        const allRows = filteredPermits();
+        const showConfirm = !isHqUser && !!user && allRows.some(r =>
+            isPermitConfirmable(r) && TVC_RBAC.canConfirmDepartment(user, r.department));
+        const canConfirm = showConfirm && wpCheckedConfirmableIds().length > 0;
+        const canApprove = isHqUser && wpCheckedIds().some(id => {
+            const r = allRows.find(x => x.id === id);
+            return r && !r.approved_at && (r.confirmed_at || TVC_RBAC.canHqDirectApprove(user, r));
+        });
+        const canDelete = wpCheckedIds().some(id => {
+            const r = allRows.find(x => x.id === id);
+            return r && TVC_WorkPermit.canDeleteListWorkflow(r);
+        });
+        return { showConfirm, canConfirm, canApprove, canDelete, isHqUser };
+    }
+
+    function syncWpListToolbarState() {
+        const panel = document.getElementById('wpHistPanel');
+        const head = panel?.querySelector('.spare-req-hist-popover-head');
+        if (!head) return;
+        const { canConfirm, canApprove, canDelete } = wpListActionState();
+        setWpToolbarBtnDisabled(head, 'wpListConfirm', !canConfirm);
+        setWpToolbarBtnDisabled(head, 'wpListApprove', !canApprove);
+        setWpToolbarBtnDisabled(head, 'wpListDelete', !canDelete);
+    }
+
     function criticalJobs() {
         const fn = TVC_App?.jobShowsCriticalEquipmentMark;
         return (getState().jobs || []).filter(j => fn?.(j));
@@ -615,6 +661,11 @@ const TVC_WorkPermitReport = (function () {
         let rows = (s.workPermits || []).filter(r => r.visible_in_list !== false);
         if (isHq() && s.selectedVesselId) {
             rows = rows.filter(r => r.vessel_id === s.selectedVesselId);
+        }
+        const dept = s.department || s.user?.department;
+        if (dept && (isHq() || (typeof TVC_Space !== 'undefined' && TVC_Space.canSwitchDepartmentView?.(s.user)))) {
+            const jobs = s._allJobs || s.jobs || [];
+            rows = rows.filter(r => TVC_App?.workPermitBelongsToDept?.(r, dept, jobs) ?? TVC_WorkPermit.belongsToDepartment(r, dept));
         }
         return rows.sort((a, b) => String(b.report_date || b.plan_date || '').localeCompare(String(a.report_date || a.plan_date || '')));
     }
@@ -659,7 +710,7 @@ const TVC_WorkPermitReport = (function () {
         if (!q) return true;
         const hay = [
             row.file_no, row.job_code, row.pms_job_code,
-            row.item_sort1, row.item_sort2, row.outline_work_permit,
+            row.item_sort1, row.item_sort2, row.outline_work_permit, row.company_comment,
             row.permit_no, TVC_WorkPermit.listWorkflowStatus(row),
         ].filter(Boolean).join(' ').toLowerCase();
         return hay.includes(q);
@@ -706,6 +757,14 @@ const TVC_WorkPermitReport = (function () {
 
     function wpIsRowChecked(id) {
         return !!ensureWpChecked()[id];
+    }
+
+    function syncWpListRowSelection(root) {
+        const scope = root || document;
+        const selId = _wpSelectedPermitId;
+        scope.querySelectorAll('#wpHistListScroll .wp-list-row[data-wp-list-id]').forEach(tr => {
+            tr.classList.toggle('sr-req-sel', tr.dataset.wpListId === selId);
+        });
     }
 
     function wpCheckedIds() {
@@ -912,7 +971,7 @@ const TVC_WorkPermitReport = (function () {
                 <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
             </div>
             <div class="wr-maint-approval-item${canApproveNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${canApproveNow ? '' : ' disabled'}> Approved by</label>
+                <label class="wr-maint-chk"><input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${canApproveNow ? '' : ' disabled'} onchange="TVC_WorkPermitReport.wpApprovedByToggle()"> Approved by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
             </div>
         </section>`;
@@ -927,7 +986,7 @@ const TVC_WorkPermitReport = (function () {
     }
 
     function wpTypeCell() {
-        return `<td class="wp-list-type hist-type hist-type-wp" title="Work Permit"><span class="hist-type-mark">W</span></td>`;
+        return `<td class="spare-consume-log-type hist-type hist-type-wp" title="Work Permit"><span class="hist-type-mark">W</span></td>`;
     }
 
     function wpCritCell() {
@@ -1069,7 +1128,13 @@ const TVC_WorkPermitReport = (function () {
             if (type === 'number') return `<input type="number" data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
             return `<input data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
         };
-        const ta = (name, val, rows = 3) => `<textarea class="wr-maint-textarea${roCls}" data-wp="${name}" rows="${rows}"${roAttr}>${esc(wpVal(row, name, val))}</textarea>`;
+        const ta = (name, val, rows = 3, forceRo = false) => {
+            const fieldRo = ro || forceRo;
+            const roAttr = fieldRo ? ' readonly' : '';
+            const roClsLocal = fieldRo ? ' wr-ro' : '';
+            return `<textarea class="wr-maint-textarea${roClsLocal}" data-wp="${name}" rows="${rows}"${roAttr}>${esc(wpVal(row, name, val))}</textarea>`;
+        };
+        const companyCommentRo = !isHq() || row.sync_status === 'SYNCED';
         const spareChk = `<label class="wr-maint-chk wp-est-spare-chk"><input type="checkbox" data-wp="checked_estimated_spare_parts"${wpVal(row, 'checked_estimated_spare_parts') ? ' checked' : ''}${ro ? ' disabled' : ''}> CHECKED ESTIMATED SPARE PARTS</label>`;
 
         const fileNoInner = isWpListWindow()
@@ -1098,9 +1163,9 @@ const TVC_WorkPermitReport = (function () {
                     ${fld('Plan Date', inp('plan_date', row.plan_date || row.report_date, 'date'))}
                     ${fld('Reported Date', inp('report_date', row.report_date, 'date'))}
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByLabel(row))}" readonly>`)}
-                    ${fld('PMS Group No.', renderWpGroupPick(row, ro), 'wr-maint-span-all')}
+                    ${fld('PMS Group No.', `<div id="wpGroupPickSlot">${renderWpGroupPick(row, ro)}</div>`, 'wr-maint-span-all')}
                 </div>
-                ${renderWpJobRowsBlock(row, ro)}
+                <div id="wpJobRowsSection">${renderWpJobRowsBlock(row, ro)}</div>
                 ${fld('Job Name', inp('job_name', row.job_name || job?.job_detail || ''), 'wr-maint-span-all wr-maint-grid-gap')}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
                     ${fld('Maker', `<input class="wr-ro" data-wp="maker" value="${esc(wpVal(row, 'maker', hdr.maker || ''))}" readonly tabindex="-1">`)}
@@ -1113,7 +1178,8 @@ const TVC_WorkPermitReport = (function () {
                     ${fld('Last Maintenance Date', inp('last_maintenance_date', job?.last_done || '', 'date'))}
                     ${fld('Running Hrs after Last Maint.', inp('rh_since_last_maintenance', '', 'number'))}
                 </div>
-                ${fld('Outline of Work Permit', ta('outline_work_permit', ''), 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld("Ship's Comments", ta('outline_work_permit', ''), 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld("Company's Comments", ta('company_comment', '', 3, companyCommentRo), 'wr-maint-span-all wr-maint-grid-gap')}
                 <div class="wr-maint-span-all wr-maint-grid-gap">${spareChk}</div>
                 ${histPanel}
             </section>
@@ -1124,7 +1190,7 @@ const TVC_WorkPermitReport = (function () {
         const forceView = mode === 'view';
         const wpPage = getState()._wpPage || '1';
         const canEdit = !forceView && TVC_WorkPermit.canModifyListWorkflow(row);
-        const titleText = forceView ? 'Work Permit (View)' : 'Work Permit';
+        const titleText = forceView ? 'Work Permit (View)' : 'Work Permit (Draft)';
         const pageTabs = `
             <div class="wr-pagetabs">
                 <button type="button" class="wr-pagetab${wpPage === '1' ? ' active' : ''}" onclick="TVC_WorkPermitReport.setWorkPermitPage('1')">Page 1</button>
@@ -1156,7 +1222,7 @@ const TVC_WorkPermitReport = (function () {
         const listViewLocked = wpListViewLocked();
         const hasDisplayed = wpListHasDisplayedPermit();
         const listEditing = !!s._wpListEditing;
-        const titleSuffix = listEditing ? ' <span class="muted">(Modify)</span>' : '';
+        const titleSuffix = listEditing ? ' <span class="muted">(Draft)</span>' : '';
         const pageTabs = `
             <div class="wr-pagetabs">
                 <button type="button" class="wr-pagetab${wpPage === '1' ? ' active' : ''}" onclick="TVC_WorkPermitReport.setWorkPermitPage('1')">Page 1</button>
@@ -1170,8 +1236,11 @@ const TVC_WorkPermitReport = (function () {
         const headActions = `${wpToolbarBtn('New', 'TVC_WorkPermitReport.wpListNew()', listEditing, 'btn-green')}
             ${wpToolbarBtn('Modify', 'TVC_WorkPermitReport.wpListEnterEdit()', !hasDisplayed || listEditing, '')}
             ${wpToolbarBtn('Save', 'TVC_WorkPermitReport.saveModal()', listViewLocked, 'btn-green')}
+            ${wpToolbarBtn('Cancel', 'TVC_WorkPermitReport.wpListCancelEdit()', listViewLocked, '')}
+            <span class="orig-toolbar-sep" aria-hidden="true"></span>
             ${wpToolbarBtn('Print', 'TVC_WorkPermitReport.wpListPrint()', !hasDisplayed, '')}
             ${wpToolbarBtn('Preview', 'TVC_WorkPermitReport.wpListPreview()', !hasDisplayed, '')}
+            <span class="orig-toolbar-sep" aria-hidden="true"></span>
             ${wpToolbarBtn('Close', 'TVC_WorkPermitReport.closeModal()', false, '')}`;
 
         return `<div class="df-modal-inner">
@@ -1188,7 +1257,256 @@ const TVC_WorkPermitReport = (function () {
         </div>`;
     }
 
-    async function renderWorkPermitModal() {
+    function captureWpModalScroll() {
+        const page = document.querySelector('#workPermitBody .wr-page');
+        const modal = document.getElementById('workPermitModal');
+        return {
+            pageTop: page?.scrollTop ?? 0,
+            modalTop: modal?.scrollTop ?? 0,
+        };
+    }
+
+    function restoreWpModalScroll(saved) {
+        if (!saved) return;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const page = document.querySelector('#workPermitBody .wr-page');
+                const modal = document.getElementById('workPermitModal');
+                if (page) page.scrollTop = saved.pageTop;
+                if (modal) modal.scrollTop = saved.modalTop;
+            });
+        });
+    }
+
+    function captureWpHistSnapshot() {
+        if (!_wpHistOpen) return null;
+        const panel = document.getElementById('wpHistPanel');
+        if (!panel || panel.classList.contains('hidden') || !panel.innerHTML.trim()) return null;
+        return {
+            html: panel.innerHTML,
+            scrollTop: document.getElementById('wpHistListScroll')?.scrollTop ?? 0,
+            metaOpen: document.querySelector('#workPermitBody .wp-meta-form')?.classList.contains('is-consume-hist-open'),
+        };
+    }
+
+    function restoreWpHistSnapshot(snap) {
+        if (!snap?.html) return;
+        const panel = document.getElementById('wpHistPanel');
+        const btn = document.getElementById('wpHistBtn');
+        const meta = document.querySelector('#workPermitBody .wp-meta-form');
+        if (!panel) return;
+        panel.innerHTML = snap.html;
+        panel.classList.remove('hidden');
+        panel.setAttribute('aria-hidden', 'false');
+        if (btn) btn.classList.add('is-open');
+        if (meta) meta.classList.toggle('is-consume-hist-open', !!snap.metaOpen);
+        _wpHistOpen = true;
+        syncWpListFilterUi();
+        syncWpListToolbarState();
+        updateWpListHeadCheckAll(listRows());
+        const histScroll = document.getElementById('wpHistListScroll');
+        if (histScroll) histScroll.scrollTop = snap.scrollTop;
+        requestAnimationFrame(() => {
+            positionWpHistPopover();
+            syncWpListHeadPad();
+        });
+        syncWpListRowSelection();
+    }
+
+    function wpStableRenderOpts(extra = {}) {
+        return isWpListWindow()
+            ? { preserveScroll: true, preserveHist: true, ...extra }
+            : { ...extra };
+    }
+
+    function wpListShellReady() {
+        return !!document.querySelector('#workPermitBody .df-modal-inner > .wr-page');
+    }
+
+    function syncWpListHeadTitle() {
+        const el = document.querySelector('#workPermitBody .wp-list-head-title');
+        if (!el) return;
+        const listEditing = !!getState()._wpListEditing;
+        const suffix = listEditing ? ' <span class="muted">(Draft)</span>' : '';
+        el.innerHTML = `Work Permit${suffix}`;
+    }
+
+    function syncWpListHeadButtons() {
+        const head = document.querySelector('#workPermitBody .wr-titlebar.wp-list-head');
+        if (!head) return;
+        const hasDisplayed = wpListHasDisplayedPermit();
+        const listEditing = !!getState()._wpListEditing;
+        const listViewLocked = wpListViewLocked();
+        setWpToolbarBtnDisabled(head, 'wpListNew', listEditing);
+        setWpToolbarBtnDisabled(head, 'wpListEnterEdit', !hasDisplayed || listEditing);
+        setWpToolbarBtnDisabled(head, 'saveModal', listViewLocked);
+        setWpToolbarBtnDisabled(head, 'wpListCancelEdit', listViewLocked);
+        setWpToolbarBtnDisabled(head, 'wpListPrint', !hasDisplayed);
+        setWpToolbarBtnDisabled(head, 'wpListPreview', !hasDisplayed);
+    }
+
+    function syncWpApprovalSection(row) {
+        const r = row || getModalRow();
+        if (!r) return;
+        const html = renderWpApprovalHtml(r);
+        document.querySelectorAll('#workPermitBody .wr-maint-approval').forEach(el => {
+            el.outerHTML = html;
+        });
+    }
+
+    function wpRowVal(row, key, fallback = '') {
+        if (row && Object.prototype.hasOwnProperty.call(row, key)) {
+            const v = row[key];
+            return v == null ? '' : v;
+        }
+        return fallback ?? '';
+    }
+
+    function applyWpFormFieldsFromRow(row) {
+        if (!row) return;
+        document.querySelectorAll('#workPermitBody [data-wp]').forEach(el => {
+            const key = el.dataset.wp;
+            if (!key) return;
+            const v = wpRowVal(row, key);
+            if (el.type === 'checkbox') el.checked = !!v;
+            else el.value = v;
+        });
+        const items = Array.isArray(row.job_items) ? row.job_items : [];
+        document.querySelectorAll('#workPermitBody [data-wp-job-row]').forEach((rowEl, idx) => {
+            const item = items[idx];
+            if (!item) return;
+            rowEl.querySelectorAll('[data-field]').forEach(el => {
+                const key = el.dataset.field;
+                if (!key || item[key] === undefined) return;
+                el.value = item[key] || '';
+            });
+            const pickText = rowEl.querySelector('.spare-consume-pick-text');
+            if (pickText && item.job_code !== undefined) pickText.textContent = item.job_code || '— No Job Code —';
+        });
+    }
+
+    function refreshWpGroupPickSlot(row, ro) {
+        const slot = document.getElementById('wpGroupPickSlot');
+        if (!slot) return false;
+        slot.innerHTML = renderWpGroupPick(row, ro);
+        return true;
+    }
+
+    function refreshWpJobRowsSection(row, ro) {
+        const section = document.getElementById('wpJobRowsSection');
+        if (!section) return false;
+        section.innerHTML = renderWpJobRowsBlock(row, ro);
+        return true;
+    }
+
+    async function softRefreshWpListWindow(row, opts = {}) {
+        if (!isWpListWindow() || !wpListShellReady()) return false;
+        const s = getState();
+        const scroll = opts.preserveScroll !== false ? captureWpModalScroll() : null;
+        const histScrollEl = _wpHistOpen ? document.getElementById('wpHistListScroll') : null;
+        const histScrollTop = histScrollEl?.scrollTop ?? 0;
+
+        closeAllWpPicks();
+        const wpPage = s._wpPage || '1';
+        const listViewLocked = wpListViewLocked();
+        const ro = listViewLocked || !TVC_WorkPermit.canModifyListWorkflow(row);
+
+        if (wpPage === '2') {
+            await patchWpListFormBody({ ...opts, preserveScroll: true, preserveHist: opts.preserveHist !== false });
+        } else if (document.getElementById('wpGroupPickSlot')) {
+            if (opts.resetValues !== false) applyWpFormFieldsFromRow(row);
+            refreshWpGroupPickSlot(row, ro);
+            refreshWpJobRowsSection(row, ro);
+            syncWpApprovalSection(row);
+        } else {
+            await patchWpListFormBody({ ...opts, preserveScroll: true, preserveHist: opts.preserveHist !== false });
+            restoreWpModalScroll(scroll);
+            return true;
+        }
+
+        syncWpListHeadTitle();
+        syncWpListHeadButtons();
+        applyWpListScrollLock(document.getElementById('workPermitBody'));
+        if (_wpHistOpen) {
+            syncWpListRowSelection();
+            if (opts.refreshList !== false) await patchWpListUi();
+            syncWpListToolbarState();
+            if (histScrollEl) histScrollEl.scrollTop = histScrollTop;
+        }
+        restoreWpModalScroll(scroll);
+        TVC_PWA?.initDateInputFormat?.(document.querySelector('#workPermitBody .df-modal-inner > .wr-page'));
+        return true;
+    }
+
+    async function patchWpListFormBody(opts = {}) {
+        const s = getState();
+        const row = getModalRow();
+        if (!row || !isWpListWindow()) return false;
+        const page = document.querySelector('#workPermitBody .df-modal-inner > .wr-page');
+        if (!page) return false;
+
+        const scroll = opts.preserveScroll !== false ? captureWpModalScroll() : null;
+        const histSnap = opts.preserveHist !== false && _wpHistOpen ? captureWpHistSnapshot() : null;
+        closeAllWpPicks();
+
+        if ((s._wpPage || '1') === '2' && document.getElementById('wrSpareListScroll')) {
+            captureWpUsedParts();
+            TVC_SpareMenu.teardownWrSparePage2();
+            wpSpareContextLeave();
+        }
+        ensureWpUsedParts(row);
+
+        const wpPage = s._wpPage || '1';
+        const listViewLocked = wpListViewLocked();
+        const ro = listViewLocked || !TVC_WorkPermit.canModifyListWorkflow(row);
+        const headHtml = wpPage === '2' ? renderWpApprovalHtml(row) : '';
+        const formBody = wpPage === '2' ? renderWpPage2Body(row, ro) : renderPage1(row, ro);
+        page.innerHTML = headHtml + formBody;
+
+        if (histSnap) {
+            restoreWpHistSnapshot(histSnap);
+        } else if (_wpHistOpen) {
+            setWpHistOpen(true);
+            await refreshWpHistList();
+        }
+
+        applyWpListScrollLock(document.getElementById('workPermitBody'));
+        if (wpPage === '2') {
+            syncWpSparePage2Ui(true, ro);
+        }
+        restoreWpModalScroll(scroll);
+        TVC_PWA?.initDateInputFormat?.(page);
+        return true;
+    }
+
+    async function refreshWpListWindowUi(opts = {}) {
+        if (!isWpListWindow()) {
+            await renderWorkPermitModal(wpStableRenderOpts(opts));
+            return;
+        }
+        if (!wpListShellReady()) {
+            await renderWorkPermitModal(wpStableRenderOpts(opts));
+            return;
+        }
+        if (opts.approvalOnly) {
+            syncWpApprovalSection();
+            syncWpListHeadButtons();
+            return;
+        }
+        syncWpListHeadTitle();
+        syncWpListHeadButtons();
+        if (opts.form !== false) {
+            await patchWpListFormBody(wpStableRenderOpts(opts));
+        }
+    }
+
+    async function renderWorkPermitModal(opts = {}) {
+        if (isWpListWindow()) {
+            opts = wpStableRenderOpts(opts);
+        }
+        const scroll = opts.preserveScroll ? captureWpModalScroll() : null;
+        const histSnap = opts.preserveHist && _wpHistOpen ? captureWpHistSnapshot() : null;
+        closeAllWpPicks();
         const s = getState();
         const row = getModalRow() || TVC_WorkPermit.blank({ id: 'wp-draft-empty' });
         if (row.id && row.id !== 'wp-draft-empty') ensureWpUsedParts(row);
@@ -1199,7 +1517,9 @@ const TVC_WorkPermitReport = (function () {
         if (isWpListWindow()) {
             body.innerHTML = renderListWindowBody(row);
             applyWpListScrollLock(body);
-            if (_wpHistOpen) {
+            if (histSnap) {
+                restoreWpHistSnapshot(histSnap);
+            } else if (_wpHistOpen) {
                 setWpHistOpen(true);
                 await refreshWpHistList();
             }
@@ -1209,6 +1529,7 @@ const TVC_WorkPermitReport = (function () {
                 syncWpSparePage2Ui(true, s._wpMode === 'view' || !TVC_WorkPermit.canModifyListWorkflow(row));
             }
         }
+        restoreWpModalScroll(scroll);
         TVC_PWA?.initDateInputFormat?.(body);
     }
 
@@ -1221,6 +1542,7 @@ const TVC_WorkPermitReport = (function () {
         scroll.querySelectorAll('input, select, textarea, button').forEach(el => {
             if (keepActive.has(el.id)) return;
             if (el.closest('#wpHistPanel')) return;
+            if (el.id === 'wpConfirmedBy' || el.id === 'wpApprovedBy') return;
             if (locked) el.setAttribute('disabled', 'disabled');
             else el.removeAttribute('disabled');
         });
@@ -1266,20 +1588,7 @@ const TVC_WorkPermitReport = (function () {
         const htmlRows = buildWpListRowsHtml(rows);
         const s = getState();
         const user = s.user;
-        const isHqUser = isHq();
-        const showConfirm = !isHqUser && !!user && TVC_RBAC.canConfirmDepartment(user, s.department);
-        const canConfirm = showConfirm && wpCheckedIds().some(id => {
-            const r = allRows.find(x => x.id === id);
-            return r && isPermitConfirmable(r);
-        });
-        const canApprove = isHqUser && wpCheckedIds().some(id => {
-            const r = allRows.find(x => x.id === id);
-            return r && !r.approved_at && (r.confirmed_at || TVC_RBAC.canHqDirectApprove(user, r));
-        });
-        const canDelete = wpCheckedIds().some(id => {
-            const r = allRows.find(x => x.id === id);
-            return r && TVC_WorkPermit.canDeleteListWorkflow(r);
-        });
+        const { showConfirm, canConfirm, canApprove, canDelete, isHqUser } = wpListActionState();
         const countLabel = `${rows.length}${rows.length !== allRows.length ? ` / ${allRows.length}` : ''} item(s)`;
         const approveBtn = isHqUser
             ? wpToolbarBtn('Approve', 'TVC_WorkPermitReport.wpListApprove()', !canApprove, 'btn-green')
@@ -1318,6 +1627,7 @@ const TVC_WorkPermitReport = (function () {
             positionWpHistPopover();
             syncWpListHeadPad();
         });
+        syncWpListRowSelection();
     }
 
     async function patchWpListUi() {
@@ -1330,6 +1640,8 @@ const TVC_WorkPermitReport = (function () {
         if (tbody) tbody.innerHTML = htmlRows;
         updateWpListHeadCheckAll(rows);
         syncWpListFilterUi();
+        syncWpListToolbarState();
+        syncWpListRowSelection();
     }
 
     async function refreshWpListUi(opts = {}) {
@@ -1381,6 +1693,7 @@ const TVC_WorkPermitReport = (function () {
         } else {
             await refreshWpListUi();
         }
+        syncWpListRowSelection();
     }
 
     async function wpListToggleRow(id, checked) {
@@ -1420,18 +1733,26 @@ const TVC_WorkPermitReport = (function () {
         s._wpDraftId = null;
         s._wpMode = 'view';
         s._wpListEditing = false;
-        s._wpPage = '1';
+        if (!opts.preservePage) s._wpPage = '1';
         s._wpUsedPartsCaseId = null;
         ensureWpUsedParts(row);
         const preserveHist = opts.preserveHistPopover !== false && _wpHistOpen && isWpListWindow();
-        if (preserveHist) {
-            const histScroll = document.getElementById('wpHistListScroll');
-            const histScrollTop = histScroll?.scrollTop ?? 0;
-            await renderWorkPermitModal();
-            if (histScroll) histScroll.scrollTop = histScrollTop;
-        } else {
-            await renderWorkPermitModal();
+        if (wpListShellReady() && isWpListWindow()) {
+            if (opts.soft !== false) {
+                const ok = await softRefreshWpListWindow(row, {
+                    preserveScroll: true,
+                    preserveHist,
+                    resetValues: true,
+                    refreshList: opts.refreshList !== false,
+                });
+                if (ok) return true;
+            }
+            syncWpListHeadTitle();
+            syncWpListHeadButtons();
+            await patchWpListFormBody({ preserveScroll: true, preserveHist });
+            return true;
         }
+        await renderWorkPermitModal({ preserveScroll: preserveHist, preserveHist });
         return true;
     }
 
@@ -1447,7 +1768,11 @@ const TVC_WorkPermitReport = (function () {
         return draft;
     }
 
-    async function refreshWorkPermitModal() {
+    async function refreshWorkPermitModal(opts = {}) {
+        if (isWpListWindow() && wpListShellReady() && opts.patchList !== false) {
+            await refreshWpListWindowUi(opts);
+            return;
+        }
         const s = getState();
         const row = getModalRow();
         if (!row) return;
@@ -1457,7 +1782,7 @@ const TVC_WorkPermitReport = (function () {
             wpSpareContextLeave();
         }
         ensureWpUsedParts(row);
-        await renderWorkPermitModal();
+        await renderWorkPermitModal(opts);
         if ((s._wpPage || '1') === '2') {
             syncWpSparePage2Ui(true, s._wpMode === 'view' || wpListViewLocked() || !TVC_WorkPermit.canModifyListWorkflow(row));
         }
@@ -1473,7 +1798,7 @@ const TVC_WorkPermitReport = (function () {
             wpSpareContextLeave();
         }
         getState()._wpPage = page;
-        refreshWorkPermitModal();
+        refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
     }
 
     function isPermitConfirmable(row) {
@@ -1593,7 +1918,73 @@ const TVC_WorkPermitReport = (function () {
         }
         s._wpListEditing = true;
         s._wpMode = 'edit';
-        await renderWorkPermitModal();
+        if (wpListShellReady()) {
+            await softRefreshWpListWindow(row, {
+                preserveScroll: true,
+                preserveHist: true,
+                resetValues: false,
+                refreshList: false,
+            });
+        } else {
+            await refreshWpListWindowUi();
+        }
+    }
+
+    async function wpListCancelEdit() {
+        const s = getState();
+        if (!isWpListWindow() || !s._wpListEditing) return;
+        closeAllWpPicks();
+        if ((s._wpPage || '1') === '2') {
+            TVC_SpareMenu.persistWrSpareUsedParts?.();
+            captureWpUsedParts();
+            TVC_SpareMenu.teardownWrSparePage2();
+            wpSpareContextLeave();
+        }
+        const id = s._workPermitId;
+        const row = id ? (s.workPermits || []).find(r => r.id === id) : null;
+        s._wpDraft = null;
+        s._wpDraftId = null;
+        s._wpListEditing = false;
+        s._wpMode = 'view';
+        if (row && row.visible_in_list === false) {
+            try {
+                await TVC_WorkPermitCaseService.deleteCase(s.user, id);
+            } catch (_) { /* discard unsaved draft */ }
+            s.workPermits = (s.workPermits || []).filter(r => r.id !== id);
+            const fallbackId = _wpSelectedPermitId && (s.workPermits || []).some(r => r.id === _wpSelectedPermitId)
+                ? _wpSelectedPermitId
+                : null;
+            s._workPermitId = fallbackId;
+            s._wpPage = '1';
+            if (fallbackId) {
+                const fresh = await TVC_WorkPermitCaseService.get(fallbackId);
+                if (fresh) upsertPermitInState(fresh);
+                await loadPermitIntoListWindow(fallbackId, { preserveHistPopover: true, preservePage: true, soft: true });
+            } else if (wpListShellReady()) {
+                ensureWpUsedParts(TVC_WorkPermit.blank({ id: 'wp-draft-empty' }));
+                await softRefreshWpListWindow(TVC_WorkPermit.blank({ id: 'wp-draft-empty' }), {
+                    preserveScroll: true,
+                    preserveHist: true,
+                    resetValues: true,
+                });
+                await patchWpListUi();
+            } else {
+                await renderWorkPermitModal({ preserveScroll: true, preserveHist: true });
+            }
+            void refresh().then(() => { if (_wpHistOpen) patchWpListUi(); });
+            return;
+        }
+        if (id) {
+            const fresh = await TVC_WorkPermitCaseService.get(id);
+            if (fresh) upsertPermitInState(fresh);
+            await loadPermitIntoListWindow(id, { preserveHistPopover: true, preservePage: true, soft: true });
+        } else {
+            await softRefreshWpListWindow(row || TVC_WorkPermit.blank({ id: 'wp-draft-empty' }), {
+                preserveScroll: true,
+                preserveHist: true,
+                resetValues: true,
+            });
+        }
     }
 
     async function openNewBlank() {
@@ -1636,29 +2027,42 @@ const TVC_WorkPermitReport = (function () {
 
     async function wpListConfirm() {
         const s = getState();
-        const ids = wpCheckedIds().filter(id => {
-            const r = (s.workPermits || []).find(x => x.id === id);
-            return r && isPermitConfirmable(r);
-        });
-        if (!ids.length) {
-            await TVC_Dialog.alert('Check one or more Reported Work Permits to confirm.');
+        const checkedIds = wpCheckedIds();
+        const idsToConfirm = wpCheckedConfirmableIds();
+        if (!idsToConfirm.length) {
+            if (checkedIds.length) {
+                await TVC_Dialog.alert('None of the selected Work Permits can be confirmed.\nOnly Reported permits can be confirmed, and you need Chief Engineer / Chief Officer / Captain permission.');
+            } else {
+                await TVC_Dialog.alert('Check one or more Reported Work Permits to confirm.');
+            }
             return;
         }
-        if (!await TVC_Dialog.confirm({ kind: 'confirm', message: `Confirm ${ids.length} Work Permit(s)?` })) return;
-        for (const id of ids) {
-            await TVC_WorkPermitCaseService.saveApprovalMeta(s.user, id, { confirm: true });
+        if (!await TVC_Dialog.confirm({ kind: 'confirm', message: `Confirm ${idsToConfirm.length} Work Permit(s)?` })) return;
+        let confirmed = 0;
+        for (const id of idsToConfirm) {
+            try {
+                await TVC_WorkPermitCaseService.saveApprovalMeta(s.user, id, { confirm: true });
+                confirmed++;
+            } catch (e) {
+                await TVC_Dialog.alert(`${id}: ${e.message || e.code || 'Confirm failed'}`);
+                break;
+            }
         }
         await refresh();
         s._wpListEditing = false;
-        if (s._workPermitId && ids.includes(s._workPermitId)) {
-            const row = (s.workPermits || []).find(r => r.id === s._workPermitId);
-            if (row) {
-                s._wpDraft = null;
-                s._wpDraftId = null;
-            }
+        if (s._workPermitId && idsToConfirm.includes(s._workPermitId)) {
+            s._wpDraft = null;
+            s._wpDraftId = null;
         }
+        _wpListCheckedIds = {};
         await refreshWpListUi({ full: true });
-        await renderWorkPermitModal();
+        await refreshWpListWindowUi({ approvalOnly: true });
+        const skipped = checkedIds.length - confirmed;
+        if (skipped > 0) {
+            await TVC_Dialog.alert(`Confirmed ${confirmed} Work Permit(s). Skipped ${skipped} (not Reported or no permission).`);
+        } else {
+            await TVC_Dialog.alert(`Confirmed ${confirmed} Work Permit(s).`);
+        }
     }
 
     async function wpListApprove() {
@@ -1678,7 +2082,7 @@ const TVC_WorkPermitReport = (function () {
         }
         await refresh();
         await refreshWpListUi({ full: true });
-        await renderWorkPermitModal();
+        await refreshWpListWindowUi({ approvalOnly: true });
     }
 
     async function wpListDelete() {
@@ -1705,7 +2109,7 @@ const TVC_WorkPermitReport = (function () {
         _wpSelectedPermitId = null;
         await refresh();
         await refreshWpListUi({ full: true });
-        await renderWorkPermitModal();
+        await refreshWpListWindowUi();
     }
 
     async function wpListPrint() {
@@ -1735,6 +2139,32 @@ const TVC_WorkPermitReport = (function () {
             captureWpUsedParts();
         }
         const draft = captureWpFormFields();
+        const row = getModalRow();
+        if (row && !TVC_WorkPermit.canModifyListWorkflow(row) && TVC_RBAC.isHqAccount(s.user)) {
+            try {
+                const saved = await TVC_WorkPermitCaseService.saveCompanyComment(s.user, id, draft.company_comment);
+                upsertPermitInState(saved);
+                if (isWpListWindow()) {
+                    s._wpDraft = null;
+                    s._wpDraftId = null;
+                    if (wpListShellReady()) {
+                        await softRefreshWpListWindow(saved, {
+                            preserveScroll: true,
+                            preserveHist: true,
+                            resetValues: false,
+                        });
+                    } else {
+                        await refreshWpListWindowUi();
+                    }
+                } else {
+                    await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+                }
+                await TVC_Dialog.alert("Company's Comments saved.");
+            } catch (e) {
+                await TVC_Dialog.alert(e.message || e.code || 'Save failed');
+            }
+            return;
+        }
         try {
             await applyWpApprovalFromUi();
         } catch (e) {
@@ -1749,17 +2179,29 @@ const TVC_WorkPermitReport = (function () {
         try {
             const saved = await TVC_WorkPermitCaseService.saveDraft(s.user, payload, id);
             upsertPermitInState(saved);
-            await refresh();
             if (isWpListWindow()) {
                 s._workPermitId = saved.id;
                 s._wpDraft = null;
                 s._wpDraftId = null;
                 s._wpListEditing = false;
                 s._wpMode = 'view';
-                await renderWorkPermitModal();
-                await refreshWpListUi({ full: true });
+                ensureWpUsedParts(saved);
+                if (wpListShellReady()) {
+                    await softRefreshWpListWindow(saved, {
+                        preserveScroll: true,
+                        preserveHist: true,
+                        resetValues: false,
+                    });
+                    await patchWpListUi();
+                    void refresh().then(() => { if (_wpHistOpen) patchWpListUi(); });
+                } else {
+                    await refresh();
+                    await refreshWpListWindowUi();
+                    await refreshWpListUi({ full: true });
+                }
                 await TVC_Dialog.alert('Work Permit saved.');
             } else {
+                await refresh();
                 openCase(saved.id, 'view');
                 await TVC_Dialog.alert('Work Permit saved.');
             }
@@ -1768,17 +2210,132 @@ const TVC_WorkPermitReport = (function () {
         }
     }
 
-    async function wpConfirmByToggle() {
-        /* checkbox state applied on save */
+    function wpPermitLabel(row) {
+        return row?.permit_no || row?.file_no || 'Work Permit';
     }
 
-    function closeModal() {
+    async function wpConfirmByToggle() {
+        const cfCb = document.getElementById('wpConfirmedBy');
+        if (!cfCb || cfCb.disabled) return;
+        const s = getState();
+        const row = getModalRow();
+        if (!row?.id || row.id === 'wp-draft-empty') return;
+        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const user = s.user;
+        if (!user) return;
+        const isConfirmed = !!(row.confirmed_at || row.confirmed_by);
+        const isApproved = !!(row.approved_at || row.approved_by);
+        const editMode = s._wpMode !== 'view' && !wpListViewLocked();
+
+        if (!cfCb.checked) {
+            if (input && !isConfirmed) {
+                input.value = '';
+                return;
+            }
+            const canUnconfirm = editMode && isConfirmed && !isApproved
+                && TVC_RBAC.canConfirmDepartment(user, row.department);
+            if (!canUnconfirm) {
+                cfCb.checked = true;
+                return;
+            }
+            try {
+                const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, { unconfirm: true });
+                upsertPermitInState(fresh);
+                s._wpDraft = null;
+                s._wpDraftId = null;
+                await refresh();
+                if (isWpListWindow()) {
+                    await refreshWpListUi({ full: true });
+                    await refreshWpListWindowUi({ approvalOnly: true });
+                } else {
+                    await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+                }
+                await TVC_Dialog.alert(`${wpPermitLabel(row)} unconfirmed.`);
+            } catch (e) {
+                cfCb.checked = true;
+                await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
+            }
+            return;
+        }
+
+        const label = TVC_RBAC.getDepartmentConfirmLabel(row.department, user) || '';
+        if (input) input.value = label;
+        if (isConfirmed) return;
+        if (!isPermitConfirmable(row)) return;
+        try {
+            const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, { confirm: true });
+            upsertPermitInState(fresh);
+            s._wpDraft = null;
+            s._wpDraftId = null;
+            await refresh();
+            if (isWpListWindow()) {
+                await refreshWpListUi({ full: true });
+                await refreshWpListWindowUi({ approvalOnly: true });
+            } else {
+                await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+            }
+            await TVC_Dialog.alert(`${wpPermitLabel(row)} confirmed.`);
+        } catch (e) {
+            cfCb.checked = false;
+            if (input) input.value = '';
+            await TVC_Dialog.alert(e.message || e.code || 'Confirm failed');
+        }
+    }
+
+    async function wpApprovedByToggle() {
+        const apCb = document.getElementById('wpApprovedBy');
+        if (!apCb || apCb.disabled) return;
+        const s = getState();
+        const row = getModalRow();
+        if (!row?.id || row.id === 'wp-draft-empty') return;
+        const user = s.user;
+        if (!user || !TVC_RBAC.isHqAccount(user)) return;
+
+        if (!apCb.checked) {
+            apCb.checked = true;
+            return;
+        }
+        if (row.approved_at || row.approved_by) return;
+        if (!TVC_RBAC.canApproveHqReport(user)) return;
+        if (!row.confirmed_at && !TVC_RBAC.canHqDirectApprove(user, row)) {
+            apCb.checked = false;
+            await TVC_Dialog.alert('Confirm required before Approve.');
+            return;
+        }
+        try {
+            captureWpFormFields();
+            const draft = ensureWpDraft(getModalRow() || {});
+            const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, {
+                approve: true,
+                company_comment: draft.company_comment,
+            });
+            upsertPermitInState(fresh);
+            s._wpDraft = null;
+            s._wpDraftId = null;
+            await refresh();
+            if (isWpListWindow()) {
+                await refreshWpListUi({ full: true });
+                await refreshWpListWindowUi({ approvalOnly: true });
+            } else {
+                await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+            }
+            await TVC_Dialog.alert(`${wpPermitLabel(row)} approved.`);
+        } catch (e) {
+            apCb.checked = false;
+            await TVC_Dialog.alert(e.message || e.code || 'Approve failed');
+        }
+    }
+
+    async function closeModal() {
+        const s = getState();
+        if (isWpListWindow() && s._wpListEditing) {
+            if (!await TVC_Dialog.confirm({ message: 'Close without saving?' })) return;
+        }
         teardownWpSpareUi();
         closeAllWpPicks();
         TVC_ListFilters?.closePopover?.();
         setWpHistOpen(false);
         document.getElementById('workPermitModal')?.classList.add('hidden');
-        const s = getState();
         s._wpListMode = false;
         s._wpListEditing = false;
         s._workPermitId = null;
@@ -1790,7 +2347,7 @@ const TVC_WorkPermitReport = (function () {
     }
 
     async function requestCloseModal() {
-        closeModal();
+        await closeModal();
     }
 
     return {
@@ -1798,7 +2355,7 @@ const TVC_WorkPermitReport = (function () {
         openListModal, closeListModal: closeModal,
         wpListSetSearch, wpListClearSearch, wpListSetPeriod, wpListClearPeriod,
         wpListSelectRow, wpListToggleRow, wpListToggleAll,
-        wpListNew, wpListEnterEdit, wpListConfirm, wpListApprove, wpListDelete,
+        wpListNew, wpListEnterEdit, wpListCancelEdit, wpListConfirm, wpListApprove, wpListDelete,
         wpListPrint, wpListPreview, toggleWpHistList,
         getWpListFilters, setWpListFilters,
         toggleWpGroupPick, pickWpGroup, addWpJobRow, removeWpJobRow,
@@ -1806,6 +2363,7 @@ const TVC_WorkPermitReport = (function () {
         wpGroupPickSearch, wpJobRowPickSearch,
         openCase, openNewBlank, openNewFromJob,
         saveModal, closeModal, requestCloseModal, setWorkPermitPage,
+        wpConfirmByToggle, wpApprovedByToggle,
         applyFileNoFromPicker, refreshWorkPermitModal, captureWpFormFields,
         filteredPermits, listRows, isPermitConfirmable,
     };

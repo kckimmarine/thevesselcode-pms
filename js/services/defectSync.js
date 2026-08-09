@@ -33,7 +33,7 @@ const TVC_DefectSync = (function () {
   <div><b>To:</b> ${esc(row.to_company)}</div>
   <div><b>Ref No:</b> ${esc(row.case_no)}</div>
 </div>
-<h1>DEFECT (TROUBLE) REPORT</h1>
+<h1>DEFECT REPORT</h1>
 <div class="meta">
   <div><b>Ship Name:</b> ${ship}</div>
   <div><b>Date:</b> ${esc(row.report_date)}</div>
@@ -72,7 +72,7 @@ const TVC_DefectSync = (function () {
 </div>
 
 <div class="phase">
-<h2>Phase 3 — Verified by Ship (After trouble cleared)</h2>
+<h2>Phase 3 — Verified by Ship (After defect cleared)</h2>
 <table>
   <tr><th>Verification</th><td colspan="3">${esc(row.ship_verified_after_clear) || '—'}</td></tr>
   <tr><th>Verified by / Date</th><td>${esc(row.ship_verified_by) || '—'}</td><td colspan="2">${esc(row.ship_verified_date) || ''}</td></tr>
@@ -350,6 +350,8 @@ const TVC_DefectSync = (function () {
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This defect package is for ship import only.');
         }
+
+        TVC_Sync.validateImportPackageScope(user, file, payload);
 
         const expectedVesselId = await TVC_Sync.resolveExpectedVesselId(user, isHq);
         const importVesselId = payload.export_meta?.vessel_id;

@@ -1,4 +1,4 @@
-/* Defect (Trouble) Report Case — Phase 1·2 긴급 워크플로 */
+/* Defect Report Case — Phase 1·2 긴급 워크플로 */
 const TVC_DefectCaseService = (function () {
     const now = () => new Date().toISOString();
 

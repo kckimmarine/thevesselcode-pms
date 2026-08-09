@@ -244,6 +244,8 @@ const TVC_PostponeSync = (function () {
             throw new Error('This postpone package is for ship import only.');
         }
 
+        TVC_Sync.validateImportPackageScope(user, file, payload);
+
         const expectedVesselId = await TVC_Sync.resolveExpectedVesselId(user, isHq);
         const importVesselId = payload.export_meta?.vessel_id;
         const vCheck = TVC_Sync.validateImportVesselId(expectedVesselId, importVesselId, isHq);

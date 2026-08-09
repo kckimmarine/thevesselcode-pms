@@ -53,6 +53,6 @@ Cursor 작업·UI·주석·기획 시 아래 3단계 용어를 사용한다.
 
 - View Consumption List (`DEDUCT_INVENTORY`)
 - Make Consumption Report (`DEDUCT_INVENTORY`)
-- Input Received Spare Parts (`SUPPLY_PARTS`)
+- Record requisition receipt (`SUPPLY_PARTS`)
 
 재고 마스터 수정·그룹 편집·Confirm 등은 **확인자** 권한 유지.

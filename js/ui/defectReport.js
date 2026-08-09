@@ -1,4 +1,4 @@
-/* Defect (Trouble) Report UI — Phase 1 (Ship) · Phase 2 (HQ) */
+/* Defect Report UI — Phase 1 (Ship) · Phase 2 (HQ) */
 const TVC_DefectReport = (function () {
     let _ctx = null;
 
@@ -520,8 +520,11 @@ const TVC_DefectReport = (function () {
     function renderDfMaintJobRowHtml(item, idx, opts = {}) {
         const ro = !!opts.readonly;
         const batch = !!opts.batch;
+        const hideLabels = !!opts.hideLabels;
         const jobDisabled = !opts.groupKey;
-        const fld = (label, inner) => `<div class="wr-maint-field"><label>${label}</label>${inner}</div>`;
+        const fld = (label, inner) => hideLabels
+            ? `<div class="wr-maint-field wr-maint-field-nolabel">${inner}</div>`
+            : `<div class="wr-maint-field"><label>${label}</label>${inner}</div>`;
         const roInp = (val, field) => field
             ? `<input class="wr-ro" data-field="${field}" value="${esc(val || '')}" readonly tabindex="-1">`
             : `<input class="wr-ro" value="${esc(val || '')}" readonly tabindex="-1">`;
@@ -541,7 +544,7 @@ const TVC_DefectReport = (function () {
             ? roInp(item.job_detail, 'job_detail')
             : `<input type="text" id="dfJobDetail-${idx}" data-field="job_detail" value="${esc(item.job_detail || '')}">`;
         const actCol = batch && !ro && (opts.rowCount || 0) > 1
-            ? `<div class="wr-maint-field df-maint-job-row-act"><label aria-hidden="true">&nbsp;</label><button type="button" class="btn btn-sm spare-consume-job-row-rm" onclick="TVC_DefectReport.removeDfJobRow(${idx})" title="Remove job row" aria-label="Remove job row">×</button></div>`
+            ? `<div class="wr-maint-field df-maint-job-row-act${hideLabels ? ' wr-maint-field-nolabel' : ''}">${hideLabels ? '' : '<label aria-hidden="true">&nbsp;</label>'}<button type="button" class="btn btn-sm spare-consume-job-row-rm" onclick="TVC_DefectReport.removeDfJobRow(${idx})" title="Remove job row" aria-label="Remove job row">×</button></div>`
             : '';
         const gapCls = idx === 0 ? ' wr-maint-grid-gap' : '';
         const gridCols = actCol ? ' wr-maint-grid-4 df-maint-job-grid-batch' : ' wr-maint-grid-4';
@@ -563,11 +566,16 @@ const TVC_DefectReport = (function () {
         const draft = getState()._dfDraft || row;
         const items = draft.job_items;
         const groupKey = dfGroupKey(row);
+        const multiJob = items.length > 1 || (!ro && !!groupKey);
+        const header = multiJob && TVC_SpareMenu.renderMaintJobRowsHeaderHtml
+            ? TVC_SpareMenu.renderMaintJobRowsHeaderHtml({ withActionCol: !ro && items.length > 1 })
+            : '';
         const rows = items.map((item, idx) => renderDfJobRowFieldHtml(item, idx, {
             readonly: ro,
             batch: !ro,
             groupKey,
             rowCount: items.length,
+            hideLabels: multiJob,
         })).join('');
         const addBtn = !ro && groupKey
             ? `<div class="spare-consume-meta-job-add">
@@ -585,7 +593,7 @@ const TVC_DefectReport = (function () {
                 </div>
             </div>`
             : '';
-        return `<div class="df-page1-job-rows wr-maint-span-all" id="dfJobRows">${rows}${addBtn}</div>${pickHost}`;
+        return `<div class="df-page1-job-rows wr-maint-span-all" id="dfJobRows">${header}${rows}${addBtn}</div>${pickHost}`;
     }
 
     function renderDfJobPick(row, ro) {
