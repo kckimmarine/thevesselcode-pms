@@ -246,6 +246,11 @@ body {
     min-height: 0 !important;
 }
 
+#spareItemHistoryModal .modal-box.wp-modal {
+    width: min(98vw, 1080px) !important;
+    max-width: min(98vw, 1080px) !important;
+}
+
 #workReportModal .modal-box.wr-modal,
 #defectReportModal .modal-box.wr-modal,
 #workPermitModal .modal-box.wr-modal {

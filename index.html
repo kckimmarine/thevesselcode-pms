@@ -15,8 +15,8 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260810-wr-batch-spacing">
-    <link rel="stylesheet" href="css/responsive-scale.css?v=20260808-wp-modal-size">
+    <link rel="stylesheet" href="css/app.css?v=20260810-spare-hist-view">
+    <link rel="stylesheet" href="css/responsive-scale.css?v=20260810-spare-hist-width2">
 </head>
 <body>
 
@@ -397,7 +397,7 @@
 <div id="spareHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeHistoryModal()">
     <div class="modal-box wide"><div id="spareHistoryBody"></div></div>
 </div>
-<div id="spareItemHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeSpareItemHistoryModal()">
+<div id="spareItemHistoryModal" class="modal hidden">
     <div class="modal-box wp-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_SpareMenu.closeSpareItemHistoryModal()">×</button>
         <div id="spareItemHistoryBody"></div>
     </div>
@@ -630,7 +630,7 @@
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
 <script src="js/core/filename.js?v=20260810-wp-hq-reply-name"></script>
 <script src="js/services/spareSync.js?v=20260806-req-excel"></script>
-<script src="js/ui/spareMenu.js?v=20260810-wr-batch-readonly"></script>
+<script src="js/ui/spareMenu.js?v=20260810-spare-hist-view"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -641,7 +641,7 @@
 <script src="js/license.js?v=20260803-electron-license"></script>
 <script src="js/services/fileExport.js?v=20260804-settings"></script>
 <script src="js/auth.js?v=20260804-dialog"></script>
-<script src="js/services/transaction.js?v=20260810-legacy-report-names"></script>
+<script src="js/services/transaction.js?v=20260810-plan-status-latest"></script>
 <script src="js/services/maintenancePlan.js?v=20260729-pms-master"></script>
 <script src="js/services/pmsMasterExcel.js?v=20260808-deck-catalog"></script>
 <script src="js/services/spareMasterExcel.js?v=20260808-dept-boundary"></script>
@@ -658,11 +658,11 @@
 <script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260808-wp-list-ui"></script>
-<script src="js/ui/defectReport.js?v=20260810-job-rows-unified"></script>
-<script src="js/ui/workPermit.js?v=20260810-job-rows-unified"></script>
+<script src="js/ui/defectReport.js?v=20260810-wr-wp-print"></script>
+<script src="js/ui/workPermit.js?v=20260810-wr-wp-print"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260804-pms-scope"></script>
-<script src="js/app.js?v=20260810-wr-batch-outline"></script>
+<script src="js/app.js?v=20260810-wr-wp-print"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

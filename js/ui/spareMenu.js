@@ -13,6 +13,7 @@ const TVC_SpareMenu = (function () {
     let _reqListReturnAfterSave = false;
     let _consumeListReturnAfterSave = false;
     let _consumeWorkReportOverlay = false;
+    let _spareHistReportOverlay = false;
     let _reqWorkCachedList = [];
     let _cachedList = [];
     let _importReqId = null;
@@ -307,6 +308,15 @@ const TVC_SpareMenu = (function () {
                     <th class="c-stk" title="${SPARE_COL_ROB_TITLE}">${SPARE_COL_ROB}</th>
                     <th class="c-await" title="${SPARE_COL_WAIT_TITLE}">${SPARE_COL_WAIT}</th>
                     <th class="c-need" title="${SPARE_COL_NEED_TITLE}">${SPARE_COL_NEED}</th>
+                </tr></thead>`;
+    const SPARE_ITEM_HIST_COL_WIDTHS = [92, 62, SPARE_MAIN_DWG_WIDTH, SPARE_MAIN_ITEMS_WIDTH, SPARE_MAIN_PART_NO_WIDTH, 44, 56, 56, 56];
+    const SPARE_ITEM_HIST_COLGROUP = `<colgroup>${SPARE_ITEM_HIST_COL_WIDTHS.map(w => `<col style="width:${w}px">`).join('')}</colgroup>`;
+    const SPARE_ITEM_HIST_TABLE_HEAD = `<thead><tr>
+                    ${SPARE_IDENTITY_HEAD.trim()}
+                    <th class="c-unit">Unit</th>
+                    <th class="c-work" title="${SPARE_COL_WORK_TITLE}">${SPARE_COL_WORK}</th>
+                    <th class="c-std" title="${SPARE_COL_STD_TITLE}">${SPARE_COL_STD}</th>
+                    <th class="c-stk" title="${SPARE_COL_ROB_TITLE}">${SPARE_COL_ROB}</th>
                 </tr></thead>`;
     const SPARE_REQ_TABLE_HEAD = `<thead><tr>
                     <th class="c-chk"><input type="checkbox" id="reqWorkHeadChkAll" class="spare-head-chk" aria-label="Select all"
@@ -7494,6 +7504,18 @@ const TVC_SpareMenu = (function () {
         document.getElementById('workReportModal')?.classList.remove('modal-over-consume');
     }
 
+    function beginSpareHistReportOverlay(modalId) {
+        _spareHistReportOverlay = true;
+        document.getElementById(modalId)?.classList.add('modal-over-spare-hist');
+    }
+
+    function cleanupSpareHistReportOverlay() {
+        if (!_spareHistReportOverlay) return;
+        _spareHistReportOverlay = false;
+        document.getElementById('spareConsumeModal')?.classList.remove('modal-over-spare-hist');
+        document.getElementById('spareReqWorkModal')?.classList.remove('modal-over-spare-hist');
+    }
+
     async function consumePreviewModify() {
         const { st } = await vesselScope();
         const m = modState(st);
@@ -13039,6 +13061,7 @@ const TVC_SpareMenu = (function () {
         if (_reqWorkResizeObs) { _reqWorkResizeObs.disconnect(); _reqWorkResizeObs = null; }
         if (vlReqWork) { vlReqWork.destroy(); vlReqWork = null; }
         document.getElementById('spareReqWorkModal')?.classList.remove('is-req-doc-preview');
+        cleanupSpareHistReportOverlay();
         closeSpicsModal('spareReqWorkModal');
         if (st.currentTab === 'spare') render();
     }
@@ -15927,6 +15950,29 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         return st._wrUsedParts;
     }
 
+    function renderWrPrintPageTabs(activePage) {
+        const tabLabel = activePage === '2' ? 'Page 2' : 'Page 1';
+        return `<div class="wr-pagetabs-bar"><div class="wr-pagetabs">
+            <span class="wr-pagetab active">${tabLabel}</span>
+        </div></div>`;
+    }
+
+    function renderWrPrintShell(title, activePage, bodyHtml, tone = 'defect') {
+        return `<div class="wr-print-page">
+            <div class="df-print-root">
+                <div class="df-print-shell df-modal-inner">
+                    <div class="wr-titlebar">${esc(title)}</div>
+                    ${renderWrPrintPageTabs(activePage)}
+                    <div class="wr-page tone-${esc(tone)}">${bodyHtml}</div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function wrHasSparePage2ForPrint(usedParts) {
+        return (usedParts || []).some(p => Number(p.qty_used) > 0);
+    }
+
     function wrReportPrintStyles() {
         return `
             @page { size: A4 portrait; margin: 12mm; }
@@ -15935,58 +15981,301 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             .wr-print-toolbar { display: flex; gap: 8px; margin-bottom: 12px; padding-bottom: 10px; border-bottom: 1px solid #cbd5e0; }
             .wr-print-toolbar button { font: inherit; padding: 6px 14px; border: 1px solid #cbd5e0; border-radius: 6px; background: #edf2f7; cursor: pointer; }
             .wr-print-toolbar .btn-green { background: #38a169; color: #fff; border-color: #2f855a; }
-            .wr-print-title { font-size: 16px; font-weight: 700; color: #1a365d; margin: 0 0 4px; }
             .wr-print-page { page-break-after: always; margin-bottom: 16px; }
             .wr-print-page:last-child { page-break-after: auto; }
-            .wr-print-page-title { font-size: 13px; font-weight: 700; color: #2d3748; margin: 0 0 10px; padding-bottom: 4px; border-bottom: 2px solid #cbd5e0; }
-            .wr-print-doc { background: #eef1f5; padding: 12px 14px; border-radius: 8px; }
+            .df-print-shell.df-modal-inner {
+                display: flex; flex-direction: column; border: 1px solid #cbd5e0; border-radius: 8px;
+                overflow: hidden; background: #fff;
+            }
+            .wr-titlebar {
+                background: #1a365d; color: #fff; font-weight: 700; font-size: 14px;
+                padding: 10px 18px; user-select: none;
+            }
+            .wr-pagetabs-bar { background: #edf2f7; padding: 0 14px; border-bottom: 1px solid #cbd5e0; }
+            .wr-pagetabs { display: flex; gap: 4px; padding-top: 6px; }
+            .wr-pagetab {
+                border: 1px solid #cbd5e0; border-bottom: none; background: #e2e8f0; color: #4a5568;
+                padding: 5px 16px; font-size: 11px; font-weight: 700; border-radius: 6px 6px 0 0;
+                min-width: 64px; display: inline-block; text-align: center;
+            }
+            .wr-pagetab.active {
+                background: #fff; color: #1a365d; border-color: #cbd5e0;
+                margin-bottom: -1px; position: relative; z-index: 1;
+            }
+            .wr-page { padding: 8px 12px; overflow: visible; background: #eef1f5; font-size: 11px; }
+            .wr-page.tone-defect,
+            .wr-page.tone-repair,
+            .wr-page.tone-postpone { background: #eef1f5; padding: 12px 14px; }
+            .wp-spare-ref-note { margin: 0 0 10px; font-size: 11px; color: #718096; }
+            .wr-postpone-critical-banner {
+                margin-bottom: 10px; padding: 10px 12px; border: 1px solid #f6ad55;
+                border-radius: 8px; background: #fffaf0; color: #744210; font-size: 11px;
+            }
             .wr-maint-form { display: flex; flex-direction: column; gap: 10px; }
-            .wr-maint-card { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px; }
-            .wr-maint-approval { display: flex; flex-wrap: wrap; gap: 16px; margin-bottom: 4px; }
+            .wr-maint-card {
+                background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+                padding: 12px 14px; box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+            }
+            .wr-maint-body { display: flex; flex-direction: column; gap: 10px; }
+            .wr-maint-approval {
+                display: flex; flex-wrap: wrap; gap: 16px 28px; align-items: center;
+                background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+                padding: 12px 14px; box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+            }
             .wr-maint-approval-item { display: flex; align-items: center; gap: 8px; }
-            .wr-maint-chk { display: inline-flex; align-items: center; gap: 4px; font-weight: 600; white-space: nowrap; }
-            .wr-maint-grid { display: grid; gap: 8px 12px; }
+            .wr-maint-chk { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; color: #2d3748; white-space: nowrap; }
+            .wr-maint-chk input[type="checkbox"] { width: 15px; height: 15px; accent-color: #2b6cb0; }
+            .wr-maint-approval .wr-maint-date, .wr-maint-approval .wr-ro {
+                padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 5px;
+                background: #f7fafc; font-size: 11px; min-width: 118px; max-width: 240px;
+            }
+            .wr-maint-grid { display: grid; gap: 10px 12px; }
             .wr-maint-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
             .wr-maint-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
             .wr-maint-span-all { grid-column: 1 / -1; }
-            .wr-maint-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-            .wr-maint-field > label { font-size: 10px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: 0.02em; }
-            .wr-print-val, .wr-maint-field input, .wr-maint-field textarea {
-                border: 1px solid #cbd5e0; border-radius: 4px; padding: 4px 6px; background: #fff; min-height: 24px; font: inherit;
+            .wr-maint-grid-gap { margin-top: 12px; }
+            .wr-maint-body > .wr-maint-grid-gap { margin-top: 0; }
+            .wr-maint-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+            .wr-maint-field > label {
+                font-size: 10px; font-weight: 700; color: #1a202c;
+                text-transform: uppercase; letter-spacing: .03em;
             }
-            .wr-maint-textarea { min-height: 56px; white-space: pre-wrap; }
-            .wr-maint-grid-gap { margin-top: 10px; }
-            .wr-print-spare-table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }
-            .wr-print-spare-table th, .wr-print-spare-table td { border: 1px solid #666; padding: 3px 5px; vertical-align: middle; }
-            .wr-print-spare-table th { background: #dde5ef; text-align: center; font-weight: 700; }
-            .wr-print-spare-table td.num { text-align: center; }
-            .wr-page2-job-rows { display: flex; flex-direction: column; gap: 0; }
-            .wr-page2-job-row { margin-top: 0; }
-            .spare-group-header { margin: 10px 0 6px; }
+            .wr-maint-field input, .wr-maint-field textarea, .wr-maint-field select {
+                width: 100%; box-sizing: border-box; padding: 6px 8px;
+                border: 1px solid #cbd5e0; border-radius: 5px;
+                font-family: inherit; font-size: 11px; background: #fff; color: #2d3748;
+            }
+            .wr-maint-field input.wr-ro, .wr-maint-field textarea.wr-ro { background: #f7fafc; color: #4a5568; }
+            .wr-maint-textarea { min-height: 68px; resize: none; line-height: 1.45; white-space: pre-wrap; }
+            .wr-maint-field-nolabel label { display: none; }
+            .wr-maint-field-nolabel { gap: 0; }
+            .wr-maint-job-col-head {
+                font-size: 10px; font-weight: 700; color: #1a202c;
+                text-transform: uppercase; letter-spacing: .03em;
+            }
+            .wr-maint-job-rows-header { margin-bottom: 2px; }
+            .df-page1-job-rows, .wr-page2-job-rows { display: flex; flex-direction: column; gap: 10px; }
+            .df-page1-job-rows .wr-maint-grid-gap { margin-top: 0; }
+            .tvc-date-input-wrap {
+                display: inline-flex; align-items: center; gap: 4px; max-width: 100%; width: 100%;
+            }
+            .tvc-date-input-wrap .tvc-date-input {
+                flex: 1 1 auto; min-width: 7.5em; width: auto;
+                font-variant-numeric: tabular-nums;
+            }
+            .tvc-date-picker-btn {
+                flex: 0 0 auto; display: inline-flex; align-items: center; justify-content: center;
+                width: 26px; height: 26px; padding: 0; border: 1px solid #cbd5e0; border-radius: 6px;
+                background: #f7fafc; color: #4a5568; line-height: 1;
+            }
+            input.tvc-date-input::placeholder { color: #718096; }
+            .df-post-date-field .tvc-date-input-wrap { width: auto; }
+            .df-ship-initial-actions {
+                display: flex; flex-direction: column; align-items: flex-start; gap: 10px; width: 100%; margin-top: 10px;
+            }
+            .df-ship-initial-actions .wr-attach-block { margin: 0; }
+            .wr-attach-btn, .wr-print-static-attach {
+                background: #2f855a; color: #fff; border: none; border-radius: 4px;
+                padding: 5px 12px; font-size: 11px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px;
+            }
+            .wr-attach-toolbar { margin: 0; }
+            .df-post-action-stack { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; width: 100%; }
+            .df-post-block {
+                display: flex; flex-direction: column; gap: 8px;
+                padding: 12px 14px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+            }
+            .df-post-block.df-company-reply { background: #fffaf0; border-color: #f6ad55; }
+            .df-post-block.df-ship-verify { background: #f0f9ff; border-color: #63b3ed; }
+            .df-post-block.df-company-final { background: #fafbfd; border-color: #e2e8f0; }
+            .df-post-title-row {
+                display: flex; align-items: center; justify-content: space-between;
+                gap: 12px; flex-wrap: wrap; margin-bottom: 4px;
+            }
+            .df-post-title {
+                margin: 0; flex: 1 1 240px; min-width: 0;
+                font-size: 10px; font-weight: 700; letter-spacing: .03em;
+                text-transform: uppercase; color: #1a202c;
+            }
+            .df-post-date-field {
+                display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: auto;
+            }
+            .df-post-date-field > label {
+                margin: 0; font-size: 10px; font-weight: 700; letter-spacing: .03em;
+                text-transform: uppercase; color: #1a202c; white-space: nowrap;
+            }
+            .df-post-date-field input[type="date"],
+            .df-post-date-field input.tvc-date-input,
+            .df-post-date-field .tvc-date-input-wrap .tvc-date-input {
+                width: 148px; padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 5px;
+                font-family: inherit; font-size: 11px; color: #2d3748; box-sizing: border-box; background: #fff;
+                font-variant-numeric: tabular-nums; min-width: 9.8em;
+            }
+            .df-post-date-field input.tvc-date-input::placeholder { color: #718096; }
+            .df-post-checks { margin-top: 4px; padding-top: 8px; border-top: 1px dashed #e2e8f0; }
+            .df-checks { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: center; margin-top: 10px; }
+            .df-checks-label, .df-check, .wr-footer-flag, .df-repair-request-chk, .df-ship-initial-actions .wr-maint-chk {
+                font-size: 10px; font-weight: 700; color: #1a202c;
+                letter-spacing: .03em; text-transform: uppercase;
+            }
+            .df-check, .wr-footer-flag, .df-repair-request-chk, .df-ship-initial-actions .wr-maint-chk {
+                display: inline-flex; align-items: center; gap: 6px;
+            }
+            .wr-footer-labor {
+                display: grid; grid-template-columns: repeat(2, minmax(0, 160px)) minmax(0, 1fr);
+                gap: 12px 20px; align-items: end; margin-top: 8px;
+            }
+            .df-verify-flags {
+                display: flex; flex-direction: column; align-items: flex-start; gap: 8px;
+                background: transparent; border: none; padding: 0;
+            }
+            .wr-footer-flag input[type="checkbox"] { width: 15px; height: 15px; accent-color: #2b6cb0; }
+            .df-company-attach-row .wr-attach-block { margin: 0; }
+            .wr-attach-block { margin-top: 4px; }
+            .wr-attach-list { list-style: none; margin: 4px 0 0; padding: 0; }
+            .wr-attach-item { display: flex; align-items: center; gap: 8px; padding: 4px 0; font-size: 11px; border-bottom: 1px solid #e2e8f0; }
+            .wr-attach-link { color: #2b6cb0; font-weight: 600; }
+            .wr-attach-size { font-size: 11px; color: #718096; }
+            .df-workflow-phases { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+            .wr-print-hint { font-size: 12px; color: #4a5568; margin: 0 0 12px; }
+            .wr-spare-print-layout { margin-top: 10px; }
+            .wr-spare-print-scroll { overflow: visible !important; max-height: none !important; }
+            .wr-spare-print-table-wrap .spare-list-panel {
+                border: 1px solid #e2e8f0; border-radius: 8px; background: #fff; overflow: hidden;
+            }
+            .wr-spare-print-layout .spare-group-header { margin: 0 0 10px; }
             .spare-group-header-card {
                 background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
                 padding: 10px 14px 12px; display: flex; flex-direction: column; gap: 10px;
             }
+            .spare-group-header.is-idle .spare-group-header-card { background: #fafbfc; }
             .spare-gh-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; align-items: start; }
             .spare-gh-row-primary { grid-template-columns: 1fr; padding-bottom: 10px; border-bottom: 1px solid #e2e8f0; }
             .spare-gh-row-quad { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-            .spare-gh-field { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
-            .spare-gh-label { font-size: 10px; font-weight: 700; color: #4a5568; text-transform: uppercase; letter-spacing: 0.02em; }
+            .spare-gh-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+            .spare-gh-label { font-size: 11px; font-weight: 600; color: #718096; line-height: 1.2; }
             .spare-gh-value {
-                border: 1px solid #cbd5e0; border-radius: 4px; padding: 4px 6px; background: #fff;
-                min-height: 24px; font: inherit; color: #2d3748;
+                display: block; font-size: 12px; color: #2d3748; min-height: 28px; padding: 5px 10px;
+                background: #fff; border: 1px solid #e2e8f0; border-radius: 6px; line-height: 1.4; word-break: break-word;
             }
-            .spare-gh-value-primary { font-weight: 600; }
+            .spare-gh-value-primary { font-size: 13px; font-weight: 600; color: #1a365d; border-color: #cbd5e0; }
             .spare-gh-value.empty { color: #a0aec0; }
-            .df-workflow-phases { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
-            .df-post-block { background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px; }
-            .df-post-title { margin: 0 0 8px; font-size: 12px; color: #1a365d; }
-            .wr-print-hint { margin: 0 0 10px; color: #718096; font-size: 11px; line-height: 1.4; }
+            .spare-gh-idle-hint { font-size: 12px; font-weight: 500; color: #a0aec0; }
+            .wr-spare-print-table-wrap .spare-data-table tr.spare-row-focused.row-selected { background: #ebf8ff; }
             @media print {
                 .no-print { display: none !important; }
                 body { padding: 0; }
-                .wr-print-doc { background: #fff; padding: 0; }
+                .wr-print-page { margin-bottom: 0; }
+                .df-print-shell.df-modal-inner { border: none; border-radius: 0; }
             }`;
+    }
+
+    function buildWrSpareDateUiPrintInput(val) {
+        const v = esc(fmtSpareDate(val));
+        const ph = v ? '' : ' placeholder="YYYY-MM-DD"';
+        return `<span class="tvc-date-input-wrap">
+            <input type="text" class="tvc-date-input wr-ro"${ph} value="${v}" readonly disabled>
+            <button type="button" class="tvc-date-picker-btn" disabled tabindex="-1" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1zm13 9H4v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9zM6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-1v1a1 1 0 1 1-2 0V5H9v1a1 1 0 1 1-2 0V5H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1z"/></svg>
+            </button>
+        </span>`;
+    }
+
+    function buildWrSpareMetaUiPrintHtml(meta = {}) {
+        const pmsLabel = meta.pmsGroupNo ? safeTreeLabel(meta.pmsGroupNo) : '—';
+        const roInp = (type, val) => type === 'date'
+            ? buildWrSpareDateUiPrintInput(val)
+            : `<input type="${type}" class="wr-ro" value="${esc(val)}" readonly disabled>`;
+        const fld = (label, inner, extraCls = '') =>
+            `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}"><label>${label}</label>${inner}</div>`;
+        const jobItems = (meta.jobItems && meta.jobItems.length)
+            ? meta.jobItems
+            : [{
+                job_code: meta.jobCode || '',
+                sort1: meta.sort1 || '',
+                sort2: meta.sort2 || '',
+                job_detail: meta.jobDetail || '',
+            }];
+        const multiJob = jobItems.length > 1;
+        const jobHeader = multiJob ? renderPage2MaintJobHeaderHtml() : '';
+        const jobRows = jobItems.map((row, idx) => renderPage2MaintJobRowHtml(row, idx, {
+            readonly: true,
+            groupKey: meta.groupKey || '',
+            hideLabels: multiJob,
+        })).join('');
+        const spareComments = meta.spareShipComments ?? meta.shipComments ?? '';
+        return `<section class="wr-maint-card wr-maint-body wr-spare-meta-form" aria-label="Work report job context">
+            <div class="wr-maint-grid wr-maint-grid-3">
+                ${fld(meta.workDateLabel || 'Work Date', roInp('date', meta.workDate || ''))}
+                ${fld('Reported Date', roInp('date', meta.reportDate || ''))}
+                ${fld('Reported by', roInp('text', meta.reportedBy || ''))}
+                ${fld('PMS Group No.', roInp('text', pmsLabel), 'wr-maint-span-all')}
+            </div>
+            <div class="wr-page2-job-rows">${jobHeader}${jobRows}</div>
+            ${fld("SHIP'S COMMENTS (IF ANY)", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly disabled>${esc(spareComments)}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+        </section>`;
+    }
+
+    function buildWrSpareUiTablePrintHtml(st, usedParts) {
+        const lines = (usedParts || []).filter(p => Number(p.qty_used) > 0);
+        const focusId = lines[0]?.spare_part_id || modState(st).wrSpareFocusedId || null;
+        const head = `<thead><tr>
+            <th class="c-chk"><input type="checkbox" class="spare-head-chk" disabled aria-hidden="true"></th>${SPARE_IDENTITY_HEAD.trim()}
+            <th class="c-unit">Unit</th>
+            <th class="c-work" title="${SPARE_COL_WORK_TITLE}">${SPARE_COL_WORK}</th>
+            <th class="c-std" title="${SPARE_COL_STD_TITLE}">${SPARE_COL_STD}</th>
+            <th class="c-stk" title="${SPARE_COL_ROB_TITLE}">${SPARE_COL_ROB}</th>
+            <th class="c-cons" title="${SPARE_COL_COS_TITLE}">${SPARE_COL_COS}</th>
+        </tr></thead>`;
+        const bodyRows = lines.map(line => {
+            const spareRaw = (st.spares || []).find(s => String(s.id) === String(line.spare_part_id));
+            const s = spareRaw ? canon(spareRaw) : {};
+            const low = spareRaw && TVC_Inventory.isLowStock(spareRaw);
+            const focused = focusId && String(line.spare_part_id) === String(focusId);
+            const rowCls = `spare-row${low ? ' row-overdue' : ''}${focused ? ' spare-row-focused row-selected' : ''}`;
+            const cos = String(Number(line.qty_used) || 0);
+            const rob = line.qty_on_hand != null
+                ? String(line.qty_on_hand)
+                : (spareRaw ? String(TVC_Inventory.currentStock(spareRaw)) : '—');
+            return `<tr class="${rowCls}">
+                <td class="c-chk"><input type="checkbox" class="spare-row-chk" checked disabled></td>
+                <td class="c-num"><strong>${esc(spareNumbering(s) || line.part_no || '')}</strong></td>
+                <td class="c-cls">${esc(spareClass(s || spareRaw) || '')}</td>
+                <td class="c-dwg">${esc(spareDwgNo(s, st) || '—')}</td>
+                <td class="c-pno">${esc(spareDrawingNo(s) || '—')}</td>
+                <td class="c-item">${esc(s.name || spareRaw?.name || line.name || '')}</td>
+                <td class="c-unit">${esc(spareUnit(s))}</td>
+                <td class="c-work">${esc(spareWorking(s) || '')}</td>
+                <td class="c-std num">${esc(spareStandardQty(s) || '')}</td>
+                <td class="c-stk num">${esc(rob)}</td>
+                <td class="c-cons num">${esc(cos)}</td>
+            </tr>`;
+        }).join('') || `<tr><td colspan="11" style="text-align:center;color:#64748b;padding:12px">No spare parts selected.</td></tr>`;
+        return `<div class="wr-spare-print-table-wrap">
+            <div class="panel spare-list-panel">
+                <div class="spare-req-table-hscroll">
+                    <div class="spare-req-table-wide">
+                        <div class="vl-head-wrap sheet-scroll-original">
+                            <div class="spare-head-track">
+                                <table class="spare-data-table spare-data-head spare-data-table-wrspare">${SPARE_WR_COLGROUP}${head}</table>
+                            </div>
+                        </div>
+                        <div class="virtual-scroll sheet-scroll-original spare-vl-scroll wr-spare-print-scroll">
+                            <table class="spare-data-table spare-data-table-wrspare">${SPARE_WR_COLGROUP}<tbody>${bodyRows}</tbody></table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    function buildWrSparePage2UiPrintHtml(st, usedParts, meta = {}) {
+        return `${buildWrSpareMetaUiPrintHtml(meta)}
+            <div class="plan-layout spare-layout spare-req-work-layout spare-consume-work-layout wr-spare-work-layout wr-spare-full-width spare-consume-preview-layout wr-spare-print-layout">
+                <main class="panel spare-main">
+                    <div id="wrSpareEditBlock">${buildWrSpareGroupHeaderPrintHtml(st, meta, usedParts)}</div>
+                    ${buildWrSpareUiTablePrintHtml(st, usedParts)}
+                </main>
+            </div>`;
     }
 
     function buildWrSpareMetaPrintHtml(meta = {}) {
@@ -16024,16 +16313,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         </section>`;
     }
 
-    function buildWrSpareGroupHeaderPrintHtml(st, meta = {}) {
-        const sort1 = meta.sort1 || meta.jobItems?.[0]?.sort1 || '';
-        const gh = resolveGroupHeaderByKey(
-            st,
-            meta.groupKey || '',
-            meta.pmsGroupNo || '',
-            st.selectedGroupKey,
-            sort1,
-        );
-        return renderSpareGroupHeaderFromResolved(gh, { pmsLabel: 'SPARE Group No.' });
+    function buildWrSpareGroupHeaderPrintHtml(st, meta = {}, usedParts = []) {
+        const firstLine = (usedParts || []).find(p => Number(p.qty_used) > 0);
+        const focusedId = firstLine?.spare_part_id ?? modState(st).wrSpareFocusedId ?? undefined;
+        return renderSpareGroupHeaderHtml(st, {
+            focusedId,
+            pmsLabel: 'SPARE Group No.',
+        });
     }
 
     function buildWrSpareTablePrintHtml(st, usedParts) {
@@ -16069,16 +16355,16 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         return `<table class="wr-print-spare-table spare-data-table-wrspare">${spareHead}<tbody>${spareRows}</tbody></table>`;
     }
 
-    function buildWrSparePage2PrintHtml(st, usedParts, meta = {}) {
+    function buildWrSparePage2PrintHtml(st, usedParts, meta = {}, opts = {}) {
         const metaHtml = buildWrSpareMetaPrintHtml(meta);
-        const groupHeaderHtml = buildWrSpareGroupHeaderPrintHtml(st, meta);
+        const groupHeaderHtml = buildWrSpareGroupHeaderPrintHtml(st, meta, usedParts);
         const spareTableHtml = buildWrSpareTablePrintHtml(st, usedParts);
+        const inner = `${metaHtml}${groupHeaderHtml}${spareTableHtml}`;
+        if (opts.innerOnly) return inner;
         return `<div class="wr-print-page">
             <h2 class="wr-print-page-title">Page 2 — Spare Parts Consumption</h2>
             <div class="wr-print-doc">
-                ${metaHtml}
-                ${groupHeaderHtml}
-                ${spareTableHtml}
+                ${inner}
             </div>
         </div>`;
     }
@@ -16152,14 +16438,17 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         return w;
     }
 
-    function openWrReportPrintWindow(title, bodyHtml, { print = false } = {}) {
+    function openWrReportPrintWindow(title, bodyHtml, { print = false, appCss = false } = {}) {
         const toolbar = `<div class="wr-print-toolbar no-print">
             <button type="button" class="btn-green" onclick="(window.tvcPrintPreview&amp;&amp;window.tvcPrintPreview.print())||window.print()">Print</button>
             <button type="button" onclick="window.close()">Close</button>
         </div>`;
         const hint = `<p class="wr-print-hint no-print">Review the report below — this window is the print preview. Then click <b>Print</b>.</p>`;
+        const appCssLink = appCss
+            ? `<link rel="stylesheet" href="css/app.css?v=20260810-wr-p2-spare-gh">`
+            : '';
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TVC — ${esc(title)}</title>
-            <style>${wrReportPrintStyles()}</style></head><body>${toolbar}${hint}${bodyHtml}</body></html>`;
+            ${appCssLink}<style>${wrReportPrintStyles()}</style></head><body>${toolbar}${hint}${bodyHtml}</body></html>`;
 
         const openLegacy = () => openLegacyPrintWindow(html, { print });
 
@@ -16363,6 +16652,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (_consumeResizeObs) { _consumeResizeObs.disconnect(); _consumeResizeObs = null; }
         if (vlConsume) { vlConsume.destroy(); vlConsume = null; }
         syncConsumeListModalSizing();
+        cleanupSpareHistReportOverlay();
         closeSpicsModal('spareConsumeModal');
         if (st.currentTab === 'spare') render();
         if (returnToList) {
@@ -17827,12 +18117,12 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
 
-    // ── Spare Item History (Consumed / Received / Requisition) ─────────
+    // ── Spare Item History (Consumption / Requisition) ─────────
     let _shSpareId = null;
     let _shTab = 'consumed';
 
     function spareItemHistoryBtnHtml() {
-        return `<button type="button" class="btn btn-sm spare-item-hist-btn" onclick="TVC_SpareMenu.openSpareItemHistoryForFocus()" title="View consumed / received / requisition history" disabled>📋 Spare History</button>`;
+        return `<button type="button" class="btn btn-sm spare-item-hist-btn" onclick="TVC_SpareMenu.openSpareItemHistoryForFocus()" title="View consumption / requisition history" disabled>📋 Spare History</button>`;
     }
 
     function syncSpareItemHistoryBtns() {
@@ -17840,7 +18130,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         document.querySelectorAll('.spare-item-hist-btn').forEach(btn => {
             btn.disabled = !id;
             btn.title = id
-                ? 'View consumed / received / requisition history'
+                ? 'View consumption / requisition history'
                 : 'Select a spare part row first';
         });
     }
@@ -17849,6 +18139,66 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const id = getFocusedSpareId(getState());
         if (!id) await TVC_Dialog.alert('Select a spare part row first.');
         openSpareItemHistory(id);
+    }
+
+    function spareHistInvRowConsumeLogStub(h) {
+        if (h.source_type === 'defect_case') return { defect_case_id: h.source_id, source: 'defect' };
+        if (h.source_type === 'work_report') return { work_report_id: h.source_id, source: 'work_report' };
+        if (h.source_type === 'consume_log') return { id: h.source_id, source: 'consumption_list' };
+        return { source: String(h.source_type || '') };
+    }
+
+    function spareHistReqLineVendor(req, line) {
+        const q = req?.hq_quote;
+        const sid = reqWorkSpareIdKey(line?.spare_part_id);
+        if (q && sid) {
+            const vendors = reqWorkQuoteVendors(req);
+            for (let slot = 0; slot < vendors.length; slot++) {
+                const key = reqWorkQuoteVendorKey(slot, sid);
+                if (q.rowChecks?.[key]) {
+                    const name = String(vendors[slot]?.vendorName || '').trim();
+                    if (name) return name;
+                }
+            }
+            for (let slot = 0; slot < vendors.length; slot++) {
+                const key = reqWorkQuoteVendorKey(slot, sid);
+                const price = Number(q.prices?.[key]);
+                if (Number.isFinite(price)) {
+                    const name = String(vendors[slot]?.vendorName || '').trim();
+                    if (name) return name;
+                }
+            }
+        }
+        const info = reqWorkExportVendorInfo(req);
+        return String(info?.vendorName || '').trim() || '—';
+    }
+
+    function spareHistReqLineUnitPrice(req, line) {
+        const q = req?.hq_quote;
+        const sid = reqWorkSpareIdKey(line?.spare_part_id);
+        if (q && sid) {
+            const vendors = reqWorkQuoteVendors(req);
+            for (let slot = 0; slot < vendors.length; slot++) {
+                const key = reqWorkQuoteVendorKey(slot, sid);
+                if (q.rowChecks?.[key]) {
+                    const price = Number(q.prices?.[key]);
+                    if (Number.isFinite(price)) return price;
+                }
+            }
+            for (let slot = 0; slot < vendors.length; slot++) {
+                const key = reqWorkQuoteVendorKey(slot, sid);
+                const price = Number(q.prices?.[key]);
+                if (Number.isFinite(price)) return price;
+            }
+        }
+        const linePrice = Number(line?.price);
+        if (Number.isFinite(linePrice)) return linePrice;
+        return null;
+    }
+
+    function spareHistDateCell(val) {
+        const d = fmtSpareDate(val) || String(val || '').slice(0, 10);
+        return esc(d || '—');
     }
 
     async function loadSpareItemHistoryData(spareId, vesselId) {
@@ -17863,14 +18213,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                     if (String(line.spare_part_id) !== sid) return;
                     const jobs = consumeLogJobItems(log);
                     consumed.push({
-                        date: log.consumed_date || log.made_on || (log.created_at || '').slice(0, 10),
-                        qty: Number(line.qty ?? line.qty_consumed) || 0,
+                        date: log.made_on || log.consumed_date || (log.created_at || '').slice(0, 10),
+                        cos: Number(line.qty ?? line.qty_consumed) || 0,
                         logId: log.id,
+                        log,
                         pmsGroup: safeTreeLabel(log.pms_group_no || '') || '—',
                         jobCode: log.job_code || jobs[0]?.job_code || '—',
-                        madeBy: log.made_by || '—',
-                        status: log.list_status || '—',
-                        source: log.work_report_id ? 'Work Report' : (log.source === 'defect' ? 'Defect Report' : 'Consumption List'),
+                        status: spareListStatus(log) || log.list_status || '—',
                         openLog: true,
                     });
                     seenConsumeLog.add(log.id);
@@ -17878,32 +18227,20 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             });
         } catch (_) { /* noop */ }
 
-        const received = [];
         try {
             const invRows = await TVC_InventoryService.getHistory({ spare_part_id: spareId, limit: 300 });
             invRows.forEach(h => {
-                if (h.tx_type === TVC_INVENTORY_TX.DELIVERY) {
-                    received.push({
-                        date: h.date || (h.at || '').slice(0, 10),
-                        qty: Number(h.qty_delta) || 0,
-                        ref: h.ref || '—',
-                        operator: h.operator_name || '—',
-                        note: h.note || '—',
-                        qtyAfter: h.qty_after,
-                    });
-                    return;
-                }
+                if (h.tx_type === TVC_INVENTORY_TX.DELIVERY) return;
                 if (h.tx_type === TVC_INVENTORY_TX.CONSUMPTION && h.source_id && seenConsumeLog.has(h.source_id)) return;
                 if (h.tx_type === TVC_INVENTORY_TX.CONSUMPTION) {
                     consumed.push({
                         date: h.date || (h.at || '').slice(0, 10),
-                        qty: Math.abs(Number(h.qty_delta) || 0),
+                        cos: Math.abs(Number(h.qty_delta) || 0),
                         logId: h.source_id || '',
+                        log: spareHistInvRowConsumeLogStub(h),
                         pmsGroup: '—',
                         jobCode: h.ref || '—',
-                        madeBy: h.operator_name || '—',
-                        status: h.tx_type,
-                        source: h.source_type || 'Stock',
+                        status: h.note || h.tx_type || '—',
                         openLog: !!(h.source_id && h.source_type === 'consume_log'),
                     });
                 }
@@ -17918,13 +18255,17 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                     if (String(line.spare_part_id) !== sid) return;
                     requisitions.push({
                         reqId: req.id,
+                        req,
+                        line,
                         reqNo: req.req_no || '—',
                         date: reqListReportedDate(req) || (req.created_at || '').slice(0, 10),
+                        typeLabel: reqListTypeLabel(req),
+                        typeCls: reqListTypeCellClass(req),
                         status: reqListStatusLabel(req),
                         qtyRequested: Number(line.qty_requested) || 0,
                         qtyReceived: Number(line.qty_received) || 0,
-                        deliverPort: req.deliver_port || '—',
-                        priority: req.priority || 'ROUTINE',
+                        vendor: spareHistReqLineVendor(req, line),
+                        unitPrice: spareHistReqLineUnitPrice(req, line),
                     });
                 });
             });
@@ -17932,9 +18273,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
         const sortDesc = (a, b) => String(b.date || '').localeCompare(String(a.date || ''));
         consumed.sort(sortDesc);
-        received.sort(sortDesc);
         requisitions.sort(sortDesc);
-        return { consumed, received, requisitions };
+        return { consumed, requisitions };
     }
 
     async function openSpareItemHistory(spareId, tab) {
@@ -17945,12 +18285,14 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         syncSpareItemHistoryBtns();
         if (_shSpareId !== spareId) _shTab = 'consumed';
         _shSpareId = spareId;
+        if (tab === 'received') tab = 'consumed';
         if (tab) _shTab = tab;
         await renderSpareItemHistoryModal();
         showSpicsModal('spareItemHistoryModal');
     }
 
     function setSpareItemHistoryTab(tab) {
+        if (tab === 'received') tab = 'consumed';
         _shTab = tab;
         renderSpareItemHistoryModal();
     }
@@ -17961,19 +18303,52 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
     async function spareHistOpenConsumeLog(logId) {
         if (!logId) return;
-        closeSpareItemHistoryModal();
+        beginSpareHistReportOverlay('spareConsumeModal');
         await openConsumeLogInListWindow(logId, { editing: false });
+        showSpicsModal('spareConsumeModal');
     }
 
     async function spareHistOpenRequisition(reqId) {
         if (!reqId) return;
-        closeSpareItemHistoryModal();
+        beginSpareHistReportOverlay('spareReqWorkModal');
         await openRequisitionInListWindow(reqId, { editing: false });
+        showSpicsModal('spareReqWorkModal');
+    }
+
+    function renderSpareItemHistoryPartHtml(st, spare) {
+        const s = canon(spare);
+        const low = TVC_Inventory.isLowStock(s);
+        const itemName = String(s.name || '').trim();
+        const dwgText = String(spareDwgNo(s, st) || '').trim();
+        const pnoText = String(spareDrawingNo(s) || '').trim();
+        const workText = String(spareWorking(s) || '').trim();
+        const stockCell = sparePipelineCols(s, null).stock;
+        const rowCls = `spare-row spare-row-focused row-selected${low ? ' row-overdue' : ''}`;
+        return `<div class="spare-item-hist-part-wrap">
+            <div class="spare-item-hist-table-panel">
+                <table class="spare-data-table spare-item-hist-table">
+                    <colgroup><col span="9"></colgroup>
+                    ${SPARE_ITEM_HIST_TABLE_HEAD}
+                    <tbody><tr class="${rowCls}">
+                        <td class="c-num"${cellTitleAttr(spareNumbering(s))}><strong>${esc(spareNumbering(s))}</strong></td>
+                        <td class="c-cls">${esc(spareClass(s))}</td>
+                        <td class="c-dwg"${cellTitleAttr(dwgText)}>${esc(spareDwgNo(s, st) || '—')}</td>
+                        <td class="c-pno"${cellTitleAttr(pnoText)}>${esc(spareDrawingNo(s) || '—')}</td>
+                        <td class="c-item"${cellTitleAttr(itemName)}>${esc(s.name)}</td>
+                        <td class="c-unit">${esc(spareUnit(s))}</td>
+                        <td class="c-work"${cellTitleAttr(workText)}>${spareWorking(s)}</td>
+                        <td class="c-std">${spareStandardQty(s)}</td>
+                        <td class="c-stk">${stockCell}</td>
+                    </tr></tbody>
+                </table>
+            </div>
+        </div>`;
     }
 
     async function renderSpareItemHistoryModal() {
         const host = document.getElementById('spareItemHistoryBody');
         if (!host || !_shSpareId) return;
+        if (_shTab === 'received') _shTab = 'consumed';
         const st = getState();
         const spare = (st.spares || []).map(canon).find(s => String(s.id) === String(_shSpareId));
         if (!spare) {
@@ -17984,7 +18359,6 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const { vesselId } = await vesselScope();
         const data = await loadSpareItemHistoryData(_shSpareId, vesselId);
         const consumedActive = _shTab === 'consumed' ? ' active' : '';
-        const receivedActive = _shTab === 'received' ? ' active' : '';
         const reqActive = _shTab === 'requisition' ? ' active' : '';
 
         let tabContent = '';
@@ -17994,63 +18368,48 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                     ? ` ondblclick="TVC_SpareMenu.spareHistOpenConsumeLog('${escAttr(c.logId)}')" title="Double-click to open Consumption List"`
                     : '';
                 const rowCls = c.openLog && c.logId ? ' wp-hist-row' : '';
+                const typeCell = c.log ? consumeLogTypeCell(c.log) : '<td class="spare-consume-log-type">—</td>';
                 return `<tr class="${rowCls.trim()}"${dbl}>
-                    <td>${esc(c.date || '—')}</td>
-                    <td style="text-align:right">${c.qty ?? '—'}</td>
-                    <td>${esc(c.pmsGroup)}</td>
-                    <td>${esc(c.jobCode)}</td>
-                    <td>${esc(c.madeBy)}</td>
-                    <td>${esc(c.source)}</td>
-                    <td>${esc(c.status)}</td>
+                    <td>${spareHistDateCell(c.date)}</td>
+                    ${typeCell}
+                    <td${cellTitleAttr(c.pmsGroup)}>${esc(c.pmsGroup)}</td>
+                    <td${cellTitleAttr(c.jobCode)}>${esc(c.jobCode)}</td>
+                    <td${cellTitleAttr(c.status)}>${esc(c.status)}</td>
+                    <td class="num">${c.cos ?? '—'}</td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="7" class="muted" style="text-align:center">No consumed history</td></tr>';
+            }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center">No consumption history</td></tr>';
             tabContent = `
                 <div class="wp-section">
-                    <div class="wp-section-head">Consumed History <span class="muted wp-hist-hint">(double-click row to open Consumption List)</span></div>
+                    <div class="wp-section-head">Consumption History <span class="muted wp-hist-hint">(double-click row to open Consumption List)</span></div>
                     <div class="wp-table-wrap">
-                        <table class="wp-table">
-                            <thead><tr><th>Date</th><th>Qty</th><th>PMS Group</th><th>Job Code</th><th>By</th><th>Source</th><th>Status</th></tr></thead>
-                            <tbody>${rows}</tbody>
-                        </table>
-                    </div>
-                </div>`;
-        } else if (_shTab === 'received') {
-            const rows = data.received.length ? data.received.map(r => `<tr>
-                    <td>${esc(r.date || '—')}</td>
-                    <td style="text-align:right">${r.qty ?? '—'}</td>
-                    <td style="text-align:right">${r.qtyAfter ?? '—'}</td>
-                    <td>${esc(r.ref)}</td>
-                    <td>${esc(r.operator)}</td>
-                    <td>${esc(r.note || '—')}</td>
-                </tr>`).join('') : '<tr><td colspan="6" class="muted" style="text-align:center">No received history</td></tr>';
-            tabContent = `
-                <div class="wp-section">
-                    <div class="wp-section-head">Received History <span class="muted wp-hist-hint">(from stock delivery records)</span></div>
-                    <div class="wp-table-wrap">
-                        <table class="wp-table">
-                            <thead><tr><th>Date</th><th>Qty</th><th>Stock After</th><th>Ref</th><th>Operator</th><th>Note</th></tr></thead>
+                        <table class="wp-table spare-item-hist-consume-table">
+                            <colgroup><col span="6"></colgroup>
+                            <thead><tr><th>Reported Date</th><th>Type</th><th>PMS Group</th><th>JOB CODE</th><th>Status</th><th>Cos</th></tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
                     </div>
                 </div>`;
         } else {
             const rows = data.requisitions.length ? data.requisitions.map(r => {
-                const pri = r.priority === 'URGENT' ? ' <span class="pill warn">URGENT</span>' : '';
+                const unitPrice = r.unitPrice != null ? esc(String(r.unitPrice)) : '—';
                 return `<tr class="wp-hist-row" ondblclick="TVC_SpareMenu.spareHistOpenRequisition('${escAttr(r.reqId)}')" title="Double-click to open Requisition">
-                    <td>${esc(r.date || '—')}</td>
-                    <td>${esc(r.reqNo)}</td>
-                    <td>${esc(r.status)}${pri}</td>
-                    <td style="text-align:right">${r.qtyRequested ?? '—'}</td>
-                    <td style="text-align:right">${r.qtyReceived ?? '—'}</td>
-                    <td>${esc(r.deliverPort)}</td>
+                    <td>${spareHistDateCell(r.date)}</td>
+                    <td class="spare-req-list-type ${r.typeCls}">${esc(r.typeLabel)}</td>
+                    <td${cellTitleAttr(r.reqNo)}>${esc(r.reqNo)}</td>
+                    <td${cellTitleAttr(r.status)}>${esc(r.status)}</td>
+                    <td class="num">${r.qtyRequested ?? '—'}</td>
+                    <td class="num">${r.qtyReceived ?? '—'}</td>
+                    <td${cellTitleAttr(r.vendor)}>${esc(r.vendor)}</td>
+                    <td class="num">${unitPrice}</td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="6" class="muted" style="text-align:center">No requisition history</td></tr>';
+            }).join('') : '<tr><td colspan="8" class="muted" style="text-align:center">No requisition history</td></tr>';
             tabContent = `
                 <div class="wp-section">
                     <div class="wp-section-head">Requisition History <span class="muted wp-hist-hint">(double-click row to open Requisition)</span></div>
                     <div class="wp-table-wrap">
-                        <table class="wp-table">
-                            <thead><tr><th>Date</th><th>Req No.</th><th>Status</th><th>Requested</th><th>Received</th><th>Port</th></tr></thead>
+                        <table class="wp-table spare-item-hist-req-table">
+                            <colgroup><col span="8"></colgroup>
+                            <thead><tr><th>Reported Date</th><th>Type</th><th>Requisition No.</th><th>Status</th><th>Req</th><th>Rcvd</th><th>Vendor</th><th>Unit Price</th></tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
                     </div>
@@ -18059,15 +18418,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
         host.innerHTML = `
             <h3 class="wp-title">Spare History</h3>
-            <div class="wp-job-head">
-                <span><b>Code</b> ${esc(partNo(spare))}</span>
-                <span><b>Item</b> ${esc(spare.name || '—')}</span>
-                <span><b>Stock</b> ${spare.currentStock ?? 0}</span>
-            </div>
-            <p class="wp-job-detail">${esc(spare.universalItemCode || spare.universalCode || spare.working || '')}</p>
+            ${renderSpareItemHistoryPartHtml(st, spare)}
             <div class="wp-tabs">
-                <button type="button" class="wp-tab${consumedActive}" onclick="TVC_SpareMenu.setSpareItemHistoryTab('consumed')">Consumed (${data.consumed.length})</button>
-                <button type="button" class="wp-tab${receivedActive}" onclick="TVC_SpareMenu.setSpareItemHistoryTab('received')">Received (${data.received.length})</button>
+                <button type="button" class="wp-tab${consumedActive}" onclick="TVC_SpareMenu.setSpareItemHistoryTab('consumed')">Consumption (${data.consumed.length})</button>
                 <button type="button" class="wp-tab${reqActive}" onclick="TVC_SpareMenu.setSpareItemHistoryTab('requisition')">Requisition (${data.requisitions.length})</button>
             </div>
             <div class="wp-tab-pane">${tabContent}</div>
@@ -18758,7 +19111,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         consumeToggleSelectedOnly, consumeFocusRow, consumeToggleRow, consumeToggleAll, consumeSetQty,
         renderSpareGroupHeaderHtml, renderPlanGroupHeaderHtml,
         renderWrSparePage2Html, initWrSparePage2, teardownWrSparePage2, persistWrSpareUsedParts,
-        buildWrSparePage2PrintHtml, openWrReportPrintWindow, wrReportPrintStyles, resolveWrJobHeader,
+        buildWrSparePage2PrintHtml, buildWrSparePage2UiPrintHtml, buildWrSpareDateUiPrintInput,
+        renderWrPrintShell, renderWrPrintPageTabs, wrHasSparePage2ForPrint,
+        openWrReportPrintWindow, wrReportPrintStyles, resolveWrJobHeader,
         capturePage2JobItems, addPage2JobRow, removePage2JobRow, togglePage2JobPick, pickPage2Job,
         page2JobPickSearch, buildPage2JobItemsFromJobs, newConsumeJobRow, jobRowFromMaintenanceJob,
         renderMaintJobRowsHeaderHtml,

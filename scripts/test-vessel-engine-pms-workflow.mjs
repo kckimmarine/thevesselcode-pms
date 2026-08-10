@@ -108,24 +108,89 @@ function extractConsumeListRow(log, reports = []) {
     };
 }
 
+function defectBatchJobItems(dc) {
+    return (dc?.job_items || []).filter(i => {
+        const c = String(i.job_code || '').trim();
+        return c && !/^JOB CODE|Select JOB CODE/i.test(c);
+    });
+}
+
+function defectIsBatch(dc) {
+    return defectBatchJobItems(dc).length > 1;
+}
+
+function defectCaseMatchesJob(dc, jobId, jobCode) {
+    if (!dc) return false;
+    if ((dc.job_items || []).some(it =>
+        (it.maintenance_job_id && it.maintenance_job_id === jobId)
+        || (it.job_code && it.job_code === jobCode)
+    )) return true;
+    if (dc.maintenance_job_id === jobId) return true;
+    return dc.job_code === jobCode || dc.pms_job_code === jobCode;
+}
+
 function workHistoryEntriesRaw(reports, defects) {
     const entries = [];
     reports.forEach(r => {
-        (r.job_items || []).forEach(item => entries.push({ source: 'report', report: r, item }));
+        if (r.is_batch && (r.job_items || []).length > 1) {
+            entries.push({ source: 'report', report: r, item: r.job_items[0], isBatchSummary: true });
+        } else {
+            (r.job_items || []).forEach(item => entries.push({ source: 'report', report: r, item }));
+        }
     });
-    defects.forEach(dc => entries.push({ source: 'defect', defect: dc }));
+    defects.forEach(dc => {
+        if (defectIsBatch(dc)) {
+            const items = defectBatchJobItems(dc);
+            const primary = [...items].sort((a, b) => String(a.job_code).localeCompare(String(b.job_code)))[0];
+            entries.push({
+                source: 'defect',
+                defect: dc,
+                defectJobItem: primary,
+                isDefectBatchSummary: true,
+            });
+        } else {
+            entries.push({ source: 'defect', defect: dc });
+        }
+    });
     return entries;
 }
 
 function jobWorkHistoryEntries(jobId, jobCode, entriesRaw) {
-    return entriesRaw.filter(e => {
+    const entries = [];
+    entriesRaw.forEach(e => {
         if (e.source === 'defect') {
             const dc = e.defect;
-            return dc.maintenance_job_id === jobId || dc.job_code === jobCode;
+            if (!defectCaseMatchesJob(dc, jobId, jobCode)) return;
+            if (e.isDefectBatchSummary && defectIsBatch(dc)) {
+                const batchItem = (dc.job_items || []).find(it =>
+                    (it.maintenance_job_id && it.maintenance_job_id === jobId)
+                    || (it.job_code && it.job_code === jobCode)
+                );
+                entries.push({
+                    source: 'defect',
+                    defect: dc,
+                    defectJobItem: batchItem,
+                    isDefectBatchSummary: true,
+                });
+            } else {
+                entries.push(e);
+            }
+            return;
         }
-        const item = e.item;
-        return item && (item.maintenance_job_id === jobId || item.job_code === jobCode);
+        const { report: r, item } = e;
+        if (!r || !item) return;
+        if (e.isBatchSummary && r.is_batch) {
+            const batchItem = (r.job_items || []).find(it =>
+                it.maintenance_job_id === jobId || it.job_code === jobCode
+            );
+            if (batchItem) {
+                entries.push({ source: 'report', report: r, item: batchItem, isBatchSummary: true });
+            }
+            return;
+        }
+        if (item.maintenance_job_id === jobId || item.job_code === jobCode) entries.push(e);
     });
+    return entries;
 }
 
 function simulateSyncConsumeLogFromWorkReport({ report, job, usedParts, form }) {
@@ -263,6 +328,76 @@ async function main() {
             assert(`${histRow.type} Status matches`, rowsMatchCore(histRow, consumeRow));
             assert(`${histRow.type} consume Total Data is number`, Number.isFinite(Number(consumeRow.totalData)));
         }
+    });
+
+    await scenario('5b) Batch Work Report → each job Work Procedure history', async () => {
+        const job1 = { id: 'job-001', job_code: '01-001', department: 'ENGINE', group: '01. MAIN ENGINE' };
+        const job2 = { id: 'job-002', job_code: '01-002', department: 'ENGINE', group: '01. MAIN ENGINE' };
+        const batchReport = {
+            id: 'rep-batch', is_batch: true, work_type: 'MAINTENANCE', status: 'REPORTED',
+            report_date: '2026-08-09', work_date: '2026-08-09', description: 'Batch maint',
+            report_form: { fileNo: 'B-001' },
+            job_items: [
+                { maintenance_job_id: job1.id, job_code: job1.job_code, description: 'carried out the maintenance..', form: { fileNo: 'B-001', outline: 'carried out the maintenance..' } },
+                { maintenance_job_id: job2.id, job_code: job2.job_code, description: 'carried out the maintenance..', form: { fileNo: 'B-001', outline: 'carried out the maintenance..' } },
+            ],
+        };
+        const raw = workHistoryEntriesRaw([batchReport], []);
+        assert('global Work History has one batch summary row', raw.length === 1 && raw[0].isBatchSummary);
+        const hist1 = jobWorkHistoryEntries(job1.id, job1.job_code, raw);
+        const hist2 = jobWorkHistoryEntries(job2.id, job2.job_code, raw);
+        assert('job 01-001 sees batch report in Work Procedure history', hist1.length === 1, `count=${hist1.length}`);
+        assert('job 01-002 sees batch report in Work Procedure history', hist2.length === 1, `count=${hist2.length}`);
+        assert('jobWorkHistoryEntries resolves batch member item', hist2[0].item.job_code === '01-002');
+        assert('app wires batch lookup in jobWorkHistoryEntries', appSrc.includes('e.isBatchSummary && r.is_batch'));
+    });
+
+    await scenario('5c) Batch Defect Report → global summary + per-job Work Procedure history', async () => {
+        const job1 = { id: 'job-001', job_code: '01-001', department: 'ENGINE', group: '01. MAIN ENGINE' };
+        const job2 = { id: 'job-002', job_code: '01-002', department: 'ENGINE', group: '01. MAIN ENGINE' };
+        const batchDefect = {
+            id: 'def-batch', file_no: 'D-BATCH', report_date: '2026-08-09', work_date: '2026-08-09',
+            status: 'DRAFT', outline_maintenance_request: 'Batch defect',
+            job_items: [
+                { maintenance_job_id: job1.id, job_code: job1.job_code, sort1: 'M/E SAFETY', sort2: 'SAFETY' },
+                { maintenance_job_id: job2.id, job_code: job2.job_code, sort1: 'M/E SAFETY', sort2: 'SAFETY' },
+            ],
+        };
+        const raw = workHistoryEntriesRaw([], [batchDefect]);
+        assert('global Work History has one batch defect summary row', raw.length === 1 && raw[0].isDefectBatchSummary);
+        const hist1 = jobWorkHistoryEntries(job1.id, job1.job_code, raw);
+        const hist2 = jobWorkHistoryEntries(job2.id, job2.job_code, raw);
+        assert('job 01-001 sees batch defect in Work Procedure history', hist1.length === 1, `count=${hist1.length}`);
+        assert('job 01-002 sees batch defect in Work Procedure history', hist2.length === 1, `count=${hist2.length}`);
+        assert('jobWorkHistoryEntries resolves batch defect member item', hist2[0].defectJobItem.job_code === '01-002');
+        assert('app wires defect batch lookup in jobWorkHistoryEntries', appSrc.includes('e.isDefectBatchSummary && defectIsBatch(dc)'));
+        assert('app shows B pill on batch defect rows', appSrc.includes('isDefectBatchSummary || defectIsBatch(dc)'));
+    });
+
+    await scenario('5d) Defect Cleared (DC) → all batch jobs LAST DONE / NEXT DATE', async () => {
+        const txSrc = fs.readFileSync(path.join(ROOT, 'js', 'services', 'transaction.js'), 'utf8');
+        assert('shouldApplyDefectJobSchedule requires ship_verified_date', txSrc.includes("!String(row.ship_verified_date || '').trim()"));
+        assert('resolveDefectScheduleTargets exported', txSrc.includes('resolveDefectScheduleTargets'));
+        assert('applyDefectJobSchedule loops all targets', txSrc.includes('for (const t of targets)'));
+        assert('app applyDefectClearedSchedules uses resolveDefectScheduleTargets', appSrc.includes('TVC_Transaction.resolveDefectScheduleTargets'));
+    });
+
+    await scenario('5e) Batch Work Report — Postpone tab + job code tags', async () => {
+        assert('batch modal allows Postpone tab', !appSrc.includes("state._batchMode && tab !== 'repair'"));
+        assert('saveBatchReport derives POSTPONE work type', appSrc.includes("tab === 'postpone' ? 'POSTPONE' : 'MAINTENANCE'"));
+        assert('batch modal shows job tags between title and tabs', appSrc.includes('batchJobTags') && appSrc.includes('<div class="wr-tabsel">${tabBtns}</div>'));
+        assert('batch modal uses Work Report (Draft) title', appSrc.includes('<div class="wr-titlebar">Work Report (Draft)</div>'));
+        const txSrc = fs.readFileSync(path.join(ROOT, 'js', 'services', 'transaction.js'), 'utf8');
+        assert('submitBatchReport stores postpone_date', txSrc.includes('postpone_date: postponeDate'));
+    });
+
+    await scenario('5f) Maintenance after Postpone — Work Plan STATUS not P', async () => {
+        assert('postponedJobKeys uses latest schedule report', appSrc.includes('buildLatestScheduleByJobId(reportsForDept())'));
+        assert('applyActiveReportSchedules uses latest per job', appSrc.includes('buildLatestScheduleByJobId(state.reports'));
+        assert('completed job skips postponed status', appSrc.includes('if (isActualJobCompleted(j))'));
+        const txSrc = fs.readFileSync(path.join(ROOT, 'js', 'services', 'transaction.js'), 'utf8');
+        assert('applyWorkReportJobSchedule branches on work_type only', txSrc.includes("report.work_type === 'POSTPONE'")
+            && !txSrc.includes("item.status === 'CONFIRMED' || item.status === 'POSTPONED'"));
     });
 
     await scenario('6) Source wiring — Postpone sync + skip empty Consumption List', async () => {

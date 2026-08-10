@@ -962,17 +962,25 @@ const TVC_DefectReport = (function () {
         });
     }
 
-    function renderDfAttachmentBlock(kind, { canUpload }) {
-        const formKey = kind === 'company' ? 'company_attachments' : 'ship_attachments';
+    function renderDfAttachmentBlock(kind, { canUpload, forPrint = false }) {
         const label = kind === 'company' ? "Company's Attachment" : "Ship's Attachment";
         const inputId = kind === 'company' ? 'dfCompanyAttachInput' : 'dfShipAttachInput';
         const list = dfAttachmentList(kind);
         const items = list.map(a => `
             <li class="wr-attach-item">
-                <a class="wr-attach-link" href="${esc(a.dataUrl)}" download="${esc(a.name)}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>
+                ${forPrint
+                    ? `<span class="wr-attach-link">📎 ${esc(a.name)}</span>`
+                    : `<a class="wr-attach-link" href="${esc(a.dataUrl)}" download="${esc(a.name)}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>`}
                 <span class="wr-attach-size">${Math.max(1, Math.round((a.size || 0) / 1024))}KB</span>
-                ${canUpload ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_DefectReport.removeAttachment('${kind}','${esc(a.id)}')">×</button>` : ''}
+                ${(!forPrint && canUpload) ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_DefectReport.removeAttachment('${kind}','${esc(a.id)}')">×</button>` : ''}
             </li>`).join('');
+        if (forPrint) {
+            const listHtml = list.length ? `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>` : '';
+            return `<div class="wr-attach-block wr-attach-print">
+                <div class="wr-attach-toolbar"><span class="wr-attach-btn wr-print-static-attach">📎 ${esc(label)}</span></div>
+                ${listHtml}
+            </div>`;
+        }
         const uploadBtn = canUpload
             ? `<button type="button" class="wr-attach-btn" onclick="document.getElementById('${inputId}').click()">📎 ${esc(label)}</button>
                <input type="file" id="${inputId}" class="hidden" multiple onchange="TVC_DefectReport.uploadAttachment('${kind}')">`
@@ -1632,10 +1640,12 @@ const TVC_DefectReport = (function () {
             canEditShipVerify = false,
             canEditShoreSupport = canEditShipVerify,
             canEditCompanyFinal = false,
+            forPrint = false,
         } = opts;
         const fld = (label, inner, extraCls = '') =>
             `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
         const inp = (name, val, type, ro) => {
+            if (forPrint && type === 'date') return dfDateUiPrintInput(dfVal(row, name, val));
             const v = esc(dfVal(row, name, val));
             const roAttr = ro ? ' readonly' : '';
             const dis = ro ? ' disabled' : '';
@@ -1650,7 +1660,7 @@ const TVC_DefectReport = (function () {
             return `<textarea class="wr-maint-textarea${roCls}" data-df="${name}" rows="${rows}"${roAttr}>${esc(dfVal(row, name, val))}</textarea>`;
         };
         const flagChk = (name, label, enabled) => {
-            const dis = enabled ? '' : ' disabled';
+            const dis = (forPrint || !enabled) ? ' disabled' : '';
             return `<label class="wr-footer-flag">
                 <input type="checkbox" data-df="${name}"${dfFlagChecked(row, name) ? ' checked' : ''}${dis}>
                 <span>${esc(label)}</span>
@@ -1659,10 +1669,10 @@ const TVC_DefectReport = (function () {
         const reportChk = (name, label, ro) =>
             fieldInput(name, label, dfVal(row, name), { checkbox: true, readonly: ro });
 
-        const p2ro = !canEditCompanyReply;
-        const p3ro = !canEditShipVerify;
-        const p4ro = !canEditCompanyFinal;
-        const canUploadCompanyAttach = canEditCompanyReply || canEditCompanyFinal;
+        const p2ro = forPrint || !canEditCompanyReply;
+        const p3ro = forPrint || !canEditShipVerify;
+        const p4ro = forPrint || !canEditCompanyFinal;
+        const canUploadCompanyAttach = !forPrint && (canEditCompanyReply || canEditCompanyFinal);
         const replyDateInp = inp('reply_date', row.reply_date || '', 'date', p2ro)
             .replace('data-df="reply_date"', 'id="dfReplyDate" data-df="reply_date"');
         const shipVerifiedDateInp = inp('ship_verified_date', row.ship_verified_date || '', 'date', p3ro)
@@ -1709,7 +1719,7 @@ const TVC_DefectReport = (function () {
             <section class="df-post-block df-company-final">
                 ${fld("Company's Comments", ta('company_comment', '', 3, p4ro), 'wr-maint-span-all')}
                 <div class="df-company-attach-row wr-maint-span-all">
-                    ${renderDfAttachmentBlock('company', { canUpload: canUploadCompanyAttach })}
+                    ${renderDfAttachmentBlock('company', { canUpload: canUploadCompanyAttach, forPrint })}
                 </div>
             </section>
         </div>`;
@@ -1740,27 +1750,30 @@ const TVC_DefectReport = (function () {
         };
     }
 
-    function renderDfApprovalHtml(row) {
+    function renderDfApprovalHtml(row, opts = {}) {
+        const forPrint = !!opts.forPrint;
         const {
             isConfirmed, isApproved, canConfirmNow, canApproveNow,
             confirmedByVal, approvedByVal,
         } = dfApprovalState(row);
+        const confirmDis = forPrint || !canConfirmNow ? ' disabled' : '';
+        const approveDis = forPrint || !canApproveNow ? ' disabled' : '';
         return `<section class="wr-maint-card wr-maint-approval">
-            <div class="wr-maint-approval-item${canConfirmNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="dfConfirmedBy"${isConfirmed ? ' checked' : ''}${canConfirmNow ? '' : ' disabled'} onchange="TVC_DefectReport.dfReportConfirmByToggle()"> Confirmed by</label>
+            <div class="wr-maint-approval-item${!forPrint && canConfirmNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="dfConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${forPrint ? '' : ' onchange="TVC_DefectReport.dfReportConfirmByToggle()"'}> Confirmed by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
             </div>
-            <div class="wr-maint-approval-item${canApproveNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="dfApprovedBy"${isApproved ? ' checked' : ''}${canApproveNow ? '' : ' disabled'}> Approved by</label>
+            <div class="wr-maint-approval-item${!forPrint && canApproveNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="dfApprovedBy"${isApproved ? ' checked' : ''}${approveDis}> Approved by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
             </div>
         </section>`;
     }
 
     function renderPhase1(row, readonly, opts = {}) {
-        const { includeApproval = true, postAction = {} } = opts;
-        const canEditShipInitial = postAction.canEditShipInitial ?? !readonly;
-        const canEditShipAttach = postAction.canEditShipAttach ?? canEditShipInitial;
+        const { includeApproval = true, postAction = {}, forPrint = false } = opts;
+        const canEditShipInitial = forPrint ? false : (postAction.canEditShipInitial ?? !readonly);
+        const canEditShipAttach = forPrint ? false : (postAction.canEditShipAttach ?? canEditShipInitial);
         ensureDfDraft(row);
         ensureDfJobItems(row);
         const s = getState();
@@ -1772,28 +1785,41 @@ const TVC_DefectReport = (function () {
             ? (s.idx?.jobById?.get(primaryJobId) || s.jobs?.find(j => j.id === primaryJobId))
             : null;
         const hdr = job && TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || resolveDfGroupHeader(s, row);
-        const ro = readonly;
+        const ro = readonly || forPrint;
         const roAttr = ro ? ' readonly' : '';
         const roCls = ro ? ' wr-ro' : '';
-        const dis = ro ? ' disabled' : '';
         const fld = (label, inner, extraCls = '') => `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
         const inp = (name, val, type = 'text') => {
+            if (forPrint && type === 'date') return dfDateUiPrintInput(dfVal(row, name, val));
             const v = esc(dfVal(row, name, val));
-            if (type === 'date') return `<input type="date" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
+            if (type === 'date') return `<input type="date" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}${ro ? ' disabled' : ''}>`;
             if (type === 'number') return `<input type="number" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
             return `<input data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
         };
         const ta = (name, val, rows = 3) => `<textarea class="wr-maint-textarea${roCls}" data-df="${name}" rows="${rows}"${roAttr}>${esc(dfVal(row, name, val))}</textarea>`;
-        const repairChk = `<label class="wr-maint-chk df-repair-request-chk"><input type="checkbox" data-df="repair_request"${dfFlagChecked(row, 'repair_request') ? ' checked' : ''}${canEditShipInitial ? '' : ' disabled'}> REPAIR REQUEST (IF SHORE SUPPORT IS REQUIRED)</label>`;
-
-        return `<div class="wr-maint-form">
-            ${includeApproval ? renderDfApprovalHtml(row) : ''}
-            <section class="wr-maint-card wr-maint-body wr-file-no-anchor">
-                <div class="wr-maint-grid wr-maint-grid-3">
-                    ${fld('File No.', `<div class="wr-file-no-row">
+        const repairChk = `<label class="wr-maint-chk df-repair-request-chk"><input type="checkbox" data-df="repair_request"${dfFlagChecked(row, 'repair_request') ? ' checked' : ''}${forPrint || !canEditShipInitial ? ' disabled' : ''}> REPAIR REQUEST (IF SHORE SUPPORT IS REQUIRED)</label>`;
+        const fileNoInner = forPrint
+            ? `<input class="wr-ro" value="${esc(dfVal(row, 'file_no', ''))}" readonly tabindex="-1">`
+            : `<div class="wr-file-no-row">
                         <input data-df="file_no" class="${roCls.trim()}" value="${esc(dfVal(row, 'file_no', ''))}"${roAttr}>
                         <button type="button" id="dfFileNoPickBtn" class="btn btn-sm wr-file-no-pick-btn" onclick="TVC_App.openFileNoPickModal('df')"${canEditShipInitial ? '' : ' disabled'} title="Browse Work History for File No. reference">Select File No.</button>
-                    </div>`)}
+                    </div>`;
+        const fileNoPanel = forPrint
+            ? ''
+            : '<div id="dfFileNoPickPanel" class="wr-file-no-popover spare-req-hist-popover hidden" aria-hidden="true"></div>';
+        const postActionOpts = forPrint
+            ? { forPrint: true, canEditCompanyReply: false, canEditShipVerify: false, canEditShoreSupport: false, canEditCompanyFinal: false }
+            : (opts.postAction || {});
+        const bottomTail = `
+                <div class="df-ship-initial-actions wr-maint-span-all wr-maint-grid-gap">
+                    ${repairChk}
+                    ${renderDfAttachmentBlock('ship', { canUpload: canEditShipAttach, forPrint })}
+                </div>
+                ${renderDfPostActionSections(row, postActionOpts)}
+                ${fileNoPanel}`;
+        const mainFields = `
+                <div class="wr-maint-grid wr-maint-grid-3">
+                    ${fld('File No.', fileNoInner)}
                     ${fld('Voy. No.', inp('voy_no', ''))}
                     ${fld('Place', inp('place', ''))}
                     ${fld('Occurred Date', inp('work_date', row.report_date, 'date'))}
@@ -1817,13 +1843,21 @@ const TVC_DefectReport = (function () {
                 ${fld('Outline of Defect', ta('outline_maintenance_request', ''), 'wr-maint-span-all wr-maint-grid-gap')}
                 ${fld('Estimated Cause of Defect', ta('estimated_cause', ''), 'wr-maint-span-all')}
                 ${fld('Possible Effect to Other System', ta('possible_effect', ''), 'wr-maint-span-all')}
-                ${fld('Action Plan / Corrective Action', ta('action_taken', ''), 'wr-maint-span-all')}
-                <div class="df-ship-initial-actions wr-maint-span-all wr-maint-grid-gap">
-                    ${repairChk}
-                    ${renderDfAttachmentBlock('ship', { canUpload: canEditShipAttach })}
-                </div>
-                ${renderDfPostActionSections(row, opts.postAction || {})}
-                <div id="dfFileNoPickPanel" class="wr-file-no-popover spare-req-hist-popover hidden" aria-hidden="true"></div>
+                ${fld('Action Plan / Corrective Action', ta('action_taken', ''), 'wr-maint-span-all')}`;
+
+        if (forPrint) {
+            return `<div class="wr-maint-form">
+            ${includeApproval ? renderDfApprovalHtml(row, { forPrint }) : ''}
+            <section class="wr-maint-card wr-maint-body wr-file-no-anchor">${mainFields}</section>
+            ${bottomTail}
+        </div>`;
+        }
+
+        return `<div class="wr-maint-form">
+            ${includeApproval ? renderDfApprovalHtml(row, { forPrint }) : ''}
+            <section class="wr-maint-card wr-maint-body wr-file-no-anchor">
+                ${mainFields}
+                ${bottomTail}
             </section>
         </div>`;
     }
@@ -2327,6 +2361,31 @@ const TVC_DefectReport = (function () {
         }
     }
 
+    function defectReportModalTitle(row) {
+        const s = getState();
+        const forceView = s._defectMode === 'view';
+        const fromListNav = s._dfNavSource === 'list';
+        const fromHistoryNav = s._dfNavSource === 'history';
+        if (fromListNav || fromHistoryNav) return 'Defect Report';
+        return isDraftDefectSession() ? 'Defect Report (Draft)' : (forceView ? 'Defect Report (View)' : 'Defect Report');
+    }
+
+    function renderDfPrintShell(title, activePage, bodyHtml) {
+        return TVC_SpareMenu.renderWrPrintShell(title, activePage, bodyHtml, 'defect');
+    }
+
+    function dfDateUiPrintInput(val) {
+        return TVC_SpareMenu.buildWrSpareDateUiPrintInput
+            ? TVC_SpareMenu.buildWrSpareDateUiPrintInput(val)
+            : `<input class="wr-ro tvc-date-input" value="${esc(val || '')}" readonly disabled>`;
+    }
+
+    function dfHasSparePage2ForPrint(usedParts) {
+        return TVC_SpareMenu.wrHasSparePage2ForPrint
+            ? TVC_SpareMenu.wrHasSparePage2ForPrint(usedParts)
+            : (usedParts || []).some(p => Number(p.qty_used) > 0);
+    }
+
     function buildDefectReportPrintBody(row) {
         if ((getState()._dfPage || '1') === '2') {
             TVC_SpareMenu.persistWrSpareUsedParts?.();
@@ -2338,43 +2397,33 @@ const TVC_DefectReport = (function () {
         if ((getState()._dfPage || '1') === '1') captureDfJobItems();
         const s = getState();
         const draft = s._dfDraft || row;
-        const approval = dfApprovalState(row);
-        const page1Html = `<div class="wr-print-page">
-            <h1 class="wr-print-title">Defect Report</h1>
-            <p class="wr-print-meta" style="margin:0 0 10px;color:#4a5568">Page 1 · ${esc(row.case_no || '')}</p>
-            <div class="wr-print-doc tone-defect"><div class="wr-page">
-                ${renderPhase1(row, true, {
-                    includeApproval: true,
-                    postAction: {
-                        canEditShipInitial: false,
-                        canEditShipAttach: false,
-                        canEditShoreSupport: false,
-                        canEditCompanyReply: false,
-                        canEditShipVerify: false,
-                        canEditCompanyFinal: false,
-                    },
-                })}
+        const title = defectReportModalTitle(row);
+        const page1Body = `${renderPhase1(row, true, { includeApproval: true, forPrint: true })}
                 <div class="df-workflow-phases">
                     ${renderPhase4(row, true)}
-                </div>
-            </div></div>
-        </div>`;
+                </div>`;
+        const page1Html = renderDfPrintShell(title, '1', page1Body);
         const usedParts = enrichDfUsedParts(s._dfUsedParts || row.used_parts || []);
-        const meta = buildDfPage2Meta(row);
-        meta.spareShipComments = dfVal(row, 'spare_ship_comments', draft.spare_ship_comments || '');
-        const page2Html = TVC_SpareMenu.buildWrSparePage2PrintHtml(s, usedParts, meta);
-        return { title: `Defect Report ${row.case_no || ''}`, html: page1Html + page2Html };
+        let page2Html = '';
+        if (dfHasSparePage2ForPrint(usedParts)) {
+            const meta = buildDfPage2Meta(row);
+            meta.spareShipComments = dfVal(row, 'spare_ship_comments', draft.spare_ship_comments || '');
+            const page2Inner = TVC_SpareMenu.buildWrSparePage2UiPrintHtml(s, usedParts, meta);
+            const page2Body = `${renderDfApprovalHtml(row, { forPrint: true })}${page2Inner}`;
+            page2Html = renderDfPrintShell(title, '2', page2Body);
+        }
+        return { title: `Defect Report ${row.case_no || ''}`, html: page1Html + page2Html, appCss: true };
     }
 
     function openDefectReportPrint({ print = false } = {}) {
         const row = getDefectModalRow();
         if (!row) return;
         const doc = buildDefectReportPrintBody(row);
-        TVC_SpareMenu.openWrReportPrintWindow(doc.title, doc.html, { print });
+        TVC_SpareMenu.openWrReportPrintWindow(doc.title, doc.html, { print, appCss: !!doc.appCss });
     }
 
     function printDefectModal() {
-        openDefectReportPrint({ print: false });
+        openDefectReportPrint({ print: true });
     }
 
     function previewDefectModal() {
@@ -2455,7 +2504,7 @@ const TVC_DefectReport = (function () {
         const row = await TVC_DefectCaseService.get(caseId);
         if (!row) return;
         const doc = buildDefectReportPrintBody(row);
-        TVC_SpareMenu.openWrReportPrintWindow(doc.title, doc.html, { print: true });
+        TVC_SpareMenu.openWrReportPrintWindow(doc.title, doc.html, { print: true, appCss: !!doc.appCss });
     }
 
     function isNewUnsavedDefectSession() {

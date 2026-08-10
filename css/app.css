@@ -729,8 +729,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .batch-chks { display: flex; gap: 14px; margin-top: 10px; font-size: 12px; font-weight: 600; color: #22543d; }
 .batch-actions { padding: 12px 18px; background: #edf2f7; margin: 0; }
 .batch-wr-jobs {
-    display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 18px 0;
-    background: #edf2f7; border-bottom: 1px solid #cbd5e0;
+    display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 14px 6px;
+    background: #edf2f7;
 }
 .batch-wr-job-tag {
     padding: 5px 12px; border: 1px solid #cbd5e0; border-radius: 14px;
@@ -1107,17 +1107,85 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .modal.modal-over-consume { z-index: 10050; }
 #spareItemHistoryModal { z-index: 10050; }
+#spareConsumeModal.modal-over-spare-hist,
+#spareReqWorkModal.modal-over-spare-hist { z-index: 10100; }
+#spareItemHistoryModal .modal-box.wp-modal {
+    width: min(98vw, 1080px);
+    max-width: min(98vw, 1080px);
+    overflow-x: hidden;
+}
+#spareItemHistoryBody {
+    min-width: 0;
+    overflow-x: hidden;
+}
+#spareItemHistoryBody .spare-item-hist-part-wrap { margin-bottom: 12px; }
+#spareItemHistoryBody .spare-item-hist-table-panel {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+    overflow: hidden;
+}
+#spareItemHistoryBody .spare-data-table.spare-item-hist-table {
+    min-width: 0 !important;
+    width: 100%;
+    table-layout: fixed;
+}
+#spareItemHistoryBody .spare-data-table.spare-item-hist-table th,
+#spareItemHistoryBody .spare-data-table.spare-item-hist-table td {
+    text-align: center !important;
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 6px 4px;
+}
+#spareItemHistoryBody .spare-data-table.spare-item-hist-table th {
+    background: #f7fafc;
+    font-weight: 700;
+    color: #4a5568;
+    border-bottom: 2px solid #e2e8f0;
+}
+#spareItemHistoryBody .spare-data-table.spare-item-hist-table tbody td {
+    border-top: 1px solid #edf2f7;
+}
+#spareItemHistoryBody .spare-data-table.spare-item-hist-table .c-pno,
+#spareItemHistoryBody .spare-data-table.spare-item-hist-table .c-cls,
+#spareItemHistoryBody .spare-data-table.spare-item-hist-table .c-stk {
+    color: inherit;
+    font-weight: inherit;
+}
+#spareItemHistoryBody .spare-data-table tr.spare-row-focused.row-selected { cursor: default; }
+#spareItemHistoryBody .wp-table-wrap { overflow-x: hidden; }
+#spareItemHistoryBody .spare-item-hist-consume-table,
+#spareItemHistoryBody .spare-item-hist-req-table {
+    table-layout: fixed;
+    width: 100%;
+}
+#spareItemHistoryBody .spare-item-hist-consume-table th,
+#spareItemHistoryBody .spare-item-hist-consume-table td,
+#spareItemHistoryBody .spare-item-hist-req-table th,
+#spareItemHistoryBody .spare-item-hist-req-table td {
+    text-align: center !important;
+    vertical-align: middle;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    padding: 6px 8px;
+}
+#spareItemHistoryBody .wp-table .spare-consume-log-type {
+    text-align: center;
+    width: auto;
+    padding-left: 8px;
+    padding-right: 8px;
+}
+#spareItemHistoryBody .wp-table .spare-req-list-type {
+    text-align: center !important;
+}
 .modal-box { background: #fff; border-radius: 12px; padding: 24px; max-width: 520px; width: 100%; max-height: 90vh; overflow: auto; position: relative; }
 .modal-box.wide { max-width: 640px; }
 .modal-box.wp-modal { max-width: 820px; width: 96%; }
 
 /* Work Procedure modal — content-height (max 720px); History tab scrolls inside pane */
-#workProcedureModal {
-    overflow: auto;
-    align-items: flex-start;
-    justify-content: center;
-    -webkit-overflow-scrolling: touch;
-}
 #workProcedureModal .modal-box.wp-modal {
     width: 820px;
     max-width: 820px;
@@ -1302,6 +1370,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     overflow: hidden;
 }
 #workReportBody > .wr-titlebar,
+#workReportBody > .batch-wr-jobs,
 #workReportBody > .wr-tabsel,
 #workReportBody > .wr-pagetabs-bar,
 #workReportBody > .modal-actions,
@@ -1589,6 +1658,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     border: 1px solid #cbd5e0; border-bottom: none; background: #e2e8f0; color: #4a5568;
     padding: 5px 16px; font-size: 11px; font-weight: 700; cursor: pointer; border-radius: 6px 6px 0 0;
     min-width: 64px;
+    transition: background-color .18s ease, color .18s ease, border-color .18s ease;
 }
 .wr-pagetab.active {
     background: #fff; color: var(--navy); border-color: #cbd5e0;
@@ -1623,6 +1693,10 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .wr-maint-field > label {
     font-size: 10px; font-weight: 700; color: #1a202c;
     text-transform: uppercase; letter-spacing: .03em;
+}
+.wr-maint-field .tvc-date-input-wrap {
+    width: 100%;
+    box-sizing: border-box;
 }
 .wr-maint-field input,
 .wr-maint-field textarea,
@@ -5257,6 +5331,14 @@ label.spare-file-pick input[type=file] { display: none; }
 .wp-list-table .wp-st-Approved { background: #16a34a; }
 .wp-list-table .wp-st-Submitted { background: #d97706; }
 .wp-list-panel .spare-data-table.wp-list-table { min-width: 860px; }
+#workPermitBody .wp-meta-form {
+    margin: 0;
+    padding: 12px 14px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+}
 #workPermitBody .wp-meta-form .spare-req-hist-popover {
     width: 100%;
     max-width: 100%;
@@ -7784,11 +7866,6 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         min-height: min(92vh, 920px);
         border-radius: 12px;
     }
-    #workProcedureModal {
-        align-items: flex-start;
-        justify-content: center;
-        padding: 12px;
-    }
     #workProcedureModal .modal-box.wp-modal {
         width: min(96vw, 820px);
         min-width: min(96vw, 820px);
@@ -8301,14 +8378,23 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     color: #4a5568;
     white-space: nowrap;
 }
-.df-post-date-field input[type="date"] {
+.df-post-date-field input[type="date"],
+#defectReportBody .df-post-date-field input.tvc-date-input,
+#defectReportBody .df-post-date-field .tvc-date-input-wrap .tvc-date-input {
     width: 148px;
     padding: 6px 8px;
     border: 1px solid #cbd5e0;
     border-radius: 5px;
-    font-size: 13px;
+    font-family: inherit;
+    font-size: 11px;
+    color: #2d3748;
     box-sizing: border-box;
     background: #fff;
+    font-variant-numeric: tabular-nums;
+    min-width: 9.8em;
+}
+#defectReportBody .df-post-date-field input.tvc-date-input::placeholder {
+    color: #718096;
 }
 .df-company-attach-row .wr-attach-block { margin: 0; }
 .df-post-date-row {
@@ -8318,6 +8404,28 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     margin-top: 4px;
     padding-top: 8px;
     border-top: 1px dashed #e2e8f0;
+}
+/* Defect Report — post-action / repair labels match standard field labels */
+#defectReportBody .df-post-title,
+#defectReportBody .df-post-date-field label,
+#defectReportBody .df-checks-label,
+#defectReportBody .df-check,
+#defectReportBody .df-post-block .wr-footer-flag,
+#defectReportBody .df-repair-request-chk,
+#defectReportBody .df-ship-initial-actions .wr-maint-chk {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1a202c;
+    letter-spacing: .03em;
+    text-transform: uppercase;
+}
+#defectReportBody .df-check,
+#defectReportBody .df-post-block .wr-footer-flag,
+#defectReportBody .df-repair-request-chk,
+#defectReportBody .df-ship-initial-actions .wr-maint-chk {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
 }
 .df-verify-labor {
     grid-template-columns: repeat(2, minmax(0, 160px)) minmax(0, 1fr);

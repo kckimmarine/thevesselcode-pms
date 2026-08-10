@@ -963,15 +963,33 @@ const TVC_WorkPermitReport = (function () {
         };
     }
 
-    function renderWpApprovalHtml(row) {
+    function renderWpPageTabsHtml(wpPage) {
+        return `
+            <div class="wr-pagetabs">
+                <button type="button" class="wr-pagetab${wpPage === '1' ? ' active' : ''}" data-wp-page="1" onclick="TVC_WorkPermitReport.setWorkPermitPage('1')">Page 1</button>
+                <button type="button" class="wr-pagetab${wpPage === '2' ? ' active' : ''}" data-wp-page="2" onclick="TVC_WorkPermitReport.setWorkPermitPage('2')">Page 2</button>
+            </div>`;
+    }
+
+    function syncWpPageTabs() {
+        const wpPage = getState()._wpPage || '1';
+        document.querySelectorAll('#workPermitBody .wr-pagetab[data-wp-page]').forEach(btn => {
+            btn.classList.toggle('active', btn.dataset.wpPage === wpPage);
+        });
+    }
+
+    function renderWpApprovalHtml(row, opts = {}) {
+        const forPrint = !!opts.forPrint;
         const { isConfirmed, isApproved, canConfirmNow, canApproveNow, confirmedByVal, approvedByVal } = wpApprovalState(row);
+        const confirmDis = forPrint || !canConfirmNow ? ' disabled' : '';
+        const approveDis = forPrint || !canApproveNow ? ' disabled' : '';
         return `<section class="wr-maint-card wr-maint-approval">
-            <div class="wr-maint-approval-item${canConfirmNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wpConfirmedBy"${isConfirmed ? ' checked' : ''}${canConfirmNow ? '' : ' disabled'} onchange="TVC_WorkPermitReport.wpConfirmByToggle()"> Confirmed by</label>
+            <div class="wr-maint-approval-item${!forPrint && canConfirmNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="wpConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${forPrint ? '' : ' onchange="TVC_WorkPermitReport.wpConfirmByToggle()"'}> Confirmed by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
             </div>
-            <div class="wr-maint-approval-item${canApproveNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${canApproveNow ? '' : ' disabled'} onchange="TVC_WorkPermitReport.wpApprovedByToggle()"> Approved by</label>
+            <div class="wr-maint-approval-item${!forPrint && canApproveNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${forPrint ? '' : ' onchange="TVC_WorkPermitReport.wpApprovedByToggle()"'}> Approved by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
             </div>
         </section>`;
@@ -1111,19 +1129,26 @@ const TVC_WorkPermitReport = (function () {
         return 'Select File No.';
     }
 
-    function renderPage1(row, readonly) {
+    function renderPage1(row, readonly, opts = {}) {
         ensureWpDraft(row);
         ensureWpJobItems(row);
+        const forPrint = !!opts.forPrint;
         const jobId = wpVal(row, 'maintenance_job_id', row.maintenance_job_id || '');
         const s = getState();
         const job = jobId ? (s.idx?.jobById?.get(jobId) || s.jobs?.find(j => j.id === jobId)) : null;
         const hdr = job && TVC_SpareMenu?.resolveWrJobHeader?.(s, job) || {};
-        const ro = readonly;
+        const ro = readonly || forPrint;
         const roAttr = ro ? ' readonly' : '';
         const roCls = ro ? ' wr-ro' : '';
         const fld = (label, inner, extraCls = '') => `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
         const inp = (name, val, type = 'text') => {
-            const v = esc(wpVal(row, name, val));
+            const raw = wpVal(row, name, val);
+            const v = esc(raw);
+            if (type === 'date' && forPrint) {
+                return TVC_SpareMenu.buildWrSpareDateUiPrintInput
+                    ? TVC_SpareMenu.buildWrSpareDateUiPrintInput(raw)
+                    : `<input class="wr-ro tvc-date-input" value="${v}" readonly disabled>`;
+            }
             if (type === 'date') return `<input type="date" data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
             if (type === 'number') return `<input type="number" data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
             return `<input data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
@@ -1137,7 +1162,9 @@ const TVC_WorkPermitReport = (function () {
         const companyCommentRo = !isHq() || row.sync_status === 'SYNCED';
         const spareChk = `<label class="wr-maint-chk wp-est-spare-chk"><input type="checkbox" data-wp="checked_estimated_spare_parts"${wpVal(row, 'checked_estimated_spare_parts') ? ' checked' : ''}${ro ? ' disabled' : ''}> CHECKED ESTIMATED SPARE PARTS</label>`;
 
-        const fileNoInner = isWpListWindow()
+        const fileNoInner = forPrint
+            ? `<input class="wr-ro" value="${esc(wpVal(row, 'file_no', ''))}" readonly tabindex="-1">`
+            : isWpListWindow()
             ? `<div class="spare-req-no-wrap">
                 <input data-wp="file_no" class="spare-req-meta-input${roCls}" value="${esc(wpVal(row, 'file_no', ''))}"${roAttr}>
                 <span class="spare-req-hist-anchor">
@@ -1149,13 +1176,15 @@ const TVC_WorkPermitReport = (function () {
                 <button type="button" id="wpFileNoPickBtn" class="btn btn-sm wr-file-no-pick-btn" onclick="TVC_App.openFileNoPickModal('wp')"${ro ? ' disabled' : ''} title="Browse Work History for File No. reference">Select File No.</button>
             </div>`;
 
-        const histPanel = isWpListWindow()
+        const histPanel = forPrint
+            ? ''
+            : isWpListWindow()
             ? `<div id="wpHistPanel" class="spare-req-hist-popover hidden" aria-hidden="true"></div>`
             : `<div id="wpFileNoPickPanel" class="wr-file-no-popover spare-req-hist-popover hidden" aria-hidden="true"></div>`;
 
         return `<div class="wr-maint-form">
-            ${renderWpApprovalHtml(row)}
-            <section class="wr-maint-card wr-maint-body wr-file-no-anchor spare-consume-meta-form wp-meta-form">
+            ${renderWpApprovalHtml(row, { forPrint })}
+            <section class="wr-maint-card wr-maint-body wr-file-no-anchor wp-meta-form">
                 <div class="wr-maint-grid wr-maint-grid-3">
                     ${fld('File No.', fileNoInner)}
                     ${fld('Voy. No.', inp('voy_no', ''))}
@@ -1191,11 +1220,7 @@ const TVC_WorkPermitReport = (function () {
         const wpPage = getState()._wpPage || '1';
         const canEdit = !forceView && TVC_WorkPermit.canModifyListWorkflow(row);
         const titleText = forceView ? 'Work Permit (View)' : 'Work Permit (Draft)';
-        const pageTabs = `
-            <div class="wr-pagetabs">
-                <button type="button" class="wr-pagetab${wpPage === '1' ? ' active' : ''}" onclick="TVC_WorkPermitReport.setWorkPermitPage('1')">Page 1</button>
-                <button type="button" class="wr-pagetab${wpPage === '2' ? ' active' : ''}" onclick="TVC_WorkPermitReport.setWorkPermitPage('2')">Page 2</button>
-            </div>`;
+        const pageTabs = renderWpPageTabsHtml(wpPage);
         const headHtml = wpPage === '2' ? renderWpApprovalHtml(row) : '';
         const body = wpPage === '2'
             ? renderWpPage2Body(row, forceView || !canEdit)
@@ -1223,11 +1248,7 @@ const TVC_WorkPermitReport = (function () {
         const hasDisplayed = wpListHasDisplayedPermit();
         const listEditing = !!s._wpListEditing;
         const titleSuffix = listEditing ? ' <span class="muted">(Draft)</span>' : '';
-        const pageTabs = `
-            <div class="wr-pagetabs">
-                <button type="button" class="wr-pagetab${wpPage === '1' ? ' active' : ''}" onclick="TVC_WorkPermitReport.setWorkPermitPage('1')">Page 1</button>
-                <button type="button" class="wr-pagetab${wpPage === '2' ? ' active' : ''}" onclick="TVC_WorkPermitReport.setWorkPermitPage('2')">Page 2</button>
-            </div>`;
+        const pageTabs = renderWpPageTabsHtml(wpPage);
         const headHtml = wpPage === '2' ? renderWpApprovalHtml(row) : '';
         const formBody = wpPage === '2'
             ? renderWpPage2Body(row, listViewLocked || !TVC_WorkPermit.canModifyListWorkflow(row))
@@ -1474,6 +1495,7 @@ const TVC_WorkPermitReport = (function () {
         if (wpPage === '2') {
             syncWpSparePage2Ui(true, ro);
         }
+        syncWpPageTabs();
         restoreWpModalScroll(scroll);
         TVC_PWA?.initDateInputFormat?.(page);
         return true;
@@ -1530,6 +1552,7 @@ const TVC_WorkPermitReport = (function () {
             }
         }
         restoreWpModalScroll(scroll);
+        syncWpPageTabs();
         TVC_PWA?.initDateInputFormat?.(body);
     }
 
@@ -2112,12 +2135,54 @@ const TVC_WorkPermitReport = (function () {
         await refreshWpListWindowUi();
     }
 
+    function workPermitModalTitle(row) {
+        const s = getState();
+        if (isWpListWindow() && !s._wpListEditing) return 'Work Permit';
+        if (s._wpMode === 'view') return 'Work Permit (View)';
+        if (isWpListWindow() && s._wpListEditing) return 'Work Permit (Draft)';
+        return s._wpMode === 'view' ? 'Work Permit (View)' : 'Work Permit (Draft)';
+    }
+
+    function buildWpPrintBody() {
+        captureWpFormFields();
+        captureWpJobItems();
+        if ((getState()._wpPage || '1') === '2') {
+            TVC_SpareMenu.persistWrSpareUsedParts?.();
+            captureWpUsedParts();
+        } else if ((getState()._wpUsedParts || []).length) {
+            captureWpUsedParts();
+        }
+        const row = getModalRow();
+        if (!row) return null;
+        const s = getState();
+        const title = workPermitModalTitle(row);
+        const page1Body = renderPage1(row, true, { forPrint: true });
+        const page1Html = TVC_SpareMenu.renderWrPrintShell(title, '1', page1Body, 'defect');
+        const usedParts = enrichWpUsedParts(s._wpUsedParts || row.estimated_parts || []);
+        let page2Html = '';
+        if (TVC_SpareMenu.wrHasSparePage2ForPrint(usedParts)) {
+            const meta = buildWpPage2Meta(row);
+            meta.page2Subtitle = 'Estimated spare parts (reference only — no inventory deduction)';
+            const page2Inner = TVC_SpareMenu.buildWrSparePage2UiPrintHtml(s, usedParts, meta);
+            const page2Body = `${renderWpApprovalHtml(row, { forPrint: true })}${page2Inner}`;
+            page2Html = TVC_SpareMenu.renderWrPrintShell(title, '2', page2Body, 'defect');
+        }
+        const permitLabel = String(row.file_no || row.permit_no || TVC_WorkPermitSync.reportJobCode(row) || '').trim();
+        return { title: `Work Permit ${permitLabel}`.trim(), html: page1Html + page2Html, appCss: true };
+    }
+
+    function openWpPrint({ print = false } = {}) {
+        const doc = buildWpPrintBody();
+        if (!doc) return;
+        TVC_SpareMenu.openWrReportPrintWindow(doc.title, doc.html, { print, appCss: !!doc.appCss });
+    }
+
     async function wpListPrint() {
         if (!wpListHasDisplayedPermit()) {
             await TVC_Dialog.alert('Select a Work Permit from the list first.');
             return;
         }
-        await TVC_Dialog.alert('Print preview for Work Permit is not yet available.');
+        openWpPrint({ print: false });
     }
 
     async function wpListPreview() {
@@ -2125,7 +2190,7 @@ const TVC_WorkPermitReport = (function () {
             await TVC_Dialog.alert('Select a Work Permit from the list first.');
             return;
         }
-        await TVC_Dialog.alert('Document preview for Work Permit is not yet available.');
+        openWpPrint({ print: false });
     }
 
     async function saveModal() {

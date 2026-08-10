@@ -99,7 +99,7 @@ const TVC_Transaction = (function () {
         if (!job || !item || !report) return job;
         maybeSnapshotJobState(item, job, opts.snapshotPrev);
 
-        if (report.work_type === 'POSTPONE' || item.status === 'CONFIRMED' || item.status === 'POSTPONED') {
+        if (report.work_type === 'POSTPONE') {
             const postponeDate = String(
                 report.approved_postpone_date || report.postpone_date || item.form?.postponeDate || '',
             ).slice(0, 10);
@@ -110,12 +110,15 @@ const TVC_Transaction = (function () {
             job.is_overdue = _isOverdue(job.next_date);
             job.plan_status = 'PLANNED';
             job.schedule_basis = 'POSTPONE';
-        } else {
+        } else if (report.work_type === 'MAINTENANCE' || report.work_type === 'TROUBLE') {
             const lastDone = resolveMaintenanceLastDone(item, report);
             job.last_done = lastDone;
             job.next_date = calcNextDate(job, lastDone);
             job.is_overdue = _isOverdue(job.next_date);
             job.plan_status = 'COMPLETED';
+            if (job.schedule_basis === 'POSTPONE') job.schedule_basis = null;
+        } else {
+            return job;
         }
 
         markPending(job);
@@ -224,19 +227,22 @@ const TVC_Transaction = (function () {
             }
 
             const codes = jobItems.map(i => i.job_code).join(', ');
+            const postponeDate = payload.postponeDate
+                || (payload.workType === 'POSTPONE' ? payload.sharedForm?.postponeDate : null)
+                || null;
             const base = {
                 id: 'DWR-' + Date.now(),
                 work_type: payload.workType || 'MAINTENANCE',
                 report_date: payload.reportDate || now().slice(0, 10),
                 work_date: payload.workDate || null,
-                description: payload.description || `Work Report (${jobItems.length} jobs)`,
+                description: payload.description || `${payload.workType === 'POSTPONE' ? 'Postpone' : 'Work'} Report (${jobItems.length} jobs)`,
                 reported_by: user.id,
                 reporter_username: String(user.username || '').toLowerCase(),
                 reporter_name: TVC_RBAC.getReportedByLabel(user),
                 reporter_role: TVC_RBAC.resolveUserRole(user) || user.role || '',
                 used_parts: [],
                 trouble_detail: null,
-                postpone_date: null,
+                postpone_date: postponeDate,
                 report_form: payload.sharedForm || null,
                 is_locked: false,
                 created_at: now(),
@@ -245,9 +251,12 @@ const TVC_Transaction = (function () {
             await stampHqLocalReport(report, user);
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             await api.put('daily_work_reports', report);
+            const scheduleNote = report.work_type === 'POSTPONE'
+                ? `NEXT DATE → ${postponeDate || '—'}`
+                : 'LAST DONE/NEXT DATE 갱신';
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
-                log: `📋 [BATCH/${report.status}] ${codes} — LAST DONE/NEXT DATE 갱신 — ${user.display_name}`,
+                log: `📋 [BATCH/${report.status}] ${codes} — ${scheduleNote} — ${user.display_name}`,
                 sync_status: 'LOCAL',
             });
             return report;
@@ -656,44 +665,74 @@ const TVC_Transaction = (function () {
         ).slice(0, 10);
     }
 
+    function resolveDefectScheduleTargets(row) {
+        const items = (row?.job_items || []).filter(i => {
+            const c = String(i.job_code || '').trim();
+            return (c && !isPlaceholderJobCode(c)) || String(i.maintenance_job_id || '').trim();
+        });
+        if (items.length > 1) {
+            return items.map(i => ({
+                jobId: String(i.maintenance_job_id || '').trim(),
+                jobCode: isPlaceholderJobCode(i.job_code) ? '' : String(i.job_code || '').trim(),
+            }));
+        }
+        const jobId = String(row.maintenance_job_id || '').trim()
+            || String(items[0]?.maintenance_job_id || '').trim();
+        const code = defectEffectiveJobCode(row) || String(items[0]?.job_code || '').trim();
+        return [{ jobId, jobCode: isPlaceholderJobCode(code) ? '' : code }];
+    }
+
+    async function resolveDefectMaintenanceJobByTarget(api, target) {
+        if (target?.jobId) {
+            const job = await api.get('maintenance_jobs', target.jobId);
+            if (job) return job;
+        }
+        if (target?.jobCode) {
+            const jobs = await api.getAll('maintenance_jobs');
+            return jobs.find(j => j.job_code === target.jobCode) || null;
+        }
+        return null;
+    }
+
     /** Defect Cleared + linked Job Code — any list status (Reported~Approved) before Closed out */
     function shouldApplyDefectJobSchedule(row) {
         if (!row || row.job_schedule_applied_at) return false;
         if (!row.defect_cleared) return false;
-        const jobId = String(row.maintenance_job_id || '').trim()
-            || (row.job_items || []).map(i => i.maintenance_job_id).find(id => String(id || '').trim());
-        const code = defectEffectiveJobCode(row);
-        return !!(jobId || code);
+        if (!String(row.ship_verified_date || '').trim()) return false;
+        return resolveDefectScheduleTargets(row).some(t => t.jobId || t.jobCode);
     }
 
     async function resolveDefectMaintenanceJob(api, row) {
-        const jobId = String(row.maintenance_job_id || '').trim()
-            || (row.job_items || []).map(i => i.maintenance_job_id).find(id => String(id || '').trim());
-        if (jobId) {
-            const job = await api.get('maintenance_jobs', jobId);
+        const targets = resolveDefectScheduleTargets(row);
+        for (const t of targets) {
+            const job = await resolveDefectMaintenanceJobByTarget(api, t);
             if (job) return job;
         }
-        const code = defectEffectiveJobCode(row);
-        if (!code) return null;
-        const jobs = await api.getAll('maintenance_jobs');
-        return jobs.find(j => j.job_code === code) || null;
+        return null;
     }
 
-    /** Defect Report DEFECT CLEARED — Work Plan LAST DONE / NEXT DATE (Work Report Confirm와 동일) */
+    /** Defect Report DEFECT CLEARED — Work Plan LAST DONE / NEXT DATE (all batch jobs) */
     async function applyDefectJobSchedule(api, row) {
         if (!shouldApplyDefectJobSchedule(row)) return null;
-        const job = await resolveDefectMaintenanceJob(api, row);
-        if (!job) return null;
         const lastDone = resolveDefectLastDone(row);
-        job.last_done = lastDone;
-        job.next_date = calcNextDate(job, lastDone);
-        job.is_overdue = _isOverdue(job.next_date);
-        job.plan_status = 'COMPLETED';
-        if (job.schedule_basis === 'POSTPONE') job.schedule_basis = null;
-        markPending(job);
-        await api.put('maintenance_jobs', job);
-        if (!String(row.maintenance_job_id || '').trim()) row.maintenance_job_id = job.id;
-        return job;
+        const targets = resolveDefectScheduleTargets(row);
+        let lastApplied = null;
+        for (const t of targets) {
+            const job = await resolveDefectMaintenanceJobByTarget(api, t);
+            if (!job) continue;
+            job.last_done = lastDone;
+            job.next_date = calcNextDate(job, lastDone);
+            job.is_overdue = _isOverdue(job.next_date);
+            job.plan_status = 'COMPLETED';
+            if (job.schedule_basis === 'POSTPONE') job.schedule_basis = null;
+            markPending(job);
+            await api.put('maintenance_jobs', job);
+            lastApplied = job;
+        }
+        if (lastApplied && !String(row.maintenance_job_id || '').trim()) {
+            row.maintenance_job_id = lastApplied.id;
+        }
+        return lastApplied;
     }
 
     function calcNextDate(job, fromDateStr) {
@@ -766,7 +805,7 @@ const TVC_Transaction = (function () {
     return {
         submitReport, submitBatchReport, updateReport, deleteReport,
         approveReport, executeMaintenance, confirmReport, unconfirmReport, calcNextDate, markPending,
-        applyDefectJobSchedule, shouldApplyDefectJobSchedule,
+        applyDefectJobSchedule, shouldApplyDefectJobSchedule, resolveDefectScheduleTargets,
         jobRequiresCompanyPostponeApproval, reportRequiresCompanyPostponeApproval,
         purgeAllWorkReports,
     };
