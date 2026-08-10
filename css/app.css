@@ -1161,6 +1161,9 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     table-layout: fixed;
     width: 100%;
 }
+#spareItemHistoryBody .spare-item-hist-req-table col {
+    width: calc(100% / 9);
+}
 #spareItemHistoryBody .spare-item-hist-consume-table th,
 #spareItemHistoryBody .spare-item-hist-consume-table td,
 #spareItemHistoryBody .spare-item-hist-req-table th,
@@ -1804,7 +1807,24 @@ input.tvc-date-input::placeholder {
 .wr-maint-approval-item { display: flex; align-items: center; gap: 8px; }
 .spare-req-work-scroll > .wr-maint-approval,
 .spare-consume-meta-form > .wr-maint-approval { margin-bottom: 10px; }
-#spareConsumeModal .spare-req-work-scroll > .wr-spare-meta-form.wr-maint-card {
+#spareConsumeBody .spare-req-work-scroll > .consume-report-meta {
+    margin: 0 14px 12px;
+    flex-shrink: 0;
+}
+#spareConsumeBody .consume-report-meta > .wr-maint-approval { margin: 0; }
+#spareConsumeBody .consume-report-meta > .wr-maint-card.spare-consume-meta-form {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, .06);
+    padding: 12px 14px;
+    margin: 0;
+    gap: 10px;
+}
+#spareConsumeBody .consume-report-meta > .wr-maint-card.spare-consume-meta-form > .wr-page2-job-rows {
+    margin-top: 0;
+}
+#spareConsumeModal .spare-req-work-scroll > .consume-report-meta .wr-spare-meta-form.wr-maint-card {
     margin: 0 14px 12px;
     flex-shrink: 0;
 }
@@ -4390,6 +4410,21 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 .spare-consume-meta-form.is-consume-hist-open {
     z-index: 500;
+}
+#spareConsumeModal .spare-req-work-wrap.is-consume-hist-open .spare-req-work-head {
+    z-index: 1;
+}
+#spareConsumeModal .spare-req-work-wrap.is-consume-hist-open .spare-req-work-scroll {
+    position: relative;
+    z-index: 100;
+}
+#spareConsumeBody .consume-report-meta.is-consume-hist-open {
+    position: relative;
+    z-index: 500;
+}
+.spare-consume-meta-form.is-consume-hist-open .spare-req-hist-popover,
+#spareConsumeBody .consume-report-meta.is-consume-hist-open .spare-req-hist-popover {
+    z-index: 600;
 }
 .spare-consume-meta-form .spare-req-no-wrap {
     display: flex;

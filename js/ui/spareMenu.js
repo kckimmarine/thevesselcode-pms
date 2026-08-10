@@ -246,6 +246,163 @@ const TVC_SpareMenu = (function () {
         return out;
     }
 
+    function isConsumeWrLinked(draft, st = getState()) {
+        if (!draft) return false;
+        const src = String(draft.source || '').toLowerCase();
+        if (src === 'work_report' || draft.work_report_id) return true;
+        if (draft._consumeWrPage2) return true;
+        if (draft.log_id && (st.reports || []).some(r => r.consume_log_id === draft.log_id)) return true;
+        return false;
+    }
+
+    async function ensureConsumeLinkedMaintenanceReport(log, draft, st = getState()) {
+        if (!log || !draft) return null;
+        let rep = consumeLogLinkedReport(log, st);
+        if (!rep && log.work_report_id && window.TVC_DB) {
+            try {
+                rep = await TVC_DB.get('daily_work_reports', log.work_report_id);
+            } catch (_) { /* ignore */ }
+        }
+        if (!rep && log.id && window.TVC_DB) {
+            try {
+                const all = await TVC_DB.getAll('daily_work_reports');
+                rep = (all || []).find(r => r.consume_log_id === log.id) || null;
+            } catch (_) { /* ignore */ }
+        }
+        if (rep) {
+            draft.work_report_id = draft.work_report_id || rep.id || '';
+            if (!String(draft.source || '').trim() || String(draft.source).toLowerCase() === 'consume') {
+                draft.source = 'work_report';
+            }
+            draft._consumeWrPage2 = true;
+            if (!(st.reports || []).some(r => r.id === rep.id)) {
+                st.reports = st.reports || [];
+                st.reports.push(rep);
+            }
+        }
+        return rep;
+    }
+
+    function resolveConsumePmsGroupNo(draft, log, rep, st, job) {
+        const candidates = [
+            draft?.spare_group_label,
+            log?.pms_group_no,
+            rep?.report_form?.pmsGroupNo,
+            job?.group,
+        ];
+        for (const c of candidates) {
+            const t = safeTreeLabel(String(c || '').trim());
+            if (t && t !== '—') return t;
+        }
+        if (job) {
+            const hdr = resolveWrJobHeader(st, job);
+            if (hdr.pmsGroupNo) return safeTreeLabel(hdr.pmsGroupNo);
+        }
+        if (rep?.job_items?.length) {
+            const j = st.idx?.jobById?.get(rep.job_items[0].maintenance_job_id);
+            if (j?.group) return safeTreeLabel(j.group);
+        }
+        if (draft?.job_items?.[0]?.job_code) {
+            const j = findJobByCode(st, draft.job_items[0].job_code);
+            if (j?.group) return safeTreeLabel(j.group);
+        }
+        if (draft?.spare_group_key) {
+            const fromKey = String(draft.spare_group_key).split('|').slice(1).join('|').trim();
+            if (fromKey) return safeTreeLabel(fromKey);
+        }
+        return '';
+    }
+
+    /** Linked Maintenance Report — fill PMS group, batch jobs, dates, comments for Page 2 parity. */
+    async function hydrateConsumeDraftFromLinkedReport(draft, log, st = getState()) {
+        if (!draft || !log) return draft;
+        if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
+            st.idx = TVC_Indexes.build(st);
+        }
+        const page1 = resolveConsumeLogPage1Meta(log, st);
+        draft.file_no = draft.file_no || page1.file_no || '';
+        draft.voy_no = draft.voy_no || page1.voy_no || '';
+        draft.place = draft.place || page1.place || '';
+        const rep = await ensureConsumeLinkedMaintenanceReport(log, draft, st);
+        if (!rep && !isConsumeWrLinked(draft, st)) return draft;
+        if (rep && window.TVC_WorkReport?.fromLegacy) TVC_WorkReport.fromLegacy(rep);
+        const form = rep?.report_form || {};
+        const firstJobId = rep?.job_items?.[0]?.maintenance_job_id || rep?.maintenance_job_id;
+        let job = firstJobId ? st.idx?.jobById?.get(firstJobId) : null;
+        if (!job && draft.job_code) job = findJobByCode(st, draft.job_code);
+        if (!job && draft.job_items?.[0]?.job_code) {
+            job = findJobByCode(st, draft.job_items[0].job_code);
+        }
+        const pmsGroupNo = resolveConsumePmsGroupNo(draft, log, rep, st, job);
+        if (pmsGroupNo) draft.spare_group_label = pmsGroupNo;
+        if (!String(draft.spare_group_key || '').trim() && job) {
+            draft.spare_group_key = `${job.department || ''}|${String(job.group || '').trim()}`;
+        }
+        const repJobs = rep?.job_items || [];
+        if (rep && repJobs.length > 1) {
+            draft.job_items = repJobs.map(it => {
+                const j = st.idx?.jobById?.get(it.maintenance_job_id);
+                return newConsumeJobRow({
+                    job_code: it.job_code || j?.job_code || '',
+                    sort1: j?.item_sort1 || it.item_sort1 || it.form?.sort1 || '',
+                    sort2: j?.item_sort2 || it.item_sort2 || it.form?.sort2 || '',
+                    job_detail: j?.job_detail || it.job_detail || it.form?.jobDetail || '',
+                });
+            });
+            syncConsumeDraftJobSummary(draft);
+        } else if ((draft.job_items || []).length <= 1 && consumeLogJobItems(log).length > 1) {
+            draft.job_items = consumeLogJobItems(log);
+            syncConsumeDraftJobSummary(draft);
+        }
+        if (!String(draft.ships_comments || '').trim()) {
+            draft.ships_comments = form.spareShipComments || form.shipComments || log.ships_comments || '';
+        }
+        if (!draft.consumed_date) {
+            draft.consumed_date = rep?.work_date || form.workDate || rep?.report_date || '';
+        }
+        if (!draft.made_on) {
+            draft.made_on = rep?.report_date || form.reportDate || '';
+        }
+        return draft;
+    }
+
+    function isConsumeWrPage2View(draft, ro, listMode, st = getState()) {
+        return !!listMode && !!ro && isConsumeWrLinked(draft, st);
+    }
+
+    function buildConsumeWrPage2Meta(draft, reportedByVal, st = getState()) {
+        ensureConsumeJobItems(draft);
+        let job = draft.job_code ? findJobByCode(st, draft.job_code) : null;
+        if (!job && draft.job_items?.[0]?.job_code) {
+            job = findJobByCode(st, draft.job_items[0].job_code);
+        }
+        const pmsGroupNo = resolveConsumePmsGroupNo(draft, null, null, st, job);
+        return {
+            workDate: draft.consumed_date || '',
+            reportDate: draft.made_on || '',
+            reportedBy: reportedByVal || '',
+            pmsGroupNo,
+            groupKey: draft.spare_group_key || '',
+            jobItems: draft.job_items,
+            spareShipComments: draft.ships_comments || '',
+            allowAdd: false,
+        };
+    }
+
+    function initConsumeListView(st) {
+        const m = modState(st);
+        if (!isConsumedLogWindow(m) || m.consumeLogListEditing || m.consumePreview) return;
+        const draft = getConsumeSession();
+        if (!draft) return;
+        const firstLine = (draft.lines || []).find(l => Number(l.qty_consumed) > 0)
+            || (draft.lines || [])[0];
+        if (firstLine?.spare_part_id) {
+            const spare = (st.spares || []).find(s => consumeSameSpareId(s.id, firstLine.spare_part_id));
+            m.consumeFocusedId = spare?.id || firstLine.spare_part_id;
+            syncConsumeGroupHeader(st);
+        }
+    }
+
     function consumeLogTypeCell(log) {
         const m = consumeLogTypeMarker(log);
         return `<td class="spare-consume-log-type hist-type ${m.cls}" title="${escAttr(m.title)}"><span class="hist-type-mark">${esc(m.letter)}</span></td>`;
@@ -996,17 +1153,23 @@ const TVC_SpareMenu = (function () {
                 showCriticalEquipment: opts.showCriticalEquipment,
             });
         }
-        const h = resolveSpareGroupHeader(st, { focusedId: focusOverride });
-        const hasContent = spareHeaderHasContent(st, focusOverride);
+        const h = opts.forceIdle
+            ? { pmsGroupNo: '', maker: '', modelType: '', capacity: '', serialNo: '' }
+            : resolveSpareGroupHeader(st, { focusedId: focusOverride });
+        const hasContent = opts.forceIdle ? false : spareHeaderHasContent(st, focusOverride);
         const showCriticalEquipment = !!opts.showCriticalEquipment;
+        const blankEmpty = !!opts.blankEmpty;
         const field = (v, extraClass = '') => {
             const t = String(v || '').trim();
             const empty = !t;
             const cls = ['spare-gh-value', extraClass, empty ? 'empty' : ''].filter(Boolean).join(' ');
+            if (blankEmpty && empty) return `<span class="${cls}"></span>`;
             return `<span class="${cls}">${empty ? '—' : esc(t)}</span>`;
         };
         const idleHintText = opts.idleHint || 'Click an item or select a group in the SPARE GROUP Tree to display equipment information.';
-        const idleHint = `<span class="spare-gh-idle-hint">${idleHintText}</span>`;
+        const idleHint = opts.suppressIdleHint
+            ? ''
+            : `<span class="spare-gh-idle-hint">${idleHintText}</span>`;
         const ariaLabel = opts.ariaLabel || 'SPARE Group information';
         const primaryRowClass = showCriticalEquipment
             ? 'spare-gh-row spare-gh-row-primary spare-gh-row-plan-split'
@@ -3126,7 +3289,7 @@ const TVC_SpareMenu = (function () {
         const line = _consumeLineBySpareId?.get(consumeSpareIdKey(s.id));
         if (!line) return '0';
         const qty = Number(line.qty_consumed) || 0;
-        if (modState(getState()).consumePreview) return String(qty);
+        if (!consumeListEditable()) return esc(String(qty));
         return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-consume-qty-input" value="${qty}"
             onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
             onfocus="event.stopPropagation();this.select()"
@@ -3349,6 +3512,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function consumeToggleAll(checked) {
+        if (!consumeListEditable()) return;
         const draft = getConsumeSession();
         if (!draft) return;
         captureConsumeMeta();
@@ -4238,7 +4402,7 @@ const TVC_SpareMenu = (function () {
             : ctx === 'receive'
                 ? `TVC_SpareMenu.receiveFocusRow('${sid}', true)`
             : ctx === 'consume'
-                ? `TVC_SpareMenu.consumeFocusRow('${sid}', true)`
+                ? `TVC_SpareMenu.consumeFocusRow('${sid}', ${consumeListEditable() ? 'true' : 'false'})`
             : `${focusFn}('${sid}')`;
         const toggleFn = ctx === 'reqWork' ? 'TVC_SpareMenu.reqWorkToggleRow'
             : ctx === 'consume' ? 'TVC_SpareMenu.consumeToggleRow'
@@ -4258,7 +4422,7 @@ const TVC_SpareMenu = (function () {
         const quoteView = ctx === 'reqWork' && reqWorkHqQuoteViewActive();
         const rcvdEdit = ctx === 'reqWork' && reqWorkReceivedQtyEditable() && !locked && !quoteView;
         const wrRo = ctx === 'wrSpare' && modState(getState()).wrSpareReadonly;
-        const consumeRo = ctx === 'consume' && modState(getState()).consumePreview;
+        const consumeRo = ctx === 'consume' && !consumeListEditable();
         const itemName = String(s.name || '').trim();
         const dwgText = String(spareDwgNo(s, getState()) || '').trim();
         const pnoText = String(spareDrawingNo(s) || '').trim();
@@ -6858,11 +7022,30 @@ const TVC_SpareMenu = (function () {
         setSpareListToolbarBtnDisabled(panel, 'consumeLogDelete', !canDelete);
     }
 
+    function consumeHistMetaAnchor() {
+        const btn = document.getElementById('consumeLogHistBtn');
+        return btn?.closest('.spare-consume-meta-form')
+            || document.querySelector('#spareConsumeBody .spare-consume-meta-form');
+    }
+
+    function attachConsumeHistPanelToAnchor(histPanel) {
+        if (!histPanel) return;
+        const anchor = consumeHistMetaAnchor();
+        if (!anchor) return;
+        const placeholder = anchor.querySelector('#consumeLogHistPanel');
+        if (placeholder && placeholder !== histPanel) {
+            placeholder.replaceWith(histPanel);
+        } else if (!anchor.contains(histPanel)) {
+            anchor.appendChild(histPanel);
+        }
+    }
+
     function positionConsumeLogHistPopover() {
         const btn = document.getElementById('consumeLogHistBtn');
         const panel = document.getElementById('consumeLogHistPanel');
-        const meta = document.querySelector('#spareConsumeBody .spare-consume-meta-form');
+        const meta = consumeHistMetaAnchor();
         if (!btn || !panel || !meta || panel.classList.contains('hidden')) return;
+        if (!meta.contains(panel)) attachConsumeHistPanelToAnchor(panel);
         const top = btn.getBoundingClientRect().bottom - meta.getBoundingClientRect().top + 6;
         panel.style.top = `${Math.max(top, 0)}px`;
     }
@@ -6872,13 +7055,14 @@ const TVC_SpareMenu = (function () {
         if (!open || opts.reset) clearConsumeLogUiState(modState(getState()));
         const panel = document.getElementById('consumeLogHistPanel');
         const btn = document.getElementById('consumeLogHistBtn');
-        const meta = document.querySelector('#spareConsumeBody .spare-consume-meta-form');
+        const meta = consumeHistMetaAnchor();
+        if (panel && meta) attachConsumeHistPanelToAnchor(panel);
         if (panel) {
             panel.classList.toggle('hidden', !open);
             panel.setAttribute('aria-hidden', open ? 'false' : 'true');
         }
         if (btn) btn.classList.toggle('is-open', open);
-        if (meta) meta.classList.toggle('is-consume-hist-open', open);
+        syncConsumeHistOpenClasses(open);
         if (open) {
             requestAnimationFrame(() => {
                 positionConsumeLogHistPopover();
@@ -6982,9 +7166,31 @@ const TVC_SpareMenu = (function () {
         await refreshConsumeLogHistList();
     }
 
+    function consumeMetaLayoutKey(draft, st = getState()) {
+        const m = modState(st);
+        const ro = !!m.consumePreview || (m.consumeLogListMode && !m.consumeLogListEditing);
+        return isConsumeWrPage2View(draft, ro, m.consumeLogListMode, st) ? 'wr-page2' : 'standard';
+    }
+
+    function canPatchConsumeMetaInPlace(draft, st = getState()) {
+        const root = document.querySelector('#spareConsumeBody .consume-report-meta');
+        if (!root || !draft) return false;
+        return root.dataset.consumeMetaLayout === consumeMetaLayoutKey(draft, st);
+    }
+
+    function syncConsumeHistOpenClasses(open = _consumeLogHistOpen) {
+        const wrap = document.querySelector('#spareConsumeBody .spare-req-work-wrap');
+        if (wrap) wrap.classList.toggle('is-consume-hist-open', open);
+        const metaRoot = document.querySelector('#spareConsumeBody .consume-report-meta');
+        if (metaRoot) metaRoot.classList.toggle('is-consume-hist-open', open);
+        const meta = consumeHistMetaAnchor();
+        if (meta) meta.classList.toggle('is-consume-hist-open', open);
+    }
+
     function syncConsumeLogApprovalSection(draft) {
-        const meta = document.querySelector('#spareConsumeBody .spare-consume-meta-form');
-        if (!meta || !draft || !isConsumedLogWindow(modState(getState()))) return;
+        const root = document.querySelector('#spareConsumeBody .consume-report-meta')
+            || document.querySelector('#spareConsumeBody .spare-req-work-scroll');
+        if (!root || !draft || !isConsumedLogWindow(modState(getState()))) return;
         const st = getState();
         const m = modState(st);
         const html = renderConsumeLogApprovalRow(draft, {
@@ -6993,12 +7199,36 @@ const TVC_SpareMenu = (function () {
             listMode: true,
             listEditing: m.consumeLogListEditing,
         });
-        const existing = meta.querySelector('.spare-req-approval-row');
+        const existing = root.querySelector('.wr-maint-approval');
         if (existing) existing.outerHTML = html;
-        else meta.insertAdjacentHTML('afterbegin', html);
+        else root.insertAdjacentHTML('afterbegin', html);
     }
 
-    function applyConsumeMetaFromSession(draft) {
+    function applyConsumeWrPage2MetaFromSession(draft, st = getState()) {
+        const reportedByVal = resolveSpareReportedBy(draft, spareInventoryUser(st));
+        const meta = buildConsumeWrPage2Meta(draft, reportedByVal, st);
+        const pmsLabel = meta.pmsGroupNo ? safeTreeLabel(meta.pmsGroupNo) : '—';
+        const pmsInp = document.querySelector('#spareConsumeBody .consume-report-meta .wr-maint-grid .wr-maint-span-all input.wr-ro');
+        if (pmsInp) pmsInp.value = pmsLabel;
+        setPage2JobContext({
+            items: meta.jobItems,
+            groupKey: meta.groupKey || '',
+            readonly: true,
+            allowAdd: false,
+        });
+        const container = document.getElementById('page2JobRows');
+        if (container) {
+            container.innerHTML = renderPage2JobRowsInner(getPage2JobContext(), {
+                readonly: true,
+                allowAdd: false,
+                maintStyle: true,
+            });
+        }
+        const comments = document.getElementById('wrSpareShipComments');
+        if (comments) comments.value = meta.spareShipComments || '';
+    }
+
+    function applyConsumeMetaFromSession(draft, st = getState()) {
         if (!draft) return;
         const setVal = (id, val) => {
             const el = document.getElementById(id);
@@ -7009,9 +7239,99 @@ const TVC_SpareMenu = (function () {
         setVal('consumePlace', draft.place || '');
         setVal('consumeDate', fmtSpareDate(draft.consumed_date || ''));
         setVal('consumeMadeOn', fmtSpareDate(draft.made_on || ''));
-        setVal('consumeMadeBy', resolveSpareReportedBy(draft, spareInventoryUser(getState())));
+        setVal('consumeMadeBy', resolveSpareReportedBy(draft, spareInventoryUser(st)));
         setVal('consumeShipComments', draft.ships_comments || '');
-        renderConsumeJobRowsSection();
+        syncConsumeLogApprovalSection(draft);
+        if (consumeMetaLayoutKey(draft, st) === 'wr-page2') {
+            applyConsumeWrPage2MetaFromSession(draft, st);
+        } else {
+            const pickText = document.getElementById('consumeGroupPickText');
+            if (pickText) {
+                const label = draft.spare_group_label ? safeTreeLabel(draft.spare_group_label) : '— Select PMS Group —';
+                pickText.textContent = label;
+            }
+            renderConsumeJobRowsSection();
+        }
+        const scroll = document.querySelector('#spareConsumeBody .spare-req-work-scroll');
+        if (scroll) syncSpareDateInputs(scroll);
+    }
+
+    /** Consumption List 행 전환 — layout 변경 시에만 meta DOM 교체 */
+    function syncConsumeMetaPanelFromSession(draft, st) {
+        const scroll = document.querySelector('#spareConsumeBody .spare-req-work-scroll');
+        if (!scroll || !draft) return;
+        const m = modState(st);
+        const listMode = !!m.consumeLogListMode;
+        const metaHtml = renderConsumeMetaHtml(draft, {
+            readonly: m.consumePreview,
+            department: st.department,
+            listMode,
+        });
+        const layout = scroll.querySelector('.spare-consume-work-layout')
+            || scroll.querySelector('.plan-layout');
+        if (!layout) return;
+
+        const histPanel = document.getElementById('consumeLogHistPanel');
+        const histWasOpen = _consumeLogHistOpen && histPanel
+            && !histPanel.classList.contains('hidden');
+
+        while (scroll.firstChild && scroll.firstChild !== layout) {
+            scroll.removeChild(scroll.firstChild);
+        }
+        layout.insertAdjacentHTML('beforebegin', metaHtml);
+
+        if (histWasOpen && histPanel) {
+            attachConsumeHistPanelToAnchor(histPanel);
+            histPanel.classList.remove('hidden');
+            histPanel.setAttribute('aria-hidden', 'false');
+            syncConsumeHistOpenClasses(true);
+            positionConsumeLogHistPopover();
+        }
+        syncSpareDateInputs(scroll);
+    }
+
+    function syncConsumeLogHistRowHighlight(st) {
+        const panel = document.getElementById('consumeLogHistPanel');
+        if (!panel) return;
+        const m = modState(st);
+        panel.querySelectorAll('.spare-consume-log-row[data-consume-log-id]').forEach(row => {
+            row.classList.toggle('sr-req-sel', row.dataset.consumeLogId === m.selectedConsumeLogId);
+        });
+        syncConsumeLogRowSelection(panel);
+    }
+
+    async function refreshConsumeListWindowFromSession(st) {
+        const m = modState(st);
+        const allCanon = (st.spares || []).map(canon);
+        const prevCount = _consumeCachedList.length;
+        _consumeCachedList = filteredConsumeSpares(st);
+        if (m.consumeShowSelectedOnly) {
+            _consumeCachedList = _consumeCachedList.filter(s => consumeRowChecked(s));
+        }
+        const scroll = document.getElementById('consumeListScroll');
+        const canRefresh = !!(vlConsume && scroll?.querySelector('.vl-inner')
+            && prevCount > 0 && _consumeCachedList.length > 0);
+        const block = document.getElementById('consumeEditBlock');
+        if (block) {
+            block.innerHTML = renderConsumeGroupHeaderHtml(st);
+        }
+        if (canRefresh) {
+            vlConsume.refresh();
+            requestAnimationFrame(syncConsumeHeadLayout);
+        } else {
+            mountConsumeVirtualList();
+        }
+        updateConsumeHeadStats();
+        updateConsumeHeadCheckAll();
+        const countEl = document.getElementById('consumeCount');
+        if (countEl) {
+            countEl.textContent = m.consumeShowSelectedOnly
+                ? consumeSelectedCountLabel(st, _consumeCachedList.length)
+                : `${_consumeCachedList.length} / ${allCanon.length}`;
+        }
+        updateConsumeSelectedBtn();
+        syncSpareItemHistoryBtns();
+        initConsumeListView(st);
     }
 
     async function loadConsumeLogIntoListWindow(logId, opts = {}) {
@@ -7023,7 +7343,9 @@ const TVC_SpareMenu = (function () {
         }
         _consumeDraft = consumeDraftFromLog(log);
         syncConsumeLineMap();
-        const st = getState();
+        let st = getState();
+        await hydrateConsumeDraftFromLinkedReport(_consumeDraft, log, st);
+        st = getState();
         const m = modState(st);
         applyConsumeLogSelection(m, log.id);
         m.consumeLogListEditing = false;
@@ -7040,15 +7362,22 @@ const TVC_SpareMenu = (function () {
         if (preserveHist) {
             const histScroll = document.getElementById('consumeLogHistListScroll');
             const histScrollTop = histScroll?.scrollTop ?? 0;
-            applyConsumeMetaFromSession(_consumeDraft);
-            syncConsumeLogApprovalSection(_consumeDraft);
+            if (canPatchConsumeMetaInPlace(_consumeDraft, st)) {
+                applyConsumeMetaFromSession(_consumeDraft, st);
+            } else {
+                syncConsumeMetaPanelFromSession(_consumeDraft, st);
+            }
             updateConsumeHeadStats();
             syncConsumeLogListWindowHeadButtons();
-            refreshConsumeListUi();
-            syncConsumeLogRowSelection(document.getElementById('consumeLogHistPanel'));
+            await refreshConsumeListWindowFromSession(st);
+            syncConsumeLogHistRowHighlight(st);
             await syncConsumeLogHistPopoverToolbar();
             applyConsumeLogScrollLock(document.getElementById('spareConsumeBody'));
             if (histScroll) histScroll.scrollTop = histScrollTop;
+            requestAnimationFrame(() => {
+                syncConsumeHeadLayout();
+                positionConsumeLogHistPopover();
+            });
             return true;
         }
         await renderConsumeModal();
@@ -12230,7 +12559,7 @@ const TVC_SpareMenu = (function () {
 
     function renderConsumeLogApprovalRow(record, opts = {}) {
         const approval = consumeLogApprovalState(record, opts.department, opts);
-        return `<div class="spare-req-approval-row">${renderSpareApprovalHtml({
+        return renderSpareApprovalHtml({
             prefix: opts.prefix || 'consumeLog',
             canConfirmNow: approval.canConfirmNow,
             canApproveNow: approval.canApproveNow,
@@ -12238,7 +12567,7 @@ const TVC_SpareMenu = (function () {
             isRepApproved: approval.isApproved,
             confirmedByVal: approval.confirmedByVal,
             approvedByVal: approval.approvedByVal,
-        })}</div>`;
+        });
     }
 
     async function reqWorkConfirmByToggle() {
@@ -14193,6 +14522,14 @@ const TVC_SpareMenu = (function () {
     function renderConsumeJobRowsInner(draft, opts = {}) {
         ensureConsumeJobItems(draft);
         const items = draft.job_items;
+        if (opts.maintStyle && opts.readonly && items.length > 1) {
+            return renderPage2JobRowsInner({
+                items,
+                groupKey: draft.spare_group_key || '',
+                readonly: true,
+                allowAdd: false,
+            }, { readonly: true, allowAdd: false, maintStyle: true });
+        }
         const batch = consumeJobBatchEnabled(draft, opts.readonly);
         const rows = items.map((row, idx) => renderConsumeJobRowFieldHtml(row, idx, {
             readonly: opts.readonly,
@@ -14869,26 +15206,22 @@ const TVC_SpareMenu = (function () {
         const histPanel = showHistPick
             ? `<div id="consumeLogHistPanel" class="spare-req-hist-popover hidden" aria-hidden="true"></div>`
             : '';
-        return `<section class="wr-maint-card wr-maint-body wr-spare-meta-form spare-consume-meta-form" aria-label="Consumption Report information">
+        const wrPage2View = isConsumeWrPage2View(draft, ro, listMode, st);
+        const headCtx = {
+            reportedByVal, today, ro, fileNoInner, txtInp, dateInp, fld, histPanel,
+        };
+        const jobCtx = { ro, pmsInner, batch, commentsDis, commentsCls, commentsOnInput, fld };
+        const layoutKey = wrPage2View ? 'wr-page2' : 'standard';
+        const wrPage2Meta = wrPage2View ? buildConsumeWrPage2Meta(draft, reportedByVal, st) : null;
+        return `<div class="wr-maint-form consume-report-meta" data-consume-meta-layout="${layoutKey}">
             ${approvalSection}
-            <div class="wr-maint-grid wr-maint-grid-3">
-                ${fld('File No.', fileNoInner)}
-                ${fld('Voy. No.', txtInp('consumeVoyNo', draft.voy_no || ''))}
-                ${fld('Place', txtInp('consumePlace', draft.place || ''))}
-            </div>
-            <div class="wr-maint-grid wr-maint-grid-3">
-                ${fld('Work Date', dateInp('consumeDate', draft.consumed_date || today, ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
-                ${fld('Reported Date', dateInp('consumeMadeOn', draft.made_on || '', ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
-                ${fld('Reported by', `<input type="text" id="consumeMadeBy" class="wr-ro" value="${esc(reportedByVal)}" readonly disabled tabindex="-1">`)}
-                ${fld('PMS Group No.', pmsInner, 'wr-maint-span-all')}
-            </div>
-            <div class="wr-page2-job-rows" id="consumeJobRows" data-maint-style="1" data-readonly="${ro ? '1' : '0'}" data-batch="${batch ? '1' : '0'}">
-                ${renderConsumeJobRowsInner(draft, { readonly: ro, maintStyle: true })}
-            </div>
-            ${ro ? '' : renderConsumeJobPickMenuHtml()}
-            ${fld("SHIP'S COMMENTS (IF ANY)", `<textarea id="consumeShipComments" class="wr-maint-textarea${commentsCls}" rows="3" placeholder="Enter remarks for this consumption record…"${commentsDis}${commentsOnInput}>${esc(draft.ships_comments || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
-            ${histPanel}
-        </section>`;
+            ${renderConsumeReportBodyCard(draft, {
+                headCtx,
+                jobCtx,
+                wrPage2View,
+                wrPage2Meta,
+            })}
+        </div>`;
     }
 
     function renderConsumeGroupTree() {
@@ -15243,6 +15576,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function consumeToggleRow(spareId, checked) {
+        if (!consumeListEditable()) return;
         const draft = getConsumeSession();
         if (!draft) return;
         const sid = consumeSpareIdKey(spareId);
@@ -15267,6 +15601,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function consumeSetQty(spareId, rawQty) {
+        if (!consumeListEditable()) return;
         const draft = getConsumeSession();
         if (!draft) return;
         const sid = consumeSpareIdKey(spareId);
@@ -15286,6 +15621,67 @@ const TVC_SpareMenu = (function () {
         if (spareId) {
             requestAnimationFrame(() => focusConsumeQtyInput(spareId));
         }
+    }
+
+    function renderConsumeWrPage2JobBlock(meta = {}, opts = {}) {
+        const ro = !!opts.readonly;
+        const allowAdd = !!opts.allowAdd && !ro;
+        const jobItems = (meta.jobItems && meta.jobItems.length)
+            ? meta.jobItems
+            : [newConsumeJobRow({
+                job_code: meta.jobCode || '',
+                sort1: meta.sort1 || '',
+                sort2: meta.sort2 || '',
+                job_detail: meta.jobDetail || '',
+            })];
+        setPage2JobContext({
+            items: jobItems,
+            groupKey: meta.groupKey || '',
+            readonly: ro || !allowAdd,
+            allowAdd,
+        });
+        const fld = (label, inner, extraCls = '') =>
+            `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}"><label>${label}</label>${inner}</div>`;
+        const spareComments = meta.spareShipComments ?? meta.shipComments ?? '';
+        const commentsDis = ro ? ' readonly disabled tabindex="-1"' : '';
+        const commentsCls = ro ? ' wr-ro' : '';
+        const commentsInput = ro ? '' : ' oninput="TVC_SpareMenu.captureConsumeMeta()"';
+        const commentsId = ro ? ' id="wrSpareShipComments" data-wf="spareShipComments"' : ' id="consumeShipComments"';
+        return `<div class="wr-page2-job-rows" id="page2JobRows" data-maint-style="1" data-readonly="${ro || !allowAdd ? '1' : '0'}" data-batch="${allowAdd ? '1' : '0'}">
+                ${renderPage2JobRowsInner(getPage2JobContext(), { readonly: ro || !allowAdd, allowAdd, maintStyle: true })}
+            </div>
+            ${allowAdd && !ro ? renderPage2JobPickMenuHtml() : ''}
+            ${fld("SHIP'S COMMENTS (IF ANY)", `<textarea${commentsId} class="wr-maint-textarea${commentsCls}" rows="3"${commentsDis}${commentsInput}>${esc(spareComments)}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}`;
+    }
+
+    function renderConsumeReportBodyCard(draft, ctx) {
+        const { headCtx, jobCtx, wrPage2View, wrPage2Meta } = ctx;
+        const { reportedByVal, today, ro, fileNoInner, txtInp, dateInp, fld, histPanel } = headCtx;
+        const { pmsInner, batch, commentsDis, commentsCls, commentsOnInput } = jobCtx;
+        const pmsLabel = wrPage2Meta?.pmsGroupNo ? safeTreeLabel(wrPage2Meta.pmsGroupNo) : '—';
+        const pmsField = wrPage2View
+            ? fld('PMS Group No.', `<input class="wr-ro" value="${esc(pmsLabel)}" readonly tabindex="-1">`, 'wr-maint-span-all')
+            : fld('PMS Group No.', pmsInner, 'wr-maint-span-all');
+        const jobExtension = wrPage2View
+            ? renderConsumeWrPage2JobBlock(wrPage2Meta, { readonly: true, allowAdd: false })
+            : `<div class="wr-page2-job-rows" id="consumeJobRows" data-maint-style="1" data-readonly="${ro ? '1' : '0'}" data-batch="${batch ? '1' : '0'}">
+                ${renderConsumeJobRowsInner(draft, { readonly: ro, maintStyle: true })}
+            </div>
+            ${ro ? '' : renderConsumeJobPickMenuHtml()}
+            ${fld("SHIP'S COMMENTS (IF ANY)", `<textarea id="consumeShipComments" class="wr-maint-textarea${commentsCls}" rows="3" placeholder="Enter remarks for this consumption record…"${commentsDis}${commentsOnInput}>${esc(draft.ships_comments || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}`;
+        return `<section class="wr-maint-card wr-maint-body wr-file-no-anchor spare-consume-meta-form" aria-label="Consumption Report">
+            <div class="wr-maint-grid wr-maint-grid-3">
+                ${fld('File No.', fileNoInner)}
+                ${fld('Voy. No.', txtInp('consumeVoyNo', draft.voy_no || ''))}
+                ${fld('Place', txtInp('consumePlace', draft.place || ''))}
+                ${fld('Work Date', dateInp('consumeDate', draft.consumed_date || today, ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
+                ${fld('Reported Date', dateInp('consumeMadeOn', draft.made_on || '', ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
+                ${fld('Reported by', `<input type="text" id="consumeMadeBy" class="wr-ro" value="${esc(reportedByVal)}" readonly disabled tabindex="-1">`)}
+                ${pmsField}
+            </div>
+            ${jobExtension}
+            ${histPanel}
+        </section>`;
     }
 
     function renderWrSpareMetaHtml(meta = {}, opts = {}) {
@@ -15348,6 +15744,44 @@ const TVC_SpareMenu = (function () {
 
     function wrSparePreviewMode(st, ro) {
         return !!ro && (!!st._wrReportId || !!st._defectCaseId);
+    }
+
+    function wrSpareHasSelectedParts(st) {
+        syncWrLineMap();
+        return (st._wrUsedParts || []).some(p => Number(p.qty_used) > 0);
+    }
+
+    /** Existing Work/Defect report edit — default Page 2 list to Selected Items when parts exist. */
+    function wrSpareEditShowSelectedByDefault(st) {
+        if (!st._wrReportId && !st._defectCaseId) return false;
+        syncWrLineMap();
+        return wrSpareCheckedCount(st) > 0;
+    }
+
+    function wrSpareGroupHeaderFocusId(st) {
+        const m = modState(st);
+        syncWrLineMap();
+        const selected = (st._wrUsedParts || []).filter(p => Number(p.qty_used) > 0);
+        if (!selected.length) return null;
+        if (m.wrSpareFocusedId && selected.some(p => wrSameSpareId(p.spare_part_id, m.wrSpareFocusedId))) {
+            return m.wrSpareFocusedId;
+        }
+        return selected[0]?.spare_part_id || null;
+    }
+
+    function syncWrSpareGroupHeaderDom(st = getState()) {
+        const block = document.getElementById('wrSpareEditBlock');
+        if (block) block.innerHTML = renderWrSpareGroupHeaderHtml(st);
+    }
+
+    function renderWrSpareIdleGroupHeaderHtml(st) {
+        return renderSpareGroupHeaderHtml(st, {
+            focusedId: null,
+            forceIdle: true,
+            blankEmpty: true,
+            suppressIdleHint: true,
+            pmsLabel: 'SPARE Group No.',
+        });
     }
 
     function rebuildWrSpareCachedList(st) {
@@ -15479,7 +15913,7 @@ const TVC_SpareMenu = (function () {
         m.wrSpareReadonly = !!ro;
         if (isPreview) m.wrSpareShowSelectedOnly = true;
         else if (m.wrSparePostSaveFilter) m.wrSpareShowSelectedOnly = true;
-        else if (!ro) m.wrSpareShowSelectedOnly = false;
+        else if (!ro) m.wrSpareShowSelectedOnly = wrSpareEditShowSelectedByDefault(st);
         const allCanon = (st.spares || []).map(canon);
         rebuildWrSpareCachedList(st);
         const selBtn = wrSpareSelectedBtnMeta(st);
@@ -15532,8 +15966,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     function renderWrSpareGroupHeaderHtml(st) {
-        const m = modState(st);
-        return renderSpareGroupHeaderHtml(st, { focusedId: m.wrSpareFocusedId });
+        const focusId = wrSpareGroupHeaderFocusId(st);
+        if (!focusId) return renderWrSpareIdleGroupHeaderHtml(st);
+        return renderSpareGroupHeaderHtml(st, { focusedId: focusId, pmsLabel: 'SPARE Group No.' });
     }
 
     function renderWrSpareGroupTree() {
@@ -15732,6 +16167,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     function updateWrSpareHeadCheckAll() {
         const el = document.getElementById('wrSpareHeadChkAll');
         if (!el) return;
+        const ro = !!modState(getState()).wrSpareReadonly;
+        el.disabled = ro;
         const list = _wrSpareCachedList || [];
         if (!list.length) {
             el.checked = false;
@@ -15781,7 +16218,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     }
 
     function wrSpareFocusRow(spareId) {
-        setFocusedSpareId(getState(), spareId || null);
+        const st = getState();
+        setFocusedSpareId(st, spareId || null);
+        syncWrSpareGroupHeaderDom(st);
         refreshWrSpareListRows();
         syncSpareItemHistoryBtns();
     }
@@ -15800,6 +16239,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             st._wrUsedParts = st._wrUsedParts.filter(l => !wrSameSpareId(l.spare_part_id, sid));
         }
         syncWrLineMap();
+        syncWrSpareGroupHeaderDom(st);
         refreshWrSpareListRows();
     }
 
@@ -15819,6 +16259,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             st._wrUsedParts = st._wrUsedParts.filter(l => !ids.has(wrSpareIdKey(l.spare_part_id)));
         }
         syncWrLineMap();
+        syncWrSpareGroupHeaderDom(st);
         refreshWrSpareListRows();
     }
 
@@ -15840,6 +16281,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             }
         }
         syncWrLineMap();
+        syncWrSpareGroupHeaderDom(st);
         refreshWrSpareListRows();
     }
 
@@ -15853,15 +16295,16 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const isPreview = wrSparePreviewMode(st, ro);
         if (isPreview) {
             m.wrSpareShowSelectedOnly = true;
-            const firstLine = (st._wrUsedParts || []).find(l => Number(l.qty_used) > 0);
-            if (firstLine?.spare_part_id) m.wrSpareFocusedId = firstLine.spare_part_id;
         } else if (m.wrSparePostSaveFilter) {
             m.wrSpareShowSelectedOnly = true;
             m.wrSparePostSaveFilter = false;
         } else if (!ro) {
-            m.wrSpareShowSelectedOnly = false;
+            m.wrSpareShowSelectedOnly = wrSpareEditShowSelectedByDefault(st);
             m.wrSpareTreeOpen = false;
         }
+        syncWrLineMap();
+        const firstLine = (st._wrUsedParts || []).find(l => Number(l.qty_used) > 0);
+        m.wrSpareFocusedId = firstLine?.spare_part_id || null;
         rebuildWrSpareCachedList(st);
         if (!st.idx && (st.jobs || []).length && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
@@ -15869,6 +16312,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         ensureSpareGroupNodes(st);
         if (!isPreview) renderWrSpareGroupTree();
         mountWrSpareVirtualList();
+        syncWrSpareGroupHeaderDom(st);
         bindWrSpareTreePopover();
         updateWrSpareTreeToggleUi();
         updateWrSpareHeadStats();
@@ -16315,9 +16759,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
     function buildWrSpareGroupHeaderPrintHtml(st, meta = {}, usedParts = []) {
         const firstLine = (usedParts || []).find(p => Number(p.qty_used) > 0);
-        const focusedId = firstLine?.spare_part_id ?? modState(st).wrSpareFocusedId ?? undefined;
+        if (!firstLine) return renderWrSpareIdleGroupHeaderHtml(st);
         return renderSpareGroupHeaderHtml(st, {
-            focusedId,
+            focusedId: firstLine.spare_part_id,
             pmsLabel: 'SPARE Group No.',
         });
     }
@@ -16587,6 +17031,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (listMode && !isPreview) {
             applyConsumeLogScrollLock(body);
             syncConsumeLogListWindowHeadButtons();
+            initConsumeListView(st);
         }
         if (!isPreview && _consumeLogHistOpen) {
             setConsumeLogHistOpen(true);
@@ -16855,7 +17300,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             voy_no: String(form?.voyNo || reportForm.voyNo || '').trim(),
             place: String(form?.place || reportForm.place || '').trim(),
             spare_group_key: `${job.department || ''}|${String(job.group || '').trim()}`,
-            spare_group_label: job.group || '',
+            spare_group_label: safeTreeLabel(form?.pmsGroupNo || job.group || '') || '',
             job_code: job.job_code || '',
             sort1: job.item_sort1 || '',
             sort2: job.item_sort2 || '',
@@ -18173,6 +18618,31 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         return String(info?.vendorName || '').trim() || '—';
     }
 
+    function spareHistReqLineCurrency(req, line) {
+        const q = req?.hq_quote;
+        const sid = reqWorkSpareIdKey(line?.spare_part_id);
+        if (q && sid) {
+            const vendors = reqWorkQuoteVendors(req);
+            for (let slot = 0; slot < vendors.length; slot++) {
+                const key = reqWorkQuoteVendorKey(slot, sid);
+                if (q.rowChecks?.[key]) {
+                    const cur = String(vendors[slot]?.currency || '').trim();
+                    if (cur) return cur;
+                }
+            }
+            for (let slot = 0; slot < vendors.length; slot++) {
+                const key = reqWorkQuoteVendorKey(slot, sid);
+                const price = Number(q.prices?.[key]);
+                if (Number.isFinite(price)) {
+                    const cur = String(vendors[slot]?.currency || '').trim();
+                    if (cur) return cur;
+                }
+            }
+        }
+        const info = reqWorkExportVendorInfo(req);
+        return String(info?.currency || '').trim() || '—';
+    }
+
     function spareHistReqLineUnitPrice(req, line) {
         const q = req?.hq_quote;
         const sid = reqWorkSpareIdKey(line?.spare_part_id);
@@ -18201,14 +18671,50 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         return esc(d || '—');
     }
 
+    function spareHistConsumeEventKey(date, jobCode, cos) {
+        const d = String(date || '').slice(0, 10);
+        const j = String(jobCode || '—').trim();
+        const q = Number(cos) || 0;
+        return `${d}|${j}|${q}`;
+    }
+
+    function spareHistConsumeEntryScore(entry) {
+        let score = 0;
+        if (entry.openLog && entry.logId && entry.log?.id) score += 8;
+        if (entry.pmsGroup && entry.pmsGroup !== '—') score += 4;
+        if (entry.log?.stock_applied_at) score += 3;
+        const status = String(entry.status || '');
+        if (status && status !== 'Draft' && !status.startsWith('Consumed:')) score += 2;
+        if (status.startsWith('Consumed:')) score += 1;
+        if (status === 'Draft') score -= 5;
+        return score;
+    }
+
+    function dedupeSpareHistConsumeEntries(list) {
+        const byKey = new Map();
+        (list || []).forEach(entry => {
+            const key = spareHistConsumeEventKey(entry.date, entry.jobCode, entry.cos);
+            const prev = byKey.get(key);
+            if (!prev || spareHistConsumeEntryScore(entry) > spareHistConsumeEntryScore(prev)) {
+                byKey.set(key, entry);
+            }
+        });
+        return Array.from(byKey.values());
+    }
+
     async function loadSpareItemHistoryData(spareId, vesselId) {
         const sid = String(spareId);
-        const consumed = [];
+        let consumed = [];
         const seenConsumeLog = new Set();
+        const seenWorkReport = new Set();
+        const seenDefectCase = new Set();
 
         try {
             const logs = await TVC_Inventory.listConsumeLogs(vesselId);
             logs.forEach(log => {
+                seenConsumeLog.add(log.id);
+                if (log.work_report_id) seenWorkReport.add(log.work_report_id);
+                if (log.defect_case_id) seenDefectCase.add(log.defect_case_id);
                 (log.lines || []).forEach(line => {
                     if (String(line.spare_part_id) !== sid) return;
                     const jobs = consumeLogJobItems(log);
@@ -18222,7 +18728,6 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                         status: spareListStatus(log) || log.list_status || '—',
                         openLog: true,
                     });
-                    seenConsumeLog.add(log.id);
                 });
             });
         } catch (_) { /* noop */ }
@@ -18231,21 +18736,24 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             const invRows = await TVC_InventoryService.getHistory({ spare_part_id: spareId, limit: 300 });
             invRows.forEach(h => {
                 if (h.tx_type === TVC_INVENTORY_TX.DELIVERY) return;
-                if (h.tx_type === TVC_INVENTORY_TX.CONSUMPTION && h.source_id && seenConsumeLog.has(h.source_id)) return;
-                if (h.tx_type === TVC_INVENTORY_TX.CONSUMPTION) {
-                    consumed.push({
-                        date: h.date || (h.at || '').slice(0, 10),
-                        cos: Math.abs(Number(h.qty_delta) || 0),
-                        logId: h.source_id || '',
-                        log: spareHistInvRowConsumeLogStub(h),
-                        pmsGroup: '—',
-                        jobCode: h.ref || '—',
-                        status: h.note || h.tx_type || '—',
-                        openLog: !!(h.source_id && h.source_type === 'consume_log'),
-                    });
-                }
+                if (h.tx_type !== TVC_INVENTORY_TX.CONSUMPTION) return;
+                if (h.source_id && seenConsumeLog.has(h.source_id)) return;
+                if (h.source_type === 'work_report' && h.source_id && seenWorkReport.has(h.source_id)) return;
+                if (h.source_type === 'defect_case' && h.source_id && seenDefectCase.has(h.source_id)) return;
+                consumed.push({
+                    date: h.date || (h.at || '').slice(0, 10),
+                    cos: Math.abs(Number(h.qty_delta) || 0),
+                    logId: h.source_type === 'consume_log' ? (h.source_id || '') : '',
+                    log: spareHistInvRowConsumeLogStub(h),
+                    pmsGroup: '—',
+                    jobCode: h.ref || '—',
+                    status: h.note || h.tx_type || '—',
+                    openLog: !!(h.source_id && h.source_type === 'consume_log'),
+                });
             });
         } catch (_) { /* noop */ }
+
+        consumed = dedupeSpareHistConsumeEntries(consumed);
 
         const requisitions = [];
         try {
@@ -18265,6 +18773,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                         qtyRequested: Number(line.qty_requested) || 0,
                         qtyReceived: Number(line.qty_received) || 0,
                         vendor: spareHistReqLineVendor(req, line),
+                        currency: spareHistReqLineCurrency(req, line),
                         unitPrice: spareHistReqLineUnitPrice(req, line),
                     });
                 });
@@ -18390,6 +18899,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                     </div>
                 </div>`;
         } else {
+            const reqColgroup = '<colgroup>' + Array.from({ length: 9 }, () => '<col>').join('') + '</colgroup>';
             const rows = data.requisitions.length ? data.requisitions.map(r => {
                 const unitPrice = r.unitPrice != null ? esc(String(r.unitPrice)) : '—';
                 return `<tr class="wp-hist-row" ondblclick="TVC_SpareMenu.spareHistOpenRequisition('${escAttr(r.reqId)}')" title="Double-click to open Requisition">
@@ -18400,16 +18910,17 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                     <td class="num">${r.qtyRequested ?? '—'}</td>
                     <td class="num">${r.qtyReceived ?? '—'}</td>
                     <td${cellTitleAttr(r.vendor)}>${esc(r.vendor)}</td>
+                    <td${cellTitleAttr(r.currency)}>${esc(r.currency)}</td>
                     <td class="num">${unitPrice}</td>
                 </tr>`;
-            }).join('') : '<tr><td colspan="8" class="muted" style="text-align:center">No requisition history</td></tr>';
+            }).join('') : '<tr><td colspan="9" class="muted" style="text-align:center">No requisition history</td></tr>';
             tabContent = `
                 <div class="wp-section">
                     <div class="wp-section-head">Requisition History <span class="muted wp-hist-hint">(double-click row to open Requisition)</span></div>
                     <div class="wp-table-wrap">
                         <table class="wp-table spare-item-hist-req-table">
-                            <colgroup><col span="8"></colgroup>
-                            <thead><tr><th>Reported Date</th><th>Type</th><th>Requisition No.</th><th>Status</th><th>Req</th><th>Rcvd</th><th>Vendor</th><th>Unit Price</th></tr></thead>
+                            ${reqColgroup}
+                            <thead><tr><th>Reported Date</th><th>Type</th><th>Requisition No.</th><th>Status</th><th>Req</th><th>Rcvd</th><th>Vendor</th><th>Currency</th><th>Unit Price</th></tr></thead>
                             <tbody>${rows}</tbody>
                         </table>
                     </div>

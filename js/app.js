@@ -7356,14 +7356,15 @@ const TVC_App = (function () {
         }
     }
 
-    /** 현재 Work Report 화면을 프린트 / 미리보기 */
+    /** Work Report 프린트 / 미리보기 상단 제목 (Maintenance·Postpone 탭별) */
     function workReportModalTitle() {
         const isHist = !!state._wrReportId;
+        const base = state._wrTab === 'postpone' ? 'Postponed Report' : 'Maintenance Report';
         return isHist
-            ? 'Work Report'
+            ? base
             : (isNewUnsavedWorkReportSession()
-                ? 'Work Report (Draft)'
-                : (state._wrReadonly ? 'Work Report (View)' : 'Work Report'));
+                ? `${base} (Draft)`
+                : (state._wrReadonly ? `${base} (View)` : base));
     }
 
     function wrDateUiPrintInput(val) {
