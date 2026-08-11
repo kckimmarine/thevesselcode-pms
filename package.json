@@ -31,6 +31,8 @@
     "test-reported-by-sync": "node scripts/test-reported-by-sync.mjs",
     "test-critical-postpone-confirm": "node scripts/test-critical-postpone-confirm.mjs",
     "test-vessel-engine-pms-workflow": "node scripts/test-vessel-engine-pms-workflow.mjs",
+    "test-vessel-engine-monthly-report": "node scripts/test-vessel-engine-monthly-report.mjs",
+    "test-vessel-engine-monthly-roundtrip": "node scripts/test-vessel-engine-monthly-roundtrip.mjs",
     "test-pms-group-equipment-headers": "node scripts/test-pms-group-equipment-headers.mjs"
   },
   "license": "ISC",

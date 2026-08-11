@@ -52,6 +52,13 @@ const TVC_Dialog = (function () {
         });
     }
 
+    function resetExtra() {
+        const extra = document.getElementById('tvcDialogExtra');
+        if (!extra) return;
+        extra.innerHTML = '';
+        extra.classList.add('hidden');
+    }
+
     function show(opts) {
         bindOnce();
         const o = normalizeOpts(opts);
@@ -61,11 +68,13 @@ const TVC_Dialog = (function () {
         const modal = modalEl();
         const titleEl = document.getElementById('tvcDialogTitle');
         const msgEl = document.getElementById('tvcDialogMessage');
+        const extraEl = document.getElementById('tvcDialogExtra');
         const actionsEl = document.getElementById('tvcDialogActions');
         if (!modal || !msgEl || !actionsEl) {
             return Promise.resolve(showCancel ? window.confirm(o.message || '') : (window.alert(o.message || ''), true));
         }
 
+        resetExtra();
         if (titleEl) {
             if (o.title) {
                 titleEl.textContent = o.title;
@@ -76,6 +85,10 @@ const TVC_Dialog = (function () {
             }
         }
         msgEl.textContent = o.message || '';
+        if (extraEl && o.textarea) {
+            extraEl.classList.remove('hidden');
+            extraEl.innerHTML = `<textarea id="tvcDialogInput" class="tvc-dialog-input" rows="${Number(o.rows) || 3}" placeholder="${esc(o.placeholder || '')}">${esc(o.defaultValue || '')}</textarea>`;
+        }
 
         const confirmLabel = o.confirmLabel || defs.confirmLabel;
         const cancelLabel = o.cancelLabel || defs.cancelLabel;
@@ -91,7 +104,8 @@ const TVC_Dialog = (function () {
             modal.classList.remove('hidden');
             const confirmBtn = document.getElementById('tvcDialogConfirmBtn');
             const cancelBtn = document.getElementById('tvcDialogCancelBtn');
-            confirmBtn?.focus();
+            const inputEl = document.getElementById('tvcDialogInput');
+            (inputEl || confirmBtn)?.focus();
             confirmBtn?.addEventListener('click', () => finish(true), { once: true });
             cancelBtn?.addEventListener('click', () => finish(false), { once: true });
         });
@@ -115,5 +129,25 @@ const TVC_Dialog = (function () {
         return alert({ ...opts, kind: 'error', message });
     }
 
-    return { confirm, alert, success, error, dismiss };
+    /** Textarea prompt — resolves input string, or null when cancelled. */
+    async function promptText(opts = {}) {
+        const o = normalizeOpts(opts);
+        const ok = await show({
+            ...o,
+            kind: o.kind || 'confirm',
+            title: o.title || "Company's Comments",
+            textarea: true,
+            confirmLabel: o.confirmLabel || 'OK',
+            cancelLabel: o.cancelLabel || 'Cancel',
+        });
+        if (!ok) return null;
+        const val = String(document.getElementById('tvcDialogInput')?.value || '').trim();
+        if (o.required && !val) {
+            await alert({ message: o.requiredMessage || 'Comment is required.' });
+            return promptText(o);
+        }
+        return val;
+    }
+
+    return { confirm, alert, success, error, promptText, dismiss };
 })();

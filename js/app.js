@@ -148,6 +148,17 @@ const TVC_App = (function () {
                 state._wrReportId = null;
             }
         } catch (e) { console.warn('[TVC_DataPurge] reports', e); }
+        try { await TVC_DataPurge.repairReportJobRefsOnce(); } catch (e) { console.warn('[TVC_DataPurge] report job refs', e); }
+        try {
+            const listPurge = await TVC_DataPurge.purgeBuggyListDataOnce();
+            if (listPurge && !listPurge.skipped) {
+                state._histSelReportId = null;
+                state._histChecked = {};
+                state._wrReportId = null;
+                state.spareModule = state.spareModule || {};
+                state.spareModule.selectedReqId = null;
+            }
+        } catch (e) { console.warn('[TVC_DataPurge] list data', e); }
         try { await TVC_Fleet.ensureFleet(); } catch (e) { console.warn('[TVC_Fleet]', e); }
 
             const seed = await TVC_Seed.ensureSeed();
@@ -165,6 +176,12 @@ const TVC_App = (function () {
                 document.getElementById('fileProtocolModal')?.classList.remove('hidden');
             }
             state._deferredBootDone = true;
+            if (state.user) {
+                try {
+                    await loadData();
+                    rerenderCurrentTab();
+                } catch (e) { console.warn('[TVC] reload after deferred boot', e); }
+            }
         } finally {
             state._deferredBootRunning = false;
         }
@@ -564,6 +581,10 @@ const TVC_App = (function () {
         return rowDept === want;
     }
 
+    function isMasterHubMode() {
+        return !!(state.user && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(state.user));
+    }
+
     function filterWorkPermitsForView(allWorkPermits, allJobs) {
         const user = state.user;
         const rows = allWorkPermits || [];
@@ -602,7 +623,39 @@ const TVC_App = (function () {
         state._allJobs = allJobs;
         state._allGroups = allGroups;
         const allReports = await TVC_DB.getAll('daily_work_reports');
+        TVC_DataPurge.repairReportJobRefsInRows(allReports, allJobs);
         const allDefects = await TVC_DB.getAll('defect_cases').catch(() => []);
+        const deptBackfill = [];
+        for (const r of allReports) {
+            if (!r.department) {
+                const dept = inferReportDepartment(r, allJobs);
+                if (dept) {
+                    r.department = dept;
+                    deptBackfill.push({ store: 'daily_work_reports', row: r });
+                }
+            }
+        }
+        for (const d of allDefects) {
+            if (!d.department) {
+                const code = String(d.pms_job_code || d.job_code || '').trim();
+                let dept = null;
+                if (code) {
+                    const matches = allJobs.filter(j => j.job_code === code);
+                    const depts = new Set(matches.map(j => j.department).filter(Boolean));
+                    if (depts.size === 1) dept = [...depts][0];
+                }
+                if (!dept && d.maintenance_job_id) {
+                    dept = allJobs.find(j => j.id === d.maintenance_job_id)?.department || null;
+                }
+                if (dept) {
+                    d.department = dept;
+                    deptBackfill.push({ store: 'defect_cases', row: d });
+                }
+            }
+        }
+        if (deptBackfill.length) {
+            Promise.all(deptBackfill.map(({ store, row }) => TVC_DB.put(store, row).catch(() => {})));
+        }
         const allWorkPermits = await TVC_DB.getAll('work_permits').catch(() => []);
         state.spares = await TVC_DB.SparePart.listAll().catch(() =>
             TVC_DB.getAll('spare_parts').then(rows => rows.map(TVC_SpareSchema.fromRow)));
@@ -653,9 +706,12 @@ const TVC_App = (function () {
             const hqRepair = [];
             for (const r of allReports) {
                 const hqAuthored = r.reporter_role === hqRole;
-                if (!r.hq_synced && !hqAuthored) continue;
+                const imported = r.sync_status === 'SYNCED'
+                    && r.vessel_id
+                    && (!state.selectedVesselId || r.vessel_id === state.selectedVesselId);
+                if (!r.hq_synced && !hqAuthored && !imported) continue;
                 let changed = false;
-                if (r.hq_synced !== true && hqAuthored) {
+                if (r.hq_synced !== true && (hqAuthored || imported)) {
                     r.hq_synced = true;
                     changed = true;
                 }
@@ -742,9 +798,14 @@ const TVC_App = (function () {
         const isHq = TVC_RBAC.isHqAccount(state.user);
         state.space = isHq ? 'HQ' : 'SHIP';
         state.station = state.user.station || null;
-        state.department = isHq || TVC_Space.isCaptainHub(state.user)
-            ? 'DECK'
-            : (state.user.department || 'ENGINE');
+        if (isHq) {
+            const savedDept = localStorage.getItem('tvc_hq_dept_view');
+            state.department = (savedDept === 'ENGINE' || savedDept === 'DECK') ? savedDept : 'DECK';
+        } else {
+            state.department = TVC_Space.isCaptainHub(state.user)
+                ? 'DECK'
+                : (state.user.department || 'ENGINE');
+        }
         state.captainView = state.department === 'ENGINE' ? 'engine' : 'deck';
         state.selectedGroupKey = null;
         state.search = '';
@@ -1009,6 +1070,9 @@ const TVC_App = (function () {
         }
         state.department = dept;
         state.captainView = dept === 'DECK' ? 'deck' : 'engine';
+        if (state.user && TVC_RBAC.isHqAccount(state.user)) {
+            try { localStorage.setItem('tvc_hq_dept_view', dept); } catch (_) {}
+        }
         state.selectedGroupKey = null;
         if (state._allWorkPermits) {
             state.workPermits = filterWorkPermitsForView(state._allWorkPermits);
@@ -1413,7 +1477,15 @@ const TVC_App = (function () {
     }
 
     function workHistoryDefectCases() {
-        return (state.defectCases || []).filter(d => d.visible_in_list !== false);
+        let cases = (state.defectCases || []).filter(d => d.visible_in_list !== false);
+        if (state.department) {
+            const canSwitch = state.user && (TVC_RBAC.isHqAccount(state.user)
+                || (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(state.user)));
+            if (canSwitch) {
+                cases = cases.filter(d => defectCaseDept(d) === state.department);
+            }
+        }
+        return cases;
     }
 
     function resolveReportJob(report) {
@@ -2281,7 +2353,7 @@ const TVC_App = (function () {
         if (isMaster) {
             return [
                 { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
-                { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: shipMonthly },
+                { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: hubMonthlyReportItems() },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
         }
@@ -2290,6 +2362,20 @@ const TVC_App = (function () {
             { key: 'daily', tone: 'daily', title: 'Daily Tasks', items: shipDailyItems },
             { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: shipMonthly },
             { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
+        ];
+    }
+
+    /** Master Hub — station ZIP merge + HQ export only (no Update Work Plan on hub PC) */
+    function hubMonthlyReportItems() {
+        return [
+            {
+                label: 'Import Engine/Deck station ZIP (Data Export & Import — match Deck/Engine toggle)',
+                textOnly: true,
+            },
+            {
+                label: 'Export Monthly Report to Company (Data Export & Import — after station merge)',
+                textOnly: true,
+            },
         ];
     }
 
@@ -2364,9 +2450,15 @@ const TVC_App = (function () {
 
     function menuXferDefaultChannelHint(user) {
         const ctx = menuXferStationContext(user);
-        if (ctx === 'station') return 'Default transfer: offline ZIP → Master (email/USB).';
-        if (ctx === 'master') return 'Default transfer: offline ZIP ↔ HQ (email). Online sync available when configured.';
-        if (ctx === 'hq') return 'Default transfer: offline ZIP import (email fallback). Online sync available when configured.';
+        if (ctx === 'station') {
+            return 'Export Monthly Report ZIP → Master (or HQ direct, same dept). Import HQ reply here — Engine/Deck only, no cross-dept.';
+        }
+        if (ctx === 'master') {
+            return 'Import Engine/Deck station ZIP (match toggle) or HQ reply. Export to HQ — Update Work Plan is not required on Master Hub.';
+        }
+        if (ctx === 'hq') {
+            return 'Import vessel ZIP (station export or Master report). Engine/Deck toggle must match file. HQ reply → Master or station direct.';
+        }
         return 'Default transfer: offline ZIP.';
     }
 
@@ -2451,6 +2543,9 @@ const TVC_App = (function () {
             if (state.selectedVesselId) {
                 cases = cases.filter(r => r.vessel_id === state.selectedVesselId);
             }
+            if (state.department) {
+                cases = cases.filter(c => defectCaseDept(c) === state.department);
+            }
         } else if (target && target !== 'COMPANY') {
             cases = cases.filter(c => TVC_DefectCase.belongsToDepartment(c, target));
         }
@@ -2459,7 +2554,17 @@ const TVC_App = (function () {
     }
 
     function menuXferDefectRowSelectable(row) {
-        return TVC_DefectCase.listWorkflowStatus(row) === 'Confirmed';
+        if (TVC_RBAC.isHqAccount(state.user)) {
+            const hasReply = !!(String(row.company_initial_reply || row.permit_to_work || '').trim());
+            return row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+                || row.status === TVC_DefectCase.Status.COMPANY_REVIEWED
+                || !!(row.approved_at && hasReply);
+        }
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (st === 'Confirmed') return true;
+        if (row.defect_cleared && String(row.ship_verified_date || '').trim()
+            && (row.approved_at || st === 'Approved')) return true;
+        return false;
     }
 
     function menuXferDefectSelectDisabledTitle(row) {
@@ -2572,7 +2677,7 @@ const TVC_App = (function () {
         const dept = getPlanLockDept();
         const locked = isOriginalPlanUpdateLocked(dept);
         const dest = menuXferExportTargetLabel(menuXferResolveExportTarget(state.user, 'monthly'));
-        if (!locked && !TVC_RBAC.isHqAccount(state.user)) {
+        if (!locked && !TVC_RBAC.isHqAccount(state.user) && !isMasterHubMode()) {
             return `
                 <p class="spare-sync-hint">Export <strong>Monthly Report</strong></p>
                 <p class="menu-xfer-block-msg">Update Work Plan must be completed first.</p>
@@ -2582,7 +2687,9 @@ const TVC_App = (function () {
         const month = lock?.month || '—';
         const stats = lock?.stats;
         let summary = `<p class="muted">Destination: <strong>${esc(dest)}</strong></p>`;
-        if (lock) {
+        if (isMasterHubMode()) {
+            summary += `<p class="muted">Master Hub — import Engine/Deck station ZIP first (match ${esc(TVC_RBAC.getDeptLabel(dept) || dept || 'department')} toggle), then export. Update Work Plan is done on station PCs.</p>`;
+        } else if (lock) {
             summary += `<ul class="menu-xfer-summary">
                 <li>Department: ${esc(TVC_RBAC.getDeptLabel(dept) || dept || '—')}</li>
                 <li>Plan month: ${esc(month)}</li>`;
@@ -3032,11 +3139,11 @@ const TVC_App = (function () {
         } else if (step === 'import') {
             const ctx = menuXferStationContext(state.user);
             const importHint = ctx === 'station'
-                ? 'Import HQ feedback ZIP received by email (HQ → Ship).'
+                ? 'Import HQ feedback ZIP (HQ → Ship). Engine HQ reply → Engine Mode only; Deck HQ reply → Deck Mode only.'
                 : ctx === 'master'
-                    ? 'Import Engine/Deck station ZIP or HQ feedback ZIP. Station packages merge into Master Hub.'
+                    ? 'Import Engine/Deck station ZIP or HQ feedback ZIP. Match Deck/Engine toggle — Engine data never merges into Deck view.'
                     : ctx === 'hq'
-                        ? 'Import vessel company report ZIP received by email (Ship → HQ). Select vessel in fleet list first.'
+                        ? 'Import vessel ZIP (Engine/Deck station export or Master→HQ report). Select vessel and matching Deck/Engine toggle first.'
                         : 'Select a PMS sync ZIP from Master or Company.';
             const importType = _menuXfer.importType || '';
             const typeBtns = MENU_IMPORT_TYPES.map(t => `
@@ -3168,12 +3275,14 @@ const TVC_App = (function () {
 
     async function menuXferConfirmMonthlyExport() {
         const dept = getPlanLockDept();
-        if (!TVC_RBAC.isHqAccount(state.user) && !isOriginalPlanUpdateLocked(dept)) {
+        if (!TVC_RBAC.isHqAccount(state.user) && !isMasterHubMode() && !isOriginalPlanUpdateLocked(dept)) {
             await TVC_Dialog.alert('Update Work Plan must be completed first.');
+            return;
         }
         const target = menuXferResolveExportTarget(state.user, 'monthly');
         if (!target || !menuXferCanExportTarget(state.user, target)) {
             await TVC_Dialog.alert('No permission to export monthly report.');
+            return;
         }
         const destLabel = menuXferExportTargetLabel(target);
         if (!await TVC_Dialog.confirm({ message: `Export Monthly Report to ${destLabel}?` })) return;
@@ -3201,35 +3310,53 @@ const TVC_App = (function () {
         }
 
         const dept = target;
+        const monthlyOpts = { monthlyExport: true };
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user)) {
-            await handleStationExport();
-            return;
+            TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.STATION_EXPORT);
+            await TVC_Sync.exportZip(user, TVC_Space.Direction.STATION_TO_HUB, dept, {
+                station_id: TVC_Space.getStation(user),
+                ...monthlyOpts,
+            });
+        } else {
+            const direction = TVC_RBAC.isHqAccount(user) ? 'HQ_TO_SHIP' : 'SHIP_TO_HQ';
+            await TVC_Sync.exportZip(user, direction, dept, monthlyOpts);
         }
-
-        const direction = TVC_RBAC.isHqAccount(user) ? 'HQ_TO_SHIP' : 'SHIP_TO_HQ';
-        await TVC_Sync.exportZip(user, direction, dept);
         await refreshAll();
         if (state.currentTab === 'menu') renderSyncHistory();
         await TVC_Dialog.alert(`${TVC_RBAC.getDeptLabel(dept)} Monthly Report exported.`);
     }
 
     async function exportSelectedDefectCase(user, caseRow) {
-        if (TVC_DefectCase.listWorkflowStatus(caseRow) !== 'Confirmed') {
-            throw new Error(`${caseRow.case_no}: only Confirmed cases can be exported.`);
-        }
         if (TVC_RBAC.isHqAccount(user)) {
-            if (caseRow.status === TVC_DefectCase.Status.COMPANY_REVIEWED) {
+            const hasReply = !!(String(caseRow.company_initial_reply || caseRow.permit_to_work || '').trim());
+            if (caseRow.status === TVC_DefectCase.Status.COMPANY_REVIEWED
+                || (caseRow.approved_at && hasReply)) {
                 await TVC_DefectSync.exportHqReplyZip(user, caseRow.id);
                 return;
             }
-            throw new Error(`${caseRow.case_no}: not ready for HQ export.`);
+            throw new Error(`${caseRow.case_no}: Initial Reply + Approve required before HQ export.`);
         }
-        if (caseRow.status === TVC_DefectCase.Status.AWAITING_COMPLETION) {
+        const clearedReady = !!caseRow.defect_cleared
+            && !!String(caseRow.ship_verified_date || '').trim()
+            && !!(caseRow.approved_at || caseRow.approved_by);
+        if (clearedReady || caseRow.status === TVC_DefectCase.Status.AWAITING_COMPLETION) {
+            if (caseRow.status !== TVC_DefectCase.Status.AWAITING_COMPLETION) {
+                const row = await TVC_DefectCaseService.get(caseRow.id) || caseRow;
+                row.status = TVC_DefectCase.Status.AWAITING_COMPLETION;
+                if (!row.phase3_locked) row.phase3_locked = true;
+                row.completed_at = row.completed_at || new Date().toISOString();
+                row.sync_status = row.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (row.sync_status || 'LOCAL');
+                row.updated_at = new Date().toISOString();
+                await TVC_DB.put('defect_cases', row);
+            }
             await TVC_DefectSync.exportCompletionZip(user, caseRow.id);
             return;
         }
+        if (TVC_DefectCase.listWorkflowStatus(caseRow) !== 'Confirmed') {
+            throw new Error(`${caseRow.case_no}: only Confirmed cases can be exported.`);
+        }
         if (caseRow.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) {
-            throw new Error(`${caseRow.case_no}: complete Phase 3 before export.`);
+            throw new Error(`${caseRow.case_no}: complete defect clearance before export.`);
         }
         if (caseRow.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) {
             await TVC_DefectCaseService.submitToCompany(user, caseRow.id);
@@ -3416,6 +3543,7 @@ const TVC_App = (function () {
         const user = TVC_Auth.getCurrentUser();
         if (!user || !file) return;
         const name = (file.name || '').toLowerCase();
+        const isMasterHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
 
         if (name.endsWith('.zip')) {
             const zip = await JSZip.loadAsync(await file.arrayBuffer());
@@ -3424,11 +3552,23 @@ const TVC_App = (function () {
                 const payload = JSON.parse(await jsonFile.async('string'));
                 const dir = payload.export_meta?.direction;
                 if (dir === 'STATION_TO_HUB') {
-                    if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) {
+                    if (isMasterHub) {
                         await handleHubImport(file);
                         return;
                     }
-                    throw new Error('Station export ZIP must be imported on Master login (Captain Hub).');
+                    if (TVC_RBAC.isHqAccount(user)) {
+                        const fileDept = payload.export_meta?.department
+                            || (typeof TVC_Sync.resolveFileDepartment === 'function'
+                                ? TVC_Sync.resolveFileDepartment(payload, file.name)
+                                : null);
+                        state._pendingImportDept = fileDept;
+                        await handleImport(file);
+                        return;
+                    }
+                    throw new Error(
+                        'Engine/Deck station export ZIP은 Master Mode 또는 HQ Mode(해당 부서 토글)에서 Import하세요. ' +
+                        'Engine export는 Deck Mode에 반영되지 않습니다.'
+                    );
                 }
                 if (TVC_RBAC.isHqAccount(user) && (dir === 'SHIP_TO_HQ' || payload.export_meta?.package_type === 'COMPANY_REPORT')) {
                     state._pendingImportDept = 'ALL';
@@ -4044,12 +4184,14 @@ const TVC_App = (function () {
     const PLAN_CALC_MS = 5000;
 
     function getPlanLockDept() {
-        if (state.user && !TVC_RBAC.isHqAccount(state.user)) return state.user.department;
-        return state.department || null;
+        if (state.user && TVC_RBAC.isHqAccount(state.user)) return state.department || null;
+        if (isMasterHubMode()) return state.department || null;
+        return state.user?.department || state.department || null;
     }
 
     function rhUpdateGateApplies() {
         if (!state.user) return true;
+        if (isMasterHubMode()) return false;
         return !(typeof TVC_Space !== 'undefined' && TVC_Space.isDeckVesselMode(state.user));
     }
 
@@ -4063,6 +4205,7 @@ const TVC_App = (function () {
     }
 
     function isOriginalPlanUpdateLocked(dept) {
+        if (isMasterHubMode()) return false;
         if (state.user && TVC_RBAC.isHqAccount(state.user)) return false;
         dept = dept || getPlanLockDept();
         if (!dept) return false;
@@ -4071,6 +4214,7 @@ const TVC_App = (function () {
 
     function canPerformOriginalPlanUpdate() {
         if (!state.user) return false;
+        if (isMasterHubMode()) return false;
         if (TVC_RBAC.isHqAccount(state.user)) return true;
         const dept = getPlanLockDept();
         if (!dept) return false;
@@ -5139,18 +5283,41 @@ const TVC_App = (function () {
         }
     }
 
+    function inferReportDepartment(report, jobs) {
+        if (!report) return null;
+        if (report.department) return report.department;
+        TVC_WorkReport.fromLegacy(report);
+        const codes = TVC_WorkReport.getJobCodes(report);
+        const pool = jobs || state._allJobs || state.jobs || [];
+        const depts = new Set();
+        for (const code of codes) {
+            const c = String(code || '').trim();
+            if (!c) continue;
+            for (const j of pool) {
+                if (j.job_code === c && j.department) depts.add(j.department);
+            }
+        }
+        if (depts.size === 1) return [...depts][0];
+        for (const item of TVC_WorkReport.getJobItems(report)) {
+            const job = resolveJobById(item.maintenance_job_id)
+                || resolveJobByCode(item.job_code, report.department || state.department);
+            if (job?.department) return job.department;
+        }
+        return null;
+    }
+
+    function defectCaseDept(dc) {
+        if (!dc) return null;
+        if (dc.department) return dc.department;
+        const job = resolveJobById(dc.maintenance_job_id)
+            || resolveJobByCode(defectEffectiveJobCode(dc), dc.department || state.department);
+        return job?.department || null;
+    }
+
     function reportDept(r) {
         if (!r) return null;
-        const items = TVC_WorkReport.getJobItems(r);
-        for (const item of items) {
-            const byId = state.idx?.jobById.get(item.maintenance_job_id)?.department;
-            if (byId) return byId;
-            const byCode = state.jobs.find(j => j.job_code === item.job_code)?.department;
-            if (byCode) return byCode;
-        }
-        const byId = state.idx?.jobById.get(r.maintenance_job_id)?.department;
-        if (byId) return byId;
-        return state.jobs.find(j => j.job_code === r.job_code)?.department || null;
+        if (r.department) return r.department;
+        return inferReportDepartment(r);
     }
 
 
@@ -6437,8 +6604,15 @@ const TVC_App = (function () {
             if (i >= 0) return i;
         }
         if (state._wrReportId) {
-            const i = list.findIndex(e => !isHistDefectEntry(e) && e.report.id === state._wrReportId
-                && (!state._wrBatchItemId || e.item.maintenance_job_id === state._wrBatchItemId));
+            const i = list.findIndex(e => {
+                if (isHistDefectEntry(e)) return false;
+                if (e.report.id !== state._wrReportId) return false;
+                if (state._wrBatchItemId) {
+                    return e.item.maintenance_job_id === state._wrBatchItemId
+                        || e.item.job_code === state.idx?.jobById.get(state._wrBatchItemId)?.job_code;
+                }
+                return true;
+            });
             if (i >= 0) return i;
         }
         return -1;
@@ -6492,7 +6666,7 @@ const TVC_App = (function () {
 
     async function histDetailWorkReport() {
         const entry = getSelectedHistEntry();
-        if (!entry) await TVC_Dialog.alert('Select an item from Work History.');
+        if (!entry) { await TVC_Dialog.alert('Select an item from Work History.'); return; }
         if (isHistDefectEntry(entry)) {
             openDefectFromHistory(entry.defect.id);
             return;
@@ -6636,6 +6810,17 @@ const TVC_App = (function () {
         if (defectEntries.length) parts.push(`${defectEntries.length}건의 Defect Report`);
         if (!await TVC_Dialog.confirm({ message: `${parts.join(' · ')} — approve selected item(s)?` })) return;
 
+        let companyComment = '';
+        if (reportIds.length) {
+            companyComment = await TVC_Dialog.promptText({
+                title: "Company's Comments",
+                message: `Enter company reply for ${reportIds.length} selected Work Report(s).`,
+                defaultValue: 'WELL NOTED',
+                placeholder: 'e.g. WELL NOTED',
+            });
+            if (companyComment === null) return;
+        }
+
         let ok = 0;
         for (const id of reportIds) {
             try {
@@ -6643,7 +6828,7 @@ const TVC_App = (function () {
                 const opts = (rep?.work_type === 'POSTPONE' && postponeRequiresCompanyApproval(rep))
                     ? { approvedPostponeDate: hqApprovePostponeDate(rep) }
                     : {};
-                await TVC_Transaction.approveReport(user, id, '', opts);
+                await TVC_Transaction.approveReport(user, id, companyComment, opts);
                 ok++;
             } catch (e) {
                 await TVC_Dialog.alert(`${id}: ${e.message || e.code || 'Approve 실패'}`);
@@ -6753,7 +6938,7 @@ const TVC_App = (function () {
                 ? `<input type="checkbox" class="hist-chk-input"${checked ? ' checked' : ''}>`
                 : `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(wrEntry))}">`;
             const fileNo = String(f.fileNo || '').trim();
-            return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(openJobId)}',{fromHistory:true,view:true})">
+            return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(openJobId)}',{fromHistory:true,view:true,swapHide:'defectReportModal'})">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 ${histTypeCell(wrEntry)}
                 <td class="hist-file">${esc(fileNo || '—')}</td>
@@ -7260,23 +7445,51 @@ const TVC_App = (function () {
         showModal('workReportModal');
     }
 
+    function resolveJobForWorkReport(item, rep) {
+        if (!rep) return null;
+        TVC_WorkReport.fromLegacy(rep);
+        const mid = item?.maintenance_job_id || rep.maintenance_job_id;
+        const code = String(item?.job_code || rep.job_code || '').trim();
+        const dept = reportDept(rep) || rep.department || state.department;
+        if (mid) {
+            const byId = resolveJobById(mid);
+            if (byId) return byId;
+        }
+        if (code) return resolveJobByCode(code, dept);
+        return null;
+    }
+
     /** Work History: 더블 클릭 — 저장된 Work Report를 그대로 재현(읽기 전용, Modify 가능) */
     async function openWorkReportFromHistory(reportId, jobId, opts = {}) {
         const rep = state.reports.find(r => r.id === reportId);
-        if (!rep) return;
+        if (!rep) {
+            await TVC_Dialog.alert('Work Report not found in the current view.');
+            return;
+        }
         TVC_WorkReport.fromLegacy(rep);
-        const item = jobId
-            ? TVC_WorkReport.findItem(rep, jobId)
-            : TVC_WorkReport.getJobItems(rep)[0];
-        const job = state.idx?.jobById.get(item?.maintenance_job_id || rep.maintenance_job_id)
-            || state.jobs.find(j => j.job_code === (item?.job_code || rep.job_code));
+        let item = jobId ? TVC_WorkReport.findItem(rep, jobId) : null;
+        if (!item && jobId) {
+            const hintJob = resolveJobById(jobId) || resolveJobByCode(jobId, reportDept(rep) || state.department);
+            if (hintJob) item = TVC_WorkReport.findItem(rep, hintJob.job_code) || TVC_WorkReport.findItem(rep, hintJob.id);
+        }
+        if (!item) item = TVC_WorkReport.getJobItems(rep)[0];
+        const job = resolveJobForWorkReport(item, rep);
         if (!job) { await TVC_Dialog.alert('Job item not found.'); return; }
+        if (item && item.maintenance_job_id !== job.id) {
+            item.maintenance_job_id = job.id;
+            TVC_DB.put('daily_work_reports', rep).catch(() => {});
+        }
+        if (!rep.department && job.department) {
+            rep.department = job.department;
+            TVC_DB.put('daily_work_reports', rep).catch(() => {});
+        }
+        state._defectCaseId = null;
         state._wrJobId = job.id;
         state.selectedJobId = job.id;
         state._wrJobItems = null;
         state._wrReportId = reportId;
         const isBatchView = rep.is_batch && (rep.job_items || []).length > 1;
-        state._wrBatchItemId = isBatchView ? null : (item?.maintenance_job_id || null);
+        state._wrBatchItemId = isBatchView ? null : (item?.maintenance_job_id || job.id);
         state._wrPostSaveView = false;
         state._wrFromHistory = !!opts.fromHistory;
         if (opts.fromHistory) {
@@ -7284,7 +7497,8 @@ const TVC_App = (function () {
                 !isHistDefectEntry(e)
                 && e.report.id === reportId
                 && (e.isBatchSummary
-                    || e.item.maintenance_job_id === (item?.maintenance_job_id || job.id))
+                    || e.item.maintenance_job_id === job.id
+                    || e.item.job_code === job.job_code)
             );
             if (histEntry) state._histSelReportId = histEntryRowKey(histEntry);
         }
@@ -7307,7 +7521,15 @@ const TVC_App = (function () {
         state._wrSpareSearch = '';
         // Always open on the report's own type — never keep the opposite tab
         state._wrTab = workReportTabForType(rep.work_type);
-        if (!opts.skipRender) renderWorkReportModal({ preserveScroll: !!opts.preserveScroll });
+        if (!opts.skipRender) {
+            try {
+                renderWorkReportModal({ preserveScroll: !!opts.preserveScroll });
+            } catch (err) {
+                console.error('[WorkReport] render failed', err);
+                await TVC_Dialog.alert('Work Report could not be displayed.\n' + (err.message || String(err)));
+                return;
+            }
+        }
         if (opts.edit) syncPlanBatchChecksFromJobItems(rep.job_items || []);
         const wrModal = document.getElementById('workReportModal');
         const wrOpen = wrModal && !wrModal.classList.contains('hidden');
@@ -8572,6 +8794,12 @@ const TVC_App = (function () {
         return !!wf(key);
     }
 
+    function readWrCompanyComment(rep) {
+        const el = document.getElementById('wrCompanyComment');
+        if (el && !el.readOnly && !el.disabled) return String(el.value || '').trim();
+        return String(rep?.company_comment || '').trim();
+    }
+
     function renderWrReportFooter(opts = {}) {
         const {
             rep = null,
@@ -8579,6 +8807,7 @@ const TVC_App = (function () {
             forPrint = false,
             canEditShipAttach = true,
             canEditCompanyAttach = false,
+            canEditCompanyComment = false,
             showShipComment = true,
             showLaborRow = true,
             shipCommentLabel = "Ship's Comments (If any)",
@@ -8586,6 +8815,11 @@ const TVC_App = (function () {
         const locked = ro || forPrint;
         const dis = locked ? ' disabled' : '';
         const roAttr = locked ? ' readonly' : '';
+        const companyCommentVal = rep?.company_comment || '';
+        const companyCommentEditable = canEditCompanyComment && !forPrint;
+        const companyCommentField = companyCommentEditable
+            ? `<textarea class="wr-maint-textarea wr-company-comment-edit" id="wrCompanyComment" rows="3" placeholder="Enter company reply…">${esc(companyCommentVal)}</textarea>`
+            : `<textarea class="wr-maint-textarea wr-ro" id="wrCompanyComment" rows="3" readonly tabindex="-1">${esc(companyCommentVal)}</textarea>`;
         const fld = (label, inner, extraCls = '') =>
             `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}">${label ? `<label>${label}</label>` : ''}${inner}</div>`;
         const flagChk = (key, label) => `<label class="wr-footer-flag">
@@ -8606,7 +8840,7 @@ const TVC_App = (function () {
                 ${fld(shipCommentLabel, `<textarea class="wr-maint-textarea${locked ? ' wr-ro' : ''}" data-wf="shipComments" rows="3"${roAttr}${dis}>${esc(wf('shipComments'))}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
                 ${fld('', renderWrAttachmentBlock('ship', { canUpload: canEditShipAttach && !locked, forPrint }), 'wr-maint-span-all wr-maint-grid-gap')}
             ` : ''}
-            ${fld("Company's Comments", `<textarea class="wr-maint-textarea wr-ro" rows="3" readonly>${esc(rep?.company_comment || '')}</textarea>`, 'wr-maint-span-all wr-maint-grid-gap')}
+            ${fld("Company's Comments", companyCommentField, 'wr-maint-span-all wr-maint-grid-gap')}
             ${fld('', renderWrAttachmentBlock('company', { canUpload: canEditCompanyAttach && !locked, forPrint }), 'wr-maint-span-all wr-maint-grid-gap')}
         `;
     }
@@ -8624,6 +8858,7 @@ const TVC_App = (function () {
             confirmedByVal = '',
             canEditShipAttach = true,
             canEditCompanyAttach = false,
+            canEditCompanyComment = false,
             batchMode = false,
             batchJobIds = [],
             activeJobId = null,
@@ -8680,6 +8915,7 @@ const TVC_App = (function () {
                     forPrint,
                     canEditShipAttach,
                     canEditCompanyAttach,
+                    canEditCompanyComment,
                 })}
                 ${forPrint ? '' : renderFileNoPickPanelHtml('wr')}
             </section>
@@ -8699,6 +8935,7 @@ const TVC_App = (function () {
             confirmedByVal = '',
             canEditShipAttach = true,
             canEditCompanyAttach = false,
+            canEditCompanyComment = false,
             batchMode = false,
             batchJobIds = [],
             ro = false,
@@ -8771,6 +9008,7 @@ const TVC_App = (function () {
                     forPrint,
                     canEditShipAttach,
                     canEditCompanyAttach,
+                    canEditCompanyComment,
                     showLaborRow: false,
                     shipCommentLabel: "Ship's Comments (Reason)",
                 })}
@@ -9034,11 +9272,20 @@ const TVC_App = (function () {
 
     function renderWorkReportModal(opts = {}) {
         const scroll = opts.preserveScroll ? captureWorkReportModalScroll() : null;
+        const forPrint = !!opts.forPrint;
         cleanupOrphanPickMenus();
         closeFileNoPickPopover();
         const host = document.getElementById('workReportBody');
         if (!host) return;
-        const job = state.idx?.jobById.get(state._wrJobId);
+        let job = resolveJobById(state._wrJobId);
+        const repEarly = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
+        if (!job && repEarly) {
+            TVC_WorkReport.fromLegacy(repEarly);
+            const item = TVC_WorkReport.findItem(repEarly, state._wrJobId)
+                || TVC_WorkReport.getJobItems(repEarly)[0];
+            job = resolveJobForWorkReport(item, repEarly);
+            if (job) state._wrJobId = job.id;
+        }
         if (!job) return;
         if (!WR_TABS[state._wrTab]) state._wrTab = 'repair';
         const today = new Date().toISOString().slice(0, 10);
@@ -9072,6 +9319,7 @@ const TVC_App = (function () {
         const approvedByVal = isRepApproved ? 'Company' : '';
         const canEditShipAttach = !ro && (!rep || TVC_RBAC.isReportedStatus(rep.status));
         const canEditCompanyAttach = !ro && !!canApproveNow;
+        const canEditCompanyComment = !!canApproveNow && !isRepApproved && !forPrint;
 
         const showPages = state._wrTab === 'repair';
         const headHtml = showPages && state._wrPage === '2'
@@ -9101,7 +9349,7 @@ const TVC_App = (function () {
                 rep, reportedByName, today,
                 canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
                 approvedByVal, confirmedByVal,
-                canEditShipAttach, canEditCompanyAttach,
+                canEditShipAttach, canEditCompanyAttach, canEditCompanyComment,
                 ro,
             });
         } else if (state._wrTab === 'postpone') {
@@ -9109,7 +9357,7 @@ const TVC_App = (function () {
                 rep, reportedByName, today,
                 canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
                 approvedByVal, confirmedByVal,
-                canEditShipAttach, canEditCompanyAttach,
+                canEditShipAttach, canEditCompanyAttach, canEditCompanyComment,
                 ro, isCriticalPostpone,
             });
         }
@@ -9188,7 +9436,8 @@ const TVC_App = (function () {
         if (ro) {
             host.querySelectorAll('.wr-page input, .wr-page textarea, .wr-page select')
                 .forEach(el => {
-                    if (el.id === 'wrApprovedBy' || el.id === 'wrConfirmedBy') return;
+                    if (el.id === 'wrApprovedBy' || el.id === 'wrConfirmedBy'
+                        || el.id === 'wrCompanyComment' || el.id === 'wrApprovedPostponeDate') return;
                     el.disabled = true;
                 });
         }
@@ -9245,7 +9494,8 @@ const TVC_App = (function () {
                 if (postponeRequiresCompanyApproval(rep) && !approvedPostponeDate) {
                     await TVC_Dialog.alert('Approved Enter Postpone Date.');
                 }
-                await TVC_Transaction.approveReport(user, rep.id, '', { approvedPostponeDate });
+                const companyComment = readWrCompanyComment(rep);
+                await TVC_Transaction.approveReport(user, rep.id, companyComment, { approvedPostponeDate });
                 resetAndCloseWorkReport();
                 await refreshAll();
                 const sched = postponeRequiresCompanyApproval(rep)
@@ -9944,6 +10194,13 @@ const TVC_App = (function () {
     async function handleHubImport(file) {
         const user = TVC_Auth.getCurrentUser();
         if (!user || !file) return;
+        if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
+            await TVC_Dialog.alert(
+                'Station merge import requires Vessel Mode — Master (captain account). ' +
+                'Sign out and log in with Department = Master.'
+            );
+            return;
+        }
         try {
             await TVC_StationSync.importStationPackage(user, file);
             await refreshAll();
@@ -10055,9 +10312,24 @@ const TVC_App = (function () {
             await TVC_Dialog.alert('Data Import 권한이 없습니다.');
             return;
         }
-        if (typeof TVC_Space !== 'undefined' && user.station && !TVC_Space.canStationDataXfer(user)) {
+        const xferUser = typeof TVC_Space !== 'undefined' ? { ...user, station: TVC_Space.getStation(user) } : user;
+        if (typeof TVC_Space !== 'undefined' && xferUser.station && !TVC_Space.canStationDataXfer(xferUser)) {
             await TVC_Dialog.alert('Data Export & Import는 Chief officer (co) · Chief engineer (ce) · Captain만 수행할 수 있습니다.');
             return;
+        }
+        const name = (file.name || '').toLowerCase();
+        if (name.endsWith('.zip') && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(xferUser)) {
+            try {
+                const zip = await JSZip.loadAsync(await file.arrayBuffer());
+                const jsonFile = zip.file('tvc_sync.json');
+                if (jsonFile) {
+                    const peek = JSON.parse(await jsonFile.async('string'));
+                    if (peek.export_meta?.direction === 'STATION_TO_HUB') {
+                        await handleHubImport(file);
+                        return;
+                    }
+                }
+            } catch (_) { /* fall through to standard import */ }
         }
         const dept = state._pendingImportDept || user.department;
         state._pendingImportDept = null;

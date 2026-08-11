@@ -187,6 +187,20 @@ const TVC_DefectSync = (function () {
         const vesselId = caseRow.vessel_id
             || await TVC_DefectCaseService.resolveVesselId(user)
             || 'UNKNOWN';
+        const maintenance_jobs = [];
+        if (typeof TVC_Transaction !== 'undefined' && TVC_Transaction.resolveDefectScheduleTargets) {
+            const allJobs = await TVC_DB.getAll('maintenance_jobs').catch(() => []);
+            const seen = new Set();
+            for (const t of TVC_Transaction.resolveDefectScheduleTargets(caseRow)) {
+                const job = (t.jobId && allJobs.find(j => j.id === t.jobId))
+                    || (t.jobCode && allJobs.find(j => j.job_code === t.jobCode))
+                    || null;
+                if (job && !seen.has(job.id)) {
+                    seen.add(job.id);
+                    maintenance_jobs.push(job);
+                }
+            }
+        }
         return {
             export_meta: {
                 vessel_id: vesselId,
@@ -200,6 +214,7 @@ const TVC_DefectSync = (function () {
                 schema_version: TVC_DefectCase.SCHEMA_VERSION,
             },
             defect_cases: [caseRow],
+            maintenance_jobs,
         };
     }
 
@@ -295,10 +310,18 @@ const TVC_DefectSync = (function () {
     }
 
     async function exportHqReplyZip(user, caseId) {
-        const row = await TVC_DefectCaseService.get(caseId);
+        let row = await TVC_DefectCaseService.get(caseId);
         if (!row) throw new Error('Defect case not found.');
+        const hasReply = !!(String(row.company_initial_reply || row.permit_to_work || '').trim());
         if (row.status !== TVC_DefectCase.Status.COMPANY_REVIEWED) {
-            throw new Error('HQ Phase 2 must be completed before reply export.');
+            if (!(row.approved_at && hasReply)) {
+                throw new Error('Complete Initial Reply and Approve before reply export.');
+            }
+            row.status = TVC_DefectCase.Status.COMPANY_REVIEWED;
+            row.phase2_locked = true;
+            row.reply_date = row.reply_date || now().slice(0, 10);
+            row.reply_by = row.reply_by || TVC_RBAC.getRankLabel(user);
+            await TVC_DB.put('defect_cases', row);
         }
         const payload = await buildHqReplyPayload(user, row);
         const exportDate = now().slice(0, 10).replace(/-/g, '');

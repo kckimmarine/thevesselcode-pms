@@ -1175,6 +1175,17 @@ const TVC_DefectReport = (function () {
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
+    /** HQ — Initial Reply·Approve·Phase 4 (목록 Submitted도 Phase 2 편집 허용) */
+    function canModifyDfHqRow(row) {
+        if (!row || !getState().user || !isHq()) return false;
+        if (row.status === TVC_DefectCase.Status.CLOSED) return false;
+        if (row.approved_at || row.approved_by) return false;
+        if (TVC_DefectCase.isPhase2Editable(row)) return true;
+        if (TVC_DefectCase.isPhase4Editable(row)) return true;
+        if (dfApprovalState(row).canApproveNow) return true;
+        return false;
+    }
+
     /** Submitted / Approved — Ship's Comments 등 선박 확인 섹션만 Modify */
     function canModifyDfShipCommentsOnly(row) {
         if (!row || !getState().user || isHq()) return false;
@@ -1189,7 +1200,7 @@ const TVC_DefectReport = (function () {
     }
 
     function canOpenDfModifyRow(row) {
-        return canModifyDfListRow(row) || canModifyDfShipCommentsOnly(row);
+        return canModifyDfListRow(row) || canModifyDfShipCommentsOnly(row) || canModifyDfHqRow(row);
     }
 
     function canEditDfShipCommentsSection(row, forceView) {
@@ -1348,10 +1359,12 @@ const TVC_DefectReport = (function () {
         const row = (getState().defectCases || []).find(c => c.id === id);
         if (row && !canOpenDfModifyRow(row)) {
             const st = TVC_DefectCase.listWorkflowStatus(row);
-            if (st === 'Submitted' || st === 'Approved') {
+            if (!isHq() && (st === 'Submitted' || st === 'Approved')) {
                 await TVC_Dialog.alert("Only Captain / Chief Engineer can edit Ship's Comments in Submitted or Approved status.");
+            } else {
+                await TVC_Dialog.alert('Modify permission denied.');
             }
-            await TVC_Dialog.alert('Modify permission denied.');
+            return;
         }
         const mode = row && (getState()._dfNavSource === 'list' || getState()._dfNavSource === 'history')
             ? resolveDfOpenMode(row)
@@ -1457,8 +1470,8 @@ const TVC_DefectReport = (function () {
     }
 
     function resolveDfOpenMode(row) {
-        if (isHq() && row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'phase2';
-        if (isHq() && row.status === TVC_DefectCase.Status.AWAITING_COMPLETION) return 'phase4';
+        if (isHq() && row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'edit';
+        if (isHq() && row.status === TVC_DefectCase.Status.AWAITING_COMPLETION) return 'edit';
         if (!isHq() && (row.status === TVC_DefectCase.Status.COMPANY_REVIEWED
             || row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS)) return 'phase3';
         return 'edit';
@@ -1495,11 +1508,17 @@ const TVC_DefectReport = (function () {
         if (!row) await TVC_Dialog.alert('Defect Report not found.');
         if (!canOpenDfModifyRow(row)) {
             const st = TVC_DefectCase.listWorkflowStatus(row);
-            if (st === 'Confirmed') await TVC_Dialog.alert('Only Captain / Chief Engineer can modify Confirmed items.');
-            if (st === 'Submitted' || st === 'Approved') {
-                await TVC_Dialog.alert("Only Captain / Chief Engineer can edit Ship's Comments in Submitted or Approved status.");
+            if (isHq()) {
+                await TVC_Dialog.alert('Modify permission denied.');
+            } else {
+                if (st === 'Confirmed') await TVC_Dialog.alert('Only Captain / Chief Engineer can modify Confirmed items.');
+                else if (st === 'Submitted' || st === 'Approved') {
+                    await TVC_Dialog.alert("Only Captain / Chief Engineer can edit Ship's Comments in Submitted or Approved status.");
+                } else {
+                    await TVC_Dialog.alert('Cannot modify Approved or Submitted items.');
+                }
             }
-            await TVC_Dialog.alert('Cannot modify Approved or Submitted items.');
+            return;
         }
         openCaseFromNav(id, navSource, resolveDfOpenMode(row), opts);
     }
@@ -1550,7 +1569,7 @@ const TVC_DefectReport = (function () {
         if (isHq()) {
             const pending = rows.filter(r => r.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY);
             if (!pending.length) await TVC_Dialog.alert('Only SUBMITTED items awaiting HQ review can be confirmed.');
-            openCase(pending[0].id, 'phase2');
+            openCase(pending[0].id, 'edit');
             return;
         }
 
@@ -1868,14 +1887,15 @@ const TVC_DefectReport = (function () {
     function renderPhase3() { return ''; }
 
     function renderPhase4(row, readonly) {
+        // HQ Defect Report — vessel-style UI; Phase 4 close-out is not shown in this modal.
+        if (isHq()) return '';
         const show = row.phase3_locked || row.phase4_locked
             || row.status === TVC_DefectCase.Status.AWAITING_COMPLETION
-            || row.status === TVC_DefectCase.Status.CLOSED
-            || (isHq() && row.status === TVC_DefectCase.Status.AWAITING_COMPLETION);
-        if (!show && !isHq()) return '';
+            || row.status === TVC_DefectCase.Status.CLOSED;
+        if (!show) return '';
         const p4ro = readonly || !TVC_DefectCase.isPhase4Editable(row);
         const showHQ = row.phase3_locked || row.status === TVC_DefectCase.Status.AWAITING_COMPLETION || row.status === TVC_DefectCase.Status.CLOSED;
-        if (!showHQ && !isHq()) return '';
+        if (!showHQ) return '';
         return `<section class="df-phase df-phase-hq df-phase-close">
             <h3 class="df-phase-title">Phase 4 — Closed out reply from Company D.P.</h3>
             <div class="df-grid">
@@ -1992,7 +2012,7 @@ const TVC_DefectReport = (function () {
         const dfPage = getState()._dfPage || '1';
         const approval = dfApprovalState(row);
         const canEditP1 = !forceView && TVC_DefectCase.isPhase1Editable(row)
-            && (!hq || row.status === TVC_DefectCase.Status.DRAFT);
+            && (!hq || row.status === TVC_DefectCase.Status.DRAFT || row.visible_in_list === false);
         const canEditShipInitial = canEditP1;
         const canEditCompanyReply = !forceView && hq && TVC_DefectCase.isPhase2Editable(row);
         const canEditShipComments = canEditDfShipCommentsSection(row, forceView);
@@ -2022,6 +2042,7 @@ const TVC_DefectReport = (function () {
             const page2ro = forceView || !TVC_DefectCase.canModifyListWorkflow(row);
             body = renderDfPage2Body(row, page2ro);
         } else {
+            const phase4Html = renderPhase4(row, !canEditP4);
             body = `${renderPhase1(row, !canEditP1, {
                 includeApproval: true,
                 postAction: {
@@ -2033,9 +2054,7 @@ const TVC_DefectReport = (function () {
                     canEditCompanyFinal,
                 },
             })}
-                <div class="df-workflow-phases">
-                    ${renderPhase4(row, !canEditP4)}
-                </div>`;
+                ${phase4Html ? `<div class="df-workflow-phases">${phase4Html}</div>` : ''}`;
         }
 
         let actionsClass = 'modal-actions wr-actions df-modal-actions';
@@ -2451,10 +2470,9 @@ const TVC_DefectReport = (function () {
         const s = getState();
         const draft = s._dfDraft || row;
         const title = defectReportModalTitle(row);
+        const phase4Print = renderPhase4(row, true);
         const page1Body = `${renderPhase1(row, true, { includeApproval: true, forPrint: true })}
-                <div class="df-workflow-phases">
-                    ${renderPhase4(row, true)}
-                </div>`;
+                ${phase4Print ? `<div class="df-workflow-phases">${phase4Print}</div>` : ''}`;
         const page1Html = renderDfPrintShell(title, '1', page1Body);
         const usedParts = enrichDfUsedParts(s._dfUsedParts || row.used_parts || []);
         let page2Html = '';

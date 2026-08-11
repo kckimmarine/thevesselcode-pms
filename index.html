@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260811-consume-job-ui">
+    <link rel="stylesheet" href="css/app.css?v=20260811-company-comment">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260810-spare-hist-width2">
 </head>
 <body>
@@ -591,6 +591,7 @@
     <div class="modal-box tvc-dialog-box" onclick="event.stopPropagation()">
         <h3 id="tvcDialogTitle" class="tvc-dialog-title hidden"></h3>
         <p id="tvcDialogMessage" class="tvc-dialog-msg"></p>
+        <div id="tvcDialogExtra" class="tvc-dialog-extra hidden"></div>
         <div id="tvcDialogActions" class="modal-actions tvc-dialog-actions"></div>
     </div>
 </div>
@@ -625,7 +626,7 @@
 <script src="js/ui/viewportScale.js?v=20260723-readability"></script>
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js?v=20260810-modal-nodrag"></script>
-<script src="js/ui/dialog.js?v=20260804-dialog"></script>
+<script src="js/ui/dialog.js?v=20260811-company-comment"></script>
 <script src="js/ui/runHours.js?v=20260808-critical-postpone"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
 <script src="js/core/filename.js?v=20260810-wp-hq-reply-name"></script>
@@ -637,10 +638,10 @@
 <script src="js/services/inventoryService.js?v=20260806-spare-consume-fix"></script>
 <script src="js/services/excel.js?v=20260807-quote-form-excel"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
-<script src="js/space.js?v=20260728-deck-spare-tab"></script>
+<script src="js/space.js?v=20260812-hub-mode"></script>
 <script src="js/license.js?v=20260803-electron-license"></script>
 <script src="js/services/fileExport.js?v=20260804-settings"></script>
-<script src="js/auth.js?v=20260804-dialog"></script>
+<script src="js/auth.js?v=20260811-master-import2"></script>
 <script src="js/services/transaction.js?v=20260810-plan-status-latest"></script>
 <script src="js/services/maintenancePlan.js?v=20260729-pms-master"></script>
 <script src="js/services/pmsMasterExcel.js?v=20260808-deck-catalog"></script>
@@ -648,21 +649,21 @@
 <script src="js/services/defectCase.js?v=20260810-legacy-report-names"></script>
 <script src="js/services/workPermitCase.js?v=20260810-wp-comments"></script>
 <script src="js/services/workPermitSync.js?v=20260810-wp-comments"></script>
-<script src="js/services/defectSync.js?v=20260810-legacy-report-names"></script>
+<script src="js/services/defectSync.js?v=20260812-defect-flow"></script>
 <script src="js/services/postponeSync.js?v=20260810-import-scope"></script>
-<script src="js/services/sync.js?v=20260810-wp-dept-fix"></script>
+<script src="js/services/sync.js?v=20260812-defect-flow"></script>
 <script src="js/services/masterBackup.js?v=20260804-dialog"></script>
-<script src="js/services/stationSync.js?v=20260728-data-xfer"></script>
+<script src="js/services/stationSync.js?v=20260811-monthly-export"></script>
 <script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
 <script src="js/services/fleet.js?v=20260728-fleet-imo"></script>
-<script src="js/services/dataPurge.js?v=20260722-incheon-chemi"></script>
+<script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260811-list-search-clear"></script>
-<script src="js/ui/defectReport.js?v=20260811-plan-batch-scroll"></script>
+<script src="js/ui/defectReport.js?v=20260812-hq-df-modify"></script>
 <script src="js/ui/workPermit.js?v=20260811-wrspare-cos-dot"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260804-pms-scope"></script>
-<script src="js/app.js?v=20260811-plan-batch-scroll"></script>
+<script src="js/app.js?v=20260812-defect-flow"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

@@ -12,11 +12,12 @@ const TVC_StationSync = (function () {
     }
 
     /** CCR/ECR — Captain Hub로보낼 Station 패키지 (ZIP + JSON) */
-    async function exportStationPackage(user) {
+    async function exportStationPackage(user, opts = {}) {
         TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.STATION_EXPORT);
         const dept = user.department || TVC_Space.fixedDepartment(TVC_Space.getStation(user));
         return TVC_Sync.exportZip(user, TVC_Space.Direction.STATION_TO_HUB, dept, {
             station_id: TVC_Space.getStation(user),
+            ...opts,
         });
     }
 

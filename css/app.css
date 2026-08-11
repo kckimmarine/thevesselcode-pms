@@ -1482,7 +1482,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .wr-spare-meta-form .wr-maint-job-pick,
 #defectReportBody .wr-maint-job-pick,
 #workPermitBody .wr-maint-job-pick,
-#workReportBody .wr-maint-job-pick {
+#workReportBody .wr-maint-job-pick,
+#spareConsumeBody .wr-maint-job-pick {
     width: 100%;
     box-sizing: border-box;
     padding: 6px 8px;
@@ -6318,7 +6319,9 @@ label.spare-file-pick input[type=file] { display: none; }
     border-color: #cbd5e0;
     cursor: default;
 }
-.spare-consume-meta-form .spare-consume-pick-trigger {
+.spare-consume-meta-form .spare-consume-pick-trigger,
+.spare-consume-meta-form .wr-maint-job-pick,
+.spare-consume-meta-form .spare-consume-job-pick-trigger {
     min-height: auto;
     padding: 6px 8px;
     border: 1px solid #cbd5e0;
@@ -8280,6 +8283,22 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     gap: 12px;
 }
 .tvc-dialog-actions .btn { min-width: 72px; }
+.tvc-dialog-extra { margin: 0 0 12px; }
+.tvc-dialog-extra.hidden { display: none; }
+.tvc-dialog-extra .tvc-dialog-input {
+    width: 100%;
+    min-height: 72px;
+    padding: 8px 10px;
+    border: 1px solid var(--border, #c8d0dc);
+    border-radius: 6px;
+    font: inherit;
+    resize: vertical;
+    box-sizing: border-box;
+}
+.wr-maint-textarea.wr-company-comment-edit {
+    border-color: var(--accent, #2563eb);
+    background: #f8fbff;
+}
 
 .df-cancel-confirm-modal { z-index: 10200; }
 .df-cancel-confirm-box {

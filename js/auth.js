@@ -94,6 +94,12 @@ const TVC_Auth = (function () {
             || users.find(u => u.username === session.username);
         if (!user) return session;
         const role = user.role || TVC_RBAC.resolveUserRole(user);
+        let station = null;
+        if (session.login_mode && typeof TVC_Space !== 'undefined') {
+            station = TVC_Space.stationFromLoginMode(session.login_mode);
+        } else {
+            station = session.station || null;
+        }
         const updated = {
             ...session,
             role,
@@ -101,7 +107,7 @@ const TVC_Auth = (function () {
             department: user.account_type === 'HQ' ? null : user.department,
             display_name: user.display_name,
             vessel_id: user.vessel_id,
-            station: session.station || null,
+            station,
             login_mode: session.login_mode || null,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(updated));

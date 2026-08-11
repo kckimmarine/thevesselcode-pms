@@ -87,7 +87,11 @@ const TVC_Space = (function () {
     }
 
     function getStation(user) {
-        return user?.station || null;
+        if (!user) return null;
+        // login_mode is authoritative (avoids stale session.station blocking Master hub import)
+        if (user.login_mode) return stationFromLoginMode(user.login_mode);
+        if (user.station) return user.station;
+        return null;
     }
 
     function isCaptainHub(user) {
@@ -303,6 +307,10 @@ const TVC_Space = (function () {
             base.showDefectInbox = true;
             base.showDefectImportUrgent = true;
             base.showDefectUrgentExport = TVC_RBAC.isApprover(user);
+            // Master Hub aggregates station data — no local RH / Original Plan update
+            base.showUpdateWorkPlan = false;
+            base.showModifyOriginalPlan = false;
+            base.canEditRunningHours = false;
         }
         base.showRunningHours = !isDeckVesselMode(user);
         if (station === Station.CCR) {
