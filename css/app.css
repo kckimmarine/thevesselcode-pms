@@ -649,6 +649,9 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .act-period-clear { padding: 3px 8px; font-size: 11px; background: #edf2f7; color: #4a5568; border: none; border-radius: 4px; cursor: pointer; }
 .act-period-clear:hover { background: #e2e8f0; }
 .search-input { flex: 1; min-width: 100px; padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 12px; }
+.list-filter-group-search-wrap {
+    margin-bottom: 8px;
+}
 .search-field-wrap {
     position: relative;
     display: flex;
@@ -1478,7 +1481,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .wr-spare-meta-form .wr-maint-job-pick,
 #defectReportBody .wr-maint-job-pick,
-#workPermitBody .wr-maint-job-pick {
+#workPermitBody .wr-maint-job-pick,
+#workReportBody .wr-maint-job-pick {
     width: 100%;
     box-sizing: border-box;
     padding: 6px 8px;
@@ -1500,25 +1504,33 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .wr-page2-job-rows,
 #defectReportBody .df-page1-job-rows,
 #workPermitBody .df-page1-job-rows,
-#workReportBody .df-page1-job-rows {
+#workReportBody .df-page1-job-rows,
+#spareConsumeBody .consume-report-meta .wr-page2-job-rows {
     display: flex;
     flex-direction: column;
     gap: 10px;
 }
 #defectReportBody .df-page1-job-rows .wr-maint-grid-gap,
 #workPermitBody .df-page1-job-rows .wr-maint-grid-gap,
-#workReportBody .df-page1-job-rows .wr-maint-grid-gap {
+#workReportBody .df-page1-job-rows .wr-maint-grid-gap,
+#spareConsumeBody .consume-report-meta .wr-page2-job-rows .wr-maint-grid-gap {
     margin-top: 0;
 }
 .wr-spare-meta-form .wr-page2-job-grid-batch,
 #defectReportBody .df-maint-job-grid-batch,
-#workPermitBody .df-maint-job-grid-batch {
+#workPermitBody .df-maint-job-grid-batch,
+#workReportBody .df-maint-job-grid-batch,
+#spareConsumeBody .consume-report-meta .df-maint-job-grid-batch {
     grid-template-columns: repeat(4, minmax(0, 1fr)) 36px;
 }
 .wr-spare-meta-form .wr-page2-job-row-act,
 #defectReportBody .df-maint-job-row-act,
-#workPermitBody .df-maint-job-row-act {
+#workPermitBody .df-maint-job-row-act,
+#workReportBody .df-maint-job-row-act,
+#spareConsumeBody .consume-report-meta .df-maint-job-row-act {
     justify-content: flex-end;
+    align-items: flex-end;
+    padding-bottom: 2px;
 }
 .wr-spare-work-layout {
     flex: 1;
@@ -3790,7 +3802,13 @@ label.spare-file-pick input[type=file] { display: none; }
     background: #fff;
     box-sizing: border-box;
 }
-.spare-inline-input-wide { min-width: 80px; }
+.spare-item-edit-table .c-dwg,
+.spare-item-edit-table .c-pno,
+.spare-item-edit-table .c-item {
+    width: 146px;
+    max-width: 146px;
+}
+.spare-inline-input-wide { min-width: 0; }
 /* Class 선택 — 네이티브 select 대신 커스텀 피커 (잔여 문자/점 표시 방지) */
 .spare-class-pick {
     position: relative;
@@ -4250,6 +4268,11 @@ label.spare-file-pick input[type=file] { display: none; }
     padding-left: 4px;
     padding-right: 4px;
     box-sizing: border-box;
+}
+.spare-data-table-wrspare .c-cons,
+.spare-data-table-consume .c-cons {
+    overflow: visible;
+    text-overflow: clip;
 }
 .spare-data-head .spare-col-head-stack {
     white-space: normal;
@@ -4855,6 +4878,28 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 .spare-data-table-consume,
 .spare-data-table-wrspare { min-width: 898px; }
+/* Page 2 SPARE table — live Page 2 */
+.wr-spare-work-layout .spare-data-table-wrspare th,
+.wr-spare-work-layout .spare-data-table-wrspare td {
+    text-align: center !important;
+}
+.wr-spare-work-layout .spare-data-table-wrspare .c-item {
+    text-align: left !important;
+}
+/* Page 2 SPARE table — print / preview */
+.wr-print-page .wr-spare-print-table-wrap .spare-data-table-wrspare th,
+.wr-print-page .wr-spare-print-table-wrap .spare-data-table-wrspare td,
+.wr-print-page .wr-print-spare-table.spare-data-table-wrspare th,
+.wr-print-page .wr-print-spare-table.spare-data-table-wrspare td,
+.wr-print-page .wr-spare-print-layout .spare-data-table-wrspare th,
+.wr-print-page .wr-spare-print-layout .spare-data-table-wrspare td {
+    text-align: center !important;
+}
+.wr-print-page .wr-spare-print-table-wrap .spare-data-table-wrspare .c-item,
+.wr-print-page .wr-print-spare-table.spare-data-table-wrspare .c-item,
+.wr-print-page .wr-spare-print-layout .spare-data-table-wrspare .c-item {
+    text-align: left !important;
+}
 .spare-detail-panel {
     background: #fff;
     border: 1px solid #e2e8f0;
@@ -4996,7 +5041,7 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-req-list-table col.rl-col-req-port { width: 112px; }
 .spare-req-list-table col.rl-col-submitted { width: 96px; }
 .spare-req-list-table col.rl-col-status { width: 88px; }
-.spare-req-list-table col.rl-col-recv-date { width: 166px; }
+.spare-req-list-table col.rl-col-recv-date { width: 112px; }
 .spare-req-list-table col.rl-col-recv-port { width: 112px; }
 .spare-req-list-table col.rl-col-os { width: 56px; }
 .spare-req-list-table col.rl-col-total { width: 56px; }
@@ -5329,7 +5374,8 @@ label.spare-file-pick input[type=file] { display: none; }
     background: #edf2f7;
     padding: 12px;
 }
-.wr-consume-preview-doc .wr-print-page {
+.wr-consume-preview-doc .wr-print-page,
+.wr-consume-preview-doc.df-print-root .wr-page {
     max-width: 210mm;
     margin: 0 auto;
 }

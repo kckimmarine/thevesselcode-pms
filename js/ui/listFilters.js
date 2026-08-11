@@ -446,21 +446,41 @@ const TVC_ListFilters = (function () {
         if (gs) {
             gs.addEventListener('input', () => {
                 _groupSearch = gs.value;
+                TVC_App.updateSearchClearBtnForEl?.(gs);
                 const list = pop.querySelector('.list-filter-group-list');
                 if (list) list.innerHTML = renderGroupChecks(filteredGroupNodes(state), f.groupKeys);
             });
+            TVC_App.updateSearchClearBtnForEl?.(gs);
         }
         positionPopover(btn, pop);
     }
 
     function renderGroupPanel(f, tab) {
         const state = { listFilters: TVC_App.getListFilterState(), department: TVC_App.getAppDepartment?.(), idx: TVC_App.getAppIdx?.() };
+        const groupSearchVal = escAttr(_groupSearch);
         return `
             <div class="list-filter-section">
                 <div class="list-filter-section-title">PMS Group</div>
-                <input type="text" class="list-filter-group-search search-input" placeholder="Search group…" value="${escAttr(_groupSearch)}">
+                <div class="search-field-wrap list-filter-group-search-wrap">
+                    <input type="text" class="list-filter-group-search search-input" placeholder="Search group…" value="${groupSearchVal}">
+                    <button type="button" class="search-clear-btn${_groupSearch ? '' : ' hidden'}" title="Clear search" aria-label="Clear search"
+                        onclick="TVC_ListFilters.clearGroupSearch(event)">×</button>
+                </div>
                 <div class="list-filter-group-list">${renderGroupChecks(filteredGroupNodes(state), f.groupKeys)}</div>
             </div>`;
+    }
+
+    function clearGroupSearch(ev) {
+        ev?.stopPropagation?.();
+        _groupSearch = '';
+        const pop = document.getElementById('listFilterPopover');
+        const gs = pop?.querySelector('.list-filter-group-search');
+        if (gs) {
+            gs.value = '';
+            gs.dispatchEvent(new Event('input', { bubbles: true }));
+            gs.focus();
+        }
+        TVC_App.updateSearchClearBtnForEl?.(gs);
     }
 
     function deptLabel(dept) {
@@ -623,6 +643,7 @@ const TVC_ListFilters = (function () {
         syncBtn,
         activeCount,
         hasActive,
+        clearGroupSearch,
         matchActualJob,
         matchDefectRow,
         matchHistEntry,

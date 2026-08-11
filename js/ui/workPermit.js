@@ -860,7 +860,7 @@ const TVC_WorkPermitReport = (function () {
         const onPage2 = (s._wpPage || '1') === '2' && !!document.getElementById('wrSpareListScroll');
         const list = onPage2 ? (s._wrUsedParts || s._wpUsedParts || []) : (s._wpUsedParts || []);
         if (host) {
-            host.querySelectorAll('.spare-wr-qty-input').forEach(el => {
+            host.querySelectorAll('.spare-consume-qty-input').forEach(el => {
                 const table = el.closest('[data-spare-id]');
                 const id = table?.dataset?.spareId;
                 if (!id) return;
@@ -896,7 +896,7 @@ const TVC_WorkPermitReport = (function () {
     function syncWpSparePage2Ui(onPage2, ro) {
         if (onPage2) {
             wpSpareContextEnter();
-            TVC_SpareMenu.initWrSparePage2(ro, { cosOnFocus: true, noDblClickHistory: true });
+            TVC_SpareMenu.initWrSparePage2(ro);
         } else {
             TVC_SpareMenu.teardownWrSparePage2();
             wpSpareContextLeave();
@@ -1645,6 +1645,8 @@ const TVC_WorkPermitReport = (function () {
         updateWpListHeadCheckAll(rows);
         syncWpListFilterUi();
         TVC_PWA?.initDateInputFormat?.(panel);
+        TVC_App.bindSearchClearInput?.('wpListSearch');
+        TVC_App.updateSearchClearBtn?.('wpListSearch');
         positionWpHistPopover();
         requestAnimationFrame(() => {
             positionWpHistPopover();
@@ -1706,7 +1708,9 @@ const TVC_WorkPermitReport = (function () {
         _wpListSearch = '';
         const el = document.getElementById('wpListSearch');
         if (el) el.value = '';
+        TVC_App.updateSearchClearBtn?.('wpListSearch');
         refreshWpListUi();
+        el?.focus();
     }
 
     async function wpListSelectRow(id) {
@@ -1924,6 +1928,8 @@ const TVC_WorkPermitReport = (function () {
         s._wpListEditing = true;
         s._wpPage = '1';
         ensureWpUsedParts(row);
+        setWpHistOpen(false);
+        TVC_ListFilters?.closePopover?.();
         await renderWorkPermitModal();
     }
 

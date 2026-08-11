@@ -387,6 +387,7 @@ const TVC_DefectReport = (function () {
             draft.machinery_name = hdr.machineryName || job.item_sort1 || draft.machinery_name || '';
         }
         syncDfPrimaryJobFromItems(draft);
+        TVC_App.syncPlanBatchCheckForJob?.(job.id, true);
     }
 
     function pickDfJob(jobId) {
@@ -745,7 +746,7 @@ const TVC_DefectReport = (function () {
         const onPage2 = (s._dfPage || '1') === '2' && !!document.getElementById('wrSpareListScroll');
         const list = onPage2 ? (s._wrUsedParts || s._dfUsedParts || []) : (s._dfUsedParts || []);
         if (host) {
-            host.querySelectorAll('.spare-wr-qty-input').forEach(el => {
+            host.querySelectorAll('.spare-consume-qty-input').forEach(el => {
                 const table = el.closest('[data-spare-id]');
                 const id = table?.dataset?.spareId;
                 if (!id) return;
@@ -2107,11 +2108,18 @@ const TVC_DefectReport = (function () {
         let row = opts.row || (s.defectCases || []).find(c => c.id === id);
         if (!row) row = await TVC_DefectCaseService.get(id);
         if (!row) await TVC_Dialog.alert('Case not found.');
+        const scroll = opts.preserveScroll ? captureDefectModalScroll() : null;
         const caseChanged = s._defectCaseId !== id;
-        if (caseChanged) {
+        if (caseChanged && !opts.preservePage) {
             s._dfPage = '1';
             s._dfCaseId = null;
             s._dfDraft = null;
+        }
+        if ((s._dfPage || '1') === '2' && caseChanged) {
+            TVC_SpareMenu.persistWrSpareUsedParts?.();
+            captureDfUsedParts();
+            TVC_SpareMenu.teardownWrSparePage2();
+            dfSpareContextLeave();
         }
         s._defectCaseId = id;
         s._defectMode = mode === 'view' ? 'view' : (mode || 'edit');
@@ -2121,13 +2129,20 @@ const TVC_DefectReport = (function () {
         } else {
             ensureDfDraft(row);
         }
+        if (s._defectMode !== 'view') {
+            const draft = s._dfDraft || row;
+            ensureDfJobItems(draft);
+            TVC_App.syncPlanBatchChecksFromJobItems?.(draft.job_items || row.job_items || []);
+        }
         s._dfUsedPartsCaseId = null;
         ensureDfUsedParts(row);
         const body = document.getElementById('defectReportBody');
         if (body) body.innerHTML = renderModalBody(getDefectModalRow() || row, s._defectMode);
+        const dfModal = document.getElementById('defectReportModal');
+        const dfOpen = dfModal && !dfModal.classList.contains('hidden');
         if (opts.swapHide && window.TVC_App?.swapHistoryModals) {
             TVC_App.swapHistoryModals('defectReportModal', opts.swapHide);
-        } else {
+        } else if (!dfOpen) {
             document.getElementById('defectReportModal')?.classList.remove('hidden');
         }
         if ((s._dfPage || '1') === '2') {
@@ -2135,18 +2150,25 @@ const TVC_DefectReport = (function () {
             const page2ro = forceView || !TVC_DefectCase.canModifyListWorkflow(row);
             syncDfSparePage2Ui(true, page2ro);
         }
+        restoreDefectModalScroll(scroll);
+        TVC_PWA?.initDateInputFormat?.(body);
     }
 
     function openCaseFromList(id) {
         openCaseFromNav(id, 'list', 'view');
     }
 
-    async function openNewFromJob(jobId) {
+    async function openNewFromJob(jobId, opts = {}) {
         const s = getState();
         s._dfNavSource = null;
         TVC_App.switchTab?.('actual');
+        TVC_App.snapshotPlanBatchSelection?.();
         const job = s.jobs?.find(j => j.id === jobId);
-        if (!job) await TVC_Dialog.alert('Select a job first.');
+        if (!job) {
+            await TVC_Dialog.alert('Select a job first.');
+            return;
+        }
+        const prefill = Array.isArray(opts.prefillJobIds) ? opts.prefillJobIds.filter(Boolean) : null;
         const shipName = document.getElementById('cmaxsShipName')?.textContent || '';
         const row = await TVC_DefectCaseService.createFromJob(s.user, job, shipName);
         row.ship_name = shipName;
@@ -2164,6 +2186,13 @@ const TVC_DefectReport = (function () {
         row.pms_group_key = `${job.department}|${String(job.group || '').trim()}`;
         row.pms_group_no = job.group || row.pms_group_no;
         row.visible_in_list = false;
+        if (prefill && prefill.length >= 2) {
+            row.job_items = TVC_App.buildJobItemsFromJobIds?.(prefill) || [];
+            syncDfPrimaryJobFromItems(row);
+            TVC_App.syncPlanBatchChecksFromJobItems?.(row.job_items);
+        } else {
+            TVC_App.syncPlanBatchCheckForJob?.(jobId, true);
+        }
         await TVC_DefectCaseService.saveDraft(s.user, row, row.id);
         await refresh();
         s._dfNewSession = true;
@@ -2178,6 +2207,7 @@ const TVC_DefectReport = (function () {
         }
         s._dfNavSource = null;
         TVC_App.switchTab?.('actual');
+        TVC_App.snapshotPlanBatchSelection?.();
         s._dfNewSession = true;
         s._dfSavedToList = false;
         const shipName = document.getElementById('cmaxsShipName')?.textContent || '';
@@ -2258,13 +2288,24 @@ const TVC_DefectReport = (function () {
         const id = s._defectCaseId;
         if (!id) return;
         const data = { ...captureForm(), visible_in_list: true };
+        const codedItems = (data.job_items || []).filter(i => String(i.job_code || '').trim());
+        const multiJobNewSave = !!(s._dfNewSession && codedItems.length >= 2);
         let row = await TVC_DefectCaseService.saveDraft(s.user, data, id);
         row = await syncDefectConsumeStock(row, data.used_parts);
         upsertDefectCaseInState(row);
         syncDfDraftFromRow(row);
         s._dfSavedToList = true;
         promoteNewDefectToListView(id);
+        TVC_App.clearPlanBatchSnapshot?.();
         await refresh();
+        if (multiJobNewSave) {
+            s.batchSelectedJobs = {};
+            s.actualSelectedOnly = false;
+            s._dfNewSession = false;
+            closeModal();
+            await TVC_Dialog.alert(`Defect Report saved (${codedItems.length} jobs).`);
+            return;
+        }
         const fresh = await TVC_DefectCaseService.get(id);
         if (fresh) {
             upsertDefectCaseInState(fresh);
@@ -2386,6 +2427,18 @@ const TVC_DefectReport = (function () {
             : (usedParts || []).some(p => Number(p.qty_used) > 0);
     }
 
+    /** Consumption List Type D — linked Defect Report Page 2 print (no modal state). */
+    function buildDefectReportPage2PrintHtmlFromCase(row, st, usedParts, opts = {}) {
+        if (!row || !dfHasSparePage2ForPrint(usedParts)) return '';
+        const meta = buildDfPage2Meta(row);
+        meta.spareShipComments = dfVal(row, 'spare_ship_comments', row.spare_ship_comments || opts.log?.ships_comments || '');
+        const page2Inner = TVC_SpareMenu.buildWrSparePage2UiPrintHtml(st, usedParts, meta);
+        const page2Body = `${renderDfApprovalHtml(row, { forPrint: true })}${page2Inner}`;
+        if (opts.innerOnly) return page2Body;
+        const title = `Defect Report ${row.case_no || ''}`.trim();
+        return renderDfPrintShell(title, '2', page2Body);
+    }
+
     function buildDefectReportPrintBody(row) {
         if ((getState()._dfPage || '1') === '2') {
             TVC_SpareMenu.persistWrSpareUsedParts?.();
@@ -2406,11 +2459,8 @@ const TVC_DefectReport = (function () {
         const usedParts = enrichDfUsedParts(s._dfUsedParts || row.used_parts || []);
         let page2Html = '';
         if (dfHasSparePage2ForPrint(usedParts)) {
-            const meta = buildDfPage2Meta(row);
-            meta.spareShipComments = dfVal(row, 'spare_ship_comments', draft.spare_ship_comments || '');
-            const page2Inner = TVC_SpareMenu.buildWrSparePage2UiPrintHtml(s, usedParts, meta);
-            const page2Body = `${renderDfApprovalHtml(row, { forPrint: true })}${page2Inner}`;
-            page2Html = renderDfPrintShell(title, '2', page2Body);
+            const page2Body = buildDefectReportPage2PrintHtmlFromCase(row, s, usedParts);
+            if (page2Body) page2Html = page2Body;
         }
         return { title: `Defect Report ${row.case_no || ''}`, html: page1Html + page2Html, appCss: true };
     }
@@ -2575,6 +2625,7 @@ const TVC_DefectReport = (function () {
     function closeModal() {
         closeAllDfPicks();
         TVC_App.closeFileNoPickModal?.();
+        TVC_App.restorePlanBatchSelection?.();
         teardownDfSpareUi();
         _dfGroupPickSearch = '';
         _dfJobPickSearch = '';
@@ -2605,6 +2656,7 @@ const TVC_DefectReport = (function () {
         dfListSearch, clearDfListSearch, selectDfListRow, toggleDfListCheck, toggleDfListSelectAll,
         navDefectModal, modifyDefectModal, cancelDefectModalEdit, deleteDefectModal, setDefectReportPage,
         captureDfFormFields, applyFileNoFromPicker,
+        buildDefectReportPage2PrintHtmlFromCase,
     };
 })();
 

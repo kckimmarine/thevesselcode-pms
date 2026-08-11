@@ -43,6 +43,7 @@ const TVC_App = (function () {
         _wrUsedParts: [],
         _wrSpareSearch: '',
         _wrForm: {},
+        _wrJobItems: null,
         _wrPostSaveView: false,
         _wrFromHistory: false,
         department: 'ENGINE',
@@ -205,6 +206,7 @@ const TVC_App = (function () {
                     if (e.key === 'Enter') handleLogin();
                 });
             });
+            bindListFilterSearchClear();
             bindTabSearchClearInputs();
             try { TVC_ListFilters?.init(); } catch (e) { console.error('[TVC] ListFilters init', e); }
 
@@ -1634,33 +1636,107 @@ const TVC_App = (function () {
         }
     }
 
-    function updateSearchClearBtn(inputId) {
-        const el = document.getElementById(inputId);
+    const LIST_FILTER_SEARCH_SEL = '.list-filter-stack .list-filter-search-row .search-input, .spare-list-search-bar .search-input, .list-filter-group-search';
+    let _listFilterSearchClearBound = false;
+
+    function isListFilterSearchInput(el) {
+        return !!el?.matches?.('input.search-input') && !!el.closest('.list-filter-stack, .spare-list-search-bar, .list-filter-section');
+    }
+
+    function updateSearchClearBtnForEl(el) {
         if (!el) return;
         const btn = el.closest('.search-field-wrap')?.querySelector('.search-clear-btn');
         if (btn) btn.classList.toggle('hidden', !String(el.value || '').trim());
+        else if (el.id) updateSearchClearBtn(el.id);
+    }
+
+    function updateSearchClearBtn(inputId) {
+        updateSearchClearBtnForEl(document.getElementById(inputId));
     }
 
     function clearSearchField(inputId) {
         const el = document.getElementById(inputId);
         if (!el) return;
         el.value = '';
-        updateSearchClearBtn(inputId);
+        updateSearchClearBtnForEl(el);
         el.dispatchEvent(new Event('input', { bubbles: true }));
         el.focus();
+    }
+
+    function clearListFilterSearch(el) {
+        if (!el) return;
+        const btn = el.closest('.search-field-wrap')?.querySelector('.search-clear-btn');
+        if (btn && !btn.classList.contains('hidden')) {
+            btn.click();
+            el.focus();
+            return;
+        }
+        if (el.id) {
+            clearSearchField(el.id);
+            return;
+        }
+        el.value = '';
+        updateSearchClearBtnForEl(el);
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.focus();
+    }
+
+    function ensureSearchClearUi(root = document) {
+        root.querySelectorAll(LIST_FILTER_SEARCH_SEL).forEach(el => {
+            if (el.closest('.search-field-wrap')) {
+                updateSearchClearBtnForEl(el);
+                return;
+            }
+            const parent = el.parentElement;
+            if (!parent) return;
+            const wrap = document.createElement('div');
+            wrap.className = 'search-field-wrap';
+            parent.insertBefore(wrap, el);
+            wrap.appendChild(el);
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'search-clear-btn hidden';
+            btn.title = 'Clear search';
+            btn.setAttribute('aria-label', 'Clear search');
+            btn.textContent = '×';
+            if (el.id) btn.setAttribute('onclick', `TVC_App.clearSearchField('${el.id}')`);
+            wrap.appendChild(btn);
+            updateSearchClearBtnForEl(el);
+        });
     }
 
     function bindSearchClearInput(inputId) {
         const el = document.getElementById(inputId);
         if (!el || el.dataset.searchClearBound) return;
         el.dataset.searchClearBound = '1';
-        el.addEventListener('input', () => updateSearchClearBtn(inputId));
-        updateSearchClearBtn(inputId);
+        el.addEventListener('input', () => updateSearchClearBtnForEl(el));
+        updateSearchClearBtnForEl(el);
+    }
+
+    function bindListFilterSearchClear() {
+        if (_listFilterSearchClearBound) return;
+        _listFilterSearchClearBound = true;
+        document.addEventListener('input', (e) => {
+            if (!isListFilterSearchInput(e.target)) return;
+            updateSearchClearBtnForEl(e.target);
+        }, true);
+        document.addEventListener('keydown', (e) => {
+            if (e.key !== 'Escape') return;
+            const el = e.target;
+            if (!isListFilterSearchInput(el) || !String(el.value || '').trim()) return;
+            e.preventDefault();
+            clearListFilterSearch(el);
+        }, true);
     }
 
     function bindTabSearchClearInputs() {
-        ['actSearch', 'actTreeSearch', 'histSearch', 'spareSearch', 'spareTreeSearch']
-            .forEach(bindSearchClearInput);
+        bindListFilterSearchClear();
+        ensureSearchClearUi();
+        [
+            'actSearch', 'actTreeSearch', 'histSearch', 'spareSearch', 'spareTreeSearch',
+            'reqListSearch', 'reqHistSearch', 'consumeLogSearch', 'wpListSearch', 'dfListSearch',
+            'reqWorkSearch', 'wrSpareSearch', 'consumeSearch', 'receiveSearch',
+        ].forEach(bindSearchClearInput);
     }
     function sortJobs(field) {
         if (state.jobSort.field === field) state.jobSort.asc = !state.jobSort.asc;
@@ -2051,6 +2127,7 @@ const TVC_App = (function () {
                 return j ? renderJobRowHtml(j) : '';
             },
         });
+        if (restoreScrollTop != null) container.scrollTop = restoreScrollTop;
         state[vlKey].refresh();
         if (restoreScrollTop != null) restoreActListScroll(restoreScrollTop);
         if (scrollId === 'actScroll') initPlanCellTips(scrollId);
@@ -3935,8 +4012,7 @@ const TVC_App = (function () {
                 break;
             case 'backup': openMasterBackupModal('pms'); break;
             case 'defectReport':
-                if (state.selectedJobId) TVC_DefectReport.openNewFromJob(state.selectedJobId);
-                else TVC_DefectReport.openNewBlank();
+                openNewDefectReportInput();
                 break;
             case 'workPermitList':
                 TVC_WorkPermitReport.openListModal();
@@ -4552,7 +4628,6 @@ const TVC_App = (function () {
         if (!data.job_code) await TVC_Dialog.alert('Enter Job Code.');
         if (!data.group) await TVC_Dialog.alert('Select a GROUP.');
         try {
-            state._actScrollRestore = captureActListScroll();
             if (m.mode === 'append') {
                 const ctx = defaultAppendContext();
                 await TVC_MaintenancePlan.createJob(user, {
@@ -4587,6 +4662,7 @@ const TVC_App = (function () {
                 await TVC_Dialog.alert(`${data.job_code} Item updated.`);
             }
             cancelOrigJobInlineEdit({ restoreScroll: false });
+            state._actScrollRestore = captureActListScroll();
             await refreshAll();
         } catch (e) {
             state._actScrollRestore = null;
@@ -5113,6 +5189,46 @@ const TVC_App = (function () {
         if (state.currentTab === 'actual') refreshPlanAfterBatchToggle();
     }
 
+    /** Work Plan batch checkboxes — snapshot before report draft open, restore on cancel close. */
+    function snapshotPlanBatchSelection() {
+        state._planBatchSnapshot = { ...state.batchSelectedJobs };
+    }
+
+    function restorePlanBatchSelection() {
+        if (!state._planBatchSnapshot) return;
+        state.batchSelectedJobs = { ...state._planBatchSnapshot };
+        state._planBatchSnapshot = null;
+        clearPlanSelectedOnlyIfEmpty();
+        syncBatchReportBtn();
+        if (state.currentTab === 'actual') refreshPlanAfterBatchToggle();
+    }
+
+    function clearPlanBatchSnapshot() {
+        state._planBatchSnapshot = null;
+    }
+
+    /** Work Report / Defect Report draft — mirror JOB CODE picks to Work Plan batch checkboxes. */
+    function syncPlanBatchCheckForJob(jobId, on = true) {
+        if (!jobId) return;
+        if (on) state.batchSelectedJobs[jobId] = true;
+        else delete state.batchSelectedJobs[jobId];
+        clearPlanSelectedOnlyIfEmpty();
+        syncBatchReportBtn();
+        document.querySelectorAll('.sheet-actual[data-job-id]').forEach(row => {
+            if (row.getAttribute('data-job-id') === jobId) {
+                const chk = row.querySelector('.act-batch-chk');
+                if (chk) chk.checked = !!on;
+            }
+        });
+    }
+
+    function syncPlanBatchChecksFromJobItems(items) {
+        (items || []).forEach(item => {
+            const id = item?.maintenance_job_id;
+            if (id) syncPlanBatchCheckForJob(id, true);
+        });
+    }
+
     function toggleBatchSelectAll(on) {
         sheetIds('actual').forEach(id => {
             if (on) state.batchSelectedJobs[id] = true;
@@ -5277,37 +5393,33 @@ const TVC_App = (function () {
     }
 
     async function openWorkReportInput(explicitJobId) {
-        const jobIds = batchSelectedJobIds();
-        if (jobIds.length >= 2) return openBatchReport();
-        const jobId = jobIds.length === 1 ? jobIds[0] : (explicitJobId || state.selectedJobId);
-        if (!jobId) await TVC_Dialog.alert('Select a job or check one or more rows.');
-        return openWorkReport(jobId);
+        const checked = batchSelectedJobIds();
+        const jobId = checked[0] || explicitJobId || state.selectedJobId;
+        if (!jobId) {
+            await TVC_Dialog.alert('Select a job or check one or more rows.');
+            return;
+        }
+        const prefill = checked.length ? checked : [jobId];
+        if (prefill.length > 1 && state.user?.department) {
+            const bad = prefill.some(id => {
+                const j = state.idx?.jobById.get(id);
+                return j && j.department !== state.user.department;
+            });
+            if (bad) {
+                await TVC_Dialog.alert('Items from another department cannot be included in the same Work Report.');
+                return;
+            }
+        }
+        return openWorkReport(jobId, undefined, { prefillJobIds: prefill });
     }
 
     async function openBatchReport() {
         const jobIds = batchSelectedJobIds();
-        if (jobIds.length < 2) await TVC_Dialog.alert('Select at least 2 jobs for Work Report.');
-        if (state.user?.department) {
-            const bad = jobIds.some(id => {
-                const j = state.idx?.jobById.get(id);
-                return j && j.department !== state.user.department;
-            });
-            if (bad) await TVC_Dialog.alert('Items from another department cannot be included in the same Work Report.');
+        if (jobIds.length < 2) {
+            await TVC_Dialog.alert('Select at least 2 jobs for Work Report.');
+            return;
         }
-        state._batchMode = true;
-        state._batchJobIds = [...jobIds];
-        state._wrReportId = null;
-        state._wrBatchItemId = null;
-        state._wrReadonly = false;
-        state._wrTab = 'repair';
-        state._wrPage = '1';
-        state._batchSpareSearch = {};
-        initBatchDraft(jobIds);
-        loadBatchJobIntoEditor(jobIds[0]);
-        state._batchJobPickerOpen = false;
-        if (state.vlActual) state.vlActual.refresh();
-        renderWorkReportModal();
-        showModal('workReportModal');
+        return openWorkReport(jobIds[0], undefined, { prefillJobIds: jobIds });
     }
 
     function closeBatchReport() {
@@ -5320,112 +5432,7 @@ const TVC_App = (function () {
     }
 
     async function saveBatchReport() {
-        captureBatchJobDraft();
-        const draft = state._batchDraft;
-        if (!draft || !state._batchJobIds.length) return;
-        const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.CREATE_DAILY_REPORT);
-        if (!user) return;
-        const tab = state._wrTab || 'repair';
-        const workType = tab === 'postpone' ? 'POSTPONE' : 'MAINTENANCE';
-        const sharedForm = { ...(state._wrForm || {}) };
-
-        if (workType === 'POSTPONE' && !String(sharedForm.postponeDate || '').trim()) {
-            await TVC_Dialog.alert('Enter Postpone Date.');
-            return;
-        }
-
-        const entries = state._batchJobIds.map((jobId, idx) => {
-            const job = state.idx?.jobById.get(jobId);
-            const item = draft.items[jobId];
-            if (!job || !item) return null;
-            const form = { ...(item.form || {}), ...sharedForm };
-            if (workType === 'MAINTENANCE' && form.workDate
-                && (!form.lastMaintDate || form.lastMaintDate === (job.last_done || ''))) {
-                form.lastMaintDate = form.workDate;
-            }
-            const usedParts = (workType === 'MAINTENANCE' && idx === 0 ? (state._wrUsedParts || item.usedParts) : [])
-                .filter(p => Number(p.qty_used) > 0)
-                .map(p => ({ spare_part_id: p.spare_part_id, qty_used: Number(p.qty_used) }));
-            const description = workType === 'POSTPONE'
-                ? (form.shipComments || `Postpone Report (${state._batchJobIds.length} jobs)`)
-                : (form.outline || form.shipComments || job.job_detail);
-            return {
-                maintenance_job_id: jobId,
-                job_code: job.job_code,
-                form,
-                description,
-                used_parts: usedParts,
-            };
-        }).filter(Boolean);
-
-        if (!entries.length) {
-            await TVC_Dialog.alert('No jobs to save.');
-            return;
-        }
-
-        const firstForm = draft.items[state._batchJobIds[0]]?.form || {};
-        try {
-            const report = await TVC_Transaction.submitBatchReport(user, {
-                workType,
-                status: 'REPORTED',
-                reportDate: firstForm.reportDate,
-                workDate: firstForm.workDate,
-                postponeDate: workType === 'POSTPONE' ? (sharedForm.postponeDate || firstForm.postponeDate) : null,
-                sharedForm: {
-                    reportDate: firstForm.reportDate,
-                    workDate: firstForm.workDate,
-                    fileNo: firstForm.fileNo,
-                    voyNo: firstForm.voyNo,
-                    postponeDate: workType === 'POSTPONE' ? (sharedForm.postponeDate || firstForm.postponeDate) : null,
-                },
-                items: entries,
-            });
-            TVC_WorkReport.fromLegacy(report);
-            const firstJob = state.idx?.jobById.get(state._batchJobIds[0]);
-            if (workType === 'MAINTENANCE' && firstJob) {
-                const batchUsedParts = TVC_SpareMenu.aggregateUsedPartsLines(entries.map(e => e.used_parts));
-                try {
-                    const syncResult = await TVC_SpareMenu.syncConsumeLogFromWorkReport({
-                        report,
-                        job: firstJob,
-                        usedParts: enrichUsedParts(batchUsedParts),
-                        form: {
-                            reportDate: firstForm.reportDate,
-                            workDate: firstForm.workDate,
-                            shipComments: firstForm.spareShipComments || firstForm.shipComments || '',
-                            fileNo: firstForm.fileNo || '',
-                            voyNo: firstForm.voyNo || '',
-                            place: firstForm.place || '',
-                        },
-                        user,
-                        department: firstJob.department || state.department || '',
-                    });
-                    const consumeLogId = syncResult?.logId ?? null;
-                    const stockAppliedAt = syncResult?.stockAppliedAt || '';
-                    if (report.consume_log_id !== consumeLogId
-                        || (stockAppliedAt && report.stock_applied_at !== stockAppliedAt)) {
-                        report.consume_log_id = consumeLogId || null;
-                        if (stockAppliedAt) report.stock_applied_at = stockAppliedAt;
-                        await TVC_DB.put('daily_work_reports', report);
-                    }
-                } catch (syncErr) {
-                    console.error('Multi-job Work Report consumed log sync failed:', syncErr);
-                    await TVC_Dialog.alert(syncErr.message || 'Spare parts stock update failed.');
-                }
-            }
-            state.batchSelectedJobs = {};
-            state.actualSelectedOnly = false;
-            state._batchMode = false;
-            state._batchJobIds = [];
-            state._batchDraft = null;
-            resetAndCloseWorkReport();
-            await refreshAll();
-            await TVC_Dialog.alert(workType === 'POSTPONE'
-                ? `Postpone report saved (${entries.length} jobs, REPORTED)`
-                : `Work Report saved (${entries.length} jobs, REPORTED)`);
-        } catch (e) {
-            await TVC_Dialog.alert(e.message || e.code || 'Work Report save failed');
-        }
+        return saveWorkReport();
     }
 
     function renderActualFilterDashboard() {
@@ -5551,20 +5558,41 @@ const TVC_App = (function () {
         const job = getPlanFocusJob();
         const noJob = !job;
         const canReport = !noJob || n >= 1;
-        const reportLabel = n >= 2 ? `Report Input (${n})` : (n === 1 ? 'Report Input (1)' : 'Report Input');
-        const reportTitle = n >= 2 ? `${n}개 작업 일괄 Work Report` : '';
+        const reportTitle = n >= 2 ? `${n} jobs — batch Work Report` : '';
         bar.innerHTML = `<div class="plan-action-btns">
                 <button type="button" id="planWpBtn" class="btn btn-sm" onclick="TVC_App.openPlanWorkProcedure()"${noJob ? ' disabled' : ''}>Work Procedure / History</button>
-                <button type="button" id="planReportBtn" class="btn btn-sm btn-green" onclick="TVC_App.openWorkReportInput()"${canReport ? '' : ' disabled'}${reportTitle ? ` title="${escAttr(reportTitle)}"` : ''}>${reportLabel}</button>
+                <button type="button" id="planReportBtn" class="btn btn-sm btn-green" onclick="TVC_App.openWorkReportInput()"${canReport ? '' : ' disabled'}${reportTitle ? ` title="${escAttr(reportTitle)}"` : ''}>Make Work Report</button>
+                <button type="button" class="btn btn-sm btn-amber plan-new-defect-btn" data-feature="showDefectReport" onclick="TVC_App.openNewDefectFromPlan()">Make Defect Report</button>
                 ${selectedItemsBtn}
-                <button type="button" class="btn btn-sm btn-amber plan-new-defect-btn" data-feature="showDefectReport" onclick="TVC_App.openNewDefectFromPlan()">＋ New Defect Report</button>
             </div>`;
     }
 
+    async function openNewDefectReportInput(explicitJobId) {
+        const checked = batchSelectedJobIds();
+        const jobId = checked[0] || explicitJobId || state.selectedJobId;
+        if (!jobId && !checked.length) {
+            return TVC_DefectReport.openNewBlank();
+        }
+        if (!jobId) {
+            await TVC_Dialog.alert('Select a job or check one or more rows.');
+            return;
+        }
+        const prefill = checked.length ? checked : [jobId];
+        if (prefill.length > 1 && state.user?.department) {
+            const bad = prefill.some(id => {
+                const j = state.idx?.jobById.get(id);
+                return j && j.department !== state.user.department;
+            });
+            if (bad) {
+                await TVC_Dialog.alert('Items from another department cannot be included in the same Defect Report.');
+                return;
+            }
+        }
+        return TVC_DefectReport.openNewFromJob(jobId, { prefillJobIds: prefill });
+    }
+
     function openNewDefectFromPlan() {
-        const job = getPlanFocusJob();
-        if (job) TVC_DefectReport.openNewFromJob(job.id);
-        else TVC_DefectReport.openNewBlank();
+        return openNewDefectReportInput();
     }
 
     /** Job 단위 Work History — Work History 탭과 동일한 daily_work_reports / defect_cases 소스 */
@@ -6380,7 +6408,23 @@ const TVC_App = (function () {
     function openDefectFromHistory(defectId) {
         if (!defectId) return;
         state._histSelReportId = histDefectRowKey(defectId);
+        syncHistRowSelection({ scrollIntoView: true });
         TVC_DefectReport.openCaseFromNav(defectId, 'history', 'view', { swapHide: 'workReportModal' });
+    }
+
+    function syncHistRowSelection(opts = {}) {
+        const body = document.getElementById('historyBody');
+        if (!body) return;
+        const key = state._histSelReportId;
+        let selectedRow = null;
+        body.querySelectorAll('tr.hist-row').forEach(tr => {
+            const match = !!(key && tr.dataset.histKey === key);
+            tr.classList.toggle('row-selected', match);
+            if (match) selectedRow = tr;
+        });
+        if (opts.scrollIntoView && selectedRow) {
+            selectedRow.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
     }
 
     function findCurrentWorkHistoryNavIndex(list) {
@@ -6402,14 +6446,23 @@ const TVC_App = (function () {
 
     function openWorkHistoryEntry(entry, opts = {}) {
         state._histSelReportId = histEntryRowKey(entry);
+        syncHistRowSelection({ scrollIntoView: true });
+        const navOpts = {
+            preservePage: !!opts.preservePage,
+            preserveScroll: !!opts.preserveScroll,
+        };
         if (isHistDefectEntry(entry)) {
-            TVC_DefectReport.openCaseFromNav(entry.defect.id, 'history', 'view', { swapHide: 'workReportModal' });
+            TVC_DefectReport.openCaseFromNav(entry.defect.id, 'history', 'view', {
+                swapHide: 'workReportModal',
+                ...navOpts,
+            });
             return;
         }
         const wrOpts = {
             fromHistory: true,
             keepTab: opts.keepTab || state._wrTab,
             swapHide: 'defectReportModal',
+            ...navOpts,
         };
         if (opts.preserveWrMode && state._wrFromHistory) {
             wrOpts.view = !!(state._wrReadonly || state._wrPostSaveView);
@@ -6429,7 +6482,12 @@ const TVC_App = (function () {
         else i += dir;
         if (i < 0) { await TVC_Dialog.alert('This is the first item.'); return; }
         if (i >= list.length) { await TVC_Dialog.alert('This is the last item.'); return; }
-        openWorkHistoryEntry(list[i], { preserveWrMode: true, keepTab: state._wrTab });
+        openWorkHistoryEntry(list[i], {
+            preserveWrMode: true,
+            keepTab: state._wrTab,
+            preservePage: true,
+            preserveScroll: true,
+        });
     }
 
     async function histDetailWorkReport() {
@@ -6723,7 +6781,7 @@ const TVC_App = (function () {
     function selectHistRow(rowKey, ev) {
         if (ev?.target?.closest?.('.hist-chk')) return;
         state._histSelReportId = rowKey;
-        renderWorkHistory();
+        syncHistRowSelection();
     }
 
     // ── Running Hours modal (예측 정비 엔진 UI) ───────────────────────
@@ -7152,16 +7210,19 @@ const TVC_App = (function () {
     }
 
     /** Original / Work Plan → Report Input: CMAXS 스타일 Work Report 화면 */
-    async function openWorkReport(jobId, tab) {
+    async function openWorkReport(jobId, tab, opts = {}) {
         const job = state.idx.jobById.get(jobId);
         if (!job) return;
         if (state.user.department && state.user.department !== job.department) {
             await TVC_Dialog.alert('타 부서 항목은 보고할 수 없습니다.');
+            return;
         }
+        snapshotPlanBatchSelection();
         state._batchMode = false;
         state._batchJobIds = [];
         state._batchDraft = null;
-        if (state._wrJobId !== jobId || !state._wrReportId) {
+        const prefill = Array.isArray(opts.prefillJobIds) ? opts.prefillJobIds.filter(Boolean) : null;
+        if (state._wrJobId !== jobId || !state._wrReportId || (prefill && prefill.length > 1)) {
             const today = new Date().toISOString().slice(0, 10);
             state._wrForm = defaultWrForm(today);
             const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
@@ -7177,6 +7238,11 @@ const TVC_App = (function () {
             state._wrTab = 'repair';
             state._wrPage = '1';
             state._wrSpareSearch = '';
+            state._wrJobItems = null;
+        }
+        if (prefill && prefill.length >= 2) {
+            state._wrJobItems = buildWrJobItemsFromJobIds(prefill);
+            syncPlanBatchChecksFromJobItems(state._wrJobItems);
         }
         state._wrReportId = null;
         state._wrBatchItemId = null;
@@ -7186,6 +7252,7 @@ const TVC_App = (function () {
         state._wrJobId = jobId;
         state._wrUsedParts = [];
         state.selectedJobId = jobId;
+        syncPlanBatchCheckForJob(jobId, true);
         state._wrTab = tab || state._wrTab || 'repair';
         if (state.vlActual) state.vlActual.refresh();
         renderSidePanel();
@@ -7206,6 +7273,7 @@ const TVC_App = (function () {
         if (!job) { await TVC_Dialog.alert('Job item not found.'); return; }
         state._wrJobId = job.id;
         state.selectedJobId = job.id;
+        state._wrJobItems = null;
         state._wrReportId = reportId;
         const isBatchView = rep.is_batch && (rep.job_items || []).length > 1;
         state._wrBatchItemId = isBatchView ? null : (item?.maintenance_job_id || null);
@@ -7220,6 +7288,7 @@ const TVC_App = (function () {
             );
             if (histEntry) state._histSelReportId = histEntryRowKey(histEntry);
         }
+        syncHistRowSelection({ scrollIntoView: !!opts.fromHistory });
         const histEntry = { source: 'report', report: rep, item };
         if (opts.edit) {
             state._wrReadonly = false;
@@ -7234,19 +7303,26 @@ const TVC_App = (function () {
         state._wrUsedParts = isBatchView
             ? enrichUsedParts(TVC_SpareMenu.aggregateUsedPartsFromWorkReport(rep))
             : enrichUsedParts(item?.used_parts || rep.used_parts || []);
-        state._wrPage = '1';
+        if (!opts.preservePage) state._wrPage = '1';
         state._wrSpareSearch = '';
         // Always open on the report's own type — never keep the opposite tab
         state._wrTab = workReportTabForType(rep.work_type);
-        if (!opts.skipRender) renderWorkReportModal();
+        if (!opts.skipRender) renderWorkReportModal({ preserveScroll: !!opts.preserveScroll });
+        if (opts.edit) syncPlanBatchChecksFromJobItems(rep.job_items || []);
+        const wrModal = document.getElementById('workReportModal');
+        const wrOpen = wrModal && !wrModal.classList.contains('hidden');
         if (opts.swapHide) swapHistoryModals('workReportModal', opts.swapHide);
-        else showModal('workReportModal');
+        else if (!wrOpen) showModal('workReportModal');
     }
 
     /** 히스토리 읽기 뷰 → 편집 모드 전환 */
     function modifyWorkReport() {
         state._wrReadonly = false;
         state._wrPostSaveView = false;
+        const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
+        const job = state.idx?.jobById.get(state._wrJobId);
+        ensureWrJobItems(job, rep);
+        syncPlanBatchChecksFromJobItems(state._wrJobItems);
         renderWorkReportModal();
     }
 
@@ -7266,6 +7342,7 @@ const TVC_App = (function () {
         state._wrTab = report.work_type === 'POSTPONE' ? 'postpone' : 'repair';
         state._wrPage = '1';
         state._wrSpareSearch = '';
+        state._wrJobItems = null;
         state._wrReadonly = true;
         state._wrPostSaveView = false;
     }
@@ -7298,6 +7375,7 @@ const TVC_App = (function () {
         state._wrTab = report.work_type === 'POSTPONE' ? 'postpone' : 'repair';
         state._wrPage = '1';
         state._wrSpareSearch = '';
+        state._wrJobItems = null;
         state._wrReadonly = true;
         state._wrPostSaveView = true;
     }
@@ -7509,24 +7587,18 @@ const TVC_App = (function () {
         if (!WR_TABS[tab]) tab = 'repair';
         const lockedTab = currentWorkReportLockedTab();
         if (lockedTab && tab !== lockedTab) return;
-        if (state._batchMode) captureBatchJobDraft();
-        else {
-            captureWorkReportForm();
-            if (state._wrPage === '2') TVC_SpareMenu.persistWrSpareUsedParts();
-            captureWorkReportUsedParts();
-        }
+        captureWorkReportForm();
+        if (state._wrPage === '2') TVC_SpareMenu.persistWrSpareUsedParts();
+        captureWorkReportUsedParts();
         state._wrTab = tab;
         state._wrPage = '1';
         renderWorkReportModal();
     }
 
     function setWorkReportPage(page) {
-        if (state._batchMode) captureBatchJobDraft();
-        else {
-            captureWorkReportForm();
-            if (state._wrPage === '2') TVC_SpareMenu.persistWrSpareUsedParts();
-            captureWorkReportUsedParts();
-        }
+        captureWorkReportForm();
+        if (state._wrPage === '2') TVC_SpareMenu.persistWrSpareUsedParts();
+        captureWorkReportUsedParts();
         state._wrPage = page;
         renderWorkReportModal();
     }
@@ -7549,7 +7621,7 @@ const TVC_App = (function () {
     function captureWorkReportUsedParts() {
         const host = document.getElementById('workReportBody');
         if (!host) return;
-        host.querySelectorAll('.spare-wr-qty-input').forEach(el => {
+        host.querySelectorAll('.spare-consume-qty-input').forEach(el => {
             const table = el.closest('[data-spare-id]');
             const id = table?.dataset?.spareId;
             if (!id) return;
@@ -7559,13 +7631,12 @@ const TVC_App = (function () {
     }
 
     function buildWrPage2JobItems(job) {
-        const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
-        if (state._batchMode && state._batchJobIds?.length >= 2) {
-            const jobs = state._batchJobIds
-                .map(id => state.idx?.jobById.get(id))
-                .filter(Boolean);
-            return TVC_SpareMenu.buildPage2JobItemsFromJobs(jobs);
+        captureWrJobItems();
+        if (Array.isArray(state._wrJobItems) && state._wrJobItems.length) {
+            const coded = state._wrJobItems.filter(i => String(i.job_code || '').trim());
+            if (coded.length) return coded.map(it => TVC_SpareMenu.newConsumeJobRow(it));
         }
+        const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
         if (rep?.is_batch && rep.job_items?.length) {
             return rep.job_items.map(it => {
                 const j = state.idx?.jobById.get(it.maintenance_job_id);
@@ -7598,6 +7669,89 @@ const TVC_App = (function () {
         };
     }
 
+    function resolveWorkReportPrimaryJob(rep, st) {
+        if (!rep) return null;
+        const item = (rep.job_items || [])[0];
+        const jobId = item?.maintenance_job_id || rep.maintenance_job_id;
+        if (!jobId) return null;
+        return st.idx?.jobById.get(jobId) || (st.jobs || []).find(j => j.id === jobId) || null;
+    }
+
+    function buildWrPage2JobItemsFromReport(rep, st) {
+        if (rep?.is_batch && rep.job_items?.length) {
+            return rep.job_items.map(it => {
+                const j = st.idx?.jobById.get(it.maintenance_job_id);
+                return TVC_SpareMenu.newConsumeJobRow({
+                    job_code: it.job_code || j?.job_code || '',
+                    sort1: j?.item_sort1 || it.item_sort1 || it.form?.sort1 || '',
+                    sort2: j?.item_sort2 || it.item_sort2 || it.form?.sort2 || '',
+                    job_detail: j?.job_detail || it.job_detail || it.form?.jobDetail || '',
+                });
+            });
+        }
+        const job = resolveWorkReportPrimaryJob(rep, st);
+        if (!job) return [];
+        return TVC_SpareMenu.buildPage2JobItemsFromJobs([job]);
+    }
+
+    function buildWrPage2MetaFromReport(rep, job, st, log) {
+        const f = rep?.report_form || {};
+        const item = (rep.job_items || [])[0];
+        const itemForm = item?.form || {};
+        const reportedByName = workReportReportedByName(rep);
+        const hdr = job ? TVC_SpareMenu.resolveWrJobHeader(st, job) : {};
+        let jobItems = buildWrPage2JobItemsFromReport(rep, st);
+        if (!jobItems.length && Array.isArray(log?.job_items) && log.job_items.length) {
+            jobItems = log.job_items.map(it => TVC_SpareMenu.newConsumeJobRow(it));
+        }
+        return {
+            reportDate: f.reportDate || itemForm.reportDate || rep.report_date || log?.made_on || '',
+            workDate: f.workDate || itemForm.workDate || log?.consumed_date || '',
+            reportedBy: reportedByName,
+            pmsGroupNo: f.pmsGroupNo || itemForm.pmsGroupNo || hdr.pmsGroupNo || job?.group || log?.pms_group_no || '',
+            groupKey: `${job?.department || rep.department || ''}|${String(job?.group || log?.pms_group_no || '').trim()}`,
+            jobCode: job?.job_code || '',
+            sort1: job?.item_sort1 || '',
+            sort2: job?.item_sort2 || '',
+            jobDetail: job?.job_detail || '',
+            spareShipComments: f.spareShipComments || f.shipComments || log?.ships_comments || '',
+            jobItems,
+            allowAdd: false,
+        };
+    }
+
+    function workReportTitleFromRep(rep) {
+        return rep?.work_type === 'POSTPONE' ? 'Postponed Report' : 'Maintenance Report';
+    }
+
+    /** Consumption List Type M — linked Maintenance Report Page 2 print (no modal state). */
+    function buildWorkReportPage2PrintHtmlFromReport(rep, st, usedParts, opts = {}) {
+        if (!rep || !TVC_SpareMenu.wrHasSparePage2ForPrint(usedParts)) return '';
+        const job = resolveWorkReportPrimaryJob(rep, st);
+        if (!job && !rep.is_batch) return '';
+        const meta = buildWrPage2MetaFromReport(rep, job, st, opts.log);
+        const page2Inner = TVC_SpareMenu.buildWrSparePage2UiPrintHtml(st, usedParts, meta);
+        const isRepConfirmed = TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked);
+        const isRepApproved = reportIsApproved(rep);
+        const dept = job?.department || rep.department;
+        const canConfirmNow = TVC_RBAC.isReportedStatus(rep.status, rep.is_locked)
+            && TVC_RBAC.canConfirmDepartment(st.user, dept);
+        const hqDirectApprove = !isRepApproved && TVC_RBAC.canHqDirectApprove(st.user, rep);
+        const canApproveNow = !isRepApproved && TVC_RBAC.canApproveHqReport(st.user)
+            && (isRepConfirmed || hqDirectApprove);
+        const confirmedByVal = isRepConfirmed
+            ? (TVC_RBAC.resolveConfirmByLabel?.(rep.confirmed_by, dept, st.user) || '')
+            : '';
+        const approvedByVal = isRepApproved ? 'Company' : '';
+        const page2Body = `${renderWrPage2HeadHtml({
+            canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
+            approvedByVal, confirmedByVal, forPrint: true,
+        })}${page2Inner}`;
+        if (opts.innerOnly) return page2Body;
+        const tone = rep.work_type === 'POSTPONE' ? 'postpone' : 'repair';
+        return TVC_SpareMenu.renderWrPrintShell(workReportTitleFromRep(rep), '2', page2Body, tone);
+    }
+
     function renderWrBatchJobRowsHtml(jobIds) {
         if (!jobIds?.length) return '';
         const multi = jobIds.length > 1;
@@ -7626,6 +7780,354 @@ const TVC_App = (function () {
     const WR_PICK_Z = 10100;
     let _wrGroupPickSearch = '';
     let _wrJobPickSearch = '';
+    let _wrActiveJobRowIndex = 0;
+    let _wrJobRowPickSearch = '';
+    let _wrJobRowPickUnbind = null;
+
+    function buildWrJobItemsFromJobIds(jobIds) {
+        return buildJobItemsFromJobIds(jobIds);
+    }
+
+    function buildJobItemsFromJobIds(jobIds) {
+        return (jobIds || []).map(id => {
+            const j = state.idx?.jobById.get(id);
+            if (!j) return TVC_SpareMenu.newConsumeJobRow();
+            return {
+                maintenance_job_id: j.id,
+                job_code: j.job_code || '',
+                sort1: j.item_sort1 || '',
+                sort2: j.item_sort2 || '',
+                job_detail: j.job_detail || '',
+            };
+        });
+    }
+
+    function resolveWrJobFromItem(item) {
+        if (!item) return null;
+        return (item.maintenance_job_id && state.idx?.jobById.get(item.maintenance_job_id))
+            || state.jobs.find(j => j.job_code === item.job_code)
+            || null;
+    }
+
+    function wrJobItemsShowCriticalPostpone(items) {
+        return (items || []).some(item => {
+            const j = resolveWrJobFromItem(item);
+            return j && jobShowsCriticalEquipmentMark(j);
+        });
+    }
+
+    function ensureWrJobItems(job, rep) {
+        if (Array.isArray(state._wrJobItems) && state._wrJobItems.length) return state._wrJobItems;
+        if (rep && (rep.job_items || []).length) {
+            state._wrJobItems = rep.job_items.map(it => {
+                const j = state.idx?.jobById.get(it.maintenance_job_id);
+                return {
+                    maintenance_job_id: it.maintenance_job_id || j?.id || '',
+                    job_code: it.job_code || j?.job_code || '',
+                    sort1: j?.item_sort1 || it.item_sort1 || it.form?.sort1 || '',
+                    sort2: j?.item_sort2 || it.item_sort2 || it.form?.sort2 || '',
+                    job_detail: j?.job_detail || it.job_detail || it.form?.jobDetail || '',
+                };
+            });
+            return state._wrJobItems;
+        }
+        if (job) {
+            state._wrJobItems = [{
+                maintenance_job_id: job.id,
+                job_code: job.job_code || '',
+                sort1: job.item_sort1 || '',
+                sort2: job.item_sort2 || '',
+                job_detail: job.job_detail || '',
+            }];
+            return state._wrJobItems;
+        }
+        state._wrJobItems = [TVC_SpareMenu.newConsumeJobRow()];
+        return state._wrJobItems;
+    }
+
+    function captureWrJobItems() {
+        const container = document.getElementById('wrJobRows');
+        if (!container) return ensureWrJobItems(state.idx?.jobById.get(state._wrJobId));
+        const rowEls = container.querySelectorAll('[data-wr-job-row]');
+        if (!rowEls.length) return ensureWrJobItems(state.idx?.jobById.get(state._wrJobId));
+        state._wrJobItems = [...rowEls].map(rowEl => ({
+            maintenance_job_id: rowEl.dataset.jobId || '',
+            job_code: rowEl.querySelector('[data-field="job_code"]')?.value?.trim()
+                || rowEl.querySelector('.spare-consume-pick-text')?.textContent?.trim()
+                || '',
+            sort1: rowEl.querySelector('[data-field="sort1"]')?.value?.trim() || '',
+            sort2: rowEl.querySelector('[data-field="sort2"]')?.value?.trim() || '',
+            job_detail: rowEl.querySelector('[data-field="job_detail"]')?.value?.trim() || '',
+        }));
+        syncWrPrimaryJobFromItems();
+        return state._wrJobItems;
+    }
+
+    function syncWrPrimaryJobFromItems() {
+        const items = state._wrJobItems || [];
+        const first = items.find(i => String(i.job_code || '').trim()) || items[0];
+        if (!first) return;
+        const job = (first.maintenance_job_id && state.idx?.jobById.get(first.maintenance_job_id))
+            || state.jobs.find(j => j.job_code === first.job_code);
+        if (job) {
+            state._wrJobId = job.id;
+            state.selectedJobId = job.id;
+            first.maintenance_job_id = job.id;
+            first.job_code = job.job_code || first.job_code;
+            first.sort1 = job.item_sort1 || first.sort1;
+            first.sort2 = job.item_sort2 || first.sort2;
+            first.job_detail = job.job_detail || first.job_detail;
+        }
+    }
+
+    function applyWrJobPickToItems(job, rowIdx = 0) {
+        ensureWrJobItems(job);
+        state._wrJobItems[rowIdx] = {
+            maintenance_job_id: job.id,
+            job_code: job.job_code || '',
+            sort1: job.item_sort1 || '',
+            sort2: job.item_sort2 || '',
+            job_detail: job.job_detail || '',
+        };
+        if (rowIdx === 0) {
+            state._wrJobId = job.id;
+            state.selectedJobId = job.id;
+            const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
+            Object.assign(state._wrForm, {
+                pmsGroupKey: `${job.department}|${String(job.group || '').trim()}`,
+                pmsGroupNo: hdr.pmsGroupNo || job.group || state._wrForm.pmsGroupNo || '',
+                maker: hdr.maker || '',
+                modelType: hdr.modelType || '',
+                capacity: hdr.capacity || '',
+                serialNo: hdr.serialNo || '',
+                lastMaintDate: state._wrForm.lastMaintDate || job.last_done || '',
+            });
+        }
+        syncWrPrimaryJobFromItems();
+        syncPlanBatchCheckForJob(job.id, true);
+    }
+
+    function unbindWrJobRowPickListeners() {
+        if (_wrJobRowPickUnbind) {
+            _wrJobRowPickUnbind();
+            _wrJobRowPickUnbind = null;
+        }
+    }
+
+    function closeWrJobRowPickMenu() {
+        unbindWrJobRowPickListeners();
+        const host = document.getElementById('wrJobRowPickHost');
+        const menu = document.getElementById('wrJobRowPickMenu');
+        if (menu) {
+            menu.classList.remove('spare-consume-pick-menu-portal');
+            menu.style.cssText = 'display:none';
+            if (menu.parentNode === document.body) {
+                if (host) host.appendChild(menu);
+                else menu.remove();
+            }
+        }
+        if (host) host.classList.add('hidden');
+    }
+
+    function positionWrJobRowPickMenu(rowIdx = 0) {
+        const trigger = document.getElementById(`wrJobPickTrigger-${rowIdx}`);
+        const menu = document.getElementById('wrJobRowPickMenu');
+        if (!trigger || !menu) return;
+        if (menu.parentNode !== document.body) document.body.appendChild(menu);
+        menu.classList.add('spare-consume-pick-menu-portal');
+        const r = trigger.getBoundingClientRect();
+        Object.assign(menu.style, {
+            display: 'flex', flexDirection: 'column', position: 'fixed',
+            left: `${r.left}px`, top: `${r.bottom + 2}px`,
+            minWidth: `${Math.max(420, r.width)}px`, width: `${Math.max(420, r.width)}px`,
+            zIndex: String(WR_PICK_Z + 1), maxHeight: 'min(420px, 70vh)',
+        });
+    }
+
+    function buildWrJobRowPickList(rowIdx = 0) {
+        const gk = wrGroupKeyFromForm();
+        if (!gk) return '<div class="spare-consume-pick-empty muted">Select PMS Group first.</div>';
+        const q = (_wrJobRowPickSearch || '').toLowerCase().trim();
+        const jobs = (TVC_SpareMenu.getJobsForGroupKey(state, gk) || []).filter(j => {
+            if (!q) return true;
+            return [j.job_code, j.item_sort1, j.item_sort2, j.job_detail].join(' ').toLowerCase().includes(q);
+        });
+        if (!jobs.length) return '<div class="spare-consume-pick-empty muted">No results</div>';
+        const activeRow = (state._wrJobItems || [])[rowIdx ?? _wrActiveJobRowIndex ?? 0] || {};
+        const selectedCode = activeRow.job_code || '';
+        return jobs.map(j => {
+            const sel = selectedCode === j.job_code ? ' selected' : '';
+            const sub = [j.item_sort1, j.item_sort2].filter(Boolean).join(' · ');
+            return `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-job${sel}"
+                onclick="TVC_App.pickWrJobForRow('${escAttr(j.id)}')">
+                <span class="spare-consume-pick-job-code">${esc(j.job_code || '')}</span>
+                ${sub ? `<span class="spare-consume-pick-job-sub">${esc(sub)}</span>` : ''}
+            </button>`;
+        }).join('');
+    }
+
+    function refreshWrJobRowPickList() {
+        const list = document.getElementById('wrJobRowPickList');
+        if (list) list.innerHTML = buildWrJobRowPickList(_wrActiveJobRowIndex);
+    }
+
+    function bindWrJobRowPickListeners() {
+        unbindWrJobRowPickListeners();
+        const close = (e) => {
+            const menu = document.getElementById('wrJobRowPickMenu');
+            const trigger = document.getElementById(`wrJobPickTrigger-${_wrActiveJobRowIndex}`);
+            if (menu?.contains(e.target) || trigger?.contains(e.target)) return;
+            closeWrJobRowPickMenu();
+        };
+        const onReposition = () => {
+            const menu = document.getElementById('wrJobRowPickMenu');
+            if (menu && menu.style.display && menu.style.display !== 'none') {
+                positionWrJobRowPickMenu(_wrActiveJobRowIndex);
+            }
+        };
+        setTimeout(() => {
+            document.addEventListener('click', close);
+            window.addEventListener('scroll', onReposition, true);
+            window.addEventListener('resize', onReposition);
+            _wrJobRowPickUnbind = () => {
+                document.removeEventListener('click', close);
+                window.removeEventListener('scroll', onReposition, true);
+                window.removeEventListener('resize', onReposition);
+            };
+        }, 0);
+    }
+
+    async function toggleWrJobRowPick(ev, idx) {
+        ev?.stopPropagation();
+        if (!wrGroupKeyFromForm()) await TVC_Dialog.alert('Select PMS Group No. first.');
+        const prevIdx = _wrActiveJobRowIndex;
+        _wrActiveJobRowIndex = idx;
+        const host = document.getElementById('wrJobRowPickHost');
+        const menu = document.getElementById('wrJobRowPickMenu');
+        if (!host || !menu) return;
+        closeWrPickMenu(document.getElementById('wrGroupPick'));
+        closeWrPickMenu(document.getElementById('wrJobPick'));
+        const isVisible = menu.style.display && menu.style.display !== 'none';
+        if (isVisible && prevIdx === idx) {
+            closeWrJobRowPickMenu();
+            return;
+        }
+        refreshWrJobRowPickList();
+        positionWrJobRowPickMenu(idx);
+        bindWrJobRowPickListeners();
+    }
+
+    function pickWrJobForRow(jobId) {
+        captureWorkReportForm();
+        captureWrJobItems();
+        const job = state.idx?.jobById.get(jobId) || state.jobs.find(j => j.id === jobId);
+        if (!job) return;
+        applyWrJobPickToItems(job, _wrActiveJobRowIndex || 0);
+        closeWrJobRowPickMenu();
+        renderWorkReportModal({ preserveScroll: true });
+    }
+
+    function wrJobRowPickSearch(v) {
+        _wrJobRowPickSearch = v || '';
+        refreshWrJobRowPickList();
+        positionWrJobRowPickMenu(_wrActiveJobRowIndex || 0);
+    }
+
+    function addWrJobRow() {
+        captureWorkReportForm();
+        captureWrJobItems();
+        ensureWrJobItems(state.idx?.jobById.get(state._wrJobId));
+        state._wrJobItems.push(TVC_SpareMenu.newConsumeJobRow());
+        renderWorkReportModal({ preserveScroll: true });
+    }
+
+    function removeWrJobRow(idx) {
+        captureWorkReportForm();
+        captureWrJobItems();
+        ensureWrJobItems(state.idx?.jobById.get(state._wrJobId));
+        if (state._wrJobItems.length <= 1) return;
+        state._wrJobItems.splice(idx, 1);
+        if (_wrActiveJobRowIndex >= state._wrJobItems.length) {
+            _wrActiveJobRowIndex = Math.max(0, state._wrJobItems.length - 1);
+        }
+        syncWrPrimaryJobFromItems();
+        renderWorkReportModal({ preserveScroll: true });
+    }
+
+    function renderWrMaintJobRowHtml(item, idx, opts = {}) {
+        const ro = !!opts.readonly;
+        const batch = !!opts.batch;
+        const hideLabels = !!opts.hideLabels;
+        const jobDisabled = !opts.groupKey;
+        const fld = (label, inner) => hideLabels
+            ? `<div class="wr-maint-field wr-maint-field-nolabel">${inner}</div>`
+            : `<div class="wr-maint-field"><label>${label}</label>${inner}</div>`;
+        const roInp = (val, field) => field
+            ? `<input class="wr-ro" data-field="${field}" value="${esc(val || '')}" readonly tabindex="-1">`
+            : `<input class="wr-ro" value="${esc(val || '')}" readonly tabindex="-1">`;
+        let jobInner;
+        if (ro) {
+            jobInner = roInp(item.job_code, 'job_code');
+        } else {
+            jobInner = `<button type="button" id="wrJobPickTrigger-${idx}" class="wr-maint-job-pick spare-consume-job-pick-trigger"${jobDisabled ? ' disabled' : ''} onclick="TVC_App.toggleWrJobRowPick(event, ${idx})">
+                    <span class="spare-consume-pick-text">${esc(item.job_code || '— No Job Code —')}</span>
+                    <span class="spare-consume-pick-caret" aria-hidden="true">▾</span>
+                </button>
+                <input type="hidden" data-field="job_code" value="${escAttr(item.job_code || '')}">`;
+        }
+        const sort1Inner = roInp(item.sort1, 'sort1');
+        const sort2Inner = roInp(item.sort2, 'sort2');
+        const detailInner = ro
+            ? roInp(item.job_detail, 'job_detail')
+            : `<input type="text" id="wrJobDetail-${idx}" data-field="job_detail" value="${esc(item.job_detail || '')}">`;
+        const actCol = batch && !ro && (opts.rowCount || 0) > 1
+            ? `<div class="wr-maint-field df-maint-job-row-act${hideLabels ? ' wr-maint-field-nolabel' : ''}">${hideLabels ? '' : '<label aria-hidden="true">&nbsp;</label>'}<button type="button" class="btn btn-sm spare-consume-job-row-rm" onclick="TVC_App.removeWrJobRow(${idx})" title="Remove job row" aria-label="Remove job row">×</button></div>`
+            : '';
+        const gapCls = idx === 0 ? ' wr-maint-grid-gap' : '';
+        const gridCols = actCol ? ' wr-maint-grid-4 df-maint-job-grid-batch' : ' wr-maint-grid-4';
+        return `<div class="wr-maint-grid${gridCols}${gapCls} df-maint-job-row" data-wr-job-row="${idx}" data-job-id="${escAttr(item.maintenance_job_id || '')}">
+                ${fld('Job Code', jobInner)}
+                ${fld('SORT-1', sort1Inner)}
+                ${fld('SORT-2', sort2Inner)}
+                ${fld('Job Detail', detailInner)}
+                ${actCol}
+            </div>`;
+    }
+
+    function renderWrJobRowsBlock(job, rep, ro, forPrint) {
+        ensureWrJobItems(job, rep);
+        const items = state._wrJobItems || [];
+        const groupKey = wrGroupKeyFromForm();
+        const allowAdd = !ro && !forPrint && !!groupKey;
+        const multiJob = items.length > 1 || allowAdd;
+        const header = multiJob && TVC_SpareMenu.renderMaintJobRowsHeaderHtml
+            ? TVC_SpareMenu.renderMaintJobRowsHeaderHtml({ withActionCol: allowAdd && items.length > 1 })
+            : '';
+        const rows = items.map((item, idx) => renderWrMaintJobRowHtml(item, idx, {
+            readonly: ro || forPrint,
+            batch: allowAdd,
+            groupKey,
+            rowCount: items.length,
+            hideLabels: multiJob,
+        })).join('');
+        const addBtn = allowAdd
+            ? `<div class="spare-consume-meta-job-add">
+                <button type="button" class="btn btn-sm spare-consume-job-row-add" onclick="TVC_App.addWrJobRow()" title="Add JOB CODE row">+</button>
+               </div>`
+            : '';
+        const pickHost = allowAdd
+            ? `<div id="wrJobRowPickHost" class="spare-consume-job-pick-host hidden" aria-hidden="true">
+                <div id="wrJobRowPickMenu" class="spare-consume-pick-menu" role="listbox" aria-label="JOB CODE" style="display:none">
+                    <div class="spare-consume-pick-search">
+                        <input type="search" class="search-input" placeholder="Search JOB CODE / SORT / DETAIL…" value="${esc(_wrJobRowPickSearch)}"
+                            oninput="TVC_App.wrJobRowPickSearch(this.value)" onclick="event.stopPropagation()">
+                    </div>
+                    <div class="spare-consume-pick-scroll" id="wrJobRowPickList"></div>
+                </div>
+            </div>`
+            : '';
+        return `<div class="df-page1-job-rows wr-maint-span-all" id="wrJobRows">${header}${rows}${addBtn}</div>${pickHost}`;
+    }
 
     function wrGroupKeyFromForm() {
         if (state._wrForm?.pmsGroupKey) return state._wrForm.pmsGroupKey;
@@ -7648,6 +8150,7 @@ const TVC_App = (function () {
     function closeAllWrPicks() {
         closeWrPickMenu(document.getElementById('wrGroupPick'));
         closeWrPickMenu(document.getElementById('wrJobPick'));
+        closeWrJobRowPickMenu();
     }
 
     function positionWrPickMenu(wrap, minWidth) {
@@ -7948,6 +8451,8 @@ const TVC_App = (function () {
         state._wrForm.serialNo = hdr.serialNo || '';
         if (prev !== groupKey) {
             state._wrForm.jobName = state._wrForm.jobName || '';
+            state._wrJobItems = [TVC_SpareMenu.newConsumeJobRow()];
+            state._wrJobId = null;
         }
         closeWrPickMenu(document.getElementById('wrGroupPick'));
         renderWorkReportModal();
@@ -8138,14 +8643,7 @@ const TVC_App = (function () {
             return `<input data-wf="${key}" value="${esc(wf(key, val))}">`;
         };
         const roWf = (key, val) => `<input class="wr-ro" data-wf="${key}" value="${esc(wf(key, val))}" readonly tabindex="-1">`;
-        const repBatchIds = (!batchMode && rep?.is_batch)
-            ? TVC_WorkReport.getJobItems(rep).map(it => it.maintenance_job_id).filter(Boolean)
-            : [];
-        const useBatchList = (batchMode && batchJobIds.length > 1) || repBatchIds.length > 1;
-        const listIds = batchMode ? batchJobIds : repBatchIds;
-        const jobInfoBlock = useBatchList
-            ? renderWrBatchJobRowsHtml(listIds)
-            : '';
+        const jobInfoBlock = renderWrJobRowsBlock(job, rep, ro, forPrint);
 
         return `<div class="wr-maint-form">
             ${renderWrApprovalHtml({
@@ -8164,12 +8662,6 @@ const TVC_App = (function () {
                     ${fld('PMS Group No.', roWf('pmsGroupNo', hdr.pmsGroupNo || job.group || ''), 'wr-maint-span-all')}
                 </div>
                 ${jobInfoBlock}
-                ${!useBatchList ? `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
-                    ${fld('Job Code', `<input class="wr-ro" value="${esc(job.job_code || '')}" readonly>`)}
-                    ${fld('SORT-1', `<input class="wr-ro" value="${esc(job.item_sort1 || '')}" readonly>`)}
-                    ${fld('SORT-2', `<input class="wr-ro" value="${esc(job.item_sort2 || '')}" readonly>`)}
-                    ${fld('Job Detail', `<input class="wr-ro" value="${esc(job.job_detail || '')}" readonly>`)}
-                </div>` : ''}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
                     ${fld('Maker', roWf('maker', hdr.maker))}
                     ${fld('Model / Type', roWf('modelType', hdr.modelType))}
@@ -8227,12 +8719,7 @@ const TVC_App = (function () {
         };
         const roWf = (key, val) => `<input class="wr-ro" data-wf="${key}" value="${esc(wf(key, val))}" readonly tabindex="-1">`;
         const approvedPostponeDefault = rep?.approved_postpone_date || rep?.postpone_date || wf('postponeDate') || '';
-        const repBatchIds = (!batchMode && rep?.is_batch)
-            ? TVC_WorkReport.getJobItems(rep).map(it => it.maintenance_job_id).filter(Boolean)
-            : [];
-        const useBatchList = (batchMode && batchJobIds.length > 1) || repBatchIds.length > 1;
-        const listIds = batchMode ? batchJobIds : repBatchIds;
-        const jobInfoBlock = useBatchList ? renderWrBatchJobRowsHtml(listIds) : '';
+        const jobInfoBlock = renderWrJobRowsBlock(job, rep, ro, forPrint);
         const criticalBanner = isCriticalPostpone
             ? `<div class="wr-postpone-critical-banner" role="note"><strong>⚠ Critical Equipment</strong> — Company approval required before NEXT DATE is finalized.</div>`
             : '';
@@ -8262,12 +8749,6 @@ const TVC_App = (function () {
                     ${fld('PMS Group No.', roWf('pmsGroupNo', hdr.pmsGroupNo || job.group || ''), 'wr-maint-span-all')}
                 </div>
                 ${jobInfoBlock}
-                ${!useBatchList ? `<div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
-                    ${fld('Job Code', `<input class="wr-ro" value="${esc(job.job_code)}" readonly>`)}
-                    ${fld('SORT-1', `<input class="wr-ro" value="${esc(job.item_sort1 || '')}" readonly>`)}
-                    ${fld('SORT-2', `<input class="wr-ro" value="${esc(job.item_sort2 || '')}" readonly>`)}
-                    ${fld('Job Detail', `<input class="wr-ro" value="${esc(job.job_detail || '')}" readonly>`)}
-                </div>` : ''}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
                     ${fld('Maker', roWf('maker', hdr.maker))}
                     ${fld('Model / Type', roWf('modelType', hdr.modelType))}
@@ -8280,7 +8761,7 @@ const TVC_App = (function () {
                     ${fld('Running Hrs after Last Maint.', fieldInp('rhAfterLastMaint', ''))}
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-2 wr-maint-grid-gap">
-                    ${useBatchList ? '' : fld('Original Due Date', `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly>`)}
+                    ${fld('Original Due Date', `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly>`)}
                     ${fld('Postpone Date', forPrint ? wrDateUiPrintInput(wf('postponeDate')) : `<input type="date" class="tvc-date-input" data-wf="postponeDate" placeholder="YYYY-MM-DD" value="${esc(wf('postponeDate'))}"${ro ? ' disabled' : ''}>`, 'wr-postpone-date')}
                 </div>
                 ${approvedPostponeField}
@@ -8347,6 +8828,7 @@ const TVC_App = (function () {
 
     /** 현재 입력값을 임시 보관 (탭 전환 시 유실 방지) */
     function captureWorkReportForm() {
+        captureWrJobItems();
         const host = document.getElementById('workReportBody');
         if (!host) return;
         state._wrForm = state._wrForm || {};
@@ -8556,7 +9038,6 @@ const TVC_App = (function () {
         closeFileNoPickPopover();
         const host = document.getElementById('workReportBody');
         if (!host) return;
-        if (state._batchMode) return renderBatchWorkReportModal(host);
         const job = state.idx?.jobById.get(state._wrJobId);
         if (!job) return;
         if (!WR_TABS[state._wrTab]) state._wrTab = 'repair';
@@ -8572,8 +9053,9 @@ const TVC_App = (function () {
                 <input type="radio" name="wrTab" ${state._wrTab === k ? 'checked' : ''}${tabLocked ? ' disabled' : ''} onclick="TVC_App.setWorkReportTab('${k}')"> ${esc(label)}
             </label>`;
         }).join('');
+        const wrJobItems = ensureWrJobItems(job, rep);
         const isCriticalPostpone = state._wrTab === 'postpone' && (
-            rep ? postponeRequiresCompanyApproval(rep) : jobShowsCriticalEquipmentMark(job)
+            rep ? postponeRequiresCompanyApproval(rep) : wrJobItemsShowCriticalPostpone(wrJobItems)
         );
         const isRepConfirmed = !!rep && TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked);
         const isRepApproved = !!rep && reportIsApproved(rep);
@@ -8726,13 +9208,6 @@ const TVC_App = (function () {
                 message: 'Cancel report editing?',
             });
             if (yes) {
-                if (state._batchMode) {
-                    state._batchMode = false;
-                    state._batchJobIds = [];
-                    state._batchDraft = null;
-                    state._batchSpareSearch = {};
-                    state._batchJobPickerOpen = false;
-                }
                 resetAndCloseWorkReport();
             }
             return;
@@ -8742,7 +9217,6 @@ const TVC_App = (function () {
 
     /** Work Report 창 닫기 — Confirmed/Approved 체크 시 Confirm·Approve 처리 후 닫기 */
     async function closeWorkReport() {
-        if (state._batchMode) return closeBatchReport();
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
         const apCb = document.getElementById('wrApprovedBy');
         const cfCb = document.getElementById('wrConfirmedBy');
@@ -8788,6 +9262,7 @@ const TVC_App = (function () {
         closeFileNoPickPopover();
         TVC_SpareMenu.teardownWrSparePage2();
         TVC_SpareMenu.cleanupConsumeWorkReportOverlay();
+        restorePlanBatchSelection();
         state._wrReportId = null;
         state._wrBatchItemId = null;
         state._wrReadonly = false;
@@ -8795,6 +9270,7 @@ const TVC_App = (function () {
         state._wrFromHistory = false;
         state._wrForm = {};
         state._wrUsedParts = [];
+        state._wrJobItems = null;
         state._wrPage = '1';
         state._wrSpareSearch = '';
         closeModal('workReportModal');
@@ -8805,7 +9281,15 @@ const TVC_App = (function () {
         captureWorkReportForm();
         if (state._wrPage === '2') TVC_SpareMenu.persistWrSpareUsedParts();
         captureWorkReportUsedParts();
-        const job = state.idx.jobById.get(state._wrJobId);
+        captureWrJobItems();
+        let job = state.idx.jobById.get(state._wrJobId);
+        const codedItems = (state._wrJobItems || []).filter(i => String(i.job_code || '').trim());
+        if (!job && codedItems.length) {
+            const first = codedItems[0];
+            job = (first.maintenance_job_id && state.idx.jobById.get(first.maintenance_job_id))
+                || state.jobs.find(j => j.job_code === first.job_code);
+            if (job) state._wrJobId = job.id;
+        }
         if (!job) return;
         const user = await TVC_Auth.requirePermission(TVC_RBAC.Action.CREATE_DAILY_REPORT);
         if (!user) return;
@@ -8853,12 +9337,45 @@ const TVC_App = (function () {
 
         try {
             let report;
+            const multiJobSave = codedItems.length > 1;
+            const buildWrSaveEntries = () => codedItems.map((item, idx) => {
+                const j = (item.maintenance_job_id && state.idx.jobById.get(item.maintenance_job_id))
+                    || state.jobs.find(x => x.job_code === item.job_code);
+                if (!j) throw Object.assign(new Error(`Job not found: ${item.job_code || '?'}`), { code: 'NOT_FOUND' });
+                const rowForm = { ...form };
+                if (workType === 'MAINTENANCE' && rowForm.workDate
+                    && (!rowForm.lastMaintDate || rowForm.lastMaintDate === (j.last_done || ''))) {
+                    rowForm.lastMaintDate = rowForm.workDate;
+                }
+                return {
+                    maintenance_job_id: j.id,
+                    job_code: j.job_code,
+                    form: rowForm,
+                    description,
+                    used_parts: (workType === 'MAINTENANCE' && idx === 0) ? usedParts : [],
+                };
+            });
             if (state._wrReportId) {
                 const updatePayload = { ...payload };
                 const rep = state.reports.find(r => r.id === state._wrReportId);
                 if (rep) {
                     TVC_WorkReport.fromLegacy(rep);
-                    if (rep.is_batch && (rep.job_items || []).length > 1) {
+                    if (multiJobSave) {
+                        updatePayload.jobItems = buildWrSaveEntries().map((entry, idx) => {
+                            const prev = (rep.job_items || []).find(it =>
+                                it.maintenance_job_id === entry.maintenance_job_id
+                                || it.job_code === entry.job_code
+                            ) || {};
+                            const j = state.idx.jobById.get(entry.maintenance_job_id);
+                            return TVC_WorkReport.blankJobItem(j, {
+                                status: prev.status || rep.status || status,
+                                form: { ...(prev.form || {}), ...entry.form },
+                                used_parts: entry.used_parts,
+                                description: entry.description,
+                            });
+                        });
+                        updatePayload.form = form;
+                    } else if (rep.is_batch && (rep.job_items || []).length > 1) {
                         updatePayload.jobItems = rep.job_items.map((it, idx) => ({
                             ...it,
                             form: { ...(it.form || {}), ...form },
@@ -8883,6 +9400,21 @@ const TVC_App = (function () {
                 report = await TVC_Transaction.updateReport(user, state._wrReportId, updatePayload);
                 TVC_JobMeta.addHistory(job.job_code, {
                     action: `${workType}_MODIFIED`, user: user.display_name,
+                    notes: (description || '').slice(0, 100),
+                });
+            } else if (multiJobSave) {
+                report = await TVC_Transaction.submitBatchReport(user, {
+                    workType,
+                    status,
+                    reportDate: form.reportDate,
+                    workDate: form.workDate,
+                    postponeDate: form.postponeDate || null,
+                    sharedForm: form,
+                    items: buildWrSaveEntries(),
+                    description,
+                });
+                TVC_JobMeta.addHistory(job.job_code, {
+                    action: `${workType}_${status}`, user: user.display_name,
                     notes: (description || '').slice(0, 100),
                 });
             } else {
@@ -8931,8 +9463,19 @@ const TVC_App = (function () {
 
             const wasModify = !!state._wrReportId;
             const fromHistory = state._wrFromHistory;
+            clearPlanBatchSnapshot();
             await refreshAll();
+            if (!wasModify && multiJobSave) {
+                state.batchSelectedJobs = {};
+                state.actualSelectedOnly = false;
+                resetAndCloseWorkReport();
+                await TVC_Dialog.alert(tab === 'postpone'
+                    ? `Postpone report saved (${codedItems.length} jobs, ${status})`
+                    : `Work Report saved (${codedItems.length} jobs, ${status})`);
+                return;
+            }
             const saved = state.reports.find(r => r.id === report.id) || report;
+            state._wrJobItems = null;
             if (fromHistory) reloadWorkReportViewFromDb(saved, job);
             else reloadWorkReportStateFromSaved(saved, job);
             renderWorkReportModal();
@@ -9760,7 +10303,7 @@ const TVC_App = (function () {
         boot, switchTab, navigate,
         setDepartment, setCaptainView, setHistView, setHistTab, menuAction, resolveDeptPick,
         setFleetView, setFleetSearch, selectVessel,
-        setSearch, setTreeSearch, clearSearchField, updateSearchClearBtn, bindSearchClearInput, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, isTreeDeptCollapsed, toggleTreeDept, renderGroupTree,
+        setSearch, setTreeSearch, clearSearchField, clearListFilterSearch, updateSearchClearBtn, updateSearchClearBtnForEl, ensureSearchClearUi, bindSearchClearInput, bindListFilterSearchClear, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, isTreeDeptCollapsed, toggleTreeDept, renderGroupTree,
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
         jobShowsCriticalEquipmentMark,
         reportMatchesPostponeAwaitingApproval,
@@ -9773,10 +10316,14 @@ const TVC_App = (function () {
         openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport, captureWorkReportForm,
         uploadWrAttachment, removeWrAttachment,
         toggleWrGroupPick, toggleWrJobPick, pickWrGroup, pickWrJob, wrGroupPickSearch, wrJobPickSearch,
+        addWrJobRow, removeWrJobRow, toggleWrJobRowPick, pickWrJobForRow, wrJobRowPickSearch,
         toggleBatchJob, toggleBatchSelectAll, openBatchReport, saveBatchReport,
-        togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader, refreshActualPlan, openNewDefectFromPlan,
+        syncPlanBatchCheckForJob, syncPlanBatchChecksFromJobItems, buildJobItemsFromJobIds,
+        snapshotPlanBatchSelection, restorePlanBatchSelection, clearPlanBatchSnapshot,
+        togglePlanSelectedOnly, toggleActSelectedOnly, renderPlanGroupHeader, refreshActualPlan,
+        openNewDefectReportInput, openNewDefectFromPlan,
         setBatchActiveJob, setWrBatchViewJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
-        openWorkReportFromHistory, openDefectFromHistory, openWorkHistoryEntry, navWorkHistoryEntry,
+        openWorkReportFromHistory, openDefectFromHistory, openWorkHistoryEntry, navWorkHistoryEntry, syncHistRowSelection,
         modifyWorkReport, cancelWorkReportEdit, selectHistRow, renderWorkHistory, histDefectRowKey,
         buildDefectHistRowHtml, matchDefectHistSearch, initHistCellTips,
         formatHistGroupEquipmentName, isPlaceholderJobCode, defectEffectiveJobCode,
@@ -9809,6 +10356,7 @@ const TVC_App = (function () {
         openMenuHistoryModal, closeMenuHistoryModal, setMenuHistCategory, menuHistPeerLabel,
         openMasterBackupModal, closeMasterBackupModal, runMasterBackup, triggerMasterRestore, onMasterRestoreFile,
         uploadAttachment, saveDetailReport, closeModal, showModal, swapHistoryModals, dismissSpicsAlerts, openSpicsRequisition,
+        buildWorkReportPage2PrintHtmlFromReport,
     };
 })();
 

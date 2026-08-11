@@ -153,6 +153,7 @@ const TVC_SpareSchema = (function () {
      *  @property {string} [partClass]       - G/L (저장: part_class) — Legal(L), General(G)
      *  @property {string} [inventoryNumbering] - SPICS Numbering (01-001-01)
      *  @property {string} [drawingPartNo]   - Part Number / Code Number
+     *  @property {string} [dwgNo]           - Drawing No. (저장: dwg_no)
      *  @property {string} [shipComponentId] - 연결 장비/섹션
      *  @property {string} [parentEquipmentID] - 부모 장비 ID (CSV Equipment Header)
      *  @property {string} location
@@ -191,6 +192,7 @@ const TVC_SpareSchema = (function () {
             partClass: '',
             inventoryNumbering: '',
             drawingPartNo: '',
+            dwgNo: '',
             shipComponentId: '',
             parentEquipmentID: '',
             location: '',
@@ -255,6 +257,7 @@ const TVC_SpareSchema = (function () {
             partClass: pClass,
             inventoryNumbering: row.inventory_numbering || row.inventoryNumbering || '',
             drawingPartNo: textField(row.drawing_part_no ?? row.drawingPartNo),
+            dwgNo: textField(row.dwg_no ?? row.dwgNo ?? row.drawing_no ?? row.drawingNo),
             shipComponentId: row.ship_component_id || row.shipComponentId || '',
             parentEquipmentID: row.parent_equipment_id || row.parentEquipmentID || '',
             location: row.location || row.storage_location || '',
@@ -300,6 +303,8 @@ const TVC_SpareSchema = (function () {
             part_class: normalizePartClass(p.partClass),
             inventory_numbering: String(p.inventoryNumbering || '').trim(),
             drawing_part_no: textField(p.drawingPartNo),
+            dwg_no: textField(p.dwgNo),
+            drawing_no: textField(p.dwgNo),
             ship_component_id: String(p.shipComponentId || '').trim(),
             parent_equipment_id: String(p.parentEquipmentID || '').trim(),
             location: String(p.location || '').trim(),
