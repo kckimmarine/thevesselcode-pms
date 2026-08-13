@@ -1,5 +1,6 @@
 /** Export filename — {vessel}_{type}_{scope}_{YYYYMMDD}_{seq}.{ext}
- *  HQ Work Permit reply: {vessel}_workpermit_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip */
+ *  HQ Work Permit reply: {vessel}_workpermit_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
+ *  HQ Defect reply:     {vessel}_defect_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip */
 const TVC_Filename = (function () {
     const SPARE_TYPE = {
         REQUISITION: 'requisition',

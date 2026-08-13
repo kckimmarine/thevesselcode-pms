@@ -9449,7 +9449,10 @@ const TVC_SpareMenu = (function () {
         const user = spareInventoryUser(st) || st.user;
         if (!user) await TVC_Dialog.alert('Login required.');
         try {
-            await TVC_MaintenancePlan.deleteGroup(user, node.department, node.label);
+            const vesselOpts = (typeof TVC_App !== 'undefined' && TVC_App.masterVesselOpts)
+                ? TVC_App.masterVesselOpts()
+                : (st.selectedVesselId ? { vesselId: st.selectedVesselId, selectedVesselId: st.selectedVesselId } : {});
+            await TVC_MaintenancePlan.deleteGroup(user, node.department, node.label, vesselOpts);
             st.selectedGroupKey = null;
             await refresh();
             await render();

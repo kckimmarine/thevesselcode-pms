@@ -167,20 +167,25 @@ const TVC_DefectCaseService = (function () {
         }
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
-        if (row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) {
+        if (TVC_DefectCase.isHqReplyExported(row)) {
+            throw Object.assign(new Error('HQ reply already exported.'), { code: 'LOCKED' });
+        }
+        const shipSubmitted = !!(row.confirmed_at || row.confirmed_by || row.phase1_locked || row.submitted_at);
+        const awaitingHqReply = row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+            || row.status === TVC_DefectCase.Status.COMPANY_REVIEWED
+            || (shipSubmitted && !TVC_DefectCase.isHqReplyExported(row));
+        if (!awaitingHqReply) {
             throw Object.assign(new Error('Case is not awaiting company review.'), { code: 'INVALID_STATUS' });
         }
+        if (row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+            && row.status !== TVC_DefectCase.Status.COMPANY_REVIEWED && shipSubmitted) {
+            row.status = TVC_DefectCase.Status.SUBMITTED_TO_COMPANY;
+        }
         Object.assign(row, phase2, {
-            reply_by: phase2.reply_by || TVC_RBAC.getRankLabel(user),
-            reply_date: phase2.reply_date || now().slice(0, 10),
-            status: TVC_DefectCase.Status.COMPANY_REVIEWED,
-            phase2_locked: true,
+            reply_by: phase2.reply_by || row.reply_by || TVC_RBAC.getRankLabel(user),
+            reply_date: phase2.reply_date ?? row.reply_date ?? '',
             hq_synced: true,
         });
-        const v = TVC_DefectCase.validatePhase2(row);
-        if (!v.ok) {
-            throw Object.assign(new Error(`Required: ${v.missing.join(', ')}`), { code: 'VALIDATION', missing: v.missing });
-        }
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
@@ -293,7 +298,7 @@ const TVC_DefectCaseService = (function () {
         return row;
     }
 
-    async function saveApprovalMeta(user, id, { confirm, approve, unconfirm } = {}) {
+    async function saveApprovalMeta(user, id, { confirm, approve, unconfirm, unapprove } = {}) {
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
         const today = now().slice(0, 10);
@@ -322,6 +327,17 @@ const TVC_DefectCaseService = (function () {
             }
             row.confirmed_by = '';
             row.confirmed_at = '';
+            changed = true;
+        }
+        if (unapprove && (row.approved_at || row.approved_by)) {
+            if (!TVC_RBAC.isHqAccount(user)) {
+                throw Object.assign(new Error('HQ unapprove only.'), { code: 'FORBIDDEN' });
+            }
+            if (TVC_DefectCase.isHqReplyExported(row)) {
+                throw Object.assign(new Error('Exported case cannot be unapproved.'), { code: 'LOCKED' });
+            }
+            row.approved_by = '';
+            row.approved_at = '';
             changed = true;
         }
         if (approve && !row.approved_at) {

@@ -74,6 +74,7 @@
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / co</li>
                     <li><b>HQ</b> · hq (Department not required)</li>
+                    <li><b>Admin</b> · tvc (Department not required · Admin Mode SKU)</li>
                 </ul>
             </div>
         </div>
@@ -334,6 +335,8 @@
     <input type="file" id="importZip" accept=".zip" hidden onchange="TVC_App.handleImport(this.files[0]);this.value=''">
     <input type="file" id="importStation" accept=".zip,.json,.csv" hidden onchange="TVC_App.handleHubImport(this.files[0]);this.value=''">
     <input type="file" id="menuXferImportFile" accept=".zip,.json,.csv" hidden onchange="TVC_App.onMenuXferImportFile(this.files[0]);this.value=''">
+    <input type="file" id="menuXferAppUpdateSetupFile" accept=".exe,application/vnd.microsoft.portable-executable" hidden
+        onchange="TVC_App.menuXferAppUpdateOnSetupFile(this.files &amp;&amp; this.files[0]); this.value='';">
     <input type="file" id="importDefectUrgent" accept=".zip" hidden onchange="TVC_App.handleDefectImport(this.files[0]);this.value=''">
 </div>
 </div><!-- /#tvcAppRoot -->
@@ -618,8 +621,8 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/rbac.js?v=20260808-reported-by"></script>
-<script src="js/core/schema.js?v=20260811-spare-dwg-no"></script>
+<script src="js/rbac.js?v=20260813-admin-mode"></script>
+<script src="js/core/schema.js?v=20260812-hq-pre-export"></script>
 <script src="js/core/db.js?v=20260806-req-sort"></script>
 <script src="js/core/indexes.js"></script>
 <script src="js/pms.js?v=20260721-stock-ledger"></script>
@@ -629,7 +632,7 @@
 <script src="js/ui/dialog.js?v=20260811-company-comment"></script>
 <script src="js/ui/runHours.js?v=20260808-critical-postpone"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
-<script src="js/core/filename.js?v=20260810-wp-hq-reply-name"></script>
+<script src="js/core/filename.js?v=20260812-defect-hq-batch"></script>
 <script src="js/services/spareSync.js?v=20260806-req-excel"></script>
 <script src="js/ui/spareMenu.js?v=20260811-consume-job-ui"></script>
 <script src="js/ui/spareRequest.js"></script>
@@ -638,32 +641,35 @@
 <script src="js/services/inventoryService.js?v=20260806-spare-consume-fix"></script>
 <script src="js/services/excel.js?v=20260807-quote-form-excel"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
-<script src="js/space.js?v=20260812-hub-mode"></script>
-<script src="js/license.js?v=20260803-electron-license"></script>
+<script src="js/space.js?v=20260813-admin-mode"></script>
+<script src="js/license.js?v=20260813-admin-mode"></script>
 <script src="js/services/fileExport.js?v=20260804-settings"></script>
-<script src="js/auth.js?v=20260811-master-import2"></script>
+<script src="js/auth.js?v=20260813-admin-mode"></script>
 <script src="js/services/transaction.js?v=20260810-plan-status-latest"></script>
-<script src="js/services/maintenancePlan.js?v=20260729-pms-master"></script>
-<script src="js/services/pmsMasterExcel.js?v=20260808-deck-catalog"></script>
-<script src="js/services/spareMasterExcel.js?v=20260808-dept-boundary"></script>
-<script src="js/services/defectCase.js?v=20260810-legacy-report-names"></script>
+<script src="js/services/maintenancePlan.js?v=20260813-vessel-master"></script>
+<script src="js/services/pmsMasterExcel.js?v=20260813-vessel-master"></script>
+<script src="js/services/spareMasterExcel.js?v=20260813-vessel-master"></script>
+<script src="js/services/defectCase.js?v=20260812-hq-pre-export"></script>
 <script src="js/services/workPermitCase.js?v=20260810-wp-comments"></script>
 <script src="js/services/workPermitSync.js?v=20260810-wp-comments"></script>
-<script src="js/services/defectSync.js?v=20260812-defect-flow"></script>
+<script src="js/services/defectSync.js?v=20260812-defect-vessel-batch"></script>
 <script src="js/services/postponeSync.js?v=20260810-import-scope"></script>
-<script src="js/services/sync.js?v=20260812-defect-flow"></script>
-<script src="js/services/masterBackup.js?v=20260804-dialog"></script>
+<script src="js/services/sync.js?v=20260812-hq-defect-import"></script>
+<script src="js/services/masterBackup.js?v=20260813-vessel-master"></script>
+<script src="js/services/vesselProfileSync.js?v=20260813-vessel-profile"></script>
+<script src="js/services/appUpdate.js?v=20260813-admin-mode"></script>
 <script src="js/services/stationSync.js?v=20260811-monthly-export"></script>
 <script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
-<script src="js/services/fleet.js?v=20260728-fleet-imo"></script>
+<script src="js/services/fleet.js?v=20260813-hq-fleet4"></script>
+<script src="js/services/masterVesselScope.js?v=20260813-vessel-master"></script>
 <script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260811-list-search-clear"></script>
-<script src="js/ui/defectReport.js?v=20260812-hq-df-modify"></script>
+<script src="js/ui/defectReport.js?v=20260812-hq-pre-export"></script>
 <script src="js/ui/workPermit.js?v=20260811-wrspare-cos-dot"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260804-pms-scope"></script>
-<script src="js/app.js?v=20260812-defect-flow"></script>
+<script src="js/app.js?v=20260813-admin-mode"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

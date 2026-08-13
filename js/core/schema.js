@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 9, // v9: work_permits (Critical Equipment Work Permit)
+    DB_VERSION: 10, // v10: master vessel_id scope (HQ multi-vessel PMS/SPARE)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -34,6 +34,7 @@ const TVC_SCHEMA = {
         ship_components: [
             { name: 'by_parent', keyPath: 'parent_id' },
             { name: 'by_sort', keyPath: 'sort_order' },
+            { name: 'by_vessel', keyPath: 'vessel_id' },
         ],
         maintenance_jobs: [
             { name: 'by_job_code', keyPath: 'job_code' },
@@ -42,14 +43,18 @@ const TVC_SCHEMA = {
             { name: 'by_overdue', keyPath: 'is_overdue' },
             { name: 'by_next_date', keyPath: 'next_date' },
             { name: 'by_sync', keyPath: 'sync_status' },
+            { name: 'by_vessel', keyPath: 'vessel_id' },
         ],
         maintenance_groups: [
             { name: 'by_department', keyPath: 'department' },
+            { name: 'by_vessel', keyPath: 'vessel_id' },
         ],
         spare_parts: [
-            { name: 'by_part_no', keyPath: 'part_no', unique: true },
+            // v10: unique 해제 — 선박별 동일 part_no 허용 (앱에서 vessel_id+part_no 검증)
+            { name: 'by_part_no', keyPath: 'part_no', unique: false },
             { name: 'by_universal', keyPath: 'universal_code' },
             { name: 'by_category', keyPath: 'category' },
+            { name: 'by_vessel', keyPath: 'vessel_id' },
         ],
         daily_work_reports: [
             { name: 'by_status', keyPath: 'status' },
@@ -120,6 +125,7 @@ const TVC_META_KEYS = {
     ORIGINAL_PLAN_UPDATE: 'original_plan_update_last',
     ORIGINAL_PLAN_LOCK: 'original_plan_lock_v1',
     PMS_MASTER_IMPORTED: 'pms_master_imported_at',
+    MASTER_VESSEL_SCOPE: 'master_vessel_scope_v1',
 };
 
 /** 번들 ENGINE CSV 경로 (우선순위 순) */
@@ -274,6 +280,8 @@ const TVC_SpareSchema = (function () {
             sync_status: row.sync_status,
             updated_at: row.updated_at,
             schema_version: row.schema_version || SCHEMA_VERSION,
+            vessel_id: row.vessel_id || row.vesselId || '',
+            vesselId: row.vessel_id || row.vesselId || '',
         };
     }
 
@@ -321,6 +329,7 @@ const TVC_SpareSchema = (function () {
             schema_version: SCHEMA_VERSION,
             sync_status: p.sync_status || 'LOCAL',
             updated_at: p.updated_at || new Date().toISOString(),
+            vessel_id: String(p.vessel_id || p.vesselId || '').trim() || undefined,
         };
     }
 
@@ -779,6 +788,8 @@ const TVC_DefectCase = (function () {
             dp_closed_reply: '',
             dp_closed_by: '',
             dp_closed_date: '',
+            hq_reply_exported_at: null,
+            last_export_filename: '',
             reported_by: overrides.reported_by || '',
             hq_synced: false,
             visible_in_list: overrides.visible_in_list !== false,
@@ -882,6 +893,22 @@ const TVC_DefectCase = (function () {
         return { ok: !missing.length, missing };
     }
 
+    /** HQ Defect reply ZIP export 전 필수 항목 */
+    function validateHqDefectReplyExport(row) {
+        const missing = [];
+        const phase2 = validatePhase2(row);
+        if (!phase2.ok) missing.push(...phase2.missing);
+        if (!(row.approved_at || row.approved_by)) missing.push('Approved by');
+        const hasReportTo = row.report_na || row.report_to_class || row.report_to_flag
+            || row.report_to_external_stakeholder || row.report_to_psc;
+        if (!hasReportTo) missing.push('REQUIRE TO REPORT TO');
+        return { ok: !missing.length, missing };
+    }
+
+    function isHqReplyExported(row) {
+        return !!(row?.hq_reply_exported_at);
+    }
+
     function belongsToDepartment(row, dept) {
         if (!dept) return true;
         return !row.department || row.department === dept;
@@ -933,7 +960,8 @@ const TVC_DefectCase = (function () {
     return {
         SCHEMA_VERSION, Status, PHASE1_FIELDS, PHASE2_FIELDS, PHASE3_FIELDS, PHASE4_FIELDS,
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
-        canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, belongsToDepartment,
+        canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, validateHqDefectReplyExport,
+        isHqReplyExported, belongsToDepartment,
         listWorkflowStatus, listWorkflowTone, canModifyListWorkflow, canDeleteListWorkflow, isShipVerificationEditable,
     };
 })();

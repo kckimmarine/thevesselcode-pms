@@ -23,6 +23,23 @@ const TVC_MaintenancePlan = (function () {
         }
     }
 
+    async function resolveVessel(user, data) {
+        if (typeof TVC_MasterVesselScope === 'undefined') {
+            return data?.vessel_id || user?.vessel_id || 'INCHEON CHEMI';
+        }
+        return TVC_MasterVesselScope.resolve(user, {
+            vesselId: data?.vessel_id,
+            selectedVesselId: data?.selectedVesselId,
+        });
+    }
+
+    function sameVessel(row, vesselId) {
+        if (typeof TVC_MasterVesselScope !== 'undefined') {
+            return TVC_MasterVesselScope.belongs(row, vesselId);
+        }
+        return !row?.vessel_id || row.vessel_id === vesselId;
+    }
+
     function recalcOverdue(job) {
         if (!job.next_date) {
             job.is_overdue = false;
@@ -59,6 +76,11 @@ const TVC_MaintenancePlan = (function () {
         if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
         assertDept(user, job);
 
+        const vesselId = await resolveVessel(user, { vessel_id: job.vessel_id || patch?.vessel_id, selectedVesselId: patch?.selectedVesselId });
+        if (TVC_RBAC.isHqAccount(user) && job.vessel_id && !sameVessel(job, vesselId)) {
+            throw Object.assign(new Error('VESSEL_FORBIDDEN'), { code: 'FORBIDDEN' });
+        }
+
         const fields = ['group', 'job_code', 'sort', 'item_sort1', 'item_sort2', 'job_detail',
             'period', 'unit', 'pic', 'next_date', 'last_done', 'is_critical_equipment'];
         const p = normalizePatch(patch);
@@ -67,11 +89,12 @@ const TVC_MaintenancePlan = (function () {
 
         if (p.job_code && p.job_code !== prevJobCode) {
             const dup = await TVC_DB.indexGetAll('maintenance_jobs', 'by_job_code', p.job_code);
-            if (dup.some(j => j.id !== jobId && j.department === job.department)) {
+            if (dup.some(j => j.id !== jobId && j.department === job.department && sameVessel(j, vesselId))) {
                 throw Object.assign(new Error('JOB_CODE_EXISTS'), { code: 'DUPLICATE' });
             }
         }
 
+        if (!job.vessel_id) job.vessel_id = vesselId;
         recalcOverdue(job);
         if (p.next_date && !job.original_next_date) job.original_next_date = p.next_date;
         job.plan_status = job.is_overdue ? 'OVERDUE' : 'PLANNED';
@@ -90,17 +113,19 @@ const TVC_MaintenancePlan = (function () {
             throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
         }
 
+        const vesselId = await resolveVessel(user, data);
         const jobCode = String(data.job_code || '').trim();
         if (!jobCode) throw Object.assign(new Error('JOB_CODE_REQUIRED'), { code: 'INVALID' });
 
         const dup = await TVC_DB.indexGetAll('maintenance_jobs', 'by_job_code', jobCode);
-        if (dup.some(j => j.department === dept)) {
+        if (dup.some(j => j.department === dept && sameVessel(j, vesselId))) {
             throw Object.assign(new Error('JOB_CODE_EXISTS'), { code: 'DUPLICATE' });
         }
 
         const p = normalizePatch(data);
         const job = markLocal({
             id: newId(),
+            vessel_id: vesselId,
             department: dept,
             group: p.group || 'UNGROUPED',
             job_code: jobCode,
@@ -135,6 +160,13 @@ const TVC_MaintenancePlan = (function () {
         if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
         assertDept(user, job);
 
+        if (TVC_RBAC.isHqAccount(user)) {
+            const vesselId = await resolveVessel(user, {});
+            if (job.vessel_id && !sameVessel(job, vesselId)) {
+                throw Object.assign(new Error('VESSEL_FORBIDDEN'), { code: 'FORBIDDEN' });
+            }
+        }
+
         const linked = (reports || []).some(r =>
             TVC_WorkReport.getJobItems(r).some(i => i.maintenance_job_id === jobId)
         );
@@ -152,25 +184,27 @@ const TVC_MaintenancePlan = (function () {
     }
 
     /** Original Plan GROUP Tree — 신규 그룹 추가 (작업 없이 트리에만 표시) */
-    async function createGroup(user, department, label) {
+    async function createGroup(user, department, label, opts = {}) {
         assertCanEditGroup(user);
         const dept = String(department || '').trim();
         const lab = String(label || '').trim();
         if (!dept) throw Object.assign(new Error('DEPARTMENT_REQUIRED'), { code: 'INVALID' });
         if (!lab) throw Object.assign(new Error('GROUP_LABEL_REQUIRED'), { code: 'INVALID' });
 
+        const vesselId = await resolveVessel(user, opts);
         const key = groupKeyOf(dept, lab);
         const allJobs = await TVC_DB.getAll('maintenance_jobs');
-        if (allJobs.some(j => TVC_Indexes.groupKey(j) === key)) {
+        if (allJobs.some(j => sameVessel(j, vesselId) && TVC_Indexes.groupKey(j) === key)) {
             throw Object.assign(new Error('GROUP_EXISTS'), { code: 'DUPLICATE' });
         }
         const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
-        if (defs.some(g => groupKeyOf(g.department, g.label) === key)) {
+        if (defs.some(g => sameVessel(g, vesselId) && groupKeyOf(g.department, g.label) === key)) {
             throw Object.assign(new Error('GROUP_EXISTS'), { code: 'DUPLICATE' });
         }
 
         const row = markLocal({
             id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            vessel_id: vesselId,
             department: dept,
             label: lab,
             sort_order: 0,
@@ -182,7 +216,7 @@ const TVC_MaintenancePlan = (function () {
     }
 
     /** Original Plan GROUP Tree — 그룹명 변경 (해당 그룹 작업 전체 + Run-hour 키) */
-    async function renameGroup(user, department, oldLabel, newLabel) {
+    async function renameGroup(user, department, oldLabel, newLabel, opts = {}) {
         assertCanEdit(user);
         const dept = String(department || '').trim();
         const oldName = String(oldLabel || '').trim();
@@ -191,15 +225,22 @@ const TVC_MaintenancePlan = (function () {
         if (!newName) throw Object.assign(new Error('GROUP_LABEL_REQUIRED'), { code: 'INVALID' });
         if (oldName === newName) return { updated: 0, newKey: groupKeyOf(dept, newName) };
 
+        const vesselId = await resolveVessel(user, opts);
         const oldKey = groupKeyOf(dept, oldName);
         const newKey = groupKeyOf(dept, newName);
         const allJobs = await TVC_DB.getAll('maintenance_jobs');
-        if (allJobs.some(j => j.department === dept && (j.group || '').trim() === newName && (j.group || '').trim() !== oldName)) {
+        if (allJobs.some(j =>
+            sameVessel(j, vesselId)
+            && j.department === dept
+            && (j.group || '').trim() === newName
+            && (j.group || '').trim() !== oldName
+        )) {
             throw Object.assign(new Error('GROUP_EXISTS'), { code: 'DUPLICATE' });
         }
 
         let updated = 0;
         for (const job of allJobs) {
+            if (!sameVessel(job, vesselId)) continue;
             if (job.department !== dept || (job.group || '').trim() !== oldName) continue;
             job.group = newName;
             markLocal(job);
@@ -209,6 +250,7 @@ const TVC_MaintenancePlan = (function () {
 
         const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         for (const g of defs) {
+            if (!sameVessel(g, vesselId)) continue;
             if (g.department === dept && (g.label || '').trim() === oldName) {
                 g.label = newName;
                 markLocal(g);
@@ -225,20 +267,24 @@ const TVC_MaintenancePlan = (function () {
     }
 
     /** Original Plan / SPARE GROUP Tree — 빈 그룹 삭제 (작업·부품 없을 때만) */
-    async function deleteGroup(user, department, label) {
+    async function deleteGroup(user, department, label, opts = {}) {
         assertCanEditGroup(user);
         const dept = String(department || '').trim();
         const lab = String(label || '').trim();
         if (!dept || !lab) throw Object.assign(new Error('GROUP_REQUIRED'), { code: 'INVALID' });
 
+        const vesselId = await resolveVessel(user, opts);
         const allJobs = await TVC_DB.getAll('maintenance_jobs');
-        const jobsInGroup = allJobs.filter(j => j.department === dept && String(j.group || '').trim() === lab);
+        const jobsInGroup = allJobs.filter(j =>
+            sameVessel(j, vesselId) && j.department === dept && String(j.group || '').trim() === lab
+        );
         if (jobsInGroup.length) {
             throw Object.assign(new Error('GROUP_HAS_JOBS'), { code: 'HAS_JOBS', count: jobsInGroup.length });
         }
 
         const spares = await TVC_DB.getAll('spare_parts');
         const sparesInGroup = spares.filter(s => {
+            if (!sameVessel(s, vesselId)) return false;
             const cat = String(s.category || s.department || '').trim();
             if (cat && cat !== dept) return false;
             return String(s.group || '').trim() === lab;
@@ -250,6 +296,7 @@ const TVC_MaintenancePlan = (function () {
         const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         let removed = 0;
         for (const g of defs) {
+            if (!sameVessel(g, vesselId)) continue;
             if (g.department === dept && String(g.label || '').trim() === lab) {
                 await TVC_DB.del('maintenance_groups', g.id);
                 removed++;

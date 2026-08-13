@@ -2,9 +2,15 @@
 'use strict';
 
 const { app, BrowserWindow, protocol, ipcMain, dialog, shell, nativeImage } = require('electron');
+const os = require('os');
 const path = require('path');
 const fs = require('fs');
-const { ensureLicense } = require('./license');
+const {
+    ensureLicense,
+    applyLicenseFile,
+    buildMachineRequest,
+    detectSkuHint,
+} = require('./license');
 
 const PROTOCOL = 'tvc-app';
 const WIDTH_RATIO = 0.78;
@@ -186,14 +192,10 @@ function computeWindowBounds() {
 }
 
 function detectSkuFromResources() {
-    const resourcesLicense = path.join(process.resourcesPath || '', 'license.json');
-    try {
-        if (fs.existsSync(resourcesLicense)) {
-            const lic = JSON.parse(fs.readFileSync(resourcesLicense, 'utf8'));
-            if (lic.sku) return String(lic.sku);
-        }
-    } catch (_) { /* ignore */ }
-    return process.env.TVC_BUILD_SKU || process.env.TVC_DEV_SKU || '';
+    return detectSkuHint({ getAppPath: () => app.getAppPath() })
+        || process.env.TVC_BUILD_SKU
+        || process.env.TVC_DEV_SKU
+        || '';
 }
 
 function applySkuUserData() {
@@ -350,12 +352,90 @@ app.whenReady().then(() => {
         userData: app.getPath('userData'),
         protocol: PROTOCOL,
     }));
+    ipcMain.handle('tvc:export-machine-request', async () => {
+        try {
+            const req = buildMachineRequest(app);
+            const defaultName = `${String(req.sku || 'sku').toLowerCase()}_machine_request_${req.machineId.slice(0, 8)}.json`;
+            const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+                title: 'Export machine request',
+                defaultPath: defaultName,
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+            });
+            if (canceled || !filePath) {
+                return { ok: false, message: 'Export cancelled.' };
+            }
+            fs.writeFileSync(filePath, JSON.stringify(req, null, 2), 'utf8');
+            return { ok: true, path: filePath, request: req };
+        } catch (e) {
+            return { ok: false, message: e.message || String(e) };
+        }
+    });
+    ipcMain.handle('tvc:import-seat-license', async () => {
+        try {
+            const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+                title: 'Import seat license.json',
+                properties: ['openFile'],
+                filters: [{ name: 'License JSON', extensions: ['json'] }],
+            });
+            if (canceled || !filePaths?.length) {
+                return { ok: false, message: 'Import cancelled.' };
+            }
+            const result = applyLicenseFile(app, filePaths[0]);
+            if (!result.ok) {
+                return {
+                    ok: false,
+                    code: result.code || null,
+                    message: result.message || 'License import failed.',
+                };
+            }
+            refreshLicense();
+            if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.loadURL(`${PROTOCOL}://localhost/index.html`);
+            }
+            return {
+                ok: true,
+                status: licenseState.status,
+                message: 'Seat license applied.',
+            };
+        } catch (e) {
+            return { ok: false, message: e.message || String(e) };
+        }
+    });
+    /** App Update: write Setup.exe to temp and launch — does not touch IndexedDB. */
+    ipcMain.handle('tvc:install-app-update', async (_evt, payload) => {
+        try {
+            const filename = String(payload?.filename || 'TVC-PMS-Setup.exe').replace(/[\\/]/g, '_');
+            const bytes = payload?.bytes;
+            if (!Array.isArray(bytes) || !bytes.length) {
+                return { ok: false, message: 'Setup bytes missing.' };
+            }
+            const dir = path.join(os.tmpdir(), 'tvc-app-update');
+            fs.mkdirSync(dir, { recursive: true });
+            const dest = path.join(dir, filename);
+            fs.writeFileSync(dest, Buffer.from(bytes));
+            const openResult = await shell.openPath(dest);
+            if (openResult) {
+                return { ok: false, message: openResult, path: dest };
+            }
+            setTimeout(() => {
+                try { app.quit(); } catch (_) { /* ignore */ }
+            }, 800);
+            return {
+                ok: true,
+                path: dest,
+                message: 'Installer launched. Finish the setup wizard, then reopen TVC-PMS. Operational data (Master/History) stays in AppData.',
+            };
+        } catch (e) {
+            return { ok: false, message: e.message || String(e) };
+        }
+    });
     registerSettingsIpc();
     registerPrintPreviewIpc();
 
     createWindow();
 
-    if (!licenseState.ok) {
+    // Activation gate is expected on first run — only alert on hard failures.
+    if (!licenseState.ok && licenseState.code !== 'LICENSE_NEED_ACTIVATION') {
         dialog.showMessageBox(mainWindow, {
             type: 'error',
             title: 'TVC-PMS License',

@@ -15,8 +15,9 @@ const TVC_Sync = (function () {
             || row.submitted_at || listSt === 'Confirmed' || listSt === 'Submitted'
             || (row.visible_in_list !== false && listSt === 'Reported'));
         if (!shipSubmitted) return;
-        if (row.status === TVC_DefectCase.Status.DRAFT || !row.status
-            || row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) {
+        if (!row.phase2_locked && row.status !== TVC_DefectCase.Status.COMPANY_REVIEWED
+            && row.status !== TVC_DefectCase.Status.AWAITING_COMPLETION
+            && row.status !== TVC_DefectCase.Status.CLOSED) {
             row.status = TVC_DefectCase.Status.SUBMITTED_TO_COMPANY;
         }
         if (!row.phase1_locked) row.phase1_locked = true;

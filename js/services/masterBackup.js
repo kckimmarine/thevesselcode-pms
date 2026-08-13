@@ -65,17 +65,22 @@ const TVC_MasterBackup = (function () {
         return meta;
     }
 
-    async function collectStores(storeNames) {
+    async function collectStores(storeNames, vesselId) {
         const stores = {};
         for (const name of storeNames) {
-            stores[name] = await TVC_DB.getAll(name).catch(() => []);
+            let rows = await TVC_DB.getAll(name).catch(() => []);
+            if (vesselId && typeof TVC_MasterVesselScope !== 'undefined'
+                && TVC_MasterVesselScope.MASTER_STORES.includes(name)) {
+                rows = TVC_MasterVesselScope.filterRows(rows, vesselId);
+            }
+            stores[name] = rows;
         }
         return stores;
     }
 
     async function buildPayload(scope, user, opts = {}) {
         const vesselId = await resolveVesselId(user, opts);
-        const stores = await collectStores(storesFor(scope));
+        const stores = await collectStores(storesFor(scope), vesselId);
         const meta = await collectMeta(metaKeysFor(scope));
         const payload = {
             kind: KIND,
@@ -135,9 +140,21 @@ const TVC_MasterBackup = (function () {
         return JSON.parse(await jsonFile.async('string'));
     }
 
-    async function replaceStore(storeName, rows) {
-        await TVC_DB.clearStore(storeName);
+    async function replaceStore(storeName, rows, vesselId) {
         const list = Array.isArray(rows) ? rows : [];
+        const masterScoped = typeof TVC_MasterVesselScope !== 'undefined'
+            && vesselId
+            && TVC_MasterVesselScope.MASTER_STORES.includes(storeName);
+        if (masterScoped) {
+            await TVC_MasterVesselScope.clearVesselStore(storeName, vesselId);
+            const stamped = list.map(r => {
+                const copy = { ...r, vessel_id: vesselId };
+                return copy;
+            });
+            if (stamped.length) await TVC_DB.bulkPut(storeName, stamped);
+            return stamped.length;
+        }
+        await TVC_DB.clearStore(storeName);
         if (list.length) await TVC_DB.bulkPut(storeName, list);
         return list.length;
     }
@@ -167,7 +184,7 @@ const TVC_MasterBackup = (function () {
         const storeNames = storesFor(scope);
         const counts = {};
         for (const name of storeNames) {
-            counts[name] = await replaceStore(name, payload.stores?.[name] || []);
+            counts[name] = await replaceStore(name, payload.stores?.[name] || [], expectedVessel);
         }
 
         const meta = payload.meta || {};

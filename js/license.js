@@ -2,6 +2,12 @@
 const TVC_License = (function () {
     const COMPANY_ID = 'DAEMYUNG';
     const PILOT_VESSEL_ID = 'INCHEON CHEMI';
+    const HQ_ALLOWED_VESSEL_IDS = [
+        'INCHEON CHEMI',
+        'QUARTERBACK J',
+        'GOLDSTAR SHINE',
+        'VALIANT',
+    ];
 
     let _cache = null;
     let _loaded = false;
@@ -18,11 +24,12 @@ const TVC_License = (function () {
                 enforced: false,
                 companyId: COMPANY_ID,
                 vesselId: null,
-                allowedVesselIds: [PILOT_VESSEL_ID],
+                allowedVesselIds: HQ_ALLOWED_VESSEL_IDS.slice(),
                 sku: 'DEV_BROWSER',
                 skuLabel: 'Browser Dev',
                 loginModes: ['MASTER', 'ENGINE', 'DECK'],
                 allowHq: true,
+                allowAdmin: true,
             };
             return _cache;
         }
@@ -64,7 +71,26 @@ const TVC_License = (function () {
             }
             return { ok: true };
         }
-        const isHq = String(accountType || '').toUpperCase() === 'HQ';
+        const type = String(accountType || '').toUpperCase();
+        const isHq = type === 'HQ';
+        const isAdmin = type === 'ADMIN';
+        const adminOnly = !!st.allowAdmin && !st.allowHq && !(st.loginModes || []).length;
+
+        if (isAdmin) {
+            if (!st.allowAdmin) {
+                return {
+                    ok: false,
+                    error: `This installation (${st.skuLabel || st.sku}) is not Admin Mode. Use HQ or Vessel login.`,
+                };
+            }
+            return { ok: true };
+        }
+        if (adminOnly) {
+            return {
+                ok: false,
+                error: `This installation (${st.skuLabel || st.sku}) is TVC Admin Mode only. Use the tvc account.`,
+            };
+        }
         if (st.allowHq) {
             if (!isHq) {
                 return {

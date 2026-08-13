@@ -373,6 +373,7 @@ const TVC_DB = (function () {
             req.onupgradeneeded = (e) => {
                 const database = e.target.result;
                 const tx = e.target.transaction; // version-change tx (기존 store 접근용)
+                const oldVersion = e.oldVersion || 0;
                 for (const [name, cfg] of Object.entries(TVC_SCHEMA.STORES)) {
                     let store;
                     if (!database.objectStoreNames.contains(name)) {
@@ -384,6 +385,10 @@ const TVC_DB = (function () {
                     } else {
                         // 기존 store: 누락된 인덱스만 추가 (파괴적 재생성 금지 → 하위호환)
                         store = tx.objectStore(name);
+                    }
+                    // v10: spare_parts.by_part_no unique → non-unique (선박별 동일 Part No)
+                    if (oldVersion < 10 && name === 'spare_parts' && store.indexNames.contains('by_part_no')) {
+                        try { store.deleteIndex('by_part_no'); } catch (_) {}
                     }
                     (TVC_SCHEMA.INDEXES[name] || []).forEach(idx => {
                         if (!store.indexNames.contains(idx.name)) {

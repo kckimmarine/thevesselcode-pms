@@ -28,6 +28,27 @@ const TVC_PmsMasterExcel = (function () {
         return String(s ?? '').replace(/\s+/g, ' ').trim();
     }
 
+    async function resolveImportVesselId(user, opts = {}) {
+        if (typeof TVC_MasterVesselScope !== 'undefined') {
+            return TVC_MasterVesselScope.resolve(user, {
+                vesselId: opts.vesselId,
+                selectedVesselId: opts.selectedVesselId,
+            });
+        }
+        if (opts.vesselId) return String(opts.vesselId).trim();
+        if (typeof TVC_Fleet !== 'undefined' && TVC_Fleet.getSelectedId()) {
+            return TVC_Fleet.getSelectedId();
+        }
+        return (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null)) || 'INCHEON CHEMI';
+    }
+
+    function sameVessel(row, vesselId) {
+        if (typeof TVC_MasterVesselScope !== 'undefined') {
+            return TVC_MasterVesselScope.belongs(row, vesselId);
+        }
+        return !row?.vessel_id || row.vessel_id === vesselId;
+    }
+
     function padGroupNo(n) {
         const d = parseInt(String(n).replace(/\D/g, ''), 10);
         return Number.isFinite(d) ? String(d).padStart(2, '0') : String(n || '').trim();
@@ -63,13 +84,14 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     /** Remove group-level defs (no item_sort1) with no jobs referencing them. */
-    async function pruneEmptyGroupDefs(allJobs) {
+    async function pruneEmptyGroupDefs(allJobs, vesselId) {
         const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         const used = new Set(
             (allJobs || []).map(j => `${j.department}|${norm(j.group)}`)
         );
         let pruned = 0;
         for (const g of defs) {
+            if (vesselId && !sameVessel(g, vesselId)) continue;
             if (norm(g.item_sort1)) continue;
             const key = `${g.department}|${norm(g.label)}`;
             if (!used.has(key) && g.id) {
@@ -239,26 +261,28 @@ const TVC_PmsMasterExcel = (function () {
         return s.includes('CRITICAL');
     }
 
-    async function loadExportData(department) {
+    async function loadExportData(department, opts = {}) {
         const dept = normDept(department);
         const [jobs, groups, meta] = await Promise.all([
             TVC_DB.getAll('maintenance_jobs'),
             TVC_DB.getAll('maintenance_groups').catch(() => []),
             TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null),
         ]);
-        let vesselId = meta || 'INCHEON CHEMI';
-        if (typeof TVC_Fleet !== 'undefined') {
-            vesselId = TVC_Fleet.getSelected()?.name || TVC_Fleet.PILOT_VESSEL_ID || vesselId;
+        let vesselId = opts.vesselId || meta || 'INCHEON CHEMI';
+        if (!opts.vesselId && typeof TVC_Fleet !== 'undefined') {
+            vesselId = TVC_Fleet.getSelectedId() || TVC_Fleet.getSelected()?.name || TVC_Fleet.PILOT_VESSEL_ID || vesselId;
         }
-        const scopedJobs = renumberJobsForExport(jobs).filter(j => String(j.department || '').toUpperCase() === dept);
-        const scopedGroups = (groups || []).filter(g => String(g.department || '').toUpperCase() === dept);
+        const vesselJobs = (jobs || []).filter(j => sameVessel(j, vesselId));
+        const vesselGroups = (groups || []).filter(g => sameVessel(g, vesselId));
+        const scopedJobs = renumberJobsForExport(vesselJobs).filter(j => String(j.department || '').toUpperCase() === dept);
+        const scopedGroups = vesselGroups.filter(g => String(g.department || '').toUpperCase() === dept);
         return { jobs: scopedJobs, groups: scopedGroups, vesselId, department: dept };
     }
 
     async function exportToWorkbook(opts = {}) {
         if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
         const department = normDept(opts.department);
-        const loaded = opts.jobs ? opts : await loadExportData(department);
+        const loaded = opts.jobs ? opts : await loadExportData(department, opts);
         const { jobs, groups, vesselId } = loaded;
         const exportJobs = (opts.jobs || jobs).filter(j => String(j.department || '').toUpperCase() === department);
 
@@ -378,8 +402,12 @@ const TVC_PmsMasterExcel = (function () {
 
     async function exportToFile(opts = {}) {
         const department = normDept(opts.department);
-        const wb = await exportToWorkbook({ ...opts, department });
-        const vesselId = opts.vesselId || (await loadExportData(department)).vesselId;
+        const vesselId = opts.vesselId
+            || opts.selectedVesselId
+            || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.getSelectedId() : null)
+            || (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null))
+            || 'INCHEON CHEMI';
+        const wb = await exportToWorkbook({ ...opts, department, vesselId });
         const buf = await wb.xlsx.writeBuffer();
         const filename = await masterExcelFilename(vesselId, department);
         await downloadBlob(buf, filename);
@@ -557,8 +585,8 @@ const TVC_PmsMasterExcel = (function () {
         return null;
     }
 
-    /** Excel에 없는 job 제거 — Work Report 연결 시 임시 CODE로 격리 */
-    async function removeOrphanJobs(jobRows) {
+    /** Excel에 없는 job 제거 — Work Report 연결 시 임시 CODE로 격리 (선택 선박만) */
+    async function removeOrphanJobs(jobRows, vesselId) {
         const importIds = new Set(jobRows.map(r => r.job_id).filter(Boolean));
         const importDepts = new Set(jobRows.map(r => r.department));
         const existingJobs = await TVC_DB.getAll('maintenance_jobs');
@@ -566,6 +594,7 @@ const TVC_PmsMasterExcel = (function () {
         let detached = 0;
 
         for (const job of existingJobs) {
+            if (vesselId && !sameVessel(job, vesselId)) continue;
             if (!importDepts.has(job.department)) continue;
             if (importIds.has(job.id)) continue;
             if (jobRows.some(row => importRowMatchesJob(row, job))) continue;
@@ -731,7 +760,14 @@ const TVC_PmsMasterExcel = (function () {
             }
         }
 
-        await pruneEmptyGroupDefs(pool);
+        const vesselIds = [...new Set(pool.map(j => j.vessel_id).filter(Boolean))];
+        if (vesselIds.length) {
+            for (const vid of vesselIds) {
+                await pruneEmptyGroupDefs(pool.filter(j => sameVessel(j, vid)), vid);
+            }
+        } else {
+            await pruneEmptyGroupDefs(pool);
+        }
 
         if (changedJobs.length || changedGroups.length || sparesUpdated) {
             console.info(`[TVC] DECK catalog normalized: jobs=${changedJobs.length}, codes renamed=${renamed}, groups=${changedGroups.length}, spares=${sparesUpdated}`);
@@ -739,21 +775,28 @@ const TVC_PmsMasterExcel = (function () {
         return { updated: changedJobs.length, renamed, groups: changedGroups.length, spares: sparesUpdated };
     }
 
-    function groupDefId(dept, label, itemSort1) {
-        const base = `${dept}|${norm(label)}|${norm(itemSort1 || '')}`;
-        return 'grp-' + base.replace(/[^\w|.-]/g, '_').slice(0, 80);
+    function groupDefId(vesselId, dept, label, itemSort1) {
+        const v = String(vesselId || '').replace(/[^\w.-]+/g, '_').slice(0, 40);
+        const base = `${v}|${dept}|${norm(label)}|${norm(itemSort1 || '')}`;
+        return 'grp-' + base.replace(/[^\w|.-]/g, '_').slice(0, 100);
     }
 
-    async function upsertGroupDef(row, itemSort1) {
+    async function upsertGroupDef(row, itemSort1, vesselId) {
         const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         const label = row.label;
         const dept = row.department;
         const item = norm(itemSort1 || '');
-        let hit = defs.find(g => g.department === dept && norm(g.label) === norm(label) && norm(g.item_sort1 || '') === item);
-        const id = hit?.id || groupDefId(dept, label, item);
+        let hit = defs.find(g =>
+            sameVessel(g, vesselId)
+            && g.department === dept
+            && norm(g.label) === norm(label)
+            && norm(g.item_sort1 || '') === item
+        );
+        const id = hit?.id || groupDefId(vesselId, dept, label, item);
         const next = {
             ...(hit || {}),
             id,
+            vessel_id: vesselId,
             department: dept,
             label,
             item_sort1: item || null,
@@ -770,7 +813,7 @@ const TVC_PmsMasterExcel = (function () {
         await TVC_DB.put('maintenance_groups', next);
     }
 
-    function rebuildComponentTree(jobs) {
+    function rebuildComponentTree(jobs, vesselId) {
         const components = {};
         let order = 0;
         function ensure(path, nodeType, label, parentId) {
@@ -780,7 +823,15 @@ const TVC_PmsMasterExcel = (function () {
                 ? crypto.randomUUID()
                 : 'cmp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
             order++;
-            components[key] = { id, parent_id: parentId || null, path: [...path], label, node_type: nodeType, sort_order: order };
+            components[key] = {
+                id,
+                vessel_id: vesselId || null,
+                parent_id: parentId || null,
+                path: [...path],
+                label,
+                node_type: nodeType,
+                sort_order: order,
+            };
             return id;
         }
         for (const job of jobs) {
@@ -794,6 +845,7 @@ const TVC_PmsMasterExcel = (function () {
                 parent = ensure(pathAcc, types[Math.min(i, types.length - 1)], parts[i], parent);
             }
             job.ship_component_id = parent;
+            if (vesselId) job.vessel_id = vesselId;
         }
         return Object.values(components);
     }
@@ -801,6 +853,7 @@ const TVC_PmsMasterExcel = (function () {
     async function importFromWorkbook(wb, user, opts = {}) {
         TVC_RBAC.assertModifyOriginalPlan(user);
         const department = normDept(opts.department);
+        const vesselId = await resolveImportVesselId(user, opts);
         const wsG = wb.getWorksheet('Group Headers');
         const wsE = wb.getWorksheet('Equipment Headers');
         const wsJ = wb.getWorksheet('Jobs');
@@ -811,15 +864,17 @@ const TVC_PmsMasterExcel = (function () {
         const jobRows = rowsForDepartment(normalizeImportJobRows(parseJobRows(wsJ)), department);
         if (!jobRows.length) throw new Error(`Jobs 시트에 ${department} 데이터가 없습니다.`);
 
-        for (const g of groupRows) await upsertGroupDef(g, null);
-        for (const e of equipRows) await upsertGroupDef(e, e.item_sort1);
+        for (const g of groupRows) await upsertGroupDef(g, null, vesselId);
+        for (const e of equipRows) await upsertGroupDef(e, e.item_sort1, vesselId);
 
-        const orphanStats = await removeOrphanJobs(jobRows);
-        let existingJobs = await TVC_DB.getAll('maintenance_jobs');
+        const orphanStats = await removeOrphanJobs(jobRows, vesselId);
+        let allExisting = await TVC_DB.getAll('maintenance_jobs');
+        let existingJobs = allExisting.filter(j => sameVessel(j, vesselId));
         let { byId, byDeptCode } = refreshJobMaps(existingJobs);
         await reserveJobCodeSlots(jobRows, byId);
 
-        existingJobs = await TVC_DB.getAll('maintenance_jobs');
+        allExisting = await TVC_DB.getAll('maintenance_jobs');
+        existingJobs = allExisting.filter(j => sameVessel(j, vesselId));
         ({ byId, byDeptCode } = refreshJobMaps(existingJobs));
 
         let created = 0;
@@ -828,6 +883,11 @@ const TVC_PmsMasterExcel = (function () {
         const importStamp = new Date().toISOString();
 
         for (const row of jobRows) {
+            // 타 선박 job_id 는 무시하고 신규 생성 (선박별 분리)
+            if (row.job_id && byId.has(row.job_id) === false) {
+                const foreign = allExisting.find(j => j.id === row.job_id && !sameVessel(j, vesselId));
+                if (foreign) row.job_id = null;
+            }
             let job = findImportJobMatch(row, byId, byDeptCode, existingJobs);
 
             const period = Number(row.period) || 1;
@@ -849,6 +909,7 @@ const TVC_PmsMasterExcel = (function () {
                         : 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
                 job = {
                     id: newId,
+                    vessel_id: vesselId,
                     department: row.department,
                     group: row.group,
                     job_code: row.job_code,
@@ -879,6 +940,7 @@ const TVC_PmsMasterExcel = (function () {
                 const oldCode = job.job_code;
                 const protectedSched = await jobHasFinalizedHistory(job.id);
 
+                job.vessel_id = vesselId;
                 job.department = row.department;
                 job.group = row.group;
                 job.item_sort1 = row.item_sort1;
@@ -916,17 +978,23 @@ const TVC_PmsMasterExcel = (function () {
             else existingJobs.push(job);
         }
 
-        const allJobs = await TVC_DB.getAll('maintenance_jobs');
-        await pruneEmptyGroupDefs(allJobs);
-        const comps = rebuildComponentTree(allJobs);
-        await TVC_DB.bulkPut('ship_components', comps);
+        const vesselJobs = (await TVC_DB.getAll('maintenance_jobs')).filter(j => sameVessel(j, vesselId));
+        await pruneEmptyGroupDefs(vesselJobs, vesselId);
+        if (typeof TVC_MasterVesselScope !== 'undefined') {
+            await TVC_MasterVesselScope.clearVesselStore('ship_components', vesselId);
+        }
+        const comps = rebuildComponentTree(vesselJobs, vesselId);
+        if (comps.length) await TVC_DB.bulkPut('ship_components', comps);
+        for (const job of vesselJobs) {
+            await TVC_DB.put('maintenance_jobs', job);
+        }
 
         const orphanNote = orphanStats.removed || orphanStats.detached
             ? ` · 제외 ${orphanStats.removed} · Work Report 격리 ${orphanStats.detached}`
             : '';
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
-            log: `📥 [PMS Master Import] jobs +${created} ~${updated} rename ${renamed}${orphanNote} — ${user.display_name}`,
+            log: `📥 [PMS Master Import] ${vesselId} jobs +${created} ~${updated} rename ${renamed}${orphanNote} — ${user.display_name}`,
             sync_status: 'LOCAL',
         });
         await TVC_DB.setMeta(TVC_META_KEYS.PMS_MASTER_IMPORTED, importStamp);
@@ -938,6 +1006,7 @@ const TVC_PmsMasterExcel = (function () {
             groups: groupRows.length,
             equipment: equipRows.length,
             jobs: jobRows.length,
+            vessel_id: vesselId,
         };
     }
 

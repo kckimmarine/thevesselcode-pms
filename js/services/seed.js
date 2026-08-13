@@ -2,8 +2,11 @@
 const TVC_Seed = (function () {
     async function loadFromJson(data) {
         const ts = new Date().toISOString();
+        const seedVessel = data.meta?.vessel_id
+            || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'INCHEON CHEMI');
         const jobs = (data.maintenance_jobs || []).map(j => ({
             ...j,
+            vessel_id: j.vessel_id || seedVessel,
             original_next_date: j.original_next_date || j.next_date || null,
             sync_status: 'SYNCED',
             updated_at: ts,
@@ -12,11 +15,13 @@ const TVC_Seed = (function () {
         }));
         const components = (data.ship_components || []).map(c => ({
             ...c,
+            vessel_id: c.vessel_id || seedVessel,
             sync_status: 'SYNCED',
             updated_at: ts,
         }));
         const spares = (data.spare_parts || []).map(s => ({
             ...s,
+            vessel_id: s.vessel_id || seedVessel,
             sync_status: 'SYNCED',
             updated_at: ts,
         }));
@@ -24,7 +29,7 @@ const TVC_Seed = (function () {
         await TVC_DB.bulkPut('ship_components', components);
         await TVC_DB.bulkPut('maintenance_jobs', jobs);
         await TVC_DB.bulkPut('spare_parts', spares);
-        await TVC_DB.setMeta(TVC_META_KEYS.VESSEL_ID, data.meta?.vessel_id || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'INCHEON CHEMI'));
+        await TVC_DB.setMeta(TVC_META_KEYS.VESSEL_ID, seedVessel);
         await TVC_DB.setMeta(TVC_META_KEYS.SEED_LOADED, ts);
         await TVC_DB.setMeta(TVC_META_KEYS.DB_INIT, ts);
         return { jobs: jobs.length, components: components.length };

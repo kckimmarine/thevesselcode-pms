@@ -102,10 +102,8 @@ const TVC_DefectSync = (function () {
         setTimeout(() => { try { w.print(); } catch (_) {} }, 400);
     }
 
-    async function buildUrgentPayload(user, caseRow) {
-        const vesselId = caseRow.vessel_id
-            || await TVC_DefectCaseService.resolveVesselId(user)
-            || 'UNKNOWN';
+    function buildBatchUrgentPayload(user, rows, vesselId) {
+        const primary = rows[0];
         return {
             export_meta: {
                 vessel_id: vesselId,
@@ -114,17 +112,76 @@ const TVC_DefectSync = (function () {
                 direction: 'DEFECT_URGENT_TO_HQ',
                 package_type: 'DEFECT_CASE',
                 urgency: 'IMMEDIATE',
-                case_no: caseRow.case_no,
-                department: caseRow.department || user?.department || 'ALL',
+                department: primary?.department || user?.department || 'ALL',
                 exported_by: user?.username || '',
                 schema_version: TVC_DefectCase.SCHEMA_VERSION,
+                record_count: rows.length,
             },
-            defect_cases: [caseRow],
+            defect_cases: rows,
         };
+    }
+
+    async function buildUrgentPayload(user, caseRow) {
+        const vesselId = await resolveVesselId(user, caseRow);
+        return buildBatchUrgentPayload(user, [caseRow], vesselId);
     }
 
     async function buildHqReplyPayload(user, caseRow) {
         const vesselId = caseRow.vessel_id || 'UNKNOWN';
+        return buildBatchHqReplyPayload(user, [caseRow], vesselId);
+    }
+
+    async function resolveVesselId(user, row) {
+        return row?.vessel_id
+            || await TVC_DefectCaseService.resolveVesselId(user)
+            || (typeof TVC_Sync !== 'undefined'
+                ? await TVC_Sync.resolveExpectedVesselId(user, TVC_RBAC.isHqAccount(user))
+                : null)
+            || user?.vessel_id
+            || 'UNKNOWN';
+    }
+
+    /** scope: engine | deck | hub | engine_hq | deck_hq (HQ reply) */
+    function resolveExportScope(user, department, { hqReply = false } = {}) {
+        if (TVC_RBAC.isHqAccount(user)) {
+            if (hqReply) {
+                const dept = department
+                    || (typeof TVC_App !== 'undefined' ? TVC_App.getAppDepartment?.() : null)
+                    || user?.department;
+                if (typeof TVC_Filename !== 'undefined') {
+                    return TVC_Filename.hqReplyScopeToken(dept);
+                }
+                const d = String(dept || '').trim().toUpperCase();
+                return d === 'DECK' ? 'deck_hq' : 'engine_hq';
+            }
+            return 'hq';
+        }
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) return 'hub';
+        if (typeof TVC_Filename !== 'undefined') {
+            return TVC_Filename.scopeToken(department || user?.department, false);
+        }
+        const d = String(department || user?.department || '').trim().toUpperCase();
+        if (d === 'DECK') return 'deck';
+        if (d === 'ENGINE') return 'engine';
+        return 'engine';
+    }
+
+    async function buildExportFilename(user, vesselId, department, { hqReply = false } = {}) {
+        const scope = resolveExportScope(user, department, { hqReply });
+        if (typeof TVC_Filename === 'undefined') {
+            const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            return `${String(vesselId || 'unknown').toLowerCase()}_defect_${scope}_${dateTag}_001.zip`;
+        }
+        return TVC_Filename.build({
+            vesselId,
+            type: 'defect',
+            scope,
+            ext: 'zip',
+        });
+    }
+
+    function buildBatchHqReplyPayload(user, rows, vesselId) {
+        const primary = rows[0];
         return {
             export_meta: {
                 vessel_id: vesselId,
@@ -132,55 +189,176 @@ const TVC_DefectSync = (function () {
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_REPLY_HQ_TO_SHIP',
                 package_type: 'DEFECT_CASE_REPLY',
-                case_no: caseRow.case_no,
+                department: primary?.department || user?.department || 'ALL',
                 exported_by: user?.username || '',
                 schema_version: TVC_DefectCase.SCHEMA_VERSION,
+                record_count: rows.length,
             },
-            defect_cases: [caseRow],
+            defect_cases: rows,
         };
     }
 
-    async function exportUrgentZip(user, caseId) {
-        const row = await TVC_DefectCaseService.get(caseId);
-        if (!row) throw new Error('Defect case not found.');
-        if (row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) {
-            throw new Error('Submit to Company before Urgent Export.');
+    async function loadDefectHqReplyBatch(caseIds) {
+        const ids = (caseIds || []).filter(Boolean);
+        if (!ids.length) throw new Error('No defect reports selected.');
+        const rows = [];
+        for (const id of ids) {
+            const row = await TVC_DefectCaseService.get(id);
+            if (!row) throw new Error('Defect case not found.');
+            if (TVC_DefectCase.isHqReplyExported(row)) {
+                throw new Error(`${row.case_no}: HQ reply already exported.`);
+            }
+            const v = TVC_DefectCase.validateHqDefectReplyExport(row);
+            if (!v.ok) {
+                throw new Error(`${row.case_no}: ${v.missing.join(', ')} required before HQ export.`);
+            }
+            rows.push(row);
         }
-        const payload = await buildUrgentPayload(user, row);
-        const exportDate = now().slice(0, 10).replace(/-/g, '');
-        const html = buildPrintHtml(row, row.ship_name);
-        const zip = new JSZip();
-        zip.file('defect_case.json', JSON.stringify(payload, null, 2));
-        zip.file(`DEFECT_${row.case_no}.html`, html);
-        zip.file('README.txt',
-            `TVC-PMS Urgent Defect Report\nCase: ${row.case_no}\nVessel: ${payload.export_meta.vessel_id}\nDirection: DEFECT_URGENT_TO_HQ\n\nOpen .html → Print → Save as PDF for email attachment.`);
+        return rows;
+    }
 
-        const filename = `${payload.export_meta.vessel_id}_DEFECT_URGENT_${row.case_no}_${exportDate}.zip`;
-        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        await TVC_FileExport.save(blob, filename);
+    async function finalizeHqReplyRows(user, rows) {
+        for (const row of rows) {
+            row.status = TVC_DefectCase.Status.COMPANY_REVIEWED;
+            row.phase2_locked = true;
+            row.hq_reply_exported_at = now();
+            row.reply_date = row.reply_date || now().slice(0, 10);
+            row.reply_by = row.reply_by || TVC_RBAC.getRankLabel(user);
+            await TVC_DB.put('defect_cases', row);
+        }
+    }
 
-        row.sync_status = 'SYNCED';
-        row.last_synced_at = now();
-        await TVC_DB.put('defect_cases', row);
+    async function saveBatchHqReplyExport(user, rows, payload, filename) {
+        const ts = now();
+        for (const row of rows) {
+            row.sync_status = 'SYNCED';
+            row.last_synced_at = ts;
+            row.last_export_filename = filename;
+            await TVC_DB.put('defect_cases', row);
+        }
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
-            log: `📦 [Defect/Urgent Export] ${filename}`,
+            log: `📦 [Defect/HQ Reply Export] ${filename} (${rows.length} item(s))`,
+            sync_status: 'SYNCED',
+        });
+        if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
+            await TVC_Sync.recordSyncHistory({
+                type: 'EXPORT',
+                direction: 'DEFECT_REPLY_HQ_TO_SHIP',
+                department: payload.export_meta?.department || 'ALL',
+                vessel_id: payload.export_meta?.vessel_id,
+                filename,
+                ref_key: filename,
+                record_count: rows.length,
+                status: 'SUCCESS',
+                space: 'HQ',
+            });
+        }
+    }
+
+    async function exportHqReplyBatchZip(user, caseIds) {
+        const rows = await loadDefectHqReplyBatch(caseIds);
+        await finalizeHqReplyRows(user, rows);
+        const vesselId = await resolveVesselId(user, rows[0]);
+        const payload = buildBatchHqReplyPayload(user, rows, vesselId);
+        const filename = await buildExportFilename(user, vesselId, rows[0]?.department, { hqReply: true });
+        const zip = new JSZip();
+        zip.file('defect_case_reply.json', JSON.stringify(payload, null, 2));
+        rows.forEach(row => {
+            zip.file(`DEFECT_REPLY_${row.case_no}.html`, buildPrintHtml(row, row.ship_name));
+        });
+        zip.file('README.txt',
+            `TVC-PMS Defect HQ Reply\nVessel: ${vesselId}\nScope: ${resolveExportScope(user, rows[0]?.department, { hqReply: true })}\nItems: ${rows.length}\nDirection: DEFECT_REPLY_HQ_TO_SHIP\n\nFilename: ${filename}`);
+
+        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        await TVC_FileExport.save(blob, filename);
+        await saveBatchHqReplyExport(user, rows, payload, filename);
+        return { payload, filename, count: rows.length };
+    }
+
+    async function exportHqReplyZip(user, caseId) {
+        return exportHqReplyBatchZip(user, [caseId]);
+    }
+
+    async function loadDefectUrgentBatch(caseIds) {
+        const ids = (caseIds || []).filter(Boolean);
+        if (!ids.length) throw new Error('No defect reports selected.');
+        const rows = [];
+        for (const id of ids) {
+            const row = await TVC_DefectCaseService.get(id);
+            if (!row) throw new Error('Defect case not found.');
+            const st = TVC_DefectCase.listWorkflowStatus(row);
+            if (st !== 'Confirmed') {
+                throw new Error(`${row.case_no}: only Confirmed cases can be exported.`);
+            }
+            if (row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) {
+                throw new Error(`${row.case_no}: complete defect clearance before export.`);
+            }
+            if (row.sync_status === 'SYNCED') {
+                throw new Error(`${row.case_no}: already exported (Submitted).`);
+            }
+            rows.push(row);
+        }
+        return rows;
+    }
+
+    async function saveBatchUrgentExport(user, rows, payload, filename) {
+        const ts = now();
+        for (const row of rows) {
+            row.sync_status = 'SYNCED';
+            row.last_synced_at = ts;
+            row.last_export_filename = filename;
+            await TVC_DB.put('defect_cases', row);
+        }
+        await TVC_DB.put('audit_logs', {
+            timestamp: new Date().toLocaleString(),
+            log: `📦 [Defect Export] ${filename} (${rows.length} item(s))`,
             sync_status: 'SYNCED',
         });
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
                 type: 'EXPORT',
                 direction: 'DEFECT_URGENT_TO_HQ',
-                department: row.department || 'ALL',
-                vessel_id: payload.export_meta.vessel_id,
+                department: payload.export_meta?.department || 'ALL',
+                vessel_id: payload.export_meta?.vessel_id,
                 filename,
-                case_no: row.case_no,
-                record_count: 1,
+                ref_key: filename,
+                record_count: rows.length,
                 status: 'SUCCESS',
                 space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
             });
         }
-        return { payload, filename };
+    }
+
+    async function exportUrgentBatchZip(user, caseIds) {
+        await loadDefectUrgentBatch(caseIds);
+        for (const id of caseIds) {
+            const row = await TVC_DefectCaseService.get(id);
+            if (row && row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) {
+                await TVC_DefectCaseService.submitToCompany(user, id);
+            }
+        }
+        const rows = await Promise.all(caseIds.map(id => TVC_DefectCaseService.get(id))).then(list => list.filter(Boolean));
+        if (!rows.length) throw new Error('Defect case not found.');
+        const vesselId = await resolveVesselId(user, rows[0]);
+        const payload = buildBatchUrgentPayload(user, rows, vesselId);
+        const filename = await buildExportFilename(user, vesselId, rows[0]?.department, { hqReply: false });
+        const zip = new JSZip();
+        zip.file('defect_case.json', JSON.stringify(payload, null, 2));
+        rows.forEach(row => {
+            zip.file(`DEFECT_${row.case_no}.html`, buildPrintHtml(row, row.ship_name));
+        });
+        zip.file('README.txt',
+            `TVC-PMS Defect Report Export\nVessel: ${vesselId}\nScope: ${resolveExportScope(user, rows[0]?.department)}\nItems: ${rows.length}\nDirection: DEFECT_URGENT_TO_HQ\n\nFilename: ${filename}`);
+
+        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        await TVC_FileExport.save(blob, filename);
+        await saveBatchUrgentExport(user, rows, payload, filename);
+        return { payload, filename, count: rows.length };
+    }
+
+    async function exportUrgentZip(user, caseId) {
+        return exportUrgentBatchZip(user, [caseId]);
     }
 
     async function buildCompletionPayload(user, caseRow) {
@@ -242,19 +420,20 @@ const TVC_DefectSync = (function () {
             throw new Error('Submit Phase 3 (completion) before export.');
         }
         const payload = await buildCompletionPayload(user, row);
-        const exportDate = now().slice(0, 10).replace(/-/g, '');
+        const vesselId = payload.export_meta.vessel_id;
+        const filename = await buildExportFilename(user, vesselId, row.department, { hqReply: false });
         const html = buildPrintHtml(row, row.ship_name);
         const zip = new JSZip();
         zip.file('defect_case_completion.json', JSON.stringify(payload, null, 2));
         zip.file(`DEFECT_COMPLETION_${row.case_no}.html`, html);
-        zip.file('README.txt', `TVC-PMS Defect Completion Report\nCase: ${row.case_no}\nDirection: DEFECT_COMPLETION_TO_HQ`);
+        zip.file('README.txt', `TVC-PMS Defect Completion Report\nCase: ${row.case_no}\nDirection: DEFECT_COMPLETION_TO_HQ\n\nFilename: ${filename}`);
 
-        const filename = `${payload.export_meta.vessel_id}_DEFECT_COMPLETION_${row.case_no}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
 
         row.sync_status = 'SYNCED';
         row.last_synced_at = now();
+        row.last_export_filename = filename;
         await TVC_DB.put('defect_cases', row);
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
@@ -263,7 +442,7 @@ const TVC_DefectSync = (function () {
                 department: row.department || 'ALL',
                 vessel_id: payload.export_meta.vessel_id,
                 filename,
-                case_no: row.case_no,
+                ref_key: filename,
                 record_count: 1,
                 status: 'SUCCESS',
                 space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
@@ -309,50 +488,6 @@ const TVC_DefectSync = (function () {
         return { payload, filename };
     }
 
-    async function exportHqReplyZip(user, caseId) {
-        let row = await TVC_DefectCaseService.get(caseId);
-        if (!row) throw new Error('Defect case not found.');
-        const hasReply = !!(String(row.company_initial_reply || row.permit_to_work || '').trim());
-        if (row.status !== TVC_DefectCase.Status.COMPANY_REVIEWED) {
-            if (!(row.approved_at && hasReply)) {
-                throw new Error('Complete Initial Reply and Approve before reply export.');
-            }
-            row.status = TVC_DefectCase.Status.COMPANY_REVIEWED;
-            row.phase2_locked = true;
-            row.reply_date = row.reply_date || now().slice(0, 10);
-            row.reply_by = row.reply_by || TVC_RBAC.getRankLabel(user);
-            await TVC_DB.put('defect_cases', row);
-        }
-        const payload = await buildHqReplyPayload(user, row);
-        const exportDate = now().slice(0, 10).replace(/-/g, '');
-        const html = buildPrintHtml(row, row.ship_name);
-        const zip = new JSZip();
-        zip.file('defect_case_reply.json', JSON.stringify(payload, null, 2));
-        zip.file(`DEFECT_REPLY_${row.case_no}.html`, html);
-        zip.file('README.txt', `TVC-PMS Defect HQ Reply\nCase: ${row.case_no}\nDirection: DEFECT_REPLY_HQ_TO_SHIP`);
-
-        const filename = `${payload.export_meta.vessel_id}_DEFECT_REPLY_${row.case_no}_${exportDate}.zip`;
-        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        await TVC_FileExport.save(blob, filename);
-
-        row.sync_status = 'SYNCED';
-        row.last_synced_at = now();
-        await TVC_DB.put('defect_cases', row);
-        if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
-            await TVC_Sync.recordSyncHistory({
-                type: 'EXPORT',
-                direction: 'DEFECT_REPLY_HQ_TO_SHIP',
-                department: row.department || 'ALL',
-                vessel_id: payload.export_meta.vessel_id,
-                filename,
-                case_no: row.case_no,
-                record_count: 1,
-                status: 'SUCCESS',
-                space: 'HQ',
-            });
-        }
-        return { payload, filename };
-    }
 
     async function importPackage(user, file) {
         const buf = await file.arrayBuffer();
@@ -402,9 +537,10 @@ const TVC_DefectSync = (function () {
     }
 
     return {
-        buildPrintHtml, openPrintWindow, exportUrgentZip, exportHqReplyZip,
+        buildPrintHtml, openPrintWindow, exportUrgentZip, exportUrgentBatchZip, exportHqReplyZip, exportHqReplyBatchZip,
         exportCompletionZip, exportCloseZip, importPackage,
         buildUrgentPayload, buildHqReplyPayload, buildCompletionPayload, buildClosePayload,
+        resolveExportScope, buildExportFilename,
     };
 })();
 

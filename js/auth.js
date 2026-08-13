@@ -2,7 +2,7 @@
 const TVC_Auth = (function () {
     const SESSION_KEY = 'tvc_session_v2';
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 7;
+    const USERS_SEED_VERSION = 8;
 
     const DEFAULT_USERS = [
         // Deck part
@@ -14,6 +14,8 @@ const TVC_Auth = (function () {
         { id: 'user-chief', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'INCHEON CHEMI' },
         // Head office
         { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent (본사)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null },
+        // THE VESSEL CODE — Admin Mode (app updates only)
+        { id: 'user-tvc', username: 'tvc', display_name: 'TVC Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null },
     ];
 
     const PBKDF2_SALT = 'tvc-pms-salt-v2';
@@ -141,9 +143,14 @@ const TVC_Auth = (function () {
             if (!licCheck.ok) return licCheck;
         }
 
-        if (user.account_type === 'HQ') {
+        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
             if (loginMode) {
-                return { ok: false, error: 'Superintendent(hq) 계정은 Department 선택 없이 로그인하세요.' };
+                return {
+                    ok: false,
+                    error: user.account_type === 'ADMIN'
+                        ? 'TVC Admin(tvc) 계정은 Department 선택 없이 로그인하세요.'
+                        : 'Superintendent(hq) 계정은 Department 선택 없이 로그인하세요.',
+                };
             }
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,

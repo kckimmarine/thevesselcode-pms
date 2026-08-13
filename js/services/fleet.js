@@ -8,9 +8,12 @@ const TVC_Fleet = (function () {
     const COMPANY_ID = 'DAEMYUNG';
     const PILOT_VESSEL_ID = 'INCHEON CHEMI';
 
-    /** 초기 Fleet — 파일럿 선박 1척 */
+    /** 초기 Fleet — HQ 등록 선박 (company: DAEMYUNG) */
     const DEFAULT_FLEET = [
-        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '01', imo_no: '9297711', delivery: '2024-01-15' },
+        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '01', imo_no: '9297711', delivery: '2003-09-18' },
+        { id: 'QUARTERBACK J', name: 'QUARTERBACK J', code: '02', imo_no: '9264879', delivery: '2003-01-29' },
+        { id: 'GOLDSTAR SHINE', name: 'GOLDSTAR SHINE', code: '03', imo_no: '9279707', delivery: '2004-09-27' },
+        { id: 'VALIANT', name: 'VALIANT', code: '04', imo_no: '9274288', delivery: '2005-01-20' },
     ];
 
     /** 예전 테스트 Fleet — HQ 목록에서 제거 */
@@ -49,7 +52,8 @@ const TVC_Fleet = (function () {
         for (const id of DEPRECATED_VESSEL_IDS) byId.delete(id);
         for (const def of DEFAULT_FLEET) {
             const prev = byId.get(def.id);
-            byId.set(def.id, { ...def, ...(prev || {}) });
+            // DEFAULT_FLEET 메타(name/imo/delivery/code)를 기준으로 맞춤
+            byId.set(def.id, { ...(prev || {}), ...def });
         }
         return sortFleet([...byId.values()]);
     }

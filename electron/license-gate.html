@@ -2,33 +2,108 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>TVC-PMS — License Required</title>
+  <title>TVC-PMS — Activate Seat License</title>
   <style>
-    body { font-family: Segoe UI, sans-serif; background: #1a365d; color: #edf2f7; margin: 0; min-height: 100vh; display: grid; place-items: center; }
-    .card { background: #2a4365; border-radius: 12px; padding: 28px 32px; max-width: 520px; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
+    body { font-family: Segoe UI, sans-serif; background: #1a365d; color: #edf2f7; margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+    .card { background: #2a4365; border-radius: 12px; padding: 28px 32px; max-width: 640px; width: 100%; box-shadow: 0 12px 40px rgba(0,0,0,.35); }
     h1 { margin: 0 0 8px; font-size: 20px; }
+    h2 { margin: 20px 0 8px; font-size: 14px; color: #a0aec0; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
     p { margin: 0 0 12px; line-height: 1.5; color: #cbd5e0; font-size: 14px; }
-    code { background: #1a365d; padding: 2px 6px; border-radius: 4px; }
-    .err { color: #feb2b2; font-weight: 600; margin-top: 16px; }
+    .meta { display: grid; grid-template-columns: 120px 1fr; gap: 6px 12px; font-size: 13px; margin: 12px 0 16px; }
+    .meta span { color: #a0aec0; }
+    .meta code, .mid { background: #1a365d; padding: 6px 8px; border-radius: 6px; font-size: 12px; word-break: break-all; display: block; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0; }
+    button { appearance: none; border: 0; border-radius: 8px; padding: 10px 14px; font-size: 13px; font-weight: 600; cursor: pointer; background: #3182ce; color: #fff; }
+    button.secondary { background: #4a5568; }
+    button:disabled { opacity: .55; cursor: not-allowed; }
+    .err { color: #feb2b2; font-weight: 600; margin-top: 12px; white-space: pre-wrap; }
+    .ok { color: #9ae6b4; font-weight: 600; margin-top: 12px; }
+    ol { margin: 0 0 12px; padding-left: 18px; color: #cbd5e0; font-size: 14px; line-height: 1.55; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>THE VESSEL CODE — License</h1>
-    <p>This installation is licensed for a specific company, vessel, and PC.</p>
-    <p>Copying the product to another vessel, company, or computer is not permitted.</p>
-    <p class="err" id="msg">Checking license…</p>
+    <h1>THE VESSEL CODE — Seat Activation</h1>
+    <p>This installation may run only on one designated PC. Installer reuse on another computer is blocked until HQ issues a seat license for that PC.</p>
+
+    <div class="meta" id="meta">
+      <span>SKU</span><div id="sku">…</div>
+      <span>Vessel</span><div id="vessel">…</div>
+      <span>Host</span><div id="host">…</div>
+      <span>Machine ID</span><div><code class="mid" id="mid">…</code></div>
+    </div>
+
+    <h2>On this PC</h2>
+    <ol>
+      <li>Export the machine request file (or copy Machine ID).</li>
+      <li>Send it to HQ by email / Kakao (not USB redistributing the Setup).</li>
+      <li>Import the seat <code>license.json</code> HQ sends back.</li>
+    </ol>
+
+    <div class="row">
+      <button type="button" id="btnCopy">Copy Machine ID</button>
+      <button type="button" class="secondary" id="btnExport">Export machine request…</button>
+      <button type="button" id="btnImport">Import seat license…</button>
+    </div>
+
+    <p class="err" id="msg"></p>
+    <p class="ok" id="ok" hidden></p>
   </div>
   <script>
-    (async () => {
-      const el = document.getElementById('msg');
-      try {
-        const r = await window.tvcElectron?.getLicense?.();
-        el.textContent = r?.message || 'License invalid or missing.';
-      } catch (e) {
-        el.textContent = e.message || 'License check failed.';
+    const $ = (id) => document.getElementById(id);
+    const api = window.tvcElectron;
+
+    function setMsg(text, isOk) {
+      $('msg').textContent = isOk ? '' : (text || '');
+      $('ok').hidden = !isOk;
+      $('ok').textContent = isOk ? (text || 'OK') : '';
+    }
+
+    async function refresh() {
+      const r = await api?.getLicense?.();
+      const st = r?.status || {};
+      $('sku').textContent = st.skuLabel || st.sku || '—';
+      $('vessel').textContent = st.vesselId || '(HQ / fleet)';
+      $('host').textContent = st.hostname || '—';
+      $('mid').textContent = st.machineId || '—';
+      if (r?.ok) {
+        setMsg('License OK — reloading…', true);
+        return;
       }
-    })();
+      setMsg(r?.message || 'Seat license required.', false);
+    }
+
+    $('btnCopy').onclick = async () => {
+      const id = $('mid').textContent.trim();
+      if (!id || id === '—') return;
+      try {
+        await navigator.clipboard.writeText(id);
+        setMsg('Machine ID copied.', true);
+      } catch (_) {
+        setMsg('Could not copy. Select and copy Machine ID manually.', false);
+      }
+    };
+
+    $('btnExport').onclick = async () => {
+      const r = await api?.exportMachineRequest?.();
+      if (!r?.ok) {
+        setMsg(r?.message || 'Export cancelled or failed.', false);
+        return;
+      }
+      setMsg('Machine request saved: ' + r.path, true);
+    };
+
+    $('btnImport').onclick = async () => {
+      setMsg('Importing…', false);
+      const r = await api?.importSeatLicense?.();
+      if (!r?.ok) {
+        setMsg(r?.message || 'Import cancelled or failed.', false);
+        return;
+      }
+      setMsg('Seat license applied. Reloading…', true);
+    };
+
+    refresh().catch((e) => setMsg(e.message || String(e), false));
   </script>
 </body>
 </html>

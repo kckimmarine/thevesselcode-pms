@@ -1175,15 +1175,33 @@ const TVC_DefectReport = (function () {
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
-    /** HQ — Initial Reply·Approve·Phase 4 (목록 Submitted도 Phase 2 편집 허용) */
+    /** HQ — HQ reply export 전까지 Modify (Approved 포함) */
     function canModifyDfHqRow(row) {
         if (!row || !getState().user || !isHq()) return false;
         if (row.status === TVC_DefectCase.Status.CLOSED) return false;
-        if (row.approved_at || row.approved_by) return false;
-        if (TVC_DefectCase.isPhase2Editable(row)) return true;
-        if (TVC_DefectCase.isPhase4Editable(row)) return true;
-        if (dfApprovalState(row).canApproveNow) return true;
-        return false;
+        if (TVC_DefectCase.isHqReplyExported(row)) return false;
+        const shipSubmitted = !!(row.confirmed_at || row.confirmed_by || row.phase1_locked || row.submitted_at
+            || row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+            || row.status === TVC_DefectCase.Status.COMPANY_REVIEWED);
+        return shipSubmitted;
+    }
+
+    function canEditDfCompanyReply(row, forceView) {
+        if (forceView || !isHq() || !row) return false;
+        if (TVC_DefectCase.isHqReplyExported(row)) return false;
+        if (row.status === TVC_DefectCase.Status.CLOSED) return false;
+        const shipSubmitted = !!(row.confirmed_at || row.confirmed_by || row.phase1_locked || row.submitted_at
+            || row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
+            || row.status === TVC_DefectCase.Status.COMPANY_REVIEWED);
+        return shipSubmitted;
+    }
+
+    function canSaveDfHqInitialReply(row) {
+        return canEditDfCompanyReply(row, false);
+    }
+
+    function hqSuperintendentApprovalLabel(user) {
+        return TVC_RBAC.getRankLabel(user) || 'Superintendent';
     }
 
     /** Submitted / Approved — Ship's Comments 등 선박 확인 섹션만 Modify */
@@ -1199,7 +1217,26 @@ const TVC_DefectReport = (function () {
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
+    function dfModifyDisabledTitle(row) {
+        if (!row || canOpenDfModifyRow(row)) return '';
+        if (isHq()) {
+            if (TVC_DefectCase.isHqReplyExported(row)) return 'HQ reply exported — modify not available';
+            return 'Modify not available';
+        }
+        const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (st === 'Submitted') return 'Submitted — modify not available';
+        if (st === 'Approved') return 'Approved — modify not available';
+        return 'Modify not available';
+    }
+
     function canOpenDfModifyRow(row) {
+        if (!row || !getState().user) return false;
+        if (!isHq()) {
+            const st = TVC_DefectCase.listWorkflowStatus(row);
+            if (st === 'Submitted' || st === 'Approved') return false;
+        } else if (TVC_DefectCase.isHqReplyExported(row)) {
+            return false;
+        }
         return canModifyDfListRow(row) || canModifyDfShipCommentsOnly(row) || canModifyDfHqRow(row);
     }
 
@@ -1273,9 +1310,14 @@ const TVC_DefectReport = (function () {
             if (el) el.classList.toggle('hidden', !show);
         };
         setDis('dfBtnDetail', !row);
-        const modifiableStatus = !!(row && (TVC_DefectCase.canModifyListWorkflow(row) || canModifyDfShipCommentsOnly(row)));
-        setVis('dfBtnModify', modifiableStatus);
+        setVis('dfBtnModify', !!row);
         setDis('dfBtnModify', !row || !canOpenDfModifyRow(row));
+        const dfModBtn = document.getElementById('dfBtnModify');
+        if (dfModBtn) {
+            const modTip = row ? dfModifyDisabledTitle(row) : '';
+            if (modTip) dfModBtn.setAttribute('title', modTip);
+            else dfModBtn.removeAttribute('title');
+        }
         setDis('dfBtnDelete', !(row && canDeleteDfListRow(row)) && !checkedRows.some(canDeleteDfListRow));
         setDis('dfBtnConfirm', !canConfirm && !(row && isDfListRowConfirmable(row)));
 
@@ -1751,13 +1793,14 @@ const TVC_DefectReport = (function () {
         const isConfirmed = !!(row.confirmed_at || row.confirmed_by);
         const isApproved = !!(row.approved_at || row.approved_by);
         const editMode = s._defectMode !== 'view';
-        const canConfirmNew = isDefectReportConfirmable(row);
-        const canUnconfirmNow = editMode && isConfirmed && !isApproved
+        const hq = isHq();
+        const hqPreExport = hq && !TVC_DefectCase.isHqReplyExported(row);
+        const canConfirmNew = !hq && isDefectReportConfirmable(row);
+        const canUnconfirmNow = !hq && editMode && isConfirmed && !isApproved
             && !!user && TVC_RBAC.canConfirmDepartment(user, row.department);
         const canConfirmNow = canConfirmNew || canUnconfirmNow;
-        // HQ 작성분: Reported만 있어도 Approve 가능 (Confirmed/Submitted 불필요)
-        const canApproveNow = !isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
-            && (isConfirmed || TVC_RBAC.canHqDirectApprove(user, row));
+        const canApproveNow = hqPreExport && editMode && !!user && TVC_RBAC.canApproveHqReport(user)
+            && (isConfirmed || TVC_RBAC.canHqDirectApprove(user, row) || isApproved);
         return {
             isConfirmed,
             isApproved,
@@ -1766,7 +1809,9 @@ const TVC_DefectReport = (function () {
             confirmedByVal: isConfirmed
                 ? (TVC_RBAC.resolveConfirmByLabel?.(row.confirmed_by, row.department, user) || '')
                 : '',
-            approvedByVal: isApproved ? 'Company' : '',
+            approvedByVal: isApproved
+                ? (row.approved_by || hqSuperintendentApprovalLabel(user))
+                : '',
         };
     }
 
@@ -1784,7 +1829,7 @@ const TVC_DefectReport = (function () {
                 <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
             </div>
             <div class="wr-maint-approval-item${!forPrint && canApproveNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="dfApprovedBy"${isApproved ? ' checked' : ''}${approveDis}> Approved by</label>
+                <label class="wr-maint-chk"><input type="checkbox" id="dfApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${forPrint ? '' : ' onchange="TVC_DefectReport.dfApprovedByToggle()"'}> Approved by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
             </div>
         </section>`;
@@ -1994,10 +2039,18 @@ const TVC_DefectReport = (function () {
         const id = s._defectCaseId;
         const user = s.user;
         if (!id || !user) return;
+        const row = await TVC_DefectCaseService.get(id);
+        if (!row) return;
         const cfCb = document.getElementById('dfConfirmedBy');
         const apCb = document.getElementById('dfApprovedBy');
         const doConfirm = cfCb?.checked && !cfCb.disabled;
         const doApprove = apCb?.checked && !apCb.disabled;
+        const doUnapprove = apCb && !apCb.disabled && !apCb.checked
+            && (row.approved_at || row.approved_by)
+            && isHq() && !TVC_DefectCase.isHqReplyExported(row);
+        if (doUnapprove) {
+            await TVC_DefectCaseService.saveApprovalMeta(user, id, { unapprove: true });
+        }
         if (doConfirm || doApprove) {
             await TVC_DefectCaseService.saveApprovalMeta(user, id, { confirm: doConfirm, approve: doApprove });
         }
@@ -2014,7 +2067,7 @@ const TVC_DefectReport = (function () {
         const canEditP1 = !forceView && TVC_DefectCase.isPhase1Editable(row)
             && (!hq || row.status === TVC_DefectCase.Status.DRAFT || row.visible_in_list === false);
         const canEditShipInitial = canEditP1;
-        const canEditCompanyReply = !forceView && hq && TVC_DefectCase.isPhase2Editable(row);
+        const canEditCompanyReply = canEditDfCompanyReply(row, forceView);
         const canEditShipComments = canEditDfShipCommentsSection(row, forceView);
         const canEditShipVerify = canEditShipComments;
         const canEditShoreSupport = canEditShipInitial || canEditShipComments;
@@ -2062,16 +2115,17 @@ const TVC_DefectReport = (function () {
         if (fromListNav || fromHistoryNav) {
             actionsClass += ' df-modal-actions-split';
             const canModifyRow = canOpenDfModifyRow(row);
+            const modifyTitle = esc(dfModifyDisabledTitle(row));
             const navBtns = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>`;
             const printBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.printDefectModal()">Print</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.previewDefectModal()">Preview</button>`;
             const closeBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button>`;
             let centerBtns = '';
-            if (canModifyRow && (fromListNav || fromHistoryNav)) {
-                centerBtns = forceView
-                    ? `<button type="button" class="btn" onclick="TVC_DefectReport.modifyDefectModal()">Modify</button>`
-                    : `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>
+            if (forceView) {
+                centerBtns = `<button type="button" class="btn" onclick="TVC_DefectReport.modifyDefectModal()"${canModifyRow ? '' : ' disabled'}${modifyTitle ? ` title="${modifyTitle}"` : ''}>Modify</button>`;
+            } else if (canModifyRow) {
+                centerBtns = `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.cancelDefectModalEdit()">Cancel</button>`;
             }
             actionsHtml = `<div class="df-modal-actions-left">${navBtns}</div>
@@ -2124,8 +2178,17 @@ const TVC_DefectReport = (function () {
 
     async function openCase(id, mode, opts = {}) {
         const s = getState();
-        let row = opts.row || (s.defectCases || []).find(c => c.id === id);
-        if (!row) row = await TVC_DefectCaseService.get(id);
+        let row = opts.row || null;
+        if (!row && opts.keepDraft && s._dfCaseId === id && s._dfDraft) {
+            row = (s.defectCases || []).find(c => c.id === id) || null;
+        } else {
+            const fromDb = await TVC_DefectCaseService.get(id);
+            if (fromDb) {
+                row = fromDb;
+                upsertDefectCaseInState(fromDb);
+            }
+        }
+        if (!row) row = (s.defectCases || []).find(c => c.id === id);
         if (!row) await TVC_Dialog.alert('Case not found.');
         const scroll = opts.preserveScroll ? captureDefectModalScroll() : null;
         const caseChanged = s._defectCaseId !== id;
@@ -2245,27 +2308,32 @@ const TVC_DefectReport = (function () {
         const s = getState();
         const id = s._defectCaseId;
         if (!id) return;
-        const row = await TVC_DefectCaseService.get(id);
+        let row = await TVC_DefectCaseService.get(id);
         if (!row) return;
-        const form = captureForm();
+        captureForm();
         try {
             await applyDfApprovalFromUi();
         } catch (e) {
             await TVC_Dialog.alert(e.message || e.code || 'Approval failed');
             return;
         }
+        row = await TVC_DefectCaseService.get(id) || row;
+        if (isHq() && canSaveDfHqInitialReply(row)) return saveHqReply();
         if (isHq() && TVC_DefectCase.isPhase4Editable(row)) return saveHqPhase4();
-        if (isHq() && TVC_DefectCase.isPhase2Editable(row)) return saveHqReply();
-        if (isHq() && dfApprovalState(row).canApproveNow) {
+        if (isHq() && canModifyDfHqRow(row)) {
             await refresh();
             await reopenDefectCaseAfterSave(id);
-            await TVC_Dialog.alert('Report approved.');
+            await TVC_Dialog.alert('Saved.');
             return;
         }
         if (!isHq() && canModifyDfShipCommentsOnly(row)) return saveShipCommentsFieldsModal();
         if (!isHq() && TVC_DefectCase.isShipVerificationEditable(row)) return saveShipVerificationModal();
         if (!isHq() && TVC_DefectCase.isPhase3Editable(row)) return saveShipPhase3();
-        return saveDraft();
+        try {
+            return await saveDraft();
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || e.code || 'Save failed');
+        }
     }
 
     async function saveShipCommentsFieldsModal() {
@@ -2368,6 +2436,12 @@ const TVC_DefectReport = (function () {
                     company_comment: form.company_comment,
                     company_attachments: form.company_attachments,
                 });
+            }
+            s._dfSavedToList = true;
+            const saved = await TVC_DefectCaseService.get(id);
+            if (saved) {
+                upsertDefectCaseInState(saved);
+                syncDfDraftFromRow(saved);
             }
             await refresh();
             await reopenDefectCaseAfterSave(id);
@@ -2498,12 +2572,48 @@ const TVC_DefectReport = (function () {
         openDefectReportPrint({ print: false });
     }
 
+    function dfApprovedByToggle() {
+        const apCb = document.getElementById('dfApprovedBy');
+        if (!apCb || apCb.disabled) return;
+        const s = getState();
+        const row = getDefectModalRow();
+        if (!row?.id) return;
+        const user = s.user;
+        if (!user || !TVC_RBAC.isHqAccount(user)) return;
+        const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const superLabel = hqSuperintendentApprovalLabel(user);
+
+        if (!apCb.checked) {
+            if ((row.approved_at || row.approved_by) && !TVC_DefectCase.isHqReplyExported(row)) {
+                if (input) input.value = '';
+                return;
+            }
+            if (row.approved_at || row.approved_by) {
+                apCb.checked = true;
+                if (input) input.value = row.approved_by || superLabel;
+                return;
+            }
+            if (input) input.value = '';
+            return;
+        }
+
+        if (row.approved_at || row.approved_by) {
+            if (input) input.value = row.approved_by || superLabel;
+            return;
+        }
+        if (input) input.value = superLabel;
+    }
+
     async function dfReportConfirmByToggle() {
         const cfCb = document.getElementById('dfConfirmedBy');
         if (!cfCb || cfCb.disabled) return;
         const s = getState();
         const row = getDefectModalRow();
         if (!row) return;
+        if (isHq()) {
+            cfCb.checked = !!(row.confirmed_at || row.confirmed_by);
+            return;
+        }
         const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
         const user = s.user;
         if (!user) return;
@@ -2664,7 +2774,7 @@ const TVC_DefectReport = (function () {
     return {
         init, renderInbox, renderTab, openCase, openCaseFromList, openCaseFromNav, openNewFromJob, openNewBlank,
         saveDraft, saveModal, submitCase, saveHqReply, saveShipPhase3, saveHqPhase4, startWork,
-        printCase, printDefectModal, previewDefectModal, dfReportConfirmByToggle, closeModal, closeDefectModal, requestCloseModal, confirmCancelNew, captureForm, uploadAttachment, removeAttachment,
+        printCase, printDefectModal, previewDefectModal, dfReportConfirmByToggle, dfApprovedByToggle, closeModal, closeDefectModal, requestCloseModal, confirmCancelNew, captureForm, uploadAttachment, removeAttachment,
         toggleDfGroupPick, toggleDfJobPick, toggleDfJobRowPick, pickDfGroup, pickDfJob, pickDfJobForRow,
         clearDfJob, clearDfJobRow, addDfJobRow, removeDfJobRow, dfGroupPickSearch, dfJobPickSearch, dfJobRowPickSearch,
         filteredCases, statusLabel, defectListRows,

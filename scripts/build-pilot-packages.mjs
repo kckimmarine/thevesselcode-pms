@@ -1,4 +1,4 @@
-/* Build Windows NSIS installers for each Pilot SKU + embed license */
+/* Build Windows NSIS installers for each Pilot SKU (seat license — no unbound embed) */
 import { spawnSync } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -24,18 +24,26 @@ function run(cmd, args, env = {}) {
 }
 
 run('node', ['scripts/generate-license-keys.mjs']);
+// Dev/unbound seeds still useful for local Electron; packaged apps use sku.json only.
 run('node', ['scripts/issue-license.mjs', '--all', '--months', '3']);
 
 const cfgDir = path.join(root, 'build', 'electron-builder');
+const stampDir = path.join(root, 'build', 'sku-stamps');
 fs.mkdirSync(cfgDir, { recursive: true });
+fs.mkdirSync(stampDir, { recursive: true });
 
 for (const sku of Object.keys(SKUS)) {
     const def = SKUS[sku];
-    const licenseSrc = path.join(root, 'build', 'licenses', sku, 'license.json');
-    if (!fs.existsSync(licenseSrc)) {
-        console.error('Missing license', licenseSrc);
-        process.exit(1);
-    }
+    const stamp = {
+        sku: def.sku,
+        companyId: def.companyId,
+        vesselId: def.vesselId || null,
+        productName: def.productName,
+        label: def.label,
+    };
+    const stampSrc = path.join(stampDir, `${sku}.json`);
+    fs.writeFileSync(stampSrc, JSON.stringify(stamp, null, 2));
+
     const cfgPath = path.join(cfgDir, `${sku}.json`);
     // Per-SKU appId + install dir so Master/Engine/Deck/HQ can all sit on one PC
     const config = {
@@ -43,8 +51,9 @@ for (const sku of Object.keys(SKUS)) {
         appId: def.appId || `com.thevesselcode.tvc-pms.${sku.toLowerCase()}`,
         productName: def.productName,
         executableName: def.executableName || def.productName,
+        // Identity only — runnable seat license is applied after install (per PC).
         extraResources: [
-            { from: licenseSrc.replace(/\\/g, '/'), to: 'license.json' },
+            { from: stampSrc.replace(/\\/g, '/'), to: 'sku.json' },
         ],
         artifactName: `TVC-PMS-${sku}-\${version}-Setup.\${ext}`,
         directories: {
@@ -73,6 +82,7 @@ for (const sku of Object.keys(SKUS)) {
 }
 
 console.log('\nPilot packages written under dist/');
+console.log('Packaged apps require a seat license (see docs/seat-license.md).');
 const dist = path.join(root, 'dist');
 if (fs.existsSync(dist)) {
     for (const f of fs.readdirSync(dist).filter(n => n.endsWith('.exe'))) {

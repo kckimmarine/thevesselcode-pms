@@ -89,9 +89,25 @@ const TVC_Inventory = (function () {
         rec.price = (rec.price === '' || rec.price == null) ? null : Number(rec.price);
         if (!rec.universal_code) rec.universal_code = universalCodeFor(rec.name);
 
-        // part_no 중복 방지 (자기 자신 제외)
+        let vesselId = rec.vessel_id;
+        if (typeof TVC_MasterVesselScope !== 'undefined') {
+            vesselId = await TVC_MasterVesselScope.resolve(user, {
+                vesselId: rec.vessel_id,
+                selectedVesselId: spare.selectedVesselId,
+            });
+            rec.vessel_id = vesselId;
+        }
+
+        // part_no 중복 방지 — 동일 선박 내에서만 (자기 자신 제외)
         const all = await TVC_DB.getAll('spare_parts');
-        if (all.some(s => s.id !== rec.id && (s.part_no || '').toLowerCase() === rec.part_no.toLowerCase())) {
+        if (all.some(s => {
+            if (s.id === rec.id) return false;
+            if ((s.part_no || '').toLowerCase() !== rec.part_no.toLowerCase()) return false;
+            if (typeof TVC_MasterVesselScope !== 'undefined') {
+                return TVC_MasterVesselScope.belongs(s, vesselId);
+            }
+            return true;
+        })) {
             throw Object.assign(new Error(`Part No "${rec.part_no}" 는 이미 존재합니다.`), { code: 'DUP' });
         }
 

@@ -252,12 +252,25 @@ const TVC_Space = (function () {
     function getUiFeatures(user) {
         const base = { ...TVC_RBAC.getUiFeatures(user) };
         if (!user) return base;
+        if (TVC_RBAC.isAdminAccount?.(user) || user.account_type === 'ADMIN') {
+            base.showDataXfer = true;
+            base.showAppUpdateAdmin = true;
+            base.showOnlineSync = false;
+            base.showSpareTab = false;
+            base.showRunningHours = false;
+            base.showUpdateWorkPlan = false;
+            base.showModifyOriginalPlan = false;
+            base.canEditRunningHours = false;
+            base.showCaptainDashboard = false;
+            return base;
+        }
         if (user.account_type === 'HQ') {
             base.showRunningHours = true;
             base.canEditRunningHours = true;
             base.showSpareTab = true;
             base.showDataXfer = true;
             base.showOnlineSync = true;
+            base.showAppUpdateImport = true;
             return base;
         }
 
@@ -318,11 +331,14 @@ const TVC_Space = (function () {
         } else {
             base.showSpareTab = !isDeckVesselMode(user);
         }
+        // HQ / Vessel may Import App Update packages (app binary only — not Master/History)
+        base.showAppUpdateImport = true;
         return base;
     }
 
     function getModeBadge(user) {
         if (!user) return '—';
+        if (TVC_RBAC.isAdminAccount?.(user) || user.account_type === 'ADMIN') return 'Admin Mode';
         if (TVC_RBAC.isHqAccount(user)) return 'HQ Mode';
         if (isCaptainHub(user)) return 'Vessel Mode - Master';
         const station = getStation(user);
@@ -334,6 +350,7 @@ const TVC_Space = (function () {
     }
 
     function canSwitchDepartmentView(user) {
+        if (TVC_RBAC.isAdminAccount?.(user)) return false;
         return TVC_RBAC.isHqAccount(user) || isCaptainHub(user);
     }
 
