@@ -11887,9 +11887,56 @@ const TVC_App = (function () {
         if (typeof TVC_SpareMasterExcel === 'undefined') await TVC_Dialog.alert('SPARE Master Export를 사용할 수 없습니다.');
         try {
             const department = requireAppDepartment();
-            await TVC_SpareMasterExcel.exportToFile({ department, ...masterVesselOpts() });
+            await TVC_SpareMasterExcel.exportToFile({ department, simplifyCodes: true, ...masterVesselOpts() });
+            if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache();
+            await refreshAll();
         } catch (e) {
             await TVC_Dialog.alert(e.message || 'Export failed');
+        }
+    }
+
+    async function exportSpareMasterSetupTemplate() {
+        if (!canSpareMasterExcel()) await TVC_Dialog.alert(spareMasterExcelDeniedMessage());
+        if (typeof TVC_SpareMasterExcel === 'undefined') await TVC_Dialog.alert('SPARE Master Export를 사용할 수 없습니다.');
+        const ok = await TVC_Dialog.confirm({
+            message: 'Export SPARE Master setup template?\n\n'
+                + '· Code = GG-EE-III (e.g. 01-01-001; no Equipment → 02-00-001)\n'
+                + '· SPARE_ID cleared · ROB/Work = 0\n'
+                + '· For new vessel or sister-ship Excel editing',
+        });
+        if (!ok) return;
+        try {
+            const department = requireAppDepartment();
+            await TVC_SpareMasterExcel.exportSetupTemplate({ department, ...masterVesselOpts() });
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || 'Export failed');
+        }
+    }
+
+    async function renumberSpareMasterCodes() {
+        if (!canSpareMasterExcel()) await TVC_Dialog.alert(spareMasterExcelDeniedMessage());
+        if (typeof TVC_SpareCode === 'undefined') await TVC_Dialog.alert('Spare code module unavailable.');
+        const ok = await TVC_Dialog.confirm({
+            message: 'Renumber all spare codes to GG-EE-III format?\n\n'
+                + 'Example: MAIN BEARING → 01-01-001, 01-01-002 …\n'
+                + 'No Equipment → 02-00-001, 02-00-002 …\n'
+                + 'Consumption / Requisition history stays linked (spare ID).\n'
+                + 'Displayed codes in old reports may differ.',
+        });
+        if (!ok) return;
+        try {
+            const department = requireAppDepartment();
+            const opts = masterVesselOpts();
+            let vesselId = opts.vesselId || opts.selectedVesselId;
+            if (!vesselId && typeof TVC_MasterVesselScope !== 'undefined') {
+                vesselId = await TVC_MasterVesselScope.resolve(TVC_Auth.getCurrentUser(), opts);
+            }
+            const r = await TVC_SpareCode.renumberVessel(vesselId, { department });
+            if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache();
+            await refreshAll();
+            await TVC_Dialog.success(`Renumbered ${r.updated} / ${r.total} spare codes (${department}).`);
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || 'Renumber failed');
         }
     }
 
@@ -11904,14 +11951,18 @@ const TVC_App = (function () {
         if (!file) return;
         if (typeof TVC_SpareMasterExcel === 'undefined') await TVC_Dialog.alert('SPARE Master Import를 사용할 수 없습니다.');
         const backupHint = '권장: Import 전 If Necessary → Database Backup & Restore로 SPARE 백업을 먼저 수행하세요.';
-        if (!await TVC_Dialog.confirm({ message: `Import SPARE Master Excel?\n\n${file.name}\n\nGroup Headers, Equipment Headers, and Spare Parts will be updated.\n${backupHint}\n\nContinue?` })) return;
+        if (!await TVC_Dialog.confirm({ message: `Import SPARE Master Excel?\n\n${file.name}\n\nGroup Headers, Equipment Headers, and Spare Parts will be updated.\nCodes use GG-EE-III (Group-Equipment-Item).\n${backupHint}\n\nContinue?` })) return;
         try {
             const department = requireAppDepartment();
-            const r = await TVC_SpareMasterExcel.importFromFile(file, user, { department, ...masterVesselOpts() });
+            const r = await TVC_SpareMasterExcel.importFromFile(file, user, { department, simplifyCodes: true, ...masterVesselOpts() });
             if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache();
             await refreshAll();
             const vesselLine = r.vessel_id ? `\nVessel: ${r.vessel_id}` : '';
-            await TVC_Dialog.alert(`Import 완료${vesselLine}\n\nSpare Parts: ${r.parts}행 (신규 ${r.created}, 수정 ${r.updated})\nGroups: ${r.groups} · Equipment: ${r.equipment}`);
+            const codeLine = r.codesRenumbered ? `\nCodes renumbered: ${r.codesRenumbered}` : '';
+            const renameLine = r.groupRenamed
+                ? `\nGroup renamed: ${r.groupRenamed} (jobs ${r.groupRenameJobs || 0}, headers ${r.groupRenameGroups || 0}, spares ${r.groupRenameSpares || 0})`
+                : '';
+            await TVC_Dialog.alert(`Import 완료${vesselLine}\n\nSpare Parts: ${r.parts}행 (신규 ${r.created}, 수정 ${r.updated})\nGroups: ${r.groups} · Equipment: ${r.equipment}${codeLine}${renameLine}`);
         } catch (e) {
             await TVC_Dialog.alert(e.message || e.code || 'Import failed');
         }
@@ -11984,7 +12035,8 @@ const TVC_App = (function () {
         masterVesselOpts,
         exportPmsMasterExcel, triggerPmsMasterImport, importPmsMasterExcel,
         canSpareMasterExcel, spareMasterExcelDeniedMessage,
-        exportSpareMasterExcel, triggerSpareMasterImport, importSpareMasterExcel,
+        exportSpareMasterExcel, exportSpareMasterSetupTemplate, renumberSpareMasterCodes,
+        triggerSpareMasterImport, importSpareMasterExcel,
         confirmPlanUpdate, closePlanUpdateModal, printTabList, printCurrentTab,
         doSubmit, doExecute, doApprove, doConfirm,
         handleLogin, handleLogout, handleExport, handleImport, handleHubImport, handleDefectImport, handlePostponeImport, handleWorkPermitImport,

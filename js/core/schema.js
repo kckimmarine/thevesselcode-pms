@@ -157,11 +157,13 @@ const TVC_SpareSchema = (function () {
      *  @property {number} [standardStock]   - 기준/청구 재고 (저장: standard_stock)
      *  @property {number} [workingQty]     - 사용(장착) 중 수량 (저장: qty_working)
      *  @property {string} [partClass]       - G/L (저장: part_class) — Legal(L), General(G)
-     *  @property {string} [inventoryNumbering] - SPICS Numbering (01-001-01)
+     *  @property {string} [inventoryNumbering] - SPICS Code (GG-EE-III, e.g. 01-01-001)
      *  @property {string} [drawingPartNo]   - Part Number / Code Number
      *  @property {string} [dwgNo]           - Drawing No. (저장: dwg_no)
      *  @property {string} [shipComponentId] - 연결 장비/섹션
      *  @property {string} [parentEquipmentID] - 부모 장비 ID (CSV Equipment Header)
+     *  @property {string} [equipment] - Equipment (SORT-1) — 그룹 내 장비 구분
+     *  @property {number} [equipmentNo] - Equipment block no (EE in GG-EE-III, 1-99; 0 = none)
      *  @property {string} location
      *  @property {string} [group] - Original/Actual Plan GROUP (사용자 지정)
      *  @property {boolean} isCritical
@@ -201,6 +203,8 @@ const TVC_SpareSchema = (function () {
             dwgNo: '',
             shipComponentId: '',
             parentEquipmentID: '',
+            equipment: '',
+            equipmentNo: 0,
             location: '',
             group: '',
             isCritical: false,
@@ -266,6 +270,8 @@ const TVC_SpareSchema = (function () {
             dwgNo: textField(row.dwg_no ?? row.dwgNo ?? row.drawing_no ?? row.drawingNo),
             shipComponentId: row.ship_component_id || row.shipComponentId || '',
             parentEquipmentID: row.parent_equipment_id || row.parentEquipmentID || '',
+            equipment: textField(row.equipment || row.item_sort1 || row.itemSort1),
+            equipmentNo: intStock(row.equipment_no ?? row.equipmentNo ?? 0),
             location: row.location || row.storage_location || '',
             maker: row.maker || row.vendor_comment || '',
             model: row.model || row.modelType || '',
@@ -315,6 +321,9 @@ const TVC_SpareSchema = (function () {
             drawing_no: textField(p.dwgNo),
             ship_component_id: String(p.shipComponentId || '').trim(),
             parent_equipment_id: String(p.parentEquipmentID || '').trim(),
+            equipment: String(p.equipment || '').trim(),
+            equipment_no: intStock(p.equipmentNo ?? p.equipment_no ?? 0),
+            item_sort1: String(p.equipment || '').trim() || undefined,
             location: String(p.location || '').trim(),
             group: String(p.group || '').trim(),
             is_critical: !!p.isCritical,
