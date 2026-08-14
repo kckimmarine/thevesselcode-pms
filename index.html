@@ -80,7 +80,7 @@
         </div>
     </main>
 
-    <footer class="login-footer">v1.0 &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
+    <footer class="login-footer"><span id="loginAppVersion">v1.0.0</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
 </div>
 
 <div id="appShell" class="hidden">
@@ -299,7 +299,7 @@
                     </div>
                 </div>
             </div>
-            <p class="hist-legend">D: Defect Report · M: Maintenance · P: Postponed · ⚠: Critical Equipment · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · SC: Ship's Comment · CC: Company's Comment · AT: Attachment</p>
+            <p class="hist-legend">D: Defect Report · M: Maintenance · P: Postponed · ⚠: Critical Equipment · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · AT: Attachment · Spare Data: consumed spare line count</p>
             <div class="sheet-table-wrap list-table-scroll-wrap">
                 <table class="sheet-table hist-table hist-table-history-list">
                     <thead><tr>
@@ -315,10 +315,9 @@
                         <th class="hist-flag-h" title="Repair Request">RR</th>
                         <th class="hist-flag-h" title="Conducted by Shore Support">SS</th>
                         <th class="hist-flag-h" title="Defect Cleared">DC</th>
-                        <th class="hist-flag-h" title="Ship's Comment">SC</th>
-                        <th class="hist-flag-h" title="Company's Comment">CC</th>
                         <th class="hist-at-h hist-at-ship-h" title="Ship's Attachment"><span class="hist-th-stack"><span>Ship's</span><span>AT</span></span></th>
                         <th class="hist-at-h hist-at-company-h" title="Company's Attachment"><span class="hist-th-stack"><span>Company's</span><span>AT</span></span></th>
+                        <th class="hist-spare-data-h"><span class="hist-th-stack"><span>Spare</span><span>Data</span></span></th>
                     </tr></thead>
                     <tbody id="historyBody"></tbody>
                 </table>
@@ -397,24 +396,27 @@
 <div id="spareAssessmentModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeAssessmentModal()">
     <div class="modal-box wide"><div id="spareAssessmentBody"></div></div>
 </div>
-<div id="spareHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeHistoryModal()">
-    <div class="modal-box wide"><div id="spareHistoryBody"></div></div>
+<div id="spareHistoryModal" class="modal hidden">
+    <div class="modal-box wide menu-hist-modal"><div id="spareHistoryBody"></div></div>
 </div>
 <div id="spareItemHistoryModal" class="modal hidden">
     <div class="modal-box wp-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_SpareMenu.closeSpareItemHistoryModal()">×</button>
         <div id="spareItemHistoryBody"></div>
     </div>
 </div>
-<div id="spareSyncModal" class="modal hidden" onclick="if(event.target===this)TVC_SpareMenu.closeSpareSyncMenu()">
+<div id="spareSyncModal" class="modal hidden">
     <div class="modal-box spare-sync-modal" onclick="event.stopPropagation()"><div id="spareSyncBody"></div></div>
 </div>
-<div id="menuXferModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeMenuXferMenu()">
+<div id="menuXferModal" class="modal hidden">
     <div class="modal-box spare-sync-modal" onclick="event.stopPropagation()"><div id="menuXferBody"></div></div>
 </div>
-<div id="menuHistoryModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeMenuHistoryModal()">
-    <div class="modal-box wide" onclick="event.stopPropagation()"><div id="menuHistoryBody"></div></div>
+<div id="adminRegistryModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeAdminRegistryModal()">
+    <div class="modal-box spare-sync-modal menu-xfer-wide" onclick="event.stopPropagation()"><div id="adminRegistryBody"></div></div>
 </div>
-<div id="masterBackupModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeMasterBackupModal()">
+<div id="menuHistoryModal" class="modal hidden">
+    <div class="modal-box wide menu-hist-modal"><div id="menuHistoryBody"></div></div>
+</div>
+<div id="masterBackupModal" class="modal hidden">
     <div class="modal-box spare-sync-modal" onclick="event.stopPropagation()">
         <button type="button" class="modal-x" onclick="TVC_App.closeMasterBackupModal()" aria-label="Close">×</button>
         <h3 class="spare-sync-title">Database Backup &amp; Restore</h3>
@@ -657,10 +659,11 @@
 <script src="js/services/sync.js?v=20260812-hq-defect-import"></script>
 <script src="js/services/masterBackup.js?v=20260813-vessel-master"></script>
 <script src="js/services/vesselProfileSync.js?v=20260813-vessel-profile"></script>
-<script src="js/services/appUpdate.js?v=20260813-admin-mode"></script>
+<script src="js/services/appUpdate.js?v=20260813-app-version-1"></script>
 <script src="js/services/stationSync.js?v=20260811-monthly-export"></script>
 <script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
 <script src="js/services/fleet.js?v=20260813-hq-fleet4"></script>
+<script src="js/services/adminRegistry.js?v=20260813-admin-registry-crud"></script>
 <script src="js/services/masterVesselScope.js?v=20260813-vessel-master"></script>
 <script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
@@ -669,7 +672,7 @@
 <script src="js/ui/workPermit.js?v=20260811-wrspare-cos-dot"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260804-pms-scope"></script>
-<script src="js/app.js?v=20260813-admin-mode"></script>
+<script src="js/app.js?v=20260813-app-version-1"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

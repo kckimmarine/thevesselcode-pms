@@ -1192,8 +1192,12 @@ const TVC_WorkPermitReport = (function () {
                     ${fld('Plan Date', inp('plan_date', row.plan_date || row.report_date, 'date'))}
                     ${fld('Reported Date', inp('report_date', row.report_date, 'date'))}
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByLabel(row))}" readonly>`)}
-                    ${fld('PMS Group No.', `<div id="wpGroupPickSlot">${renderWpGroupPick(row, ro)}</div>`, 'wr-maint-span-all')}
                 </div>
+                ${TVC_App.renderWrPmsGroupCriticalRow({
+                    pmsInner: `<div id="wpGroupPickSlot">${renderWpGroupPick(row, ro)}</div>`,
+                    criticalLabel: TVC_App.jobCriticalEquipmentDisplay(job, hdr?.pmsGroupNo || wpVal(row, 'pms_group_no', '')),
+                    forPrint,
+                })}
                 <div id="wpJobRowsSection">${renderWpJobRowsBlock(row, ro)}</div>
                 ${fld('Job Name', inp('job_name', row.job_name || job?.job_detail || ''), 'wr-maint-span-all wr-maint-grid-gap')}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">

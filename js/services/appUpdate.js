@@ -11,12 +11,24 @@ const TVC_AppUpdate = (function () {
     }
 
     function currentAppVersion() {
+        return '1.0.0';
+    }
+
+    async function resolveAppVersion() {
         try {
             if (typeof window !== 'undefined' && window.tvcElectron?.getAppInfo) {
-                /* async filled by caller when needed */
+                const info = await window.tvcElectron.getAppInfo();
+                if (info?.version) return String(info.version);
             }
         } catch (_) { /* ignore */ }
-        return '2.0.0';
+        try {
+            const res = await fetch('package.json', { cache: 'no-store' });
+            if (res.ok) {
+                const pkg = await res.json();
+                if (pkg?.version) return String(pkg.version);
+            }
+        } catch (_) { /* ignore */ }
+        return currentAppVersion();
     }
 
     function normalizeManifest(raw = {}) {
@@ -211,6 +223,7 @@ const TVC_AppUpdate = (function () {
         JSON_NAME,
         isAdminUser,
         currentAppVersion,
+        resolveAppVersion,
         buildZip,
         parseFile,
         detectInZip,

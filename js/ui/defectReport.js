@@ -1378,6 +1378,25 @@ const TVC_DefectReport = (function () {
         return defectListRows();
     }
 
+    function defectListNavBounds() {
+        const list = defectNavList();
+        if (!list.length) return { atFirst: true, atLast: true };
+        const curId = getState()._defectCaseId;
+        let i = list.findIndex(r => r.id === curId);
+        if (i < 0) i = 0;
+        return { atFirst: i <= 0, atLast: i >= list.length - 1 };
+    }
+
+    function defectNavButtonsHtml() {
+        const s = getState();
+        if (s._dfNavSource === 'history' && TVC_App?.histNavButtonsHtml) {
+            return TVC_App.histNavButtonsHtml('TVC_DefectReport.navDefectModal(-1)', 'TVC_DefectReport.navDefectModal(1)');
+        }
+        const { atFirst, atLast } = defectListNavBounds();
+        return `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)"${atFirst ? ' disabled' : ''}>&laquo; Previous</button>
+            <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)"${atLast ? ' disabled' : ''}>Next &raquo;</button>`;
+    }
+
     async function navDefectModal(dir) {
         const s = getState();
         if (s._dfNavSource === 'history') {
@@ -1389,8 +1408,7 @@ const TVC_DefectReport = (function () {
         const curId = getState()._defectCaseId;
         let i = list.findIndex(r => r.id === curId);
         if (i < 0) i = 0; else i += dir;
-        if (i < 0) { await TVC_Dialog.alert('This is the first defect report.'); return; }
-        if (i >= list.length) { await TVC_Dialog.alert('This is the last defect report.'); return; }
+        if (i < 0 || i >= list.length) return;
         const mode = getState()._defectMode === 'view' ? 'view' : (getState()._defectMode || 'edit');
         openCase(list[i].id, mode);
     }
@@ -1750,7 +1768,7 @@ const TVC_DefectReport = (function () {
                     </div>
                 </div>
                 ${fld('', ta('company_initial_reply', '', 4, p2ro), 'wr-maint-span-all')}
-                <textarea class="hidden" data-df="permit_to_work" aria-hidden="true">${esc(dfVal(row, 'permit_to_work', dfVal(row, 'company_initial_reply', '')))}</textarea>
+                ${forPrint ? '' : `<textarea class="hidden" data-df="permit_to_work" aria-hidden="true">${esc(dfVal(row, 'permit_to_work', dfVal(row, 'company_initial_reply', '')))}</textarea>`}
                 <div class="df-checks df-post-checks">
                     <span class="df-checks-label">REQUIRE TO REPORT TO</span>
                     ${reportChk('report_to_class', 'Class', p2ro)}
@@ -1890,8 +1908,12 @@ const TVC_DefectReport = (function () {
                     ${fld('Occurred Date', inp('work_date', row.report_date, 'date'))}
                     ${fld('Reported Date', inp('report_date', row.report_date, 'date'))}
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByLabel(row))}" readonly>`)}
-                    ${fld('PMS Group No.', renderDfGroupPick(row, ro), 'wr-maint-span-all')}
                 </div>
+                ${TVC_App.renderWrPmsGroupCriticalRow({
+                    pmsInner: renderDfGroupPick(row, ro),
+                    criticalLabel: TVC_App.jobCriticalEquipmentDisplay(job, dfVal(row, 'pms_group_no', hdr?.pmsGroupNo || '')),
+                    forPrint,
+                })}
                 ${renderDfJobRowsBlock(row, ro)}
                 ${fld('Job Name', inp('job_name', ''), 'wr-maint-span-all wr-maint-grid-gap')}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
@@ -2116,8 +2138,7 @@ const TVC_DefectReport = (function () {
             actionsClass += ' df-modal-actions-split';
             const canModifyRow = canOpenDfModifyRow(row);
             const modifyTitle = esc(dfModifyDisabledTitle(row));
-            const navBtns = `<button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(-1)">&laquo; Previous</button>
-                <button type="button" class="btn" onclick="TVC_DefectReport.navDefectModal(1)">Next &raquo;</button>`;
+            const navBtns = defectNavButtonsHtml();
             const printBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.printDefectModal()">Print</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.previewDefectModal()">Preview</button>`;
             const closeBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button>`;
@@ -2222,10 +2243,14 @@ const TVC_DefectReport = (function () {
         if (body) body.innerHTML = renderModalBody(getDefectModalRow() || row, s._defectMode);
         const dfModal = document.getElementById('defectReportModal');
         const dfOpen = dfModal && !dfModal.classList.contains('hidden');
+        const wpStack = opts.stackOverWp || opts.swapOpts?.overWorkProcedure || TVC_App?.isWorkProcedureHistNav?.();
         if (opts.swapHide && window.TVC_App?.swapHistoryModals) {
-            TVC_App.swapHistoryModals('defectReportModal', opts.swapHide);
+            TVC_App.swapHistoryModals('defectReportModal', opts.swapHide, opts.swapOpts || {});
         } else if (!dfOpen) {
-            document.getElementById('defectReportModal')?.classList.remove('hidden');
+            dfModal?.classList.remove('hidden');
+            if (wpStack) TVC_App.applyModalOverWorkProcedure?.('defectReportModal');
+        } else if (wpStack) {
+            TVC_App.applyModalOverWorkProcedure?.('defectReportModal');
         }
         if ((s._dfPage || '1') === '2') {
             const forceView = s._defectMode === 'view';
@@ -2528,8 +2553,7 @@ const TVC_DefectReport = (function () {
         const page2Inner = TVC_SpareMenu.buildWrSparePage2UiPrintHtml(st, usedParts, meta);
         const page2Body = `${renderDfApprovalHtml(row, { forPrint: true })}${page2Inner}`;
         if (opts.innerOnly) return page2Body;
-        const title = `Defect Report ${row.case_no || ''}`.trim();
-        return renderDfPrintShell(title, '2', page2Body);
+        return renderDfPrintShell(defectReportModalTitle(row), '2', page2Body);
     }
 
     function buildDefectReportPrintBody(row) {
@@ -2768,6 +2792,14 @@ const TVC_DefectReport = (function () {
         s._dfNewSession = false;
         s._dfSavedToList = false;
         s._dfPage = '1';
+        const dfModal = document.getElementById('defectReportModal');
+        if (dfModal) {
+            dfModal.style.zIndex = '';
+            TVC_App?.clearModalOverWorkProcedure?.('defectReportModal');
+        }
+        if (TVC_App?.refreshWorkProcedureIfOpen) {
+            try { TVC_App.refreshWorkProcedureIfOpen(); } catch (_) { /* keep WP open */ }
+        }
         if (s.currentTab === 'history') renderTab();
     }
 

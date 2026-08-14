@@ -18,6 +18,29 @@ node scripts/issue-license.mjs --sku VESSEL_ENGINE --machine <32-char-id> --out 
 
 5. Ship: **Import seat license…** → select `license.json` → app reloads.
 
+## Term policy (TVC)
+
+| Phase | Term | When |
+|-------|------|------|
+| New company / pilot | **3 months** | First contract, low trust |
+| Established trust | **12 months** | After payment history, renewals on time |
+
+Issue with `--months`:
+
+```bash
+# New company — 3 months
+node scripts/issue-license.mjs --request machine-request.json --out license.json --months 3
+
+# Trusted company — 12 months
+node scripts/issue-license.mjs --request machine-request.json --out license.json --months 12
+```
+
+**Renewal:** Before `expiresAt`, collect payment → issue a **new** seat for the **same** machineId (same `--request` or `--machine`) with new `--months`. Ship imports the new `license.json`.
+
+**Expired:** App shows license expired; no Master/History wipe — only re-import a valid seat.
+
+Track in TVC ledger: company, PC, SKU, machineId, issued, expires, months, paid (Y/N).
+
 ## Rules
 
 | Item | Behavior |

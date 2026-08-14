@@ -20,6 +20,7 @@ const TVC_App = (function () {
         components: [], jobs: [], groups: [], spares: [], reports: [], defectCases: [], workPermits: [],
         idx: null,
         selectedGroupKey: null,
+        spareSelectedGroupKey: null,
         treeSearch: '',
         collapsedTreeDepts: {},
         actualFilter: 'total',        // total | overdue | due30 | postponed | critical
@@ -46,6 +47,8 @@ const TVC_App = (function () {
         _wrJobItems: null,
         _wrPostSaveView: false,
         _wrFromHistory: false,
+        _wrOverWorkProcedure: false,
+        _histNavJobId: null,
         department: 'ENGINE',
         station: null,                     // CCR | ECR | CAPTAIN
         captainView: 'deck',               // deck | engine (Captain Hub dashboard)
@@ -123,6 +126,71 @@ const TVC_App = (function () {
         if (busy && message && errEl && !errEl.textContent) errEl.textContent = '';
     }
 
+    function formatLoginError(err) {
+        const msg = String(err?.message || err || '').trim();
+        if (/^internal error\.?$/i.test(msg)) {
+            return 'Local database error (Internal error). Close all TVC windows, restart the app, or sign in with the correct Department. If it persists, contact TVC support.';
+        }
+        return msg || 'An error occurred while signing in.';
+    }
+
+    /** Limit Department dropdown to licensed login modes (Engine SKU → Engine only). */
+    function applyLoginDeptForLicense(lic) {
+        const sel = document.getElementById('loginDept');
+        const field = sel?.closest('.login-field');
+        if (!sel) return;
+        const allModes = [
+            { value: 'MASTER', label: 'Master' },
+            { value: 'ENGINE', label: 'Engine' },
+            { value: 'DECK', label: 'Deck' },
+        ];
+        if (!lic?.enforced || !lic?.ok) {
+            sel.innerHTML = `<option value="">— Select Department —</option>`
+                + allModes.map(m => `<option value="${m.value}">${m.label}</option>`).join('');
+            if (field) field.classList.remove('hidden');
+            return;
+        }
+        if (lic.allowAdmin) {
+            if (field) field.classList.add('hidden');
+            sel.value = '';
+            return;
+        }
+        if (lic.allowHq) {
+            if (field) field.classList.add('hidden');
+            sel.value = '';
+            return;
+        }
+        const allowed = (lic.loginModes || []).map(m => String(m).toUpperCase()).filter(Boolean);
+        const modes = allModes.filter(m => allowed.includes(m.value));
+        if (!modes.length) {
+            sel.innerHTML = `<option value="">— Select Department —</option>`
+                + allModes.map(m => `<option value="${m.value}">${m.label}</option>`).join('');
+            if (field) field.classList.remove('hidden');
+            return;
+        }
+        if (field) field.classList.remove('hidden');
+        if (modes.length === 1) {
+            sel.innerHTML = `<option value="${modes[0].value}" selected>${modes[0].label}</option>`;
+            sel.value = modes[0].value;
+            return;
+        }
+        sel.innerHTML = `<option value="">— Select Department —</option>`
+            + modes.map(m => `<option value="${m.value}">${m.label}</option>`).join('');
+    }
+
+    function clearStaleLoginSession(lic) {
+        try {
+            const user = TVC_Auth.getCurrentUser();
+            if (!user || !lic?.enforced || !lic?.ok) return;
+            if (lic.allowAdmin || lic.allowHq) return;
+            const mode = String(user.login_mode || '').toUpperCase();
+            const allowed = (lic.loginModes || []).map(m => String(m).toUpperCase());
+            if (mode && allowed.length && !allowed.includes(mode)) {
+                TVC_Auth.logout();
+            }
+        } catch (_) { /* ignore */ }
+    }
+
     async function runDeferredBoot() {
         if (state._deferredBootRunning || state._deferredBootDone) return;
         state._deferredBootRunning = true;
@@ -193,12 +261,48 @@ const TVC_App = (function () {
     }
 
     // ── Boot ─────────────────────────────────────────────────────────
+    /** package.json 1.0.0 → display v1.0.0 ; 1.100.0 → v1.100.0 */
+    function formatDisplayVersion(ver) {
+        const raw = String(ver || '').trim().replace(/^v/i, '');
+        if (!raw) return 'v1.0.0';
+        const parts = raw.split('.');
+        const major = parts[0] || '1';
+        const minor = parts[1] || '0';
+        const patch = parts[2] != null && parts[2] !== '' ? parts[2] : '0';
+        return `v${major}.${minor}.${patch}`;
+    }
+
+    async function resolveAppVersion() {
+        try {
+            if (window.tvcElectron?.getAppInfo) {
+                const info = await window.tvcElectron.getAppInfo();
+                if (info?.version) return String(info.version);
+            }
+        } catch (_) { /* ignore */ }
+        try {
+            const res = await fetch('package.json', { cache: 'no-store' });
+            if (res.ok) {
+                const pkg = await res.json();
+                if (pkg?.version) return String(pkg.version);
+            }
+        } catch (_) { /* ignore */ }
+        return '1.0.0';
+    }
+
+    async function syncLoginAppVersion() {
+        const ver = await resolveAppVersion();
+        const el = document.getElementById('loginAppVersion');
+        if (el) el.textContent = formatDisplayVersion(ver);
+        return ver;
+    }
+
     async function boot() {
         bootReady = false;
         bootReadyPromise = new Promise(resolve => { bootReadyResolve = resolve; });
         setLoginBusy(true, 'Preparing system…');
         startBootWatchdog();
         try {
+            try { await syncLoginAppVersion(); } catch (e) { console.warn('[TVC] version', e); }
             if (typeof TVC_License !== 'undefined') {
                 try {
                     const lic = await TVC_License.refresh();
@@ -210,6 +314,8 @@ const TVC_App = (function () {
                                 + (lic.vesselId ? ` · ${lic.vesselId}` : '')
                                 + (lic.expiresAt ? ` · until ${String(lic.expiresAt).slice(0, 10)}` : '');
                         }
+                        applyLoginDeptForLicense(lic);
+                        clearStaleLoginSession(lic);
                     }
                 } catch (e) { console.warn('[TVC_License]', e); }
             }
@@ -306,7 +412,7 @@ const TVC_App = (function () {
         } catch (e) {
             console.error('[TVC] boot failed', e);
             const errEl = document.getElementById('loginErr');
-            if (errEl) errEl.textContent = e.message || '시스템 초기화 중 오류가 발생했습니다.';
+            if (errEl) errEl.textContent = formatLoginError(e);
             showLogin();
         } finally {
             clearTimeout(_bootWatchdog);
@@ -784,6 +890,17 @@ const TVC_App = (function () {
         clearActualFilterKeysCache();
         state._outstandingReqLoaded = false;
         state._outstandingReqCache = null;
+        try {
+            const consumeVesselId = masterVesselId || state.user?.vessel_id || null;
+            const consumeLogs = consumeVesselId
+                ? await TVC_Inventory.listConsumeLogs(consumeVesselId).catch(() => [])
+                : await TVC_DB.getAll('consume_logs').catch(() => []);
+            state._consumeLogById = Object.fromEntries(
+                consumeLogs.filter(masterBelongs).map(l => [String(l.id), l])
+            );
+        } catch (_) {
+            state._consumeLogById = {};
+        }
     }
 
     /** seed JSON 기준 Due Date — run-hour 리셋 시 Original Plan 복원용 */
@@ -836,6 +953,7 @@ const TVC_App = (function () {
         }
         state.captainView = state.department === 'ENGINE' ? 'engine' : 'deck';
         state.selectedGroupKey = null;
+        state.spareSelectedGroupKey = null;
         state.search = '';
         updateUserBar(state.user);
         // HQ는 선박 선택을 먼저 확정해야 선박별 Run-hour scope / 데이터 필터가 올바르게 적용됨
@@ -844,6 +962,20 @@ const TVC_App = (function () {
             state.jobs = [];
             state.components = [];
             state.groups = [];
+            state.adminSearch = '';
+            try {
+                await TVC_AdminRegistry.load();
+                const sel = TVC_AdminRegistry.getSelected();
+                state.selectedAdminCompanyId = sel.companyId || TVC_AdminRegistry.listCompanies()[0]?.company_id || null;
+                state.selectedAdminVesselId = sel.vesselId || null;
+                if (state.selectedAdminCompanyId && !state.selectedAdminVesselId) {
+                    const first = TVC_AdminRegistry.listVessels({ companyId: state.selectedAdminCompanyId })[0];
+                    state.selectedAdminVesselId = first?.vessel_id || null;
+                }
+            } catch (e) {
+                console.warn('[TVC_AdminRegistry]', e);
+                await TVC_Dialog.alert('Admin registry (admin/registry.json) load failed.\n' + (e.message || e));
+            }
         } else if (isHq) {
             state.fleet = await TVC_Fleet.ensureFleet();
             state.selectedVesselId = TVC_Fleet.getSelectedId();
@@ -1135,6 +1267,7 @@ const TVC_App = (function () {
             try { localStorage.setItem('tvc_hq_dept_view', dept); } catch (_) {}
         }
         state.selectedGroupKey = null;
+        state.spareSelectedGroupKey = null;
         if (state._allWorkPermits) {
             state.workPermits = filterWorkPermitsForView(state._allWorkPermits);
         }
@@ -1949,7 +2082,6 @@ const TVC_App = (function () {
         state.focusedSpareId = null;
         if (modStateSpare()) modStateSpare().focusedId = null;
         if (state.currentTab === 'actual') renderActualPlan();
-        else if (state.currentTab === 'spare') TVC_SpareMenu.syncSpareGroupSelection?.();
     }
 
     // ── Job table (Work Plan) ──────────────────────────────────────
@@ -2071,6 +2203,40 @@ const TVC_App = (function () {
         if (j?.is_critical_equipment === true) return 'Yes';
         if (j?.is_critical_equipment === false) return 'No';
         return '';
+    }
+
+    function jobCriticalEquipmentDisplay(job, groupFallback = '') {
+        if (job) {
+            if (job.is_critical_equipment === true) return 'Yes';
+            if (job.is_critical_equipment === false) return 'No';
+            groupFallback = groupFallback || job.group || '';
+        }
+        if (groupFallback && TVC_SpareMenu?.isGroupCriticalEquipmentYes?.(state, groupFallback)) return 'Yes';
+        return '—';
+    }
+
+    function renderWrPmsGroupCriticalRow(opts = {}) {
+        const {
+            pmsInner,
+            criticalLabel = '—',
+            pmsLabel = 'PMS Group No.',
+            forPrint = false,
+        } = opts;
+        const crit = String(criticalLabel || '').trim() || '—';
+        const critEmpty = crit === '—';
+        const critDisplay = forPrint
+            ? `<input class="wr-ro" value="${esc(crit)}" readonly tabindex="-1">`
+            : `<span class="spare-gh-value${critEmpty ? ' empty' : ''}">${esc(crit)}</span>`;
+        return `<div class="wr-maint-pms-crit-row spare-gh-row spare-gh-row-primary spare-gh-row-plan-split">
+            <div class="spare-gh-field spare-gh-field-wide spare-gh-field-span3">
+                <span class="spare-gh-label">${esc(pmsLabel)}</span>
+                <div class="wr-pms-crit-pms-inner">${pmsInner}</div>
+            </div>
+            <div class="spare-gh-field">
+                <span class="spare-gh-label">Critical Equipment</span>
+                ${critDisplay}
+            </div>
+        </div>`;
     }
 
     function parseJobCriticalEditValue(raw) {
@@ -2380,14 +2546,29 @@ const TVC_App = (function () {
 
     function menuModel() {
         if (state.user && TVC_RBAC.isAdminAccount?.(state.user)) {
+            const st = typeof TVC_AdminRegistry !== 'undefined' ? TVC_AdminRegistry.stats() : { companies: 0, vessels: 0 };
             return [
                 {
                     key: 'admin',
                     tone: 'necessary',
-                    title: 'Admin — App Update',
+                    title: 'Admin — Contract & Deploy',
                     items: [
                         {
-                            label: 'Package App Update (Setup.exe → ZIP for HQ / Vessel)',
+                            label: `Contract registry · ${st.companies} companies · ${st.vessels} vessels (select in list)`,
+                            textOnly: true,
+                        },
+                        {
+                            label: 'Add / edit company (registry)',
+                            tag: 'B',
+                            action: "TVC_App.openAdminCompanyForm('add')",
+                        },
+                        {
+                            label: 'Add / edit vessel (registry)',
+                            tag: 'B',
+                            action: "TVC_App.openAdminVesselForm('add')",
+                        },
+                        {
+                            label: 'Package App Update (Setup.exe → ZIP → send to company HQ)',
                             tag: 'A',
                             action: 'TVC_App.openMenuXferMenu()',
                         },
@@ -3322,6 +3503,15 @@ const TVC_App = (function () {
                 VESSEL_MASTER: false,
             };
             _menuXfer.appUpdateFiles = {};
+            try {
+                if (typeof TVC_AppUpdate?.resolveAppVersion === 'function') {
+                    _menuXfer.appUpdateVersion = await TVC_AppUpdate.resolveAppVersion();
+                } else {
+                    _menuXfer.appUpdateVersion = await resolveAppVersion();
+                }
+            } catch (_) {
+                _menuXfer.appUpdateVersion = '1.0.0';
+            }
         }
         renderMenuXferModal();
         showModal('menuXferModal');
@@ -3410,7 +3600,10 @@ const TVC_App = (function () {
         }
         const skus = _menuXfer.appUpdateSkus || {};
         const files = _menuXfer.appUpdateFiles || {};
-        const ver = _menuXfer.appUpdateVersion || (typeof TVC_AppUpdate.currentAppVersion === 'function' ? '2.0.1' : '2.0.1');
+        const ver = _menuXfer.appUpdateVersion
+            || (typeof TVC_AppUpdate !== 'undefined' && TVC_AppUpdate.currentAppVersion
+                ? TVC_AppUpdate.currentAppVersion()
+                : '1.0.0');
         const notes = _menuXfer.appUpdateNotes || '';
         const skuRows = ['HQ_OFFICE', 'VESSEL_ENGINE', 'VESSEL_DECK', 'VESSEL_MASTER'].map(sku => {
             const checked = skus[sku] ? 'checked' : '';
@@ -4327,19 +4520,401 @@ const TVC_App = (function () {
     function renderMenuCards(host) {
         if (!host) return;
         const f = state.user ? TVC_Space.getUiFeatures(state.user) : {};
+        if (TVC_RBAC.isAdminAccount?.(state.user)) {
+            host.innerHTML = renderAdminHomePanel()
+                + renderSectionCard('Admin actions', renderMenuFlowPanel(menuModel(), f), {
+                    className: 'tvc-section-pms-flow',
+                });
+            return;
+        }
         host.innerHTML = renderSectionCard('PMS Work Flow', renderMenuFlowPanel(menuModel(), f), {
             className: 'tvc-section-pms-flow',
         });
+    }
+
+    function renderAdminHomePanel() {
+        const company = state.selectedAdminCompanyId
+            && typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.getCompany(state.selectedAdminCompanyId)
+            : null;
+        const vessel = company && state.selectedAdminVesselId
+            ? TVC_AdminRegistry.getVessel(state.selectedAdminCompanyId, state.selectedAdminVesselId)
+            : null;
+        const st = typeof TVC_AdminRegistry !== 'undefined' ? TVC_AdminRegistry.stats() : { companies: 0, vessels: 0 };
+        const editCompanyBtn = company
+            ? `<button type="button" class="btn" onclick="TVC_App.openAdminCompanyForm('edit')">Edit company</button>`
+            : '';
+        const editVesselBtn = vessel
+            ? `<button type="button" class="btn" onclick="TVC_App.openAdminVesselForm('edit')">Edit vessel</button>`
+            : '';
+        return renderSectionCard('Selected contract', `
+            <p class="spare-sync-note muted">Registry: ${st.companies} companies · ${st.vessels} vessels (scales to 100+). Search/select in the left list.</p>
+            <div class="spare-sync-actions" style="margin:8px 0;flex-wrap:wrap;gap:8px">
+                <button type="button" class="btn btn-green" onclick="TVC_App.openAdminCompanyForm('add')">+ Add company</button>
+                ${editCompanyBtn}
+                <button type="button" class="btn btn-green" onclick="TVC_App.openAdminVesselForm('add')">+ Add vessel</button>
+                ${editVesselBtn}
+            </div>
+            <table class="menu-xfer-profile-table" style="width:100%;margin:8px 0;border-collapse:collapse">
+                <tbody>
+                    <tr><th style="text-align:left;padding:4px 8px">Company</th>
+                        <td style="padding:4px 8px">${esc(company ? `${company.name} (${company.company_id})` : '—')}</td></tr>
+                    <tr><th style="text-align:left;padding:4px 8px">Vessel</th>
+                        <td style="padding:4px 8px">${esc(vessel ? vessel.name : '—')}</td></tr>
+                    <tr><th style="text-align:left;padding:4px 8px">IMO</th>
+                        <td style="padding:4px 8px">${esc(vessel?.imo_no || '—')}</td></tr>
+                    <tr><th style="text-align:left;padding:4px 8px">Delivery</th>
+                        <td style="padding:4px 8px">${esc(vessel?.delivery || '—')}</td></tr>
+                </tbody>
+            </table>
+            <p class="spare-sync-note muted">Improve HQ/Vessel with <code>npm run electron:hq|engine|deck|master</code>, then package App Update here and email <strong>one ZIP per company HQ</strong>.</p>
+        `, { className: 'tvc-section-admin-selected' });
+    }
+
+    function renderAdminContractList() {
+        const hqCol = document.getElementById('hqLeftCol');
+        const body = document.getElementById('fleetTableBody');
+        if (!body || !hqCol) return;
+        hqCol.classList.remove('hidden');
+        document.getElementById('cmaxsMenuBody')?.classList.add('hq-mode');
+
+        const head = hqCol.querySelector('.fleet-list-head');
+        if (head) head.textContent = '📋 Companies · Vessels';
+        const search = document.getElementById('fleetSearch');
+        if (search) {
+            search.placeholder = 'Search company / vessel / IMO…';
+            search.oninput = () => TVC_App.setAdminSearch(search.value);
+            if (search.value !== (state.adminSearch || '')) search.value = state.adminSearch || '';
+        }
+        const toolbar = hqCol.querySelector('.fleet-list-toolbar');
+        if (toolbar) {
+            const companies = typeof TVC_AdminRegistry !== 'undefined'
+                ? TVC_AdminRegistry.listCompanies({ includeInactive: true })
+                : [];
+            const companyBtns = companies.map(c => {
+                const active = c.company_id === state.selectedAdminCompanyId ? ' active' : '';
+                const off = c.status === 'inactive' ? ' (inactive)' : '';
+                return `<button type="button" class="fleet-view-btn${active}"
+                    onclick="TVC_App.selectAdminCompany('${escAttr(c.company_id)}')">${esc(c.name_en || c.company_id)}${esc(off)}</button>`;
+            }).join('');
+            toolbar.innerHTML = (companyBtns || '<span class="muted">No companies in registry</span>')
+                + `<button type="button" class="fleet-view-btn" title="Add company"
+                    onclick="TVC_App.openAdminCompanyForm('add')">+ Co</button>`;
+        }
+        const thead = hqCol.querySelector('.fleet-table thead tr');
+        if (thead) {
+            thead.innerHTML = '<th>No</th><th>Ship</th><th>IMO</th><th>Company</th>';
+        }
+
+        const rows = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.listVessels({
+                search: state.adminSearch || '',
+                companyId: state.selectedAdminCompanyId || '',
+                includeInactive: true,
+            })
+            : [];
+        if (!rows.length) {
+            body.innerHTML = `<tr><td colspan="4" class="muted" style="text-align:center">No vessels found</td></tr>
+                <tr><td colspan="4" style="text-align:center;padding:8px">
+                    <button type="button" class="btn btn-green" onclick="TVC_App.openAdminVesselForm('add')">+ Add vessel</button>
+                </td></tr>`;
+            return;
+        }
+        body.innerHTML = rows.map((v, i) => {
+            const sel = (v.vessel_id === state.selectedAdminVesselId
+                && v.company_id === state.selectedAdminCompanyId) ? ' selected' : '';
+            const inactive = v.status === 'inactive' ? ' <span class="muted">(inactive)</span>' : '';
+            return `<tr class="fleet-row${sel}" onclick="TVC_App.selectAdminVessel('${escAttr(v.company_id)}','${escAttr(v.vessel_id)}')">
+                <td>${i + 1}</td>
+                <td><strong>${esc(v.name)}</strong>${inactive}</td>
+                <td>${esc(v.imo_no || '—')}</td>
+                <td>${esc(v.company_id)}</td>
+            </tr>`;
+        }).join('') + `<tr><td colspan="4" style="text-align:center;padding:8px">
+                <button type="button" class="btn" onclick="TVC_App.openAdminVesselForm('add')">+ Add vessel</button>
+            </td></tr>`;
+    }
+
+    function setAdminSearch(q) {
+        state.adminSearch = String(q || '');
+        renderAdminContractList();
+    }
+
+    function selectAdminCompany(companyId) {
+        state.selectedAdminCompanyId = String(companyId || '').trim() || null;
+        const vessels = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.listVessels({ companyId: state.selectedAdminCompanyId, includeInactive: true })
+            : [];
+        state.selectedAdminVesselId = vessels[0]?.vessel_id || null;
+        if (typeof TVC_AdminRegistry !== 'undefined') {
+            TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
+        }
+        renderMainMenu();
+    }
+
+    function selectAdminVessel(companyId, vesselId) {
+        state.selectedAdminCompanyId = String(companyId || '').trim() || null;
+        state.selectedAdminVesselId = String(vesselId || '').trim() || null;
+        if (typeof TVC_AdminRegistry !== 'undefined') {
+            TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
+        }
+        renderMainMenu();
+    }
+
+    function closeAdminRegistryModal() {
+        closeModal('adminRegistryModal');
+        state._adminRegForm = null;
+    }
+
+    function adminStatusOptions(selected) {
+        const opts = TVC_AdminRegistry?.STATUS_OPTS || ['active', 'inactive'];
+        return opts.map(s =>
+            `<option value="${escAttr(s)}"${s === selected ? ' selected' : ''}>${esc(s)}</option>`).join('');
+    }
+
+    function renderAdminCompanyForm(mode) {
+        const host = document.getElementById('adminRegistryBody');
+        if (!host) return;
+        const isEdit = mode === 'edit';
+        const company = isEdit && state.selectedAdminCompanyId
+            ? TVC_AdminRegistry.getCompany(state.selectedAdminCompanyId)
+            : null;
+        if (isEdit && !company) {
+            host.innerHTML = '<p class="muted">Select a company in the left list first.</p>';
+            return;
+        }
+        const hqSku = company?.hq_sku || 'HQ_OFFICE';
+        host.innerHTML = `
+            <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
+            <h3 class="spare-sync-title">${isEdit ? 'Edit company' : 'Add company'}</h3>
+            <p class="spare-sync-hint muted">Saved to <code>admin/registry.json</code> and <code>admin/companies/…/company.json</code>.</p>
+            <form class="orig-job-form" id="adminCompanyForm" onsubmit="event.preventDefault();TVC_App.saveAdminCompanyForm()">
+                <label>Company ID
+                    <input name="company_id" required ${isEdit ? 'readonly class="wr-ro"' : ''}
+                        placeholder="e.g. DAEMYUNG" value="${escAttr(company?.company_id || '')}">
+                </label>
+                <label>Status<select name="status">${adminStatusOptions(company?.status || 'active')}</select></label>
+                <label class="span2">Name (KR)
+                    <input name="name" required placeholder="e.g. 대명상선" value="${escAttr(company?.name || '')}">
+                </label>
+                <label class="span2">Name (EN)
+                    <input name="name_en" placeholder="e.g. Daemyung" value="${escAttr(company?.name_en || '')}">
+                </label>
+                <label>HQ SKU
+                    <input name="hq_sku" value="${escAttr(hqSku)}" placeholder="HQ_OFFICE">
+                </label>
+                <label class="span2">Notes
+                    <textarea name="notes" rows="2" placeholder="Optional contract notes">${esc(company?.notes || '')}</textarea>
+                </label>
+                <div class="orig-job-actions span2">
+                    <button type="button" class="btn" onclick="TVC_App.closeAdminRegistryModal()">Cancel</button>
+                    ${isEdit ? `<button type="button" class="btn btn-red" onclick="TVC_App.deactivateAdminCompany()">Set inactive</button>` : ''}
+                    <button type="submit" class="btn btn-green">${isEdit ? 'Save company' : 'Add company'}</button>
+                </div>
+            </form>`;
+        state._adminRegForm = { type: 'company', mode };
+    }
+
+    function renderAdminVesselForm(mode) {
+        const host = document.getElementById('adminRegistryBody');
+        if (!host) return;
+        const isEdit = mode === 'edit';
+        const companyId = state.selectedAdminCompanyId;
+        const vessel = isEdit && companyId && state.selectedAdminVesselId
+            ? TVC_AdminRegistry.getVessel(companyId, state.selectedAdminVesselId)
+            : null;
+        const companies = TVC_AdminRegistry.listCompanies({ includeInactive: true });
+        if (isEdit && !vessel) {
+            host.innerHTML = '<p class="muted">Select a vessel in the left list first.</p>';
+            return;
+        }
+        if (!companies.length) {
+            host.innerHTML = '<p class="muted">Add a company first.</p>';
+            return;
+        }
+        const companyOpts = companies.map(c =>
+            `<option value="${escAttr(c.company_id)}"${c.company_id === (companyId || companies[0]?.company_id) ? ' selected' : ''}>${esc(c.name)} (${esc(c.company_id)})</option>`).join('');
+        host.innerHTML = `
+            <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
+            <h3 class="spare-sync-title">${isEdit ? 'Edit vessel' : 'Add vessel'}</h3>
+            <p class="spare-sync-hint muted">Saved to registry and <code>admin/companies/…/vessels/…/vessel.json</code>.</p>
+            <form class="orig-job-form" id="adminVesselForm" onsubmit="event.preventDefault();TVC_App.saveAdminVesselForm()">
+                <label class="span2">Company<select name="company_id" ${isEdit ? 'disabled' : ''}>${companyOpts}</select></label>
+                <label>Vessel ID
+                    <input name="vessel_id" required ${isEdit ? 'readonly class="wr-ro"' : ''}
+                        placeholder="e.g. INCHEON CHEMI" value="${escAttr(vessel?.vessel_id || '')}">
+                </label>
+                <label>Status<select name="status">${adminStatusOptions(vessel?.status || 'active')}</select></label>
+                <label class="span2">Name
+                    <input name="name" required value="${escAttr(vessel?.name || '')}">
+                </label>
+                <label>Code<input name="code" placeholder="01" value="${escAttr(vessel?.code || '')}"></label>
+                <label>IMO No<input name="imo_no" placeholder="9297711" value="${escAttr(vessel?.imo_no || '')}"></label>
+                <label>Delivery<input name="delivery" type="date" value="${escAttr(vessel?.delivery || '')}"></label>
+                <label class="span2">Notes
+                    <textarea name="notes" rows="2" placeholder="Optional">${esc(vessel?.notes || '')}</textarea>
+                </label>
+                <div class="orig-job-actions span2">
+                    <button type="button" class="btn" onclick="TVC_App.closeAdminRegistryModal()">Cancel</button>
+                    ${isEdit ? `<button type="button" class="btn btn-red" onclick="TVC_App.deactivateAdminVessel()">Set inactive</button>` : ''}
+                    <button type="submit" class="btn btn-green">${isEdit ? 'Save vessel' : 'Add vessel'}</button>
+                </div>
+            </form>`;
+        state._adminRegForm = { type: 'vessel', mode };
+    }
+
+    async function openAdminCompanyForm(mode) {
+        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
+        if (typeof TVC_AdminRegistry === 'undefined') {
+            await TVC_Dialog.alert('Admin registry module not loaded.');
+            return;
+        }
+        renderAdminCompanyForm(mode === 'edit' ? 'edit' : 'add');
+        showModal('adminRegistryModal');
+    }
+
+    async function openAdminVesselForm(mode) {
+        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
+        if (typeof TVC_AdminRegistry === 'undefined') {
+            await TVC_Dialog.alert('Admin registry module not loaded.');
+            return;
+        }
+        if (mode === 'add' && !state.selectedAdminCompanyId) {
+            const first = TVC_AdminRegistry.listCompanies({ includeInactive: true })[0];
+            if (first) state.selectedAdminCompanyId = first.company_id;
+        }
+        renderAdminVesselForm(mode === 'edit' ? 'edit' : 'add');
+        showModal('adminRegistryModal');
+    }
+
+    async function persistAdminRegistry(successMessage) {
+        const result = await TVC_AdminRegistry.save();
+        if (result.fallback) {
+            await TVC_Dialog.alert(result.message);
+        } else {
+            await TVC_AdminRegistry.load();
+            await TVC_Dialog.success(successMessage || 'Registry saved.');
+        }
+        closeAdminRegistryModal();
+        renderMainMenu();
+    }
+
+    async function saveAdminCompanyForm() {
+        const form = document.getElementById('adminCompanyForm');
+        if (!form) return;
+        const fd = new FormData(form);
+        const isEdit = state._adminRegForm?.mode === 'edit';
+        const input = {
+            _edit: isEdit,
+            company_id: fd.get('company_id'),
+            name: fd.get('name'),
+            name_en: fd.get('name_en'),
+            status: fd.get('status'),
+            hq_sku: fd.get('hq_sku'),
+            notes: fd.get('notes'),
+        };
+        try {
+            const company = TVC_AdminRegistry.upsertCompany(input);
+            state.selectedAdminCompanyId = company.company_id;
+            TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
+            await persistAdminRegistry(isEdit ? 'Company updated.' : 'Company added.');
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
+    }
+
+    async function saveAdminVesselForm() {
+        const form = document.getElementById('adminVesselForm');
+        if (!form) return;
+        const fd = new FormData(form);
+        const isEdit = state._adminRegForm?.mode === 'edit';
+        const companyId = isEdit
+            ? state.selectedAdminCompanyId
+            : String(fd.get('company_id') || '').trim();
+        const input = {
+            _edit: isEdit,
+            vessel_id: fd.get('vessel_id'),
+            name: fd.get('name'),
+            code: fd.get('code'),
+            imo_no: fd.get('imo_no'),
+            delivery: fd.get('delivery'),
+            status: fd.get('status'),
+            notes: fd.get('notes'),
+        };
+        try {
+            const vessel = TVC_AdminRegistry.upsertVessel(companyId, input);
+            state.selectedAdminCompanyId = companyId;
+            state.selectedAdminVesselId = vessel.vessel_id;
+            TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
+            await persistAdminRegistry(isEdit ? 'Vessel updated.' : 'Vessel added.');
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
+    }
+
+    async function deactivateAdminCompany() {
+        const id = state.selectedAdminCompanyId;
+        if (!id) return;
+        if (!await TVC_Dialog.confirm({
+            message: `Set company "${id}" to inactive?\n\nIt stays in registry files but is hidden from active lists.`,
+            kind: 'warning',
+        })) return;
+        try {
+            TVC_AdminRegistry.setCompanyStatus(id, 'inactive');
+            await persistAdminRegistry('Company set to inactive.');
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
+    }
+
+    async function deactivateAdminVessel() {
+        const cid = state.selectedAdminCompanyId;
+        const vid = state.selectedAdminVesselId;
+        if (!cid || !vid) return;
+        if (!await TVC_Dialog.confirm({
+            message: `Set vessel "${vid}" to inactive?\n\nIt stays in registry files but is hidden from active contract lists.`,
+            kind: 'warning',
+        })) return;
+        try {
+            TVC_AdminRegistry.setVesselStatus(cid, vid, 'inactive');
+            await persistAdminRegistry('Vessel set to inactive.');
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
     }
 
     function renderFleetList() {
         const hqCol = document.getElementById('hqLeftCol');
         const body = document.getElementById('fleetTableBody');
         if (!body) return;
+        const isAdmin = state.user && TVC_RBAC.isAdminAccount?.(state.user);
+        if (isAdmin) {
+            renderAdminContractList();
+            return;
+        }
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
         hqCol?.classList.toggle('hidden', !isHq);
         document.getElementById('cmaxsMenuBody')?.classList.toggle('hq-mode', isHq);
         if (!isHq) return;
+
+        // Restore HQ fleet chrome if returning from Admin session in same page lifetime
+        const head = hqCol?.querySelector('.fleet-list-head');
+        if (head) head.textContent = '🚢 Ship List';
+        const search = document.getElementById('fleetSearch');
+        if (search) {
+            search.placeholder = 'Search ship name / IMO No…';
+            search.oninput = () => TVC_App.setFleetSearch(search.value);
+        }
+        const toolbar = hqCol?.querySelector('.fleet-list-toolbar');
+        if (toolbar && !toolbar.querySelector('[data-fview]')) {
+            toolbar.innerHTML = `
+                <button class="fleet-view-btn active" data-fview="all" onclick="TVC_App.setFleetView('all')">View: All</button>
+                <button class="fleet-view-btn" data-fview="selected" onclick="TVC_App.setFleetView('selected')">Selected</button>`;
+        }
+        const thead = hqCol?.querySelector('.fleet-table thead tr');
+        if (thead) {
+            thead.innerHTML = '<th>No</th><th>Ship\'s Name</th><th>IMO No</th><th>Delivery</th>';
+        }
 
         let vessels = TVC_Fleet.getAll();
         const q = (state.fleetSearch || '').toLowerCase();
@@ -4400,7 +4975,12 @@ const TVC_App = (function () {
         document.getElementById('menuMainCol')?.classList.remove('hidden');
         renderMenuCards(mainCards);
         if (sidebarCards) sidebarCards.innerHTML = '';
-        TVC_OutstandingTasks.render();
+        if (TVC_RBAC.isAdminAccount?.(state.user)) {
+            const ot = document.getElementById('outstandingTasksPanel');
+            if (ot) ot.innerHTML = '';
+        } else {
+            TVC_OutstandingTasks.render();
+        }
     }
 
     function setHistView(view) {
@@ -6367,6 +6947,35 @@ const TVC_App = (function () {
         return histEntryUsedParts(entry).filter(p => Number(p.qty_used) > 0).length;
     }
 
+    function resolveHistEntryConsumeLog(entry) {
+        const map = state._consumeLogById || {};
+        if (isHistDefectEntry(entry)) {
+            const dc = entry.defect;
+            if (!dc) return null;
+            if (dc.consume_log_id && map[String(dc.consume_log_id)]) return map[String(dc.consume_log_id)];
+            return Object.values(map).find(l => l.defect_case_id === dc.id) || null;
+        }
+        const r = entry?.report;
+        if (!r) return null;
+        if (r.consume_log_id && map[String(r.consume_log_id)]) return map[String(r.consume_log_id)];
+        return Object.values(map).find(l => l.work_report_id === r.id) || null;
+    }
+
+    /** Work History — Spare Data (Consumption List line count when linked) */
+    function histEntrySpareDataCount(entry) {
+        const log = resolveHistEntryConsumeLog(entry);
+        if (log) {
+            return TVC_SpareMenu.consumeLogTotalData
+                ? TVC_SpareMenu.consumeLogTotalData(log)
+                : (Number(log.line_count) || (log.lines || []).length || 0);
+        }
+        return histEntryPage2SpareCount(entry);
+    }
+
+    function histSpareDataCell(entry) {
+        return `<td class="hist-spare-data">${histEntrySpareDataCount(entry)}</td>`;
+    }
+
     function wrReportForm(report) {
         return report?.report_form || {};
     }
@@ -6427,17 +7036,24 @@ const TVC_App = (function () {
 
     function reportWorkflowStatusLabel(report, item) {
         if (report && !item) return workReportListWorkflowStatus(report);
+        const wf = report ? workReportListWorkflowStatus(report) : null;
+        if (wf === 'Submitted' || wf === 'Approved') return wf;
+        if (wf && (!item || report.job_items?.length === 1)) return wf;
         const status = item
             ? TVC_RBAC.normalizeReportStatus(item.status, report?.is_locked)
             : repSt(report);
-        const wf = report ? workReportListWorkflowStatus(report) : null;
-        if (wf && (!item || report.job_items?.length === 1)) return wf;
         const labels = {
             REPORTED: 'Reported',
             CONFIRMED: 'Confirmed',
             APPROVED: 'Approved',
         };
         return labels[status] || 'Reported';
+    }
+
+    function histWorkflowStatusPillClass(label) {
+        if (label === 'Submitted') return 'warn';
+        if (label === 'Approved' || label === 'Confirmed') return 'ok';
+        return 'warn';
     }
 
     function workHistoryStatusLabel(report, item) {
@@ -6457,6 +7073,7 @@ const TVC_App = (function () {
     function getAppDepartment() { return state.department; }
     function getAppUserDepartment() { return state.user?.department || null; }
     function getSelectedGroupKey() { return state.selectedGroupKey; }
+    function getSpareSelectedGroupKey() { return state.spareSelectedGroupKey; }
     function getAppIdx() { return state.idx; }
     function getAppJobs() { return state.jobs; }
 
@@ -6839,10 +7456,11 @@ const TVC_App = (function () {
                 ${histFlagCell(flags.repairRequest)}
                 ${histFlagCell(flags.shoreSupport)}
                 ${histFlagCell(flags.defectCleared)}
-                ${histFlagCell(flags.shipComment)}
-                ${histFlagCell(flags.companyComment)}
                 ${histAttachmentCell(dc.ship_attachments, atShipClass)}
                 ${histAttachmentCell(dc.company_attachments, atCompanyClass)}
+                ${opts.spareDataCount != null
+                    ? `<td class="hist-spare-data">${opts.spareDataCount}</td>`
+                    : (opts.historyListColumns ? histSpareDataCell({ source: 'defect', defect: dc }) : '')}
             </tr>`;
     }
 
@@ -6879,9 +7497,27 @@ const TVC_App = (function () {
         return 'Reported';
     }
 
+    /** Previous / Next navigation list — job-scoped when opened from Work Procedure */
+    function workHistoryNavEntries() {
+        if (state._histNavJobId) return jobWorkHistoryEntries(state._histNavJobId);
+        return workHistoryEntries();
+    }
+
+    function isWorkProcedureHistNav() {
+        return !!(state._histNavJobId && isModalOpen('workProcedureModal'));
+    }
+
+    function setWorkProcedureHistNavScope(fromWorkProcedure) {
+        if (fromWorkProcedure && state._wpJobId) state._histNavJobId = state._wpJobId;
+    }
+
+    function clearWorkProcedureHistNavScope() {
+        state._histNavJobId = null;
+    }
+
     function getCurrentWrHistEntry() {
         if (!state._wrReportId) return null;
-        return workHistoryEntries().find(entry => {
+        return workHistoryNavEntries().find(entry => {
             if (isHistDefectEntry(entry)) return false;
             if (entry.report.id !== state._wrReportId) return false;
             if (state._wrBatchItemId) return entry.item.maintenance_job_id === state._wrBatchItemId;
@@ -7099,11 +7735,16 @@ const TVC_App = (function () {
         renderWorkHistory();
     }
 
-    function openDefectFromHistory(defectId) {
+    function openDefectFromHistory(defectId, opts = {}) {
         if (!defectId) return;
+        if (opts.fromWorkProcedure) setWorkProcedureHistNavScope(true);
+        else if (!opts.preserveNavScope) clearWorkProcedureHistNavScope();
         state._histSelReportId = histDefectRowKey(defectId);
         syncHistRowSelection({ scrollIntoView: true });
-        TVC_DefectReport.openCaseFromNav(defectId, 'history', 'view', { swapHide: 'workReportModal' });
+        const wpStack = opts.fromWorkProcedure && isModalOpen('workProcedureModal');
+        TVC_DefectReport.openCaseFromNav(defectId, 'history', 'view', wpStack
+            ? { stackOverWp: true, preserveNavScope: true }
+            : { swapHide: 'workReportModal' });
     }
 
     function syncHistRowSelection(opts = {}) {
@@ -7146,24 +7787,32 @@ const TVC_App = (function () {
     }
 
     function openWorkHistoryEntry(entry, opts = {}) {
+        const wpNav = isWorkProcedureHistNav();
         state._histSelReportId = histEntryRowKey(entry);
-        syncHistRowSelection({ scrollIntoView: true });
+        if (!wpNav) syncHistRowSelection({ scrollIntoView: true });
         const navOpts = {
             preservePage: !!opts.preservePage,
             preserveScroll: !!opts.preserveScroll,
+            preserveNavScope: !!opts.preserveNavScope,
         };
+        const swapOpts = { preserveScroll: navOpts.preserveScroll, overWorkProcedure: wpNav };
         if (isHistDefectEntry(entry)) {
-            TVC_DefectReport.openCaseFromNav(entry.defect.id, 'history', 'view', {
-                swapHide: 'workReportModal',
-                ...navOpts,
-            });
+            const defectOpts = { ...navOpts, swapOpts };
+            if (isModalOpen('workReportModal')) {
+                defectOpts.swapHide = 'workReportModal';
+            } else if (wpNav) {
+                defectOpts.stackOverWp = true;
+            } else {
+                defectOpts.swapHide = 'workReportModal';
+            }
+            TVC_DefectReport.openCaseFromNav(entry.defect.id, 'history', 'view', defectOpts);
             return;
         }
         const wrOpts = {
             fromHistory: true,
             keepTab: opts.keepTab || state._wrTab,
-            swapHide: 'defectReportModal',
             ...navOpts,
+            swapOpts,
         };
         if (opts.preserveWrMode && state._wrFromHistory) {
             wrOpts.view = !!(state._wrReadonly || state._wrPostSaveView);
@@ -7171,20 +7820,44 @@ const TVC_App = (function () {
         } else {
             wrOpts.view = true;
         }
+        if (isModalOpen('defectReportModal')) {
+            wrOpts.swapHide = 'defectReportModal';
+        } else if (wpNav && isModalOpen('workReportModal')) {
+            wrOpts.skipModalToggle = true;
+        } else if (wpNav) {
+            wrOpts.fromWorkProcedure = true;
+        } else {
+            wrOpts.swapHide = 'defectReportModal';
+        }
         openWorkReportFromHistory(entry.report.id, entry.item.maintenance_job_id, wrOpts);
     }
 
-    /** Work History 목록 전체(Work Report + Defect) 순서로 Previous / Next */
+    /** Work History modal — Prev/Next boundary (first/last item) */
+    function workHistoryNavBounds() {
+        const list = workHistoryNavEntries();
+        if (!list.length) return { atFirst: true, atLast: true, index: -1 };
+        let i = findCurrentWorkHistoryNavIndex(list);
+        if (i < 0) i = 0;
+        return { atFirst: i <= 0, atLast: i >= list.length - 1, index: i };
+    }
+
+    function histNavButtonsHtml(prevOnclick, nextOnclick) {
+        const { atFirst, atLast } = workHistoryNavBounds();
+        return `<button type="button" class="btn" onclick="${prevOnclick}"${atFirst ? ' disabled' : ''}>&laquo; Previous</button>
+            <button type="button" class="btn" onclick="${nextOnclick}"${atLast ? ' disabled' : ''}>Next &raquo;</button>`;
+    }
+
+    /** Work History 목록 — Previous / Next (job-scoped when opened from Work Procedure) */
     async function navWorkHistoryEntry(dir) {
-        const list = workHistoryEntries();
+        const list = workHistoryNavEntries();
         if (!list.length) return;
         let i = findCurrentWorkHistoryNavIndex(list);
         if (i < 0) i = 0;
         else i += dir;
-        if (i < 0) { await TVC_Dialog.alert('This is the first item.'); return; }
-        if (i >= list.length) { await TVC_Dialog.alert('This is the last item.'); return; }
+        if (i < 0 || i >= list.length) return;
         openWorkHistoryEntry(list[i], {
             preserveWrMode: true,
+            preserveNavScope: true,
             keepTab: state._wrTab,
             preservePage: true,
             preserveScroll: true,
@@ -7406,7 +8079,7 @@ const TVC_App = (function () {
         pruneHistChecked();
         const all = workHistoryEntriesRaw();
         const entries = workHistoryEntries();
-        const colSpan = 16;
+        const colSpan = 15;
         setText('histCount', `${entries.length} / ${all.length} entries`);
         const searchEl = document.getElementById('histSearch');
         if (searchEl && document.activeElement !== searchEl) searchEl.value = state.search || '';
@@ -7483,10 +8156,9 @@ const TVC_App = (function () {
                 ${histFlagCell(flags.repairRequest)}
                 ${histFlagCell(flags.shoreSupport)}
                 ${histFlagCell(flags.defectCleared)}
-                ${histFlagCell(flags.shipComment)}
-                ${histFlagCell(flags.companyComment)}
                 ${histAttachmentCell(f.shipAttachments, 'hist-at-ship')}
                 ${histAttachmentCell(f.companyAttachments, 'hist-at-company')}
+                ${histSpareDataCell(entry)}
             </tr>`;
         }).join('');
         updateHistToolbarState();
@@ -7798,11 +8470,11 @@ const TVC_App = (function () {
                     const desc = dc.outline_maintenance_request || dc.action_taken || '—';
                     const consumption = histEntryPage2SpareCount(entry);
                     const batchTag = entry.isDefectBatchSummary ? '<span class="pill ok" title="Defect Report (multi-job)">B</span> ' : '';
-                    return `<tr class="wp-hist-row wp-hist-row-defect" ondblclick="TVC_App.closeModal('workProcedureModal');TVC_App.openDefectFromHistory('${escAttr(dc.id)}')" title="Double-click to open Defect Report">
+                    return `<tr class="wp-hist-row wp-hist-row-defect" ondblclick="TVC_App.openDefectFromHistory('${escAttr(dc.id)}',{fromWorkProcedure:true})" title="Double-click to open Defect Report">
                 <td class="hist-type ${esc(m.title ? 'hist-type-defect' : '')}"><span class="hist-type-mark">${esc(m.letter)}</span> ${batchTag}</td>
                 <td>${esc(fileNo)}</td>
                 <td>${esc(dt || '—')}</td>
-                <td><span class="pill ${st === 'Approved' || st === 'Confirmed' ? 'ok' : 'warn'}">${esc(st)}</span></td>
+                <td><span class="pill ${histWorkflowStatusPillClass(st)}">${esc(st)}</span></td>
                 <td>${esc(desc)}</td>
                 <td class="num">${consumption}</td>
             </tr>`;
@@ -7812,17 +8484,17 @@ const TVC_App = (function () {
                 const f = item.form || wrReportForm(r);
                 const fileNo = String(f.fileNo || r.report_form?.fileNo || '').trim() || '—';
                 const dt = formatCmaxsHistDate(listReportedDateStr(r));
-                const st = reportWorkflowStatusLabel(r, item);
+                const st = reportWorkflowStatusLabel(r, entry.isBatchSummary ? null : item);
                 const desc = entry.isBatchSummary
                     ? (resolveBatchWrForm(r, item).outline || item.description || r.description || '—')
                     : (item.description || r.description || '—');
                 const consumption = histEntryPage2SpareCount(entry);
                 const openJobId = entry.isBatchSummary ? job.id : item.maintenance_job_id;
-                return `<tr class="wp-hist-row" ondblclick="TVC_App.closeModal('workProcedureModal');TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(openJobId)}')" title="Double-click to open Work Report">
+                return `<tr class="wp-hist-row" ondblclick="TVC_App.openWorkReportFromHistory('${escAttr(r.id)}','${escAttr(openJobId)}',{fromHistory:true,view:true,fromWorkProcedure:true})" title="Double-click to open Work Report">
                 <td class="hist-type ${esc(m.cls)}"><span class="hist-type-mark">${esc(m.letter)}</span></td>
                 <td>${esc(fileNo)}</td>
                 <td>${esc(dt || '—')}</td>
-                <td><span class="pill ${TVC_RBAC.isConfirmedStatus(r.status) || TVC_RBAC.isApprovedStatus(r.status) ? 'ok' : 'warn'}">${esc(st)}</span></td>
+                <td><span class="pill ${histWorkflowStatusPillClass(st)}">${esc(st)}</span></td>
                 <td>${esc(desc)}</td>
                 <td class="num">${consumption}</td>
             </tr>`;
@@ -7832,7 +8504,14 @@ const TVC_App = (function () {
                     <div class="wp-section-head">Work History <span class="muted wp-hist-hint">(double-click row to open report)</span></div>
                     <div class="wp-table-wrap">
                         <table class="wp-table">
-                            <thead><tr><th>Type</th><th>File No</th><th>Reported Date</th><th>Status</th><th>Description</th><th>Consumption</th></tr></thead>
+                            <thead><tr>
+                                <th>Type</th>
+                                <th>File No.</th>
+                                <th><span class="hist-th-stack"><span>Reported</span><span>Date</span></span></th>
+                                <th>Status</th>
+                                <th>Description</th>
+                                <th class="num"><span class="hist-th-stack"><span>Spare</span><span>Data</span></span></th>
+                            </tr></thead>
                             <tbody>${histRows}</tbody>
                         </table>
                     </div>
@@ -8024,8 +8703,10 @@ const TVC_App = (function () {
         state._wrBatchItemId = isBatchView ? null : (item?.maintenance_job_id || job.id);
         state._wrPostSaveView = false;
         state._wrFromHistory = !!opts.fromHistory;
+        if (opts.fromWorkProcedure) setWorkProcedureHistNavScope(true);
+        else if (!opts.preserveNavScope) clearWorkProcedureHistNavScope();
         if (opts.fromHistory) {
-            const histEntry = workHistoryEntries().find(e =>
+            const histEntry = workHistoryNavEntries().find(e =>
                 !isHistDefectEntry(e)
                 && e.report.id === reportId
                 && (e.isBatchSummary
@@ -8065,8 +8746,20 @@ const TVC_App = (function () {
         if (opts.edit) syncPlanBatchChecksFromJobItems(rep.job_items || []);
         const wrModal = document.getElementById('workReportModal');
         const wrOpen = wrModal && !wrModal.classList.contains('hidden');
-        if (opts.swapHide) swapHistoryModals('workReportModal', opts.swapHide);
-        else if (!wrOpen) showModal('workReportModal');
+        const wpStack = isWorkProcedureHistNav();
+        if (opts.skipModalToggle) {
+            if (wpStack) applyModalOverWorkProcedure('workReportModal');
+            state._wrOverWorkProcedure = !!wpStack;
+        } else if (opts.swapHide) {
+            swapHistoryModals('workReportModal', opts.swapHide, opts.swapOpts || {});
+            state._wrOverWorkProcedure = !!(wpStack || opts.swapOpts?.overWorkProcedure);
+        } else {
+            if (!wrOpen) showModal('workReportModal');
+            if (wpStack || opts.fromWorkProcedure) {
+                applyModalOverWorkProcedure('workReportModal');
+                state._wrOverWorkProcedure = true;
+            }
+        }
     }
 
     /** 히스토리 읽기 뷰 → 편집 모드 전환 */
@@ -8245,7 +8938,8 @@ const TVC_App = (function () {
                 isCriticalPostpone: rep ? postponeRequiresCompanyApproval(rep) : jobShowsCriticalEquipmentMark(job),
             });
         }
-        const page1Html = TVC_SpareMenu.renderWrPrintShell(title, '1', page1Body, tone);
+        const printShellOpts = state._wrTab === 'postpone' ? { hidePageTabs: true } : {};
+        const page1Html = TVC_SpareMenu.renderWrPrintShell(title, '1', page1Body, tone, printShellOpts);
         let page2Html = '';
         if (state._wrTab === 'repair' && TVC_SpareMenu.wrHasSparePage2ForPrint(state._wrUsedParts)) {
             const meta = buildWrPage2Meta(job, reportedByName, today);
@@ -9499,8 +10193,12 @@ const TVC_App = (function () {
                     ${fld('Work Date', fieldInp('workDate', today, 'date'))}
                     ${fld('Reported Date', fieldInp('reportDate', today, 'date'))}
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByName)}" readonly>`)}
-                    ${fld('PMS Group No.', roWf('pmsGroupNo', hdr.pmsGroupNo || job.group || ''), 'wr-maint-span-all')}
                 </div>
+                ${renderWrPmsGroupCriticalRow({
+                    pmsInner: roWf('pmsGroupNo', hdr.pmsGroupNo || job.group || ''),
+                    criticalLabel: jobCriticalEquipmentDisplay(job, hdr.pmsGroupNo || job.group),
+                    forPrint,
+                })}
                 ${jobInfoBlock}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
                     ${fld('Maker', roWf('maker', hdr.maker))}
@@ -9562,9 +10260,6 @@ const TVC_App = (function () {
         const roWf = (key, val) => `<input class="wr-ro" data-wf="${key}" value="${esc(wf(key, val))}" readonly tabindex="-1">`;
         const approvedPostponeDefault = rep?.approved_postpone_date || rep?.postpone_date || wf('postponeDate') || '';
         const jobInfoBlock = renderWrJobRowsBlock(job, rep, ro, forPrint);
-        const criticalBanner = isCriticalPostpone
-            ? `<div class="wr-postpone-critical-banner" role="note"><strong>⚠ Critical Equipment</strong> — Company approval required before NEXT DATE is finalized.</div>`
-            : '';
         const approvedPostponeField = isCriticalPostpone && (canApproveNow || isRepApproved)
             ? fld('Approved Postpone Date',
                 forPrint || (isRepApproved && !canApproveNow)
@@ -9576,7 +10271,6 @@ const TVC_App = (function () {
             : '';
 
         return `<div class="wr-maint-form">
-            ${criticalBanner}
             ${renderWrApprovalHtml({
                 canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
                 approvedByVal, confirmedByVal, forPrint,
@@ -9588,8 +10282,12 @@ const TVC_App = (function () {
                     ${fld('Place', fieldInp('place', ''))}
                     ${fld('Reported Date', fieldInp('reportDate', today, 'date'))}
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByName)}" readonly>`)}
-                    ${fld('PMS Group No.', roWf('pmsGroupNo', hdr.pmsGroupNo || job.group || ''), 'wr-maint-span-all')}
                 </div>
+                ${renderWrPmsGroupCriticalRow({
+                    pmsInner: roWf('pmsGroupNo', hdr.pmsGroupNo || job.group || ''),
+                    criticalLabel: jobCriticalEquipmentDisplay(job, hdr.pmsGroupNo || job.group),
+                    forPrint,
+                })}
                 ${jobInfoBlock}
                 <div class="wr-maint-grid wr-maint-grid-4 wr-maint-grid-gap">
                     ${fld('Maker', roWf('maker', hdr.maker))}
@@ -9603,8 +10301,10 @@ const TVC_App = (function () {
                     ${fld('Running Hrs after Last Maint.', fieldInp('rhAfterLastMaint', ''))}
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-2 wr-maint-grid-gap">
-                    ${fld('Original Due Date', `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly>`)}
-                    ${fld('Postpone Date', forPrint ? wrDateUiPrintInput(wf('postponeDate')) : `<input type="date" class="tvc-date-input" data-wf="postponeDate" placeholder="YYYY-MM-DD" value="${esc(wf('postponeDate'))}"${ro ? ' disabled' : ''}>`, 'wr-postpone-date')}
+                    ${fld('Original Due Date', forPrint ? `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly tabindex="-1">` : `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly>`)}
+                    ${fld('Postpone Date', forPrint
+                        ? `<input class="wr-ro" value="${esc(wf('postponeDate') || '')}" readonly tabindex="-1">`
+                        : `<input type="date" class="tvc-date-input" data-wf="postponeDate" placeholder="YYYY-MM-DD" value="${esc(wf('postponeDate'))}"${ro ? ' disabled' : ''}>`, 'wr-postpone-date')}
                 </div>
                 ${approvedPostponeField}
                 ${renderWrReportFooter({
@@ -9966,8 +10666,7 @@ const TVC_App = (function () {
         const canModifyRow = histEntry && canModifyHistEntry(histEntry);
         const canDeleteRow = histEntry && canDeleteHistEntry(histEntry);
         const navBtns = isHist
-            ? `<button class="btn" onclick="TVC_App.navReport(-1)">&laquo; Previous</button>
-               <button class="btn" onclick="TVC_App.navReport(1)">Next &raquo;</button>`
+            ? histNavButtonsHtml('TVC_App.navReport(-1)', 'TVC_App.navReport(1)')
             : '';
         const printBtn = isHist
             ? `<button class="btn" onclick="TVC_App.printWorkReport()">Print</button>
@@ -10109,12 +10808,25 @@ const TVC_App = (function () {
         state._wrReadonly = false;
         state._wrPostSaveView = false;
         state._wrFromHistory = false;
+        const wasOverWp = state._wrOverWorkProcedure;
+        state._wrOverWorkProcedure = false;
         state._wrForm = {};
         state._wrUsedParts = [];
         state._wrJobItems = null;
         state._wrPage = '1';
         state._wrSpareSearch = '';
+        const wrModal = document.getElementById('workReportModal');
+        if (wrModal) wrModal.style.zIndex = '';
+        clearModalOverWorkProcedure('workReportModal');
         closeModal('workReportModal');
+        if (wasOverWp && state._wpJobId && isModalOpen('workProcedureModal')) {
+            refreshWorkProcedureIfOpen();
+        }
+    }
+
+    function refreshWorkProcedureIfOpen() {
+        if (!state._wpJobId || !isModalOpen('workProcedureModal')) return;
+        try { renderWorkProcedureModal(); } catch (_) { /* keep WP open */ }
     }
 
     async function saveWorkReport() {
@@ -10494,6 +11206,7 @@ const TVC_App = (function () {
     async function refreshAll() {
         await loadData();
         rerenderCurrentTab();
+        refreshWorkProcedureIfOpen();
         TVC_RunHours.syncRhToolbarUi();
         syncPlanUpdateUi();
     }
@@ -10547,6 +11260,11 @@ const TVC_App = (function () {
             .map(k => `<td>${flags[k] ? '☑' : '—'}</td>`).join('');
     }
 
+    function printHistFlagCells(flags) {
+        return ['repairRequest', 'shoreSupport', 'defectCleared']
+            .map(k => `<td>${flags[k] ? '☑' : '—'}</td>`).join('');
+    }
+
     function printAttachmentLabel(attachments) {
         const list = Array.isArray(attachments) ? attachments : [];
         return list.length ? `Yes (${list.length})` : '—';
@@ -10563,15 +11281,19 @@ const TVC_App = (function () {
         const fileNoCell = opts.includeFileNo
             ? `<td>${esc(String(dc.file_no || '').trim() || '—')}</td>`
             : '';
+        const flagCells = opts.historyList ? printHistFlagCells(flags) : printFlagCells(flags);
+        const spareCell = opts.historyList
+            ? `<td>${histEntrySpareDataCount({ source: 'defect', defect: dc })}</td>`
+            : '';
         return `${fileNoCell}<td>${esc(cols.jobCode || '—')}</td>
             <td>${esc(cols.sort1 || '')}</td>
             <td>${esc(cols.sort2 || '')}</td>
             ${detailCell}
             <td>${esc(dt || '—')}</td>
             <td>${esc(st)}</td>
-            ${printFlagCells(flags)}
+            ${flagCells}
             <td>${esc(printAttachmentLabel(dc.ship_attachments))}</td>
-            <td>${esc(printAttachmentLabel(dc.company_attachments))}</td>`;
+            <td>${esc(printAttachmentLabel(dc.company_attachments))}</td>${spareCell}`;
     }
 
     const PRINT_DEFECT_HIST_HEAD = `<tr>
@@ -10591,8 +11313,9 @@ const TVC_App = (function () {
     const PRINT_WORK_HIST_HEAD = `<tr>
             <th>Type</th><th>File No</th><th>⚠</th><th>JOB CODE</th><th>SORT-1</th><th>SORT-2</th>
             <th>Reported Date</th><th>Status</th>
-            <th>RR</th><th>SS</th><th>DC</th><th>SC</th><th>CC</th>
+            <th>RR</th><th>SS</th><th>DC</th>
             <th>Ship's AT</th><th>Company's AT</th>
+            <th>Spare Data</th>
         </tr>`;
 
     function buildWorkPlanPrintBody() {
@@ -10656,7 +11379,7 @@ const TVC_App = (function () {
         const bodyRows = entries.map(entry => {
             if (isHistDefectEntry(entry)) {
                 const fileNo = String(entry.defect.file_no || '').trim() || '—';
-                return `<tr><td>D</td><td>${esc(fileNo)}</td><td>${esc(printHistCriticalMark(entry))}</td>${printDefectRowCells(entry.defect, { omitDetail: true })}</tr>`;
+                return `<tr><td>D</td><td>${esc(fileNo)}</td><td>${esc(printHistCriticalMark(entry))}</td>${printDefectRowCells(entry.defect, { omitDetail: true, historyList: true })}</tr>`;
             }
             const { report: r, item } = entry;
             const job = histPrimaryJob(entry);
@@ -10676,15 +11399,16 @@ const TVC_App = (function () {
                 <td>${esc(job?.item_sort2 || '')}</td>
                 <td>${esc(dt || '—')}</td>
                 <td>${esc(st)}</td>
-                ${printFlagCells(flags)}
+                ${printHistFlagCells(flags)}
                 <td>${esc(printAttachmentLabel(f.shipAttachments))}</td>
                 <td>${esc(printAttachmentLabel(f.companyAttachments))}</td>
+                <td>${histEntrySpareDataCount(entry)}</td>
             </tr>`;
         }).join('');
         return `${printListMeta('Work History')}
             ${printFilterNote(filterParts)}
             <p class="meta">${entries.length} entr${entries.length === 1 ? 'y' : 'ies'}</p>
-            <table>${PRINT_WORK_HIST_HEAD}${bodyRows || `<tr><td colspan="15">No history entries to print.</td></tr>`}</table>`;
+            <table>${PRINT_WORK_HIST_HEAD}${bodyRows || `<tr><td colspan="14">No history entries to print.</td></tr>`}</table>`;
     }
 
     function openListPrintWindow(title, bodyHtml, preview) {
@@ -10743,6 +11467,7 @@ const TVC_App = (function () {
                 setLoginBusy(false);
             }
             setLoginBusy(true, 'Signing in…');
+            if (errEl) errEl.textContent = '';
             const loginMode = document.getElementById('loginDept')?.value || '';
         const r = await TVC_Auth.login(
             document.getElementById('loginUser').value,
@@ -10756,7 +11481,7 @@ const TVC_App = (function () {
             }
         } catch (e) {
             console.error('[TVC] login failed', e);
-            if (errEl) errEl.textContent = e.message || 'An error occurred while signing in.';
+            if (errEl) errEl.textContent = formatLoginError(e);
         } finally {
             setLoginBusy(false);
         }
@@ -11038,6 +11763,10 @@ const TVC_App = (function () {
     }
 
     // ── Utils ────────────────────────────────────────────────────────
+    function isModalOpen(id) {
+        const el = document.getElementById(id);
+        return !!(el && !el.classList.contains('hidden'));
+    }
     function showModal(id, opts = {}) {
         const el = document.getElementById(id);
         if (!el) return;
@@ -11049,10 +11778,25 @@ const TVC_App = (function () {
         if (!el) return;
         el.classList.add('hidden');
         window.TVC_ModalDrag?.resetModal?.(el);
+        if (id === 'workProcedureModal') clearWorkProcedureHistNavScope();
+    }
+
+    function applyModalOverWorkProcedure(modalId) {
+        const el = document.getElementById(modalId);
+        if (!el) return;
+        el.classList.add('modal-over-wp');
+        el.style.zIndex = '10001';
+    }
+
+    function clearModalOverWorkProcedure(modalId) {
+        const el = document.getElementById(modalId);
+        if (!el) return;
+        el.classList.remove('modal-over-wp');
+        el.style.zIndex = '';
     }
 
     /** Work History — Work Report ↔ Defect 전환 시 backdrop 깜빡임 방지 */
-    function swapHistoryModals(showId, hideId) {
+    function swapHistoryModals(showId, hideId, opts = {}) {
         const showEl = document.getElementById(showId);
         const hideEl = hideId ? document.getElementById(hideId) : null;
         if (!showEl) return;
@@ -11062,15 +11806,21 @@ const TVC_App = (function () {
         }
         showEl.classList.remove('hidden');
         showEl.style.zIndex = '10001';
-        showEl.scrollTop = 0;
-        const showBox = showEl.querySelector('.modal-box');
-        if (showBox) showBox.scrollTop = 0;
+        if (opts.overWorkProcedure || isWorkProcedureHistNav()) {
+            applyModalOverWorkProcedure(showId);
+        }
+        if (!opts.preserveScroll) {
+            showEl.scrollTop = 0;
+            const showBox = showEl.querySelector('.modal-box');
+            if (showBox) showBox.scrollTop = 0;
+        }
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 if (hideEl) {
                     hideEl.classList.remove('modal-hist-swapping');
                     hideEl.classList.add('hidden');
                     hideEl.style.zIndex = '';
+                    clearModalOverWorkProcedure(hideId);
                     window.TVC_ModalDrag?.resetModal?.(hideEl);
                 }
             });
@@ -11189,15 +11939,19 @@ const TVC_App = (function () {
         boot, switchTab, navigate,
         setDepartment, setCaptainView, setHistView, setHistTab, menuAction, resolveDeptPick,
         setFleetView, setFleetSearch, selectVessel,
+        setAdminSearch, selectAdminCompany, selectAdminVessel,
+        openAdminCompanyForm, openAdminVesselForm, closeAdminRegistryModal,
+        saveAdminCompanyForm, saveAdminVesselForm, deactivateAdminCompany, deactivateAdminVessel,
         setSearch, setTreeSearch, clearSearchField, clearListFilterSearch, updateSearchClearBtn, updateSearchClearBtnForEl, ensureSearchClearUi, bindSearchClearInput, bindListFilterSearchClear, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, isTreeDeptCollapsed, toggleTreeDept, renderGroupTree,
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
-        jobShowsCriticalEquipmentMark,
+        jobShowsCriticalEquipmentMark, jobCriticalEquipmentDisplay, renderWrPmsGroupCriticalRow,
         reportMatchesPostponeAwaitingApproval,
-        getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getAppIdx, getAppJobs, resolveJobByCode,
+        getAppDepartment, getAppUserDepartment, getSelectedGroupKey, getSpareSelectedGroupKey, getAppIdx, getAppJobs, resolveJobByCode,
         workPermitBelongsToDept, filterWorkPermitsForView,
         renderSectionCard,
         openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab,
         enterWorkProcedureEdit, cancelWorkProcedureEdit, saveWorkProcedure, uploadWorkProcedureAttachment, removeWorkProcedureAttachment,
+        refreshWorkProcedureIfOpen, isModalOpen, isWorkProcedureHistNav, applyModalOverWorkProcedure, clearModalOverWorkProcedure,
         openProcedureHistory, openProcedureHistoryByCode,
         openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport, captureWorkReportForm,
         uploadWrAttachment, removeWrAttachment,
@@ -11210,6 +11964,7 @@ const TVC_App = (function () {
         openNewDefectReportInput, openNewDefectFromPlan,
         setBatchActiveJob, setWrBatchViewJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
         openWorkReportFromHistory, openDefectFromHistory, openWorkHistoryEntry, navWorkHistoryEntry, syncHistRowSelection,
+        histNavButtonsHtml, workHistoryNavBounds,
         modifyWorkReport, cancelWorkReportEdit, selectHistRow, renderWorkHistory, histDefectRowKey,
         buildDefectHistRowHtml, matchDefectHistSearch, initHistCellTips,
         formatHistGroupEquipmentName, isPlaceholderJobCode, defectEffectiveJobCode,

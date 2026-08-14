@@ -1,0 +1,11 @@
+{
+  "vessel_id": "INCHEON CHEMI",
+  "name": "INCHEON CHEMI",
+  "company_id": "DAEMYUNG",
+  "code": "01",
+  "imo_no": "9297711",
+  "delivery": "2003-09-18",
+  "status": "active",
+  "vessel_skus": ["VESSEL_MASTER", "VESSEL_ENGINE", "VESSEL_DECK"],
+  "notes": "Pilot vessel — current Vessel Mode SKUs pin this id."
+}

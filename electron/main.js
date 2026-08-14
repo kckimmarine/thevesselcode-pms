@@ -117,6 +117,41 @@ function registerPrintPreviewIpc() {
     ipcMain.handle('tvc:print-preview-window', (evt) => printWebContents(evt.sender));
 }
 
+function registerAdminRegistryIpc() {
+    ipcMain.handle('tvc:save-admin-registry', (_evt, bundle) => {
+        try {
+            const sku = detectSkuFromResources();
+            if (app.isPackaged && sku !== 'ADMIN_TVC') {
+                return { ok: false, error: 'Admin registry save is only available in Admin Mode.' };
+            }
+            const files = Array.isArray(bundle?.files) ? bundle.files : [];
+            if (!files.length) {
+                return { ok: false, error: 'No registry files to save.' };
+            }
+            const adminDir = path.join(appRoot(), 'admin');
+            const adminNorm = path.normalize(adminDir + path.sep);
+            const written = [];
+            for (const entry of files) {
+                const rel = String(entry?.relPath || '').replace(/\\/g, '/').replace(/^\/+/, '');
+                if (!rel || rel.includes('..')) {
+                    return { ok: false, error: `Invalid registry path: ${rel || '(empty)'}` };
+                }
+                const abs = path.normalize(path.join(adminDir, rel));
+                if (!abs.startsWith(adminNorm)) {
+                    return { ok: false, error: 'Registry path outside admin folder.' };
+                }
+                fs.mkdirSync(path.dirname(abs), { recursive: true });
+                const data = entry?.data ?? null;
+                fs.writeFileSync(abs, JSON.stringify(data, null, 2) + '\n', 'utf8');
+                written.push(rel);
+            }
+            return { ok: true, written, adminDir };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+}
+
 function registerSettingsIpc() {
     ipcMain.handle('tvc:get-settings', () => {
         const settings = readSettings();
@@ -337,6 +372,17 @@ function createWindow() {
 
 app.whenReady().then(() => {
     applySkuUserData();
+    const gotLock = app.requestSingleInstanceLock();
+    if (!gotLock) {
+        app.quit();
+        return;
+    }
+    app.on('second-instance', () => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            if (mainWindow.isMinimized()) mainWindow.restore();
+            mainWindow.focus();
+        }
+    });
     registerProtocol();
     refreshLicense();
 
@@ -430,6 +476,7 @@ app.whenReady().then(() => {
         }
     });
     registerSettingsIpc();
+    registerAdminRegistryIpc();
     registerPrintPreviewIpc();
 
     createWindow();

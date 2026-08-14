@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "updated_at": "2026-08-13",
+  "companies": [
+    {
+      "company_id": "DAEMYUNG",
+      "name": "대명상선",
+      "name_en": "Daemyung",
+      "status": "active",
+      "hq_sku": "HQ_OFFICE",
+      "vessels": [
+        {
+          "vessel_id": "INCHEON CHEMI",
+          "name": "INCHEON CHEMI",
+          "code": "01",
+          "imo_no": "9297711",
+          "delivery": "2003-09-18",
+          "status": "active"
+        },
+        {
+          "vessel_id": "QUARTERBACK J",
+          "name": "QUARTERBACK J",
+          "code": "02",
+          "imo_no": "9264879",
+          "delivery": "2003-01-29",
+          "status": "active"
+        },
+        {
+          "vessel_id": "GOLDSTAR SHINE",
+          "name": "GOLDSTAR SHINE",
+          "code": "03",
+          "imo_no": "9279707",
+          "delivery": "2004-09-27",
+          "status": "active"
+        },
+        {
+          "vessel_id": "VALIANT",
+          "name": "VALIANT",
+          "code": "04",
+          "imo_no": "9274288",
+          "delivery": "2005-01-20",
+          "status": "active"
+        }
+      ]
+    }
+  ]
+}

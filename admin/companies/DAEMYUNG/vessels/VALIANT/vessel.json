@@ -1,0 +1,11 @@
+{
+  "vessel_id": "VALIANT",
+  "name": "VALIANT",
+  "company_id": "DAEMYUNG",
+  "code": "04",
+  "imo_no": "9274288",
+  "delivery": "2005-01-20",
+  "status": "active",
+  "vessel_skus": [],
+  "notes": "In HQ fleet / allowlist. Dedicated Vessel Mode SKUs not built yet."
+}

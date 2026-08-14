@@ -1,0 +1,14 @@
+{
+  "company_id": "DAEMYUNG",
+  "name": "대명상선",
+  "name_en": "Daemyung",
+  "status": "active",
+  "hq_sku": "HQ_OFFICE",
+  "notes": "Pilot company — HQ Mode + contracted vessels below.",
+  "vessels": [
+    "INCHEON CHEMI",
+    "QUARTERBACK J",
+    "GOLDSTAR SHINE",
+    "VALIANT"
+  ]
+}

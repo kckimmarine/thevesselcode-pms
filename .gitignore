@@ -21,3 +21,7 @@ build/electron-builder/
 *.exe
 *.blockmap
 *.nsis.7z
+
+# Local Admin release archives (Setup / App Update ZIP); keep folder via .gitkeep
+admin/releases/**
+!admin/releases/.gitkeep

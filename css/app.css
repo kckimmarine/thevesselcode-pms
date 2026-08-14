@@ -1251,6 +1251,17 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     height: auto;
     box-sizing: border-box;
 }
+#workProcedureBody .wp-table th {
+    text-align: center;
+    vertical-align: middle;
+}
+#workProcedureBody .wp-table td {
+    text-align: center;
+    vertical-align: middle;
+}
+#workProcedureBody .wp-table td.hist-type {
+    white-space: nowrap;
+}
 
 .wp-title { margin: 0 0 8px; color: var(--navy); font-size: 18px; }
 .wp-job-head { display: flex; flex-wrap: wrap; gap: 12px; font-size: 12px; color: #4a5568; margin-bottom: 4px; }
@@ -1352,6 +1363,16 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 #workReportModal.modal-hist-swapping .modal-box,
 #defectReportModal.modal-hist-swapping .modal-box {
     visibility: hidden;
+}
+/* Work Procedure 위 data view — WP backdrop만 사용 (이중 dim / Prev·Next 깜빡임 방지) */
+#workReportModal.modal-over-wp,
+#defectReportModal.modal-over-wp {
+    background: transparent;
+    pointer-events: none;
+}
+#workReportModal.modal-over-wp .modal-box,
+#defectReportModal.modal-over-wp .modal-box {
+    pointer-events: auto;
 }
 #workReportModal .modal-box.wr-modal,
 #defectReportModal .modal-box.wr-modal,
@@ -1700,6 +1721,54 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 #defectReportBody .wr-maint-body > .wr-maint-grid-gap,
 #workPermitBody .wr-maint-body > .wr-maint-grid-gap,
 #workReportBody .wr-maint-body > .wr-maint-grid-gap { margin-top: 0; }
+.wr-maint-body > .wr-maint-pms-crit-row {
+    margin-top: 10px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e2e8f0;
+}
+.wr-maint-pms-crit-row .spare-gh-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1a202c;
+    text-transform: uppercase;
+    letter-spacing: .03em;
+    line-height: inherit;
+}
+.wr-maint-pms-crit-row .wr-pms-crit-pms-inner input.wr-ro,
+.wr-maint-pms-crit-row .wr-pms-crit-pms-inner .spare-consume-pick-trigger,
+.wr-maint-pms-crit-row .spare-gh-field > input.wr-ro,
+.wr-maint-pms-crit-row .spare-gh-value {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: 11px;
+    font-weight: 400;
+    color: #2d3748;
+    min-height: auto;
+    padding: 6px 8px;
+    background: #fff;
+    border: 1px solid #cbd5e0;
+    border-radius: 5px;
+    line-height: 1.4;
+}
+.wr-maint-pms-crit-row .wr-pms-crit-pms-inner input.wr-ro,
+.wr-maint-pms-crit-row .spare-gh-field > input.wr-ro,
+.wr-maint-pms-crit-row .spare-gh-value:not(.empty) {
+    background: #f7fafc;
+    color: #4a5568;
+}
+.wr-maint-pms-crit-row .wr-pms-crit-pms-inner .spare-consume-pick-trigger:disabled {
+    background: #f7fafc;
+    color: #4a5568;
+    opacity: 1;
+    cursor: default;
+}
+.wr-maint-pms-crit-row .spare-gh-value.empty {
+    color: #a0aec0;
+    background: #f7fafc;
+}
+.wr-maint-pms-crit-row .spare-consume-meta-pick { width: 100%; }
 .wr-maint-grid { display: grid; gap: 10px 12px; }
 .wr-maint-grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .wr-maint-grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
@@ -5099,10 +5168,12 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-req-list-table .rl-st-Submitted { background: #5a67d8; }
 .spare-req-list-table .rl-st-Requisition { background: #3182ce; }
 .spare-req-list-table .rl-st-ReqQuote { background: #5a67d8; }
+.spare-req-list-table .rl-st-Evaluating { background: #805ad5; }
 .spare-req-list-table .rl-st-Quoted { background: #7c3aed; }
 .spare-req-list-table .rl-st-Evaluated { background: #805ad5; }
 .spare-req-list-table .rl-st-Ordered { background: #d97706; }
 .spare-req-list-table .rl-st-Received { background: #16a34a; }
+.spare-req-list-table .rl-st-ReceivedExport { background: #0d9488; }
 .spare-req-list-table .rl-st-PartialRecv { background: #38a169; }
 .spare-req-list-table .spare-req-list-daterange {
     font-size: var(--list-item-font);
@@ -7476,6 +7547,44 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-hist-sub {
     margin: -4px 0 12px;
     font-size: 12px;
+    flex-shrink: 0;
+}
+/* Data Export & Import History — fixed shell (Requisition tab proportions) */
+#menuHistoryModal .modal-box.menu-hist-modal,
+#spareHistoryModal .modal-box.menu-hist-modal {
+    width: min(96vw, 780px);
+    max-width: min(96vw, 780px) !important;
+    min-width: min(96vw, 780px);
+    height: min(92vh, 580px);
+    max-height: min(92vh, 580px);
+    min-height: min(92vh, 580px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+}
+#menuHistoryModal .modal-box.menu-hist-modal > #menuHistoryBody,
+#spareHistoryModal .modal-box.menu-hist-modal > #spareHistoryBody {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+#menuHistoryModal .modal-box.menu-hist-modal .spare-sync-title,
+#spareHistoryModal .modal-box.menu-hist-modal .spare-sync-title,
+#menuHistoryModal .modal-box.menu-hist-modal .menu-hist-cats,
+#spareHistoryModal .modal-box.menu-hist-modal .menu-hist-cats,
+#menuHistoryModal .modal-box.menu-hist-modal .modal-actions,
+#spareHistoryModal .modal-box.menu-hist-modal .modal-actions {
+    flex-shrink: 0;
+}
+#menuHistoryModal .modal-box.menu-hist-modal .menu-hist-table-wrap,
+#spareHistoryModal .modal-box.menu-hist-modal .menu-hist-table-wrap {
+    flex: 1 1 0;
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
 }
 .menu-hist-cats {
     display: flex;
@@ -7483,9 +7592,13 @@ label.spare-file-pick input[type=file] { display: none; }
     gap: 6px;
     margin: 0 0 12px;
 }
+.menu-hist-cats.menu-hist-cats-hq {
+    flex-wrap: nowrap;
+}
 .menu-hist-cats.menu-hist-cats-hq .menu-hist-cat {
     padding: 6px 10px;
     font-size: 11px;
+    white-space: nowrap;
 }
 .menu-hist-cat {
     border: 1px solid #e2e8f0;
@@ -8099,7 +8212,8 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 .list-tab-frame .hist-table-defect-list th.hist-at-company-h,
 .list-tab-frame .hist-table-history-list th.hist-date-h,
 .list-tab-frame .hist-table-history-list th.hist-at-ship-h,
-.list-tab-frame .hist-table-history-list th.hist-at-company-h {
+.list-tab-frame .hist-table-history-list th.hist-at-company-h,
+.list-tab-frame .hist-table-history-list th.hist-spare-data-h {
     white-space: normal;
 }
 /* Defect Report list — fixed columns; SORT-1 / SORT-2 min 130px, grow together */
@@ -8247,6 +8361,19 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     max-width: 88px;
     text-align: center;
     white-space: nowrap;
+}
+.list-tab-frame .hist-table-history-list th.hist-spare-data-h,
+.list-tab-frame .hist-table-history-list td.hist-spare-data {
+    width: 56px;
+    min-width: 56px;
+    max-width: 56px;
+    text-align: center;
+    white-space: nowrap;
+}
+.list-tab-frame .hist-table-history-list td.hist-spare-data {
+    font-weight: 600;
+    color: #2b6cb0;
+    font-variant-numeric: tabular-nums;
 }
 .list-tab-frame .hist-table-history-list th.hist-sort1-h,
 .list-tab-frame .hist-table-history-list td.hist-sort1,
