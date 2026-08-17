@@ -1,6 +1,8 @@
 # Seat license (1 PC / vessel install)
 
-Packaged TVC-PMS setups do **not** include a runnable `license.json`. After install, the app opens the activation gate until HQ issues a **seat license** bound to that PC’s machine ID.
+Packaged TVC-PMS setups do **not** include a runnable `license.json`. After install, the app opens the activation gate until TVC issues a **seat license** bound to that PC’s machine ID.
+
+**Exception:** **`ADMIN_TVC` (Admin Mode)** — no seat license. Install and run with login `tvc` / `0000` only.
 
 ## Flow (INCHEON CHEMI / vessel PC)
 
@@ -45,6 +47,7 @@ Track in TVC ledger: company, PC, SKU, machineId, issued, expires, months, paid 
 
 | Item | Behavior |
 |------|----------|
+| **Admin Mode (`ADMIN_TVC`)** | **No seat license** — TVC internal deploy tool only |
 | Setup.exe on another PC | Installs, but needs a **new** seat license for that PC |
 | Copy AppData / bound license | Blocked (`LICENSE_MACHINE`) |
 | Unbound license in package | Not shipped; packaged apps reject unbound |

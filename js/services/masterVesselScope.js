@@ -3,6 +3,7 @@ const TVC_MasterVesselScope = (function () {
     const MASTER_STORES = [
         'maintenance_jobs',
         'maintenance_groups',
+        'spare_groups',
         'ship_components',
         'spare_parts',
     ];

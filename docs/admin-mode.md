@@ -2,6 +2,11 @@
 
 Admin Mode is for **THE VESSEL CODE** only. It packages **application Setup.exe** files for HQ / Vessel. It does **not** export or overwrite PMS Master, SPARE Master, or Work History.
 
+**Operational SOP (계약 → Registry → Setup → License → Master):** [`docs/admin-mode-sop.md`](admin-mode-sop.md)  
+**Company / Vessel ID 규칙 · Pilot → 출시:** [`docs/admin-registry-id-guide.md`](admin-registry-id-guide.md)
+
+**Contract print · deploy version tracking:** registry `deploy` block · **Print contract draft** / **Print contract registry** in Admin menu.
+
 ## Run Admin Mode
 
 ```bat
@@ -10,10 +15,25 @@ npm run electron:admin
 
 Login: `tvc` / `0000` (Department 선택 없음)
 
-Or install `TVC-PMS-ADMIN_TVC-…-Setup.exe` (seat license required when packaged).
+Or install `TVC-PMS-ADMIN_TVC-…-Setup.exe` — **Admin Mode does not require a seat license** (TVC internal use only).
 
-Home screen: contract **company / vessel list** (search + select) + **Add/edit registry** + **App Update** entry.  
+Home screen: contract **company / vessel list** (search + select) + **Contract SOP checklist** + registry / Setup / license / App Update.  
+Operational checklist: [`docs/admin-mode-sop.md`](admin-mode-sop.md) · 1-page: [`docs/admin-mode-sop-1page.md`](admin-mode-sop-1page.md)
 Source of truth: `admin/registry.json` (editable in Admin UI or JSON under `admin/companies/…`).
+
+## Issue seat license (no CLI)
+
+1. Crew installs **universal** Setup → **Export machine request…** → sends JSON to TVC.
+2. Admin → **Issue seat license** → load request → select **company** (+ **vessel** for vessel SKUs) → save `license.json`.
+3. Crew **Import seat license…**
+
+## Export Setup handoff (universal HQ + Vessel)
+
+1. Dev PC: `npm run dist` (builds universal Setup.exe × 4 under `dist/`).
+2. Admin → **Export Setup handoff** → company select → confirms `dist/` folder → **Export Setup ZIP**.
+3. ZIP contains `setups/*.exe` + manifest + README. Same Setup works for any vessel — **seat license** binds company/vessel.
+
+**Signing key:** Dev uses `electron/keys/private.pem`. Packaged Admin: **Select signing key** once.
 
 ## Deploy to many companies (e.g. 20 HQ · 100 vessels)
 

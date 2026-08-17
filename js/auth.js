@@ -213,9 +213,12 @@ const TVC_Auth = (function () {
             await TVC_Dialog.alert(`Permission denied: ${TVC_RBAC.getRoleLabel(user.role)}`);
             return null;
         }
-        if (typeof TVC_Space !== 'undefined' && user.station) {
-            try { TVC_Space.assertAction(user, action); }
-            catch (e) { await TVC_Dialog.alert(e.message || 'Station access denied'); return null; }
+        if (typeof TVC_Space !== 'undefined') {
+            const station = TVC_Space.getStation(user);
+            if (station) {
+                try { TVC_Space.assertAction(user, action); }
+                catch (e) { await TVC_Dialog.alert(e.message || 'Station access denied'); return null; }
+            }
         }
         return user;
     }

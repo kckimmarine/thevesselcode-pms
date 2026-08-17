@@ -231,7 +231,7 @@ const TVC_Sync = (function () {
 
     async function collectDeptRows(dept, opts = {}) {
         const pendingOnly = opts.pendingOnly !== false;
-        const [jobs, reports, spares, components, audits, requisitions, jobBom, catalog, groups, defects] = await Promise.all([
+        const [jobs, reports, spares, components, audits, requisitions, jobBom, catalog, groups, spareGroups, defects] = await Promise.all([
             TVC_DB.getAll('maintenance_jobs'),
             TVC_DB.getAll('daily_work_reports'),
             TVC_DB.getAll('spare_parts'),
@@ -241,6 +241,7 @@ const TVC_Sync = (function () {
             TVC_DB.getAll('job_bom').catch(() => []),
             TVC_DB.getAll('universal_catalog').catch(() => []),
             TVC_DB.getAll('maintenance_groups').catch(() => []),
+            TVC_DB.getAll('spare_groups').catch(() => []),
             TVC_DB.getAll('defect_cases').catch(() => []),
         ]);
         const pending = (rows) => pendingOnly ? rows.filter(r => r.sync_status !== 'SYNCED') : rows;
@@ -251,6 +252,7 @@ const TVC_Sync = (function () {
         let pComponents = pending(components);
         let pReqs = pending(requisitions);
         let pGroups = pending(groups);
+        let pSpareGroups = pending(spareGroups);
         let pDefects = pending(defects);
         if (dept) {
             pJobs = pJobs.filter(j => j.department === dept);
@@ -258,6 +260,7 @@ const TVC_Sync = (function () {
             pComponents = pComponents.filter(c => !c.path || c.path[0] === dept);
             pReqs = pReqs.filter(r => !r.department || r.department === dept);
             pGroups = pGroups.filter(g => g.department === dept);
+            pSpareGroups = pSpareGroups.filter(g => g.department === dept);
             pDefects = pDefects.filter(d => TVC_DefectCase.belongsToDepartment(d, dept));
         }
         return {
@@ -270,6 +273,7 @@ const TVC_Sync = (function () {
             job_bom: pending(jobBom),
             universal_catalog: pending(catalog),
             maintenance_groups: pGroups,
+            spare_groups: pSpareGroups,
             defect_cases: pDefects,
         };
     }
@@ -287,6 +291,10 @@ const TVC_Sync = (function () {
         if (!accessDept) throw new Error(`이 계정은 ${dept} 부서 데이터를보낼 권한이 없습니다.`);
 
         const delta = opts.monthlyExport ? await collectMonthlySnapshot(dept) : await collectDelta(dept);
+        const recordCount = Object.values(delta).reduce((sum, rows) => sum + (rows?.length || 0), 0);
+        if (!opts.monthlyExport && recordCount === 0) {
+            throw new Error('보낼 변경 데이터가 없습니다. Confirm된 Work Report가 있는지 확인하세요.');
+        }
         const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user.vessel_id || 'UNKNOWN';
         const companyId = licensedCompanyId();
         const lic = assertLicenseForPackage(vesselId, companyId);
@@ -351,7 +359,6 @@ const TVC_Sync = (function () {
             log: `📦 [Export/${direction}/${dept}] ${filename}`,
             sync_status: 'SYNCED',
         });
-        const recordCount = Object.values(delta).reduce((sum, rows) => sum + (rows?.length || 0), 0);
         await recordSyncHistory({
             type: 'EXPORT',
             direction,
@@ -390,7 +397,7 @@ const TVC_Sync = (function () {
     }
 
     async function markExported(delta) {
-        const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups', 'defect_cases'];
+        const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups', 'spare_groups', 'defect_cases'];
         for (const store of stores) {
             for (const row of delta[store] || []) {
                 row.sync_status = 'SYNCED';
@@ -501,7 +508,7 @@ const TVC_Sync = (function () {
             TVC_PMS.writeStore(store, myScope);
         }
 
-        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'defect_cases']
+        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'spare_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'defect_cases']
             .reduce((sum, k) => sum + (payload[k]?.length || 0), 0);
 
         await TVC_DB.put('audit_logs', {
@@ -728,6 +735,7 @@ const TVC_Sync = (function () {
         const jobIdRemap = await mergeMaintenanceJobs(payload.maintenance_jobs);
         await remapReportJobRefs(payload.daily_work_reports, jobIdRemap, dept);
         await mergeStore('maintenance_groups', payload.maintenance_groups, 'group');
+        await mergeStore('spare_groups', payload.spare_groups, 'group');
         await mergeStore('daily_work_reports', payload.daily_work_reports, 'report');
         const spareIdRemap = await mergeSpareParts(payload.spare_parts);
         if (spareIdRemap.size && payload.job_bom?.length) {
@@ -771,7 +779,7 @@ const TVC_Sync = (function () {
 
         const depts = ['DECK', 'ENGINE'];
         const merged = {
-            maintenance_jobs: [], maintenance_groups: [], daily_work_reports: [],
+            maintenance_jobs: [], maintenance_groups: [], spare_groups: [], daily_work_reports: [],
             spare_parts: [], ship_components: [], audit_logs: [],
             requisitions: [], job_bom: [], universal_catalog: [], defect_cases: [],
         };
@@ -867,7 +875,7 @@ const TVC_Sync = (function () {
             TVC_PMS.writeStore(store, 'SHIP');
         }
 
-        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'defect_cases']
+        const recordCount = ['maintenance_jobs', 'maintenance_groups', 'spare_groups', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'defect_cases']
             .reduce((sum, k) => sum + (payload[k]?.length || 0), 0);
 
         await TVC_DB.put('audit_logs', {

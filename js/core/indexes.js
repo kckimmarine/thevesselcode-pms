@@ -33,10 +33,13 @@ const TVC_Indexes = (function () {
         });
 
         const groupNodes = buildGroupTree(state.jobs, jobsByGroupKey, state.groups);
+        const spareGroupNodes = typeof TVC_SpareIndexes !== 'undefined'
+            ? TVC_SpareIndexes.buildSpareGroupTree(state.spareGroups, state.spares)
+            : [];
 
         return {
             jobById, componentById, jobsByGroupKey, jobsByDepartment,
-            reportsByJobCode, spareById, groupNodes,
+            reportsByJobCode, spareById, groupNodes, spareGroupNodes,
         };
     }
 

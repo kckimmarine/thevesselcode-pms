@@ -11,7 +11,7 @@ const TVC_AppUpdate = (function () {
     }
 
     function currentAppVersion() {
-        return '1.0.0';
+        return '1.0.1';
     }
 
     async function resolveAppVersion() {

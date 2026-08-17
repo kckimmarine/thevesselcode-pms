@@ -5,12 +5,18 @@ const { app, BrowserWindow, protocol, ipcMain, dialog, shell, nativeImage } = re
 const os = require('os');
 const path = require('path');
 const fs = require('fs');
+const { spawn } = require('child_process');
 const {
     ensureLicense,
     applyLicenseFile,
     buildMachineRequest,
     detectSkuHint,
 } = require('./license');
+const {
+    issueSeatLicense,
+    readPrivateKeyPem,
+    resolvePrivateKeyPath,
+} = require('./license-issue');
 
 const PROTOCOL = 'tvc-app';
 const WIDTH_RATIO = 0.78;
@@ -146,6 +152,431 @@ function registerAdminRegistryIpc() {
                 written.push(rel);
             }
             return { ok: true, written, adminDir };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+}
+
+function isAdminModeSku() {
+    const sku = detectSkuFromResources();
+    return !app.isPackaged || sku === 'ADMIN_TVC';
+}
+
+function registerAdminSeatLicenseIpc() {
+    ipcMain.handle('tvc:get-license-signing-status', () => {
+        try {
+            if (!isAdminModeSku()) {
+                return { ok: false, configured: false, error: 'Admin Mode only.' };
+            }
+            const settings = readSettings();
+            const keyPath = resolvePrivateKeyPath({
+                settingsPath: settings.licensePrivateKeyPath,
+                root: appRoot(),
+            });
+            return {
+                ok: true,
+                configured: !!keyPath,
+                path: keyPath || null,
+            };
+        } catch (e) {
+            return { ok: false, configured: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:pick-license-private-key', async () => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            const win = BrowserWindow.getFocusedWindow() || mainWindow;
+            const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+                title: 'Select license signing key (private.pem)',
+                properties: ['openFile'],
+                filters: [{ name: 'PEM', extensions: ['pem'] }],
+            });
+            if (canceled || !filePaths?.[0]) return { ok: false, canceled: true };
+            const settings = readSettings();
+            settings.licensePrivateKeyPath = filePaths[0];
+            writeSettings(settings);
+            return { ok: true, path: filePaths[0] };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:issue-seat-license', (_evt, payload) => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            const settings = readSettings();
+            const pem = readPrivateKeyPem({
+                settingsPath: settings.licensePrivateKeyPath,
+                root: appRoot(),
+            });
+            const result = issueSeatLicense(payload?.request, {
+                months: Number(payload?.months) || 3,
+                sku: payload?.sku || null,
+                companyId: payload?.companyId || null,
+                vesselId: payload?.vesselId || null,
+                allowedVesselIds: payload?.allowedVesselIds || null,
+                privateKeyPem: pem,
+            });
+            return { ok: true, ...result };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:export-seat-license', async (_evt, payload) => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            const license = payload?.license;
+            if (!license) return { ok: false, error: 'No license to save.' };
+            const defaultName = String(payload?.suggestedFilename || 'license-seat.json').replace(/[\\/]/g, '_');
+            const win = BrowserWindow.getFocusedWindow() || mainWindow;
+            const { canceled, filePath } = await dialog.showSaveDialog(win, {
+                title: 'Save seat license.json',
+                defaultPath: defaultName,
+                filters: [{ name: 'JSON', extensions: ['json'] }],
+            });
+            if (canceled || !filePath) return { ok: false, canceled: true };
+            fs.writeFileSync(filePath, JSON.stringify(license, null, 2), 'utf8');
+            return { ok: true, path: filePath };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+}
+
+const SETUP_SKU_RES = {
+    HQ_OFFICE: /HQ_OFFICE/i,
+    VESSEL_MASTER: /VESSEL_MASTER/i,
+    VESSEL_ENGINE: /VESSEL_ENGINE/i,
+    VESSEL_DECK: /VESSEL_DECK/i,
+};
+
+function resolveSetupsSourceDir(settings) {
+    const s = settings || readSettings();
+    const configured = String(s.setupsSourceDir || '').trim();
+    if (configured && fs.existsSync(configured)) return configured;
+    const devDist = path.join(appRoot(), 'dist');
+    if (fs.existsSync(devDist)) return devDist;
+    return null;
+}
+
+function listSetupFiles(dir) {
+    if (!dir || !fs.existsSync(dir)) return [];
+    const out = [];
+    for (const name of fs.readdirSync(dir)) {
+        if (!/-Setup\.exe$/i.test(name)) continue;
+        for (const [sku, re] of Object.entries(SETUP_SKU_RES)) {
+            if (re.test(name)) {
+                const full = path.join(dir, name);
+                try {
+                    out.push({
+                        sku,
+                        filename: name,
+                        path: full,
+                        bytes: fs.statSync(full).size,
+                    });
+                } catch (_) { /* skip */ }
+                break;
+            }
+        }
+    }
+    return out;
+}
+
+let releaseBuildProcess = null;
+
+function releaseBuildScriptPath(root) {
+    return path.join(root, 'scripts', 'build-release.mjs');
+}
+
+function canRunReleaseBuild(root) {
+    return fs.existsSync(releaseBuildScriptPath(root))
+        && fs.existsSync(path.join(root, 'package.json'));
+}
+
+function readPackageVersion(root) {
+    try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+        return String(pkg.version || '').trim();
+    } catch (_) {
+        return '';
+    }
+}
+
+function findAppUpdateZip(distDir, version) {
+    if (!distDir || !fs.existsSync(distDir) || !version) return null;
+    const prefix = `tvc_app_update_${version.replace(/[^\w.-]+/g, '_')}_`;
+    const matches = fs.readdirSync(distDir)
+        .filter(n => n.startsWith(prefix) && n.endsWith('.zip'))
+        .sort()
+        .reverse();
+    return matches.length ? path.join(distDir, matches[0]) : null;
+}
+
+function findHandoffFile(releaseDir, version) {
+    if (!releaseDir || !fs.existsSync(releaseDir) || !version) return null;
+    const prefix = `v${version}-handoff-`;
+    const matches = fs.readdirSync(releaseDir)
+        .filter(n => n.startsWith(prefix) && n.endsWith('.txt'))
+        .sort()
+        .reverse();
+    return matches.length ? path.join(releaseDir, matches[0]) : null;
+}
+
+function fileMeta(absPath) {
+    if (!absPath || !fs.existsSync(absPath)) return null;
+    try {
+        const st = fs.statSync(absPath);
+        return {
+            filename: path.basename(absPath),
+            path: absPath,
+            bytes: st.size,
+        };
+    } catch (_) {
+        return null;
+    }
+}
+
+function gatherReleaseArtifacts(root) {
+    const version = readPackageVersion(root);
+    const distDir = path.join(root, 'dist');
+    const releaseDir = path.join(root, 'release');
+    const setups = listSetupFiles(distDir).filter(s => !version || s.filename.includes(`-${version}-`));
+    const appUpdateZip = findAppUpdateZip(distDir, version);
+    const handoff = findHandoffFile(releaseDir, version);
+    let config = null;
+    const configPath = version ? path.join(releaseDir, `v${version}.json`) : null;
+    if (configPath && fs.existsSync(configPath)) {
+        try {
+            config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        } catch (_) { /* ignore */ }
+    }
+    return {
+        version,
+        distDir: fs.existsSync(distDir) ? distDir : null,
+        releaseDir: fs.existsSync(releaseDir) ? releaseDir : null,
+        configPath: configPath && fs.existsSync(configPath) ? configPath : null,
+        config,
+        setups,
+        appUpdateZip: fileMeta(appUpdateZip),
+        handoff: fileMeta(handoff),
+    };
+}
+
+function sendReleaseLog(webContents, line) {
+    const text = String(line || '');
+    if (!text) return;
+    if (webContents && !webContents.isDestroyed()) {
+        webContents.send('tvc:release-log', text);
+    }
+}
+
+function registerAdminReleaseIpc() {
+    ipcMain.handle('tvc:get-release-info', () => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            const root = appRoot();
+            const version = readPackageVersion(root);
+            const buildable = canRunReleaseBuild(root);
+            const artifacts = gatherReleaseArtifacts(root);
+            const exportFolder = resolveExportFolder(readSettings());
+            return {
+                ok: true,
+                root,
+                buildable,
+                buildableMessage: buildable
+                    ? null
+                    : 'Release build requires the development project (npm run electron:admin from source checkout).',
+                version,
+                exportFolder,
+                artifacts,
+            };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:list-release-artifacts', () => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            return { ok: true, artifacts: gatherReleaseArtifacts(appRoot()) };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:run-admin-release', async (evt) => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            if (releaseBuildProcess) return { ok: false, error: 'Release build already running.' };
+            const root = appRoot();
+            if (!canRunReleaseBuild(root)) {
+                return {
+                    ok: false,
+                    error: 'Release build is only available from the development project root (scripts/build-release.mjs). Run npm run electron:admin from the repo.',
+                };
+            }
+            const version = readPackageVersion(root);
+            const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+            return await new Promise((resolve) => {
+                let logTail = '';
+                const appendLog = (chunk) => {
+                    logTail += chunk;
+                    const lines = logTail.split(/\r?\n/);
+                    logTail = lines.pop() || '';
+                    for (const line of lines) sendReleaseLog(evt.sender, line);
+                };
+                releaseBuildProcess = spawn(npmCmd, ['run', 'release'], {
+                    cwd: root,
+                    shell: true,
+                    env: process.env,
+                });
+                releaseBuildProcess.stdout?.on('data', (d) => appendLog(String(d)));
+                releaseBuildProcess.stderr?.on('data', (d) => appendLog(String(d)));
+                releaseBuildProcess.on('error', (err) => {
+                    releaseBuildProcess = null;
+                    resolve({ ok: false, error: err.message || String(err) });
+                });
+                releaseBuildProcess.on('close', (code) => {
+                    if (logTail) sendReleaseLog(evt.sender, logTail);
+                    releaseBuildProcess = null;
+                    if (code !== 0) {
+                        resolve({ ok: false, error: `Release build failed (exit ${code}).` });
+                        return;
+                    }
+                    const settings = readSettings();
+                    const distDir = path.join(root, 'dist');
+                    if (fs.existsSync(distDir)) {
+                        settings.setupsSourceDir = distDir;
+                        writeSettings(settings);
+                    }
+                    resolve({
+                        ok: true,
+                        version,
+                        artifacts: gatherReleaseArtifacts(root),
+                    });
+                });
+            });
+        } catch (e) {
+            releaseBuildProcess = null;
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:cancel-admin-release', () => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            if (!releaseBuildProcess) return { ok: false, error: 'No release build running.' };
+            releaseBuildProcess.kill();
+            releaseBuildProcess = null;
+            return { ok: true };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:export-release-artifacts', (_evt, payload) => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            const root = appRoot();
+            const artifacts = gatherReleaseArtifacts(root);
+            const version = String(payload?.version || artifacts.version || '').trim();
+            const includeSetups = payload?.includeSetups !== false;
+            const includeAppUpdate = payload?.includeAppUpdate !== false;
+            const includeHandoff = payload?.includeHandoff !== false;
+            const settings = readSettings();
+            const baseFolder = resolveExportFolder(settings);
+            const date = new Date().toISOString().slice(0, 10);
+            const subfolder = String(payload?.subfolder || `TVC-Release-v${version || 'unknown'}-${date}`).replace(/[\\/]/g, '_');
+            const destDir = path.join(baseFolder, subfolder);
+            fs.mkdirSync(destDir, { recursive: true });
+            const copied = [];
+            const addCopy = (meta) => {
+                if (!meta?.path || !meta.filename) return;
+                const dest = path.join(destDir, meta.filename);
+                fs.copyFileSync(meta.path, dest);
+                copied.push({
+                    filename: meta.filename,
+                    path: dest,
+                    bytes: fs.statSync(dest).size,
+                });
+            };
+            if (includeSetups) {
+                for (const s of artifacts.setups || []) addCopy({ filename: s.filename, path: s.path, bytes: s.bytes });
+            }
+            if (includeAppUpdate && artifacts.appUpdateZip) addCopy(artifacts.appUpdateZip);
+            if (includeHandoff && artifacts.handoff) addCopy(artifacts.handoff);
+            if (!copied.length) {
+                return { ok: false, error: 'No release artifacts found in dist/ or release/. Run Release build first.' };
+            }
+            if (artifacts.distDir && fs.existsSync(artifacts.distDir)) {
+                settings.setupsSourceDir = artifacts.distDir;
+                writeSettings(settings);
+            }
+            return { ok: true, folder: destDir, copied, version: artifacts.version };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+}
+
+function registerSetupExportIpc() {
+    ipcMain.handle('tvc:get-setups-source', () => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            const dir = resolveSetupsSourceDir(readSettings());
+            if (!dir) {
+                return { ok: true, configured: false, path: null, setups: [] };
+            }
+            return {
+                ok: true,
+                configured: true,
+                path: dir,
+                setups: listSetupFiles(dir),
+            };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:pick-setups-source-folder', async () => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            const win = BrowserWindow.getFocusedWindow() || mainWindow;
+            const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+                title: 'Select folder containing Setup.exe (usually dist/)',
+                properties: ['openDirectory'],
+            });
+            if (canceled || !filePaths?.[0]) return { ok: false, canceled: true };
+            const folder = filePaths[0];
+            const settings = readSettings();
+            settings.setupsSourceDir = folder;
+            writeSettings(settings);
+            return {
+                ok: true,
+                path: folder,
+                setups: listSetupFiles(folder),
+            };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
+    });
+
+    ipcMain.handle('tvc:read-setup-file', (_evt, payload) => {
+        try {
+            if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
+            const filename = path.basename(String(payload?.filename || ''));
+            if (!filename) return { ok: false, error: 'Missing filename.' };
+            const dir = resolveSetupsSourceDir(readSettings());
+            if (!dir) return { ok: false, error: 'Setups source folder not configured.' };
+            const abs = path.normalize(path.join(dir, filename));
+            const dirNorm = path.normalize(dir + path.sep);
+            if (!abs.startsWith(dirNorm)) return { ok: false, error: 'Invalid path.' };
+            if (!fs.existsSync(abs)) return { ok: false, error: 'Setup file not found.' };
+            const buf = fs.readFileSync(abs);
+            return { ok: true, filename, bytes: Array.from(buf) };
         } catch (e) {
             return { ok: false, error: e.message || String(e) };
         }
@@ -477,6 +908,9 @@ app.whenReady().then(() => {
     });
     registerSettingsIpc();
     registerAdminRegistryIpc();
+    registerAdminSeatLicenseIpc();
+    registerSetupExportIpc();
+    registerAdminReleaseIpc();
     registerPrintPreviewIpc();
 
     createWindow();

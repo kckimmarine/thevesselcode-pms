@@ -323,7 +323,7 @@ const TVC_PmsMasterExcel = (function () {
         const wsG = wb.addWorksheet('Group Headers', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsG, [
             `Vessel: ${vesselId}  ·  PMS Master — ${department} — Group Headers`,
-            'GROUP NO + GROUP NAME for this department only.',
+            'Live DB snapshot — PMS GROUP Tree (maintenance_groups + maintenance_jobs) for this department only.',
         ]);
         ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Critical Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Jobs (ref)'].forEach((h, i) => {
             wsG.getRow(HDR_ROW).getCell(i + 1).value = h;

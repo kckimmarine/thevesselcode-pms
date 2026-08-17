@@ -1,0 +1,50 @@
+[TVC-PMS v1.0.1 App Update — 후배 전달용]
+
+■ 파일: tvc_app_update_1.0.1_2026-08-17.zip
+■ 경로: C:\Users\zzang\Desktop\thevesselcode-pms\dist\tvc_app_update_1.0.1_2026-08-17.zip
+■ 용량: 약 329.0 MB
+■ Drive/OneDrive 링크 권장 (ZIP 약 330MB — 카톡 용량 주의)
+
+■ 포함 SKU: HQ_OFFICE, VESSEL_ENGINE, VESSEL_DECK, VESSEL_MASTER
+
+■ 변경 사항
+- CE/CO가 Work Report Confirm 후 Monthly Report Export로 Master Hub에 전송 가능 (Update Work Plan 완료 전에도 가능)
+- Defect / Postpone / Work Permit: Confirm 후 Export Ready 화면에서 바로 Export
+- Data Export & Import History: Monthly 탭에서 PMS/SPARE Master Excel 기록 제외
+- Work Plan: PMS 그룹 헤더에서 Equipment 필드 제거
+- SPARE Master Export/Import: SPARE GROUP Tree(spare_groups) 기준 — PMS 그룹과 분리
+- SPARE Append → Master Export → Excel에 SPARE GROUP만 표시
+- Work Plan / SPARE Master Export·Import — password 0000 required
+- Work Plan: PMS GROUP Tree Modify — 선택 그룹 인식 오류 수정
+- F5 새로고침·앱 재시작 후 로그인 실패 / DB 준비 지연 수정 (IndexedDB 데이터 유지)
+- HQ Requisition List → Data 로드 시 norm is not defined 오류 수정
+- Requisition List Data 클릭·로드 속도 개선 (spares 캐시·부품 매칭 최적화)
+- Requisition List Data 전환 시 화면 깜빡임 감소
+
+■ 설치
+1. 해당 SKU TVC 앱 실행 (HQ / Engine / Deck / Master)
+2. Menu → Data Export & Import → Import → App Update
+3. tvc_app_update_1.0.1_*.zip 선택 → Install update
+4. 설치 마법사 완료 후 앱 재실행 → 로그인 footer v1.0.1 확인
+5. 기존 Work History / Master / Requisition 데이터 그대로 있는지 확인
+
+■ 주의
+- Sync ZIP이 아님 — App Update는 프로그램만 교체, 업무 데이터(Master/History/IndexedDB)는 AppData에 그대로 유지
+- Seat license 재발급 불필요
+- 대상: HQ / Engine / Deck / Master만 (Admin Mode는 별도·버전 없음)
+- 각 PC는 ZIP 안 4종 Setup 중 본인 SKU만 Install update가 실행함
+
+■ 설치 후 테스트
+[ ] Engine CE: Work Report Confirm → Monthly Report Export → Master Import
+[ ] Deck CO: Confirm → Monthly Export (STATION_TO_HUB) → Master Import (Deck 토글) → HQ Import 또는 Master→HQ Export
+[ ] HQ: Engine/Deck station ZIP 직접 Import (Master 생략 경로) — 부서 토글 일치 확인
+[ ] Defect / Postpone / Work Permit: Confirm → Export
+[ ] Data History Monthly 탭에 PMS/SPARE Master 없음
+[ ] Work Plan PMS GROUP Tree: 그룹 선택 → ✏️ Modify → 헤더 편집 가능
+[ ] Work Plan PMS 그룹 헤더: PMS Group No. / Critical Equipment / Maker 등만 표시 (Equipment 없음)
+[ ] DECK SPARE: Append 1그룹 → F5 → SPARE GROUP Tree 유지 → Master Export 1행만
+[ ] F5 새로고침 후 로그인 정상 · 기존 Master/History 데이터 유지
+[ ] HQ Requisition List: 행 클릭(Data) → spare 목록 정상 로드 · 오류 없음
+[ ] Work History / Master 데이터 유지
+[ ] Seat license 재발급 불필요
+[ ] 로그인 footer v1.0.1

@@ -618,9 +618,17 @@ const TVC_SpareMenu = (function () {
         return user.department === 'ENGINE';
     }
 
-    /** SPARE GROUP Tree — PMS Group Tree(idx.groupNodes)와 동일 소스, 부서 필터는 spareGroupTreeIncludesDept */
+    /** SPARE GROUP Tree — spare_groups + spare_parts (PMS idx.groupNodes와 분리) */
     function spareGroupTreeNodes(st) {
-        return st.idx?.groupNodes || [];
+        return st.idx?.spareGroupNodes || [];
+    }
+
+    function findPmsGroupNode(st, key) {
+        if (!key) return null;
+        if (key === CRITICAL_GROUP_KEY) {
+            return { key: CRITICAL_GROUP_KEY, label: 'Critical Equipment', department: st?.department || '' };
+        }
+        return st.idx?.groupNodes?.find(n => n.key === key) || null;
     }
 
     function findSpareGroupNode(st, key) {
@@ -636,9 +644,18 @@ const TVC_SpareMenu = (function () {
         return spareGroupTreeNodes(st).find(n => n.key === key) || null;
     }
 
+    function findGroupNodeByContext(st, key) {
+        if (!key) return null;
+        if (st?.currentTab === 'actual') return findPmsGroupNode(st, key) || findSpareGroupNode(st, key);
+        return findSpareGroupNode(st, key) || findPmsGroupNode(st, key);
+    }
+
     function ensureSpareGroupNodes(st) {
-        if (!st?.idx && (st?.jobs || []).length && window.TVC_Indexes) {
+        if (!st) return;
+        if (!st.idx && window.TVC_Indexes) {
             st.idx = TVC_Indexes.build(st);
+        } else if (st.idx && typeof TVC_SpareIndexes !== 'undefined') {
+            st.idx.spareGroupNodes = TVC_SpareIndexes.buildSpareGroupTree(st.spareGroups, st.spares);
         }
     }
 
@@ -661,9 +678,6 @@ const TVC_SpareMenu = (function () {
         if (st.collapsedTreeDepts[dept]) delete st.collapsedTreeDepts[dept];
         else st.collapsedTreeDepts[dept] = true;
         renderSpareGroupTree();
-        if (document.getElementById('actTree') && st.idx && TVC_App?.renderGroupTree) {
-            TVC_App.renderGroupTree('actTree');
-        }
     }
 
     function spareInventoryGroupKey(st) {
@@ -700,6 +714,12 @@ const TVC_SpareMenu = (function () {
         return null;
     }
 
+    /** PMS GROUP Tree (Work Plan) vs SPARE GROUP Tree — current sidebar selection. */
+    function activeTreeGroupKey(st) {
+        if (st?.currentTab === 'actual') return planGroupKey(st);
+        return spareInventoryGroupKey(st);
+    }
+
     function wrJobGroupKey(st) {
         const job = st?.idx?.jobById?.get(st?._wrJobId);
         if (!job?.group) return null;
@@ -710,7 +730,7 @@ const TVC_SpareMenu = (function () {
         if (!key) return '';
         if (key === CRITICAL_GROUP_KEY) return 'Critical Equipment';
         if (key === MERGED_GEN_ENGINE_KEY) return MERGED_GEN_ENGINE_LABEL;
-        const node = findSpareGroupNode(st, key);
+        const node = findGroupNodeByContext(st, key);
         return node?.label || '';
     }
 
@@ -760,7 +780,7 @@ const TVC_SpareMenu = (function () {
     function spareListDeptScope(st, selectedGroupKey) {
         if (!st?.department) return null;
         if (selectedGroupKey && selectedGroupKey !== CRITICAL_GROUP_KEY) {
-            const node = findSpareGroupNode(st, selectedGroupKey);
+            const node = findGroupNodeByContext(st, selectedGroupKey);
             if (node?.department) return node.department;
         }
         return st.department;
@@ -797,6 +817,10 @@ const TVC_SpareMenu = (function () {
             .trim()
             .toLowerCase()
             .replace(/(\d+)\s*~\s*(\d+)/g, '$1~$2');
+    }
+
+    function normalizePartKey(s) {
+        return String(s ?? '').trim().toLowerCase();
     }
 
     function extractMachineryFromGroupLabel(label) {
@@ -866,7 +890,7 @@ const TVC_SpareMenu = (function () {
     function equipmentNamesForGroup(st, groupLabel) {
         const lab = String(groupLabel || '').trim();
         if (!lab) return [];
-        const inDept = (gr) => (!st.department || gr.department === st.department);
+        const inDept = (gr) => (!st.department || !gr.department || gr.department === st.department);
         const matchLabel = (gr) => {
             if (!inDept(gr)) return false;
             if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(gr.label);
@@ -875,6 +899,14 @@ const TVC_SpareMenu = (function () {
         const fromGroups = (st.groups || [])
             .filter(gr => matchLabel(gr) && String(gr.item_sort1 || '').trim())
             .map(gr => String(gr.item_sort1).trim());
+        const fromJobs = (st.jobs || [])
+            .filter(j => {
+                if (st.department && j.department && j.department !== st.department) return false;
+                if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(j.group);
+                return normalizeGroupLabel(String(j.group || '')) === normalizeGroupLabel(lab);
+            })
+            .map(j => String(j.item_sort1 || '').trim())
+            .filter(Boolean);
         const fromSpares = (st.spares || [])
             .map(canon)
             .filter(s => {
@@ -884,7 +916,7 @@ const TVC_SpareMenu = (function () {
             })
             .map(s => equipmentFromSpare(s))
             .filter(Boolean);
-        return [...new Set([...fromGroups, ...fromSpares])].sort((a, b) => a.localeCompare(b));
+        return [...new Set([...fromGroups, ...fromJobs, ...fromSpares])].sort((a, b) => a.localeCompare(b));
     }
 
     function equipmentDatalistHtml(st, groupLabel, listId) {
@@ -897,7 +929,7 @@ const TVC_SpareMenu = (function () {
         const lab = String(groupLabel || '').trim();
         const item = String(equipmentName || '').trim();
         if (!lab || !item) return null;
-        const inDept = (gr) => (!st.department || gr.department === st.department);
+        const inDept = (gr) => (!st.department || !gr.department || gr.department === st.department);
         const matchLabel = (gr) => {
             if (!inDept(gr)) return false;
             if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(gr.label);
@@ -967,8 +999,9 @@ const TVC_SpareMenu = (function () {
     }
 
     function equipmentDefsForGroup(st, groupLabel) {
+        const headerStore = st?.currentTab === 'actual' ? 'pms' : 'spare';
         return equipmentNamesForGroup(st, groupLabel).map(name => {
-            const def = groupDefHeader(st, groupLabel, name);
+            const def = groupDefHeader(st, groupLabel, name, headerStore);
             const row = findEquipmentGroupDef(st, groupLabel, name);
             const equipmentNo = equipmentNoFromRow(row) || equipmentNoForName(st, groupLabel, name);
             return {
@@ -986,7 +1019,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function equipmentListGroupLabel(st) {
-        const key = spareInventoryGroupKey(st);
+        const key = st?.currentTab === 'actual' ? planGroupKey(st) : spareInventoryGroupKey(st);
         if (!key || key === CRITICAL_GROUP_KEY) return '';
         return groupKeyLabel(st, key) || '';
     }
@@ -1154,15 +1187,19 @@ const TVC_SpareMenu = (function () {
         return result;
     }
 
-    /** maintenance_groups에 저장된 그룹/장비 헤더 메타 조회 (그룹 Modify · 아이템 Modify · PMS Master) */
-    function groupDefHeader(st, label, itemSort1) {
+    /** maintenance_groups(PMS) 또는 spare_groups(SPARE) 헤더 메타 */
+    function groupDefHeader(st, label, itemSort1, store, deptScope) {
+        const usePms = store === 'pms';
+        const groupRows = usePms ? (st.groups || []) : (st.spareGroups || []);
         const lab = String(label || '').trim();
         if (!lab) return null;
-        const inDept = (gr) => (!st.department || gr.department === st.department);
+        const scopeDept = deptScope || st.department || null;
+        const inDept = (gr) => (!scopeDept || !gr.department || gr.department === scopeDept);
         const itemKey = String(itemSort1 || '').trim();
         const mapDef = (def) => {
             if (!def) return null;
-            const has = def.machinery_name || def.model_type || def.maker || def.capacity || def.dwg_no || def.serial_no;
+            const has = def.machinery_name || def.model_type || def.maker || def.capacity || def.dwg_no || def.serial_no
+                || def.is_critical_equipment === true || def.is_critical_equipment === false;
             if (!def.header_edited && !has) return null;
             return {
                 edited: !!def.header_edited,
@@ -1181,20 +1218,19 @@ const TVC_SpareMenu = (function () {
             return normalizeGroupLabel(gr.label) === normalizeGroupLabel(lab);
         };
         if (itemKey) {
-            const itemDef = (st.groups || []).find(gr => matchLabel(gr)
+            const itemDef = groupRows.find(gr => matchLabel(gr)
                 && String(gr.item_sort1 || '').trim() === itemKey);
             const mappedItem = mapDef(itemDef);
             if (mappedItem) return mappedItem;
         }
-        // 병합 그룹(03~05)은 개별 gen-engine 라벨에 저장되므로, 병합 라벨 조회 시 그 중 하나를 사용
         let def;
         if (isGeneratorEngineGroupLabel(lab)) {
-            def = (st.groups || []).find(gr => inDept(gr) && isGeneratorEngineGroupLabel(gr.label)
+            def = groupRows.find(gr => inDept(gr) && isGeneratorEngineGroupLabel(gr.label)
                 && !String(gr.item_sort1 || '').trim()
                 && (gr.machinery_name || gr.model_type || gr.maker || gr.capacity || gr.header_edited));
         }
         if (!def) {
-            def = (st.groups || []).find(gr => matchLabel(gr) && !String(gr.item_sort1 || '').trim());
+            def = groupRows.find(gr => matchLabel(gr) && !String(gr.item_sort1 || '').trim());
         }
         return mapDef(def);
     }
@@ -1232,6 +1268,29 @@ const TVC_SpareMenu = (function () {
         </select>`;
     }
 
+    function upsertPmsGroupInState(st, row) {
+        if (!row?.id) return;
+        const groups = st.groups || [];
+        const gi = groups.findIndex(gr => gr.id === row.id);
+        if (gi >= 0) groups[gi] = row;
+        else groups.push(row);
+        st.groups = groups;
+        if (Array.isArray(st._allGroups)) {
+            const ai = st._allGroups.findIndex(gr => gr.id === row.id);
+            if (ai >= 0) st._allGroups[ai] = row;
+            else st._allGroups.push(row);
+        }
+    }
+
+    function findMaintenanceGroupDef(defs, lab, dept) {
+        const norm = normalizeGroupLabel;
+        return (defs || []).find(gr => {
+            if (norm(gr.label) !== norm(lab)) return false;
+            if (!dept) return true;
+            return !gr.department || gr.department === dept;
+        }) || null;
+    }
+
     async function upsertGroupCriticalEquipment(st, yesNo, groupKeyOverride) {
         const key = groupKeyOverride ?? spareInventoryGroupKey(st);
         if (!key || key === CRITICAL_GROUP_KEY) return;
@@ -1253,7 +1312,7 @@ const TVC_SpareMenu = (function () {
             targetLabels = [label];
         }
         for (const lab of [...new Set(targetLabels.filter(Boolean))]) {
-            const existing = (defs || []).find(gr => (!dept || gr.department === dept) && norm(gr.label) === norm(lab));
+            const existing = findMaintenanceGroupDef(defs, lab, dept);
             const defBase = existing || {
                 id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
                 department: dept,
@@ -1264,29 +1323,43 @@ const TVC_SpareMenu = (function () {
             const row = {
                 ...defBase,
                 label: lab,
+                department: dept || defBase.department || '',
                 is_critical_equipment: yesNo,
                 header_edited: !!defBase.header_edited || yesNo !== null,
                 updated_at: new Date().toISOString(),
                 sync_status: 'LOCAL',
             };
             await TVC_DB.put('maintenance_groups', row);
-            const groups = st.groups || [];
-            const gi = groups.findIndex(gr => gr.id === row.id);
-            if (gi >= 0) groups[gi] = row;
-            else groups.push(row);
-            st.groups = groups;
+            upsertPmsGroupInState(st, row);
         }
     }
 
     function isGroupCriticalEquipmentYes(st, groupLabel) {
-        const h = groupDefHeader(st, groupLabel);
-        if (h) return h.criticalEquipment === 'Yes';
+        const h = groupDefHeader(st, groupLabel, undefined, 'pms');
+        if (h?.criticalEquipment === 'Yes') return true;
         const lab = String(groupLabel || '').trim();
         if (!lab) return false;
-        const inDept = (gr) => (!st.department || gr.department === st.department);
+        const inDept = (gr) => (!st.department || !gr.department || gr.department === st.department);
         const target = normalizeGroupLabel(lab);
         const def = (st.groups || []).find(gr => inDept(gr) && normalizeGroupLabel(gr.label) === target);
         return def?.is_critical_equipment === true;
+    }
+
+    function groupHasCriticalJob(st, groupLabel, deptScope) {
+        const target = normalizeGroupLabel(groupLabel);
+        if (!target) return false;
+        return (st.jobs || []).some(j => {
+            if (deptScope && j.department && j.department !== deptScope) return false;
+            if (normalizeGroupLabel(j.group || '') !== target) return false;
+            return j.is_critical_equipment === true;
+        });
+    }
+
+    function effectiveGroupCriticalEquipment(st, groupLabel, deptScope, headerStore) {
+        const defCrit = groupDefHeader(st, groupLabel, undefined, headerStore, deptScope)?.criticalEquipment || '';
+        if (defCrit === 'Yes') return 'Yes';
+        if (headerStore === 'pms' && groupHasCriticalJob(st, groupLabel, deptScope)) return 'Yes';
+        return defCrit;
     }
 
     async function savePlanCriticalEquipment(rawVal) {
@@ -1317,8 +1390,12 @@ const TVC_SpareMenu = (function () {
             assyName: '',
             dwgNo: '',
         };
+        const headerStore = opts.headerStore || 'spare';
         const groupKey = opts.groupKey !== undefined ? opts.groupKey : spareInventoryGroupKey(st);
         if (!groupKey) return blank;
+
+        const pmsNode = headerStore === 'pms' ? findPmsGroupNode(st, groupKey) : null;
+        const deptScope = pmsNode?.department || st.department || null;
 
         const pmsGroupNo = opts.groupLabel !== undefined
             ? safeTreeLabel(opts.groupLabel)
@@ -1329,7 +1406,7 @@ const TVC_SpareMenu = (function () {
 
         const equipment = String(opts.equipment || '').trim();
         if (equipment) {
-            const equipDef = groupDefHeader(st, pmsGroupNo, equipment);
+            const equipDef = groupDefHeader(st, pmsGroupNo, equipment, headerStore, deptScope);
             if (equipDef?.edited) {
                 return {
                     pmsGroupNo,
@@ -1352,12 +1429,11 @@ const TVC_SpareMenu = (function () {
             };
         }
 
-        // 우선순위: 1) maintenance_groups에 저장된 그룹 헤더 메타(그룹 Modify로 영속 저장)
-        //           2) 그룹 컴포넌트 자체 값  3) 대표 아이템(클릭 시와 동일 소스)
-        //           Ass'y/Dwg.는 그룹 단위에서는 비운다.
-        const def = groupDefHeader(st, pmsGroupNo);
-        // 사용자가 그룹 헤더를 편집했으면(빈 값 포함) 입력값을 그대로 사용 — 폴백하지 않음
+        const def = groupDefHeader(st, pmsGroupNo, undefined, headerStore, deptScope);
         if (def?.edited) {
+            const crit = headerStore === 'pms'
+                ? effectiveGroupCriticalEquipment(st, pmsGroupNo, deptScope, headerStore)
+                : (def.criticalEquipment || '');
             return {
                 pmsGroupNo,
                 equipment: '',
@@ -1366,7 +1442,7 @@ const TVC_SpareMenu = (function () {
                 capacity: def.capacity,
                 maker: def.maker,
                 serialNo: def.serialNo,
-                criticalEquipment: def.criticalEquipment || '',
+                criticalEquipment: crit,
                 assyName: '',
                 dwgNo: '',
             };
@@ -1374,16 +1450,31 @@ const TVC_SpareMenu = (function () {
         const sample = sparesInGroupKey(st, groupKey).find(s => !equipmentFromSpare(s))
             || sparesInGroupKey(st, groupKey)[0];
         const itemHeader = sample ? resolveSpareHeaderFromSpare(st, sample) : null;
-        const groupLabels = groupLabelsForPmsGroup(pmsGroupNo, st, groupKey);
-        const comp = findGroupComponent(st, groupLabels);
+        if (headerStore === 'pms') {
+            const groupLabels = groupLabelsForPmsGroup(pmsGroupNo, st, groupKey);
+            const comp = findGroupComponent(st, groupLabels);
+            const crit = effectiveGroupCriticalEquipment(st, pmsGroupNo, deptScope, headerStore);
+            return {
+                pmsGroupNo,
+                equipment: '',
+                machineryName: def?.machineryName || headerFieldText(comp?.machinery_name) || itemHeader?.machineryName || '',
+                modelType: def?.modelType || headerFieldText(comp?.model_type || comp?.model) || itemHeader?.modelType || '',
+                capacity: def?.capacity || headerFieldText(comp?.capacity || comp?.remarks) || itemHeader?.capacity || '',
+                maker: def?.maker || headerFieldText(comp?.maker) || itemHeader?.maker || '',
+                serialNo: def?.serialNo || headerFieldText(comp?.serial_no) || itemHeader?.serialNo || '',
+                criticalEquipment: crit,
+                assyName: '',
+                dwgNo: '',
+            };
+        }
         return {
             pmsGroupNo,
             equipment: '',
-            machineryName: def?.machineryName || headerFieldText(comp?.machinery_name) || itemHeader?.machineryName || '',
-            modelType: def?.modelType || headerFieldText(comp?.model_type || comp?.model) || itemHeader?.modelType || '',
-            capacity: def?.capacity || headerFieldText(comp?.capacity || comp?.remarks) || itemHeader?.capacity || '',
-            maker: def?.maker || headerFieldText(comp?.maker) || itemHeader?.maker || '',
-            serialNo: def?.serialNo || headerFieldText(comp?.serial_no) || itemHeader?.serialNo || '',
+            machineryName: def?.machineryName || itemHeader?.machineryName || '',
+            modelType: def?.modelType || itemHeader?.modelType || '',
+            capacity: def?.capacity || itemHeader?.capacity || '',
+            maker: def?.maker || itemHeader?.maker || '',
+            serialNo: def?.serialNo || itemHeader?.serialNo || '',
             criticalEquipment: def?.criticalEquipment || '',
             assyName: '',
             dwgNo: '',
@@ -1399,7 +1490,10 @@ const TVC_SpareMenu = (function () {
                 if (fromItem) return fromItem;
             }
         }
-        return resolveSpareHeaderFromGroup(st, { groupKey: opts.groupKey });
+        return resolveSpareHeaderFromGroup(st, {
+            groupKey: opts.groupKey,
+            headerStore: opts.headerStore || 'spare',
+        });
     }
 
     function spareHeaderHasContent(st, focusedOverride, groupKeyOverride) {
@@ -1449,18 +1543,24 @@ const TVC_SpareMenu = (function () {
         if (m.inlineEditId && m.inlineDraft?.header && focusOverride === undefined) {
             return renderSpareGroupHeaderEditHtml(st, m.inlineDraft.header);
         }
-        if (m.groupHeaderEdit && m.groupHeaderDraft && m.groupHeaderEditKey === spareInventoryGroupKey(st)) {
+        if (m.groupHeaderEdit && m.groupHeaderDraft && m.groupHeaderEditKey === activeTreeGroupKey(st)) {
             return renderSpareGroupHeaderGroupEditHtml(st, m.groupHeaderDraft, {
                 pmsLabel: opts.pmsLabel || 'SPARE Group No.',
                 showCriticalEquipment: opts.showCriticalEquipment,
+                showEquipment: opts.showEquipment !== false,
             });
         }
         const headerGroupKey = opts.groupKey !== undefined ? opts.groupKey : spareFilterGroupKey(st);
         const h = opts.forceIdle
             ? { pmsGroupNo: '', maker: '', modelType: '', capacity: '', serialNo: '' }
-            : resolveSpareGroupHeader(st, { focusedId: focusOverride, groupKey: headerGroupKey });
+            : resolveSpareGroupHeader(st, {
+                focusedId: focusOverride,
+                groupKey: headerGroupKey,
+                headerStore: opts.headerStore || 'spare',
+            });
         const hasContent = opts.forceIdle ? false : spareHeaderHasContent(st, focusOverride, headerGroupKey);
         const showCriticalEquipment = !!opts.showCriticalEquipment;
+        const showEquipment = opts.showEquipment !== false;
         const blankEmpty = !!opts.blankEmpty;
         const field = (v, extraClass = '') => {
             const t = String(v || '').trim();
@@ -1469,33 +1569,37 @@ const TVC_SpareMenu = (function () {
             if (blankEmpty && empty) return `<span class="${cls}"></span>`;
             return `<span class="${cls}">${empty ? '—' : esc(t)}</span>`;
         };
-        const idleHintText = opts.idleHint || 'Click an item or select a group in the SPARE GROUP Tree to display equipment information.';
-        const idleHint = opts.suppressIdleHint
-            ? ''
-            : `<span class="spare-gh-idle-hint">${idleHintText}</span>`;
+        const idleHint = opts.idleHint && !opts.suppressIdleHint
+            ? `<span class="spare-gh-idle-hint">${opts.idleHint}</span>`
+            : '';
         const ariaLabel = opts.ariaLabel || 'SPARE Group information';
         const primaryRowClass = showCriticalEquipment
             ? 'spare-gh-row spare-gh-row-primary spare-gh-row-plan-split spare-gh-row-primary-split'
             : 'spare-gh-row spare-gh-row-primary spare-gh-row-primary-split';
         const pmsFieldClass = showCriticalEquipment
-            ? 'spare-gh-field spare-gh-field-wide spare-gh-field-span2'
-            : 'spare-gh-field spare-gh-field-wide';
+            ? (showEquipment
+                ? 'spare-gh-field spare-gh-field-wide spare-gh-field-span2'
+                : 'spare-gh-field spare-gh-field-wide spare-gh-field-span3')
+            : (showEquipment
+                ? 'spare-gh-field spare-gh-field-wide'
+                : 'spare-gh-field spare-gh-field-wide spare-gh-field-span2');
         const criticalField = showCriticalEquipment ? `
                     <div class="spare-gh-field">
                         <span class="spare-gh-label">Critical Equipment</span>
                         ${renderCriticalEquipmentControl(st, h, { hasContent })}
+                    </div>` : '';
+        const equipmentField = showEquipment ? `
+                    <div class="spare-gh-field spare-gh-field-wide">
+                        ${renderEquipmentFieldLabel(st, hasContent)}
+                        ${renderHeaderEquipmentField(st, h, { hasContent })}
                     </div>` : '';
         return `<section class="spare-group-header${hasContent ? '' : ' is-idle'}" aria-label="${esc(ariaLabel)}">
             <div class="spare-group-header-card">
                 <div class="${primaryRowClass}">
                     <div class="${pmsFieldClass}">
                         <span class="spare-gh-label">${pmsLabel}</span>
-                        ${hasContent ? field(h.pmsGroupNo, 'spare-gh-value-primary') : `<span class="spare-gh-value spare-gh-value-primary empty">${idleHint}</span>`}
-                    </div>
-                    <div class="spare-gh-field spare-gh-field-wide">
-                        ${renderEquipmentFieldLabel(st, hasContent)}
-                        ${renderHeaderEquipmentField(st, h, { hasContent })}
-                    </div>${criticalField}
+                        ${hasContent ? field(h.pmsGroupNo, 'spare-gh-value-primary') : (idleHint || field('', 'spare-gh-value-primary'))}
+                    </div>${equipmentField}${criticalField}
                 </div>
                 <div class="spare-gh-row spare-gh-row-quad">
                     <div class="spare-gh-field">
@@ -1520,6 +1624,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function renderSpareGroupHeaderFromResolved(h, opts = {}) {
+        const st = getState();
         const pmsLabel = opts.pmsLabel || 'SPARE Group No.';
         const hasContent = !!(String(h?.pmsGroupNo || '').trim());
         const field = (v, extraClass = '') => {
@@ -1563,17 +1668,36 @@ const TVC_SpareMenu = (function () {
         </section>`;
     }
 
+    /** Requisition / consumption line → live spare (id, part_no, code fallback) */
+    function resolveSpareFromLine(st, line) {
+        if (!line) return null;
+        const lookup = spareResolveLookup(st);
+        const sid = reqWorkSpareIdKey(line.spare_part_id);
+        if (sid && lookup.byId.has(sid)) return lookup.byId.get(sid);
+        const pno = normalizePartKey(line.part_no || line.maker_part_no || '');
+        if (pno && lookup.byPartNo.has(pno)) return lookup.byPartNo.get(pno);
+        const code = normalizePartKey(line.universal_code || line.inventory_numbering || line.code || '');
+        if (code && lookup.byCode.has(code)) return lookup.byCode.get(code);
+        return null;
+    }
+
+    function spareForReqLine(st, line) {
+        return resolveSpareFromLine(st, line) || spareFromReqLine(line);
+    }
+
     function reqWorkUsesGroupedList(st) {
         const m = modState(st);
         if (!isRequisitionListWindow(m) || reqWorkCheckedSpareCount(st) <= 0) return false;
-        if (m.reqWorkListEditing && !m.reqWorkShowSelectedOnly) return false;
+        if (m.reqWorkListEditing) return false;
         return true;
     }
 
     function reqWorkGroupedSections(st) {
         const req = getReqWorkSession();
-        if (!req?.lines?.length) return [];
-        return reqPreviewGroups(st, req).map(g => ({
+        const lines = normalizeReqLines(req?.lines);
+        if (!lines.length) return [];
+        const draft = req ? { ...req, lines } : { lines };
+        return reqPreviewGroups(st, draft).map(g => ({
             key: g.key,
             header: g.header || { pmsGroupNo: g.key, machineryName: '', modelType: '', capacity: '', maker: '', serialNo: '' },
             spares: g.rows.map(({ spare, line }) => spare || spareFromReqLine(line)).map(canon),
@@ -1598,9 +1722,10 @@ const TVC_SpareMenu = (function () {
         }
         return renderSpareGroupHeaderHtml(st, {
             pmsLabel: 'PMS Group No.',
-            idleHint: 'Click a job or select a group in the PMS GROUP Tree to display equipment information.',
             ariaLabel: 'PMS Group information',
             showCriticalEquipment: true,
+            suppressIdleHint: true,
+            headerStore: 'pms',
             groupKey: planGroupKey(st),
         });
     }
@@ -1678,7 +1803,7 @@ const TVC_SpareMenu = (function () {
         //  - 03/04/05 GENERATOR ENGINE(PMS) → SPARE: 03. GENERATOR ENGINE
         //  - 라벨 기준 동일 정렬
         const seen = new Set();
-        const nodes = (st.idx?.groupNodes || [])
+        const nodes = (spareGroupTreeNodes(st) || [])
             .filter(n => !st.department || spareTreeDisplayDept(n) === st.department)
             .filter(n => !isHiddenSpareGroup(n.label, n.department))
             .filter(n => {
@@ -1790,31 +1915,39 @@ const TVC_SpareMenu = (function () {
     function renderSpareGroupHeaderGroupEditHtml(st, h, opts = {}) {
         const pmsLabel = opts.pmsLabel || 'SPARE Group No.';
         const showCriticalEquipment = !!opts.showCriticalEquipment;
+        const showEquipment = opts.showEquipment !== false;
         const primaryRowClass = showCriticalEquipment
             ? 'spare-gh-row spare-gh-row-primary spare-gh-row-plan-split spare-gh-row-primary-split'
             : 'spare-gh-row spare-gh-row-primary spare-gh-row-primary-split';
         const pmsFieldClass = showCriticalEquipment
-            ? 'spare-gh-field spare-gh-field-wide spare-gh-field-span2'
-            : 'spare-gh-field spare-gh-field-wide';
+            ? (showEquipment
+                ? 'spare-gh-field spare-gh-field-wide spare-gh-field-span2'
+                : 'spare-gh-field spare-gh-field-wide spare-gh-field-span3')
+            : (showEquipment
+                ? 'spare-gh-field spare-gh-field-wide'
+                : 'spare-gh-field spare-gh-field-wide spare-gh-field-span2');
         const criticalField = showCriticalEquipment ? `
                     <div class="spare-gh-field">
                         <span class="spare-gh-label">Critical Equipment</span>
                         ${renderCriticalEquipmentControl(st, h, { hasContent: true, editMode: true })}
                     </div>` : '';
-        const equipHint = String(h.equipment || '').trim()
-            ? `Equipment “${String(h.equipment).trim()}” header — not applied to group default.`
-            : 'Group default — applied to items without Equipment.';
+        const equipmentField = showEquipment ? `
+                    <div class="spare-gh-field spare-gh-field-wide">
+                        ${renderEquipmentFieldLabel(st, true)}
+                        ${renderHeaderEquipmentField(st, h, { editMode: true, groupLabel: h.pmsGroupNo })}
+                    </div>` : '';
+        const equipHint = showEquipment
+            ? (String(h.equipment || '').trim()
+                ? `Equipment “${String(h.equipment).trim()}” header — not applied to group default.`
+                : 'Group default — applied to items without Equipment.')
+            : 'Group header — applied to all jobs in this PMS group.';
         return `<section class="spare-group-header is-editing is-group-editing" aria-label="Edit group header">
             <div class="spare-group-header-card">
                 <div class="${primaryRowClass}">
                     <div class="${pmsFieldClass}">
                         <span class="spare-gh-label">${esc(pmsLabel)}</span>
                         ${ghInput('sgh_g_pmsGroupNo', h.pmsGroupNo, 'spare-gh-input-primary')}
-                    </div>
-                    <div class="spare-gh-field spare-gh-field-wide">
-                        ${renderEquipmentFieldLabel(st, true)}
-                        ${renderHeaderEquipmentField(st, h, { editMode: true, groupLabel: h.pmsGroupNo })}
-                    </div>${criticalField}
+                    </div>${equipmentField}${criticalField}
                 </div>
                 <div class="spare-gh-row spare-gh-row-quad">
                     <div class="spare-gh-field">
@@ -1984,11 +2117,61 @@ const TVC_SpareMenu = (function () {
         refresh = opts.refresh || refresh;
     }
 
-    async function reloadSparesCache() {
+    let _sparesCacheScopeKey = '';
+    let _spareResolveLookup = null;
+    let _spareResolveLookupLen = -1;
+
+    function invalidateSpareResolveLookup() {
+        _spareResolveLookup = null;
+        _spareResolveLookupLen = -1;
+    }
+
+    function spareResolveLookup(st) {
+        const spares = st?.spares || [];
+        if (_spareResolveLookup && _spareResolveLookupLen === spares.length) return _spareResolveLookup;
+        const byId = new Map();
+        const byPartNo = new Map();
+        const byCode = new Map();
+        for (const raw of spares) {
+            const s = canon(raw);
+            const idKey = reqWorkSpareIdKey(s.id);
+            if (idKey) byId.set(idKey, s);
+            const pno = normalizePartKey(s.makerPartNo || s.part_no);
+            if (pno && !byPartNo.has(pno)) byPartNo.set(pno, s);
+            const code = normalizePartKey(s.inventoryNumbering || s.universalItemCode || s.universal_code);
+            if (code && !byCode.has(code)) byCode.set(code, s);
+        }
+        _spareResolveLookup = { byId, byPartNo, byCode };
+        _spareResolveLookupLen = spares.length;
+        return _spareResolveLookup;
+    }
+
+    async function reloadSparesCache(opts = {}) {
         const st = getState();
         if (!st) return;
-        st.spares = await TVC_DB.SparePart.listAll().catch(() =>
+        const isHq = window.TVC_RBAC && TVC_RBAC.isHqAccount(st.user);
+        const metaVessel = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null);
+        const scopeVessel = isHq ? st.selectedVesselId : (metaVessel || st.user?.vessel_id);
+        const extraVessel = opts.vesselId || opts.includeVesselId || null;
+        const vesselIds = new Set([scopeVessel, extraVessel].filter(Boolean));
+        const scopeKey = [...vesselIds].sort().join('\0') || '__all__';
+        if (!opts.force && _sparesCacheScopeKey === scopeKey && Array.isArray(st.spares) && st.spares.length) {
+            return;
+        }
+        const all = await TVC_DB.SparePart.listAll().catch(() =>
             TVC_DB.getAll('spare_parts').then(rows => rows.map(TVC_SpareSchema.fromRow)));
+        const belongs = (row, vid) => {
+            if (!vid) return true;
+            if (typeof TVC_MasterVesselScope !== 'undefined') return TVC_MasterVesselScope.belongs(row, vid);
+            return !row?.vessel_id || row.vessel_id === vid;
+        };
+        if (!vesselIds.size) {
+            st.spares = all;
+        } else {
+            st.spares = all.filter(s => [...vesselIds].some(vid => belongs(s, vid)));
+        }
+        _sparesCacheScopeKey = scopeKey;
+        invalidateSpareResolveLookup();
     }
 
     function modState(st) {
@@ -2255,14 +2438,46 @@ const TVC_SpareMenu = (function () {
         refreshList();
     }
 
+    /** Requisition line → map key (local spare id or line snapshot id) */
+    function reqLineSpareKey(line) {
+        const id = reqWorkSpareIdKey(line?.spare_part_id || line?.sparePartId);
+        if (id) return id;
+        return spareFromReqLine(line || {}).id;
+    }
+
+    /** Load saved requisition lines — legacy keys + part-only snapshots */
+    function normalizeReqLines(rawLines) {
+        return (rawLines || []).map(l => {
+            const line = { ...l };
+            line.spare_part_id = reqWorkSpareIdKey(line.spare_part_id || line.sparePartId);
+            line.part_no = String(line.part_no || line.partNo || line.maker_part_no || '').trim();
+            line.universal_code = String(line.universal_code || line.universalCode || line.code || '').trim();
+            line.name = String(line.name || '').trim();
+            line.unit = line.unit || 'EA';
+            return line;
+        }).filter(l => l.spare_part_id || l.part_no || l.universal_code || l.name);
+    }
+
+    function reqLineCount(req) {
+        return normalizeReqLines(req?.lines).length;
+    }
+
     async function syncReqLineMap() {
         _reqLineBySpareId = new Map();
+        const st = getState();
+        const indexLine = (l) => {
+            const line = normalizeReqLines([l])[0];
+            if (!line) return;
+            const resolved = resolveSpareFromLine(st, line);
+            const keys = new Set();
+            if (resolved?.id) keys.add(reqWorkSpareIdKey(resolved.id));
+            const snapKey = reqLineSpareKey(line);
+            if (snapKey) keys.add(snapKey);
+            keys.forEach(k => _reqLineBySpareId.set(k, line));
+        };
         if (_reqWorkDraft && modState(getState()).reqWorkOpen) {
             _reqLineMapReqId = '__draft__';
-            (_reqWorkDraft.lines || []).forEach(l => {
-                const id = reqWorkSpareIdKey(l.spare_part_id);
-                if (id) _reqLineBySpareId.set(id, l);
-            });
+            normalizeReqLines(_reqWorkDraft.lines).forEach(indexLine);
             return;
         }
         const reqId = _reqSheet.reqId || modState(getState()).selectedReqId;
@@ -2270,10 +2485,7 @@ const TVC_SpareMenu = (function () {
         if (!reqId) return;
         try {
             const req = await TVC_Inventory.getRequisition(reqId);
-            (req?.lines || []).forEach(l => {
-                const id = reqWorkSpareIdKey(l.spare_part_id);
-                if (id) _reqLineBySpareId.set(id, l);
-            });
+            (req?.lines || []).forEach(indexLine);
         } catch (_) { /* noop */ }
     }
 
@@ -2311,13 +2523,13 @@ const TVC_SpareMenu = (function () {
         const req = getReqWorkSession();
         let focusId = null;
         for (const line of req?.lines || []) {
-            const id = reqWorkSpareIdKey(line.spare_part_id);
-            if (!id) continue;
-            const spare = (st.spares || []).find(s => reqWorkSameSpareId(s.id, id));
+            const spare = resolveSpareFromLine(st, line);
             if (spare) {
                 focusId = spare.id;
                 break;
             }
+            const id = reqLineSpareKey(line);
+            if (id) { focusId = id; break; }
         }
         m.reqWorkFocusedId = focusId;
     }
@@ -2336,8 +2548,29 @@ const TVC_SpareMenu = (function () {
         return reqWorkSpareIdKey(a) === reqWorkSpareIdKey(b);
     }
 
+    function reqLineForSpareRow(s) {
+        const sid = reqWorkSpareIdKey(s?.id);
+        const hit = _reqLineBySpareId?.get(sid);
+        if (hit) return hit;
+        const req = getReqWorkSession();
+        if (!req?.lines?.length) return null;
+        return normalizeReqLines(req.lines).find(l => {
+            const resolved = resolveSpareFromLine(getState(), l);
+            if (resolved && reqWorkSameSpareId(resolved.id, sid)) return true;
+            return reqLineSpareKey(l) === sid;
+        }) || null;
+    }
+
     function reqWorkRowChecked(s) {
-        return !!_reqLineBySpareId?.get(reqWorkSpareIdKey(s.id));
+        const sid = reqWorkSpareIdKey(s.id);
+        if (_reqLineBySpareId?.has(sid)) return true;
+        const req = getReqWorkSession();
+        if (!req?.lines?.length) return false;
+        return normalizeReqLines(req.lines).some(l => {
+            const resolved = resolveSpareFromLine(getState(), l);
+            if (resolved && reqWorkSameSpareId(resolved.id, sid)) return true;
+            return reqLineSpareKey(l) === sid;
+        });
     }
 
     function getConsumeSession() {
@@ -2390,8 +2623,7 @@ const TVC_SpareMenu = (function () {
     function reqWorkCheckedSpareCount(st) {
         const m = modState(st);
         if (isRequisitionListWindow(m)) {
-            const req = getReqWorkSession();
-            return (req?.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id)).length;
+            return reqLineCount(getReqWorkSession());
         }
         return (st.spares || []).reduce((n, s) => n + (reqWorkRowChecked(canon(s)) ? 1 : 0), 0);
     }
@@ -2417,14 +2649,9 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkLineSpares(st, req) {
-        if (!req?.lines?.length) return [];
-        const spareById = new Map((st.spares || []).map(s => [reqWorkSpareIdKey(s.id), canon(s)]));
-        return (req.lines || [])
-            .filter(l => reqWorkSpareIdKey(l.spare_part_id))
-            .map(line => {
-                const local = spareById.get(reqWorkSpareIdKey(line.spare_part_id));
-                return local || spareFromReqLine(line);
-            });
+        const lines = normalizeReqLines(req?.lines);
+        if (!lines.length) return [];
+        return lines.map(line => spareForReqLine(st, line));
     }
 
     function reqWorkSelectedBtnMeta(st) {
@@ -2527,7 +2754,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkRequestCellHtml(s, sid, locked = false) {
-        const line = _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id));
+        const line = reqLineForSpareRow(s);
         if (!line) return '0';
         const qty = Number(line.qty_requested) || 0;
         if (locked) return esc(String(qty));
@@ -2538,7 +2765,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkEvalCellHtml(s, sid, locked = false) {
-        const line = _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id));
+        const line = reqLineForSpareRow(s);
         if (!line) return '—';
         const reqQty = Number(line.qty_requested) || 0;
         const evalQty = line.qty_approved != null && line.qty_approved !== ''
@@ -3590,7 +3817,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkReceivedCellHtml(s, sid) {
-        const line = _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id));
+        const line = reqLineForSpareRow(s);
         if (!line) return '0';
         const qty = Number(line.qty_received) || 0;
         return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-req-qty-input spare-req-rcvd-qty-input" value="${qty}"
@@ -3875,7 +4102,7 @@ const TVC_SpareMenu = (function () {
 
     /** @deprecated alias */
     function spareOrderCols(s) {
-        return sparePipelineCols(s, _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id)));
+        return sparePipelineCols(s, reqLineForSpareRow(s));
     }
 
     function spareInventoryUser(st) {
@@ -4727,7 +4954,7 @@ const TVC_SpareMenu = (function () {
             : ctx === 'consume' ? SPARE_CONSUME_COLGROUP
                 : ctx === 'receive' ? SPARE_RECEIVE_COLGROUP
                 : ctx === 'wrSpare' ? SPARE_WR_COLGROUP : SPARE_MAIN_COLGROUP;
-        const reqLine = ctx === 'reqWork' ? _reqLineBySpareId?.get(reqWorkSpareIdKey(s.id)) : null;
+        const reqLine = ctx === 'reqWork' ? reqLineForSpareRow(s) : null;
         const pipe = sparePipelineCols(s, reqLine);
         const stockCell = pipe.stock;
         const locked = ctx === 'reqWork' && reqWorkFormLocked();
@@ -6429,13 +6656,62 @@ const TVC_SpareMenu = (function () {
         syncSparePartsRequisitionWindowTitle();
     }
 
+    async function refreshReqWorkListWindowFromSession(st, opts = {}) {
+        st = st || getState();
+        const req = getReqWorkSession();
+        if (!opts.skipReload && req?.vessel_id) await reloadSparesCache({ vesselId: req.vessel_id });
+        if (!opts.skipLineMap) await syncReqLineMap();
+        syncRequisitionDraftFromLines();
+        syncReqWorkHeaderFocusFromLines(st);
+        _reqWorkCachedList = filteredReqWorkSpares(st);
+        refreshReqWorkListUi(opts);
+        updateReqWorkSelectedBtn();
+        updateReqWorkHeadStats();
+        if (!opts.skipHeadLayout) {
+            requestAnimationFrame(() => {
+                syncReqWorkHeadLayout();
+                if (!opts.soft) requestAnimationFrame(syncReqWorkHeadLayout);
+            });
+        }
+    }
+
+    function bindReqWorkHistListClicks() {
+        const root = document.getElementById('spareReqWorkBody');
+        if (!root || root._reqHistClickBound) return;
+        root._reqHistClickBound = true;
+        root.addEventListener('click', (e) => {
+            const tr = e.target.closest('#reqWorkHistPanel tr[data-req-id]');
+            if (!tr || e.target.closest('.spare-req-list-chk')) return;
+            const id = tr.dataset.reqId;
+            if (!id) return;
+            e.preventDefault();
+            e.stopPropagation();
+            reqListSelectRow(id);
+        });
+    }
+
+    function bindSpareReqListModalClicks() {
+        const modal = document.getElementById('spareReqListModal');
+        if (!modal || modal._reqListClickBound) return;
+        modal._reqListClickBound = true;
+        modal.addEventListener('click', (e) => {
+            const tr = e.target.closest('#spareReqListBody tr[data-req-id]');
+            if (!tr || e.target.closest('.spare-req-list-chk')) return;
+            const id = tr.dataset.reqId;
+            if (!id) return;
+            e.preventDefault();
+            e.stopPropagation();
+            reqListSelectRow(id);
+        });
+    }
+
     async function reqListSelectRow(id) {
+        try {
         const m = modState(getState());
         // 행 클릭은 하이라이트(선택)만 — 체크는 ㅁ를 직접 눌러야 함
         m.selectedReqId = id;
         if (isRequisitionListWindow(m)) {
-            // load path already syncs hist selection / toolbar / head buttons once
-            await loadRequisitionIntoListWindow(id, { preserveHistPopover: true });
+            await loadRequisitionIntoListWindow(id);
         } else {
             syncReqListRowSelection(document.getElementById('spareReqListBody'));
             syncReqListRowSelection(document.getElementById('reqWorkHistPanel'));
@@ -6450,6 +6726,10 @@ const TVC_SpareMenu = (function () {
             try { scroll.focus({ preventScroll: true }); } catch (_) { /* ignore */ }
         }
         requestAnimationFrame(reqListScrollSelectedIntoView);
+        } catch (e) {
+            console.error('[reqListSelectRow]', e);
+            await TVC_Dialog.alert(e?.message || 'Failed to load requisition.');
+        }
     }
 
     async function reqListToggleRow(id, checked) {
@@ -6475,6 +6755,11 @@ const TVC_SpareMenu = (function () {
             syncReqListRowSelection(document.getElementById('reqWorkHistPanel'));
             if (modalOpen) await syncReqListModalToolbar();
             if (histOpen) {
+                if (checked && isRequisitionListWindow(m)) {
+                    await loadRequisitionIntoListWindow(id);
+                    syncReqWorkHqFlowBtns();
+                    return;
+                }
                 await syncReqHistPopoverToolbar();
                 syncReqWorkListWindowHeadButtons();
             }
@@ -6508,9 +6793,16 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert('Requisition not found.');
             return false;
         }
+        const st0 = getState();
+        const m0 = modState(st0);
+        const uiMounted = isRequisitionListWindow(m0) && m0.reqWorkOpen && !!document.getElementById('reqWorkListScroll');
+        const prevLayout = uiMounted ? (reqWorkUsesGroupedList(st0) ? 'grouped' : 'virtual') : null;
+        const prevQuoteView = !!m0.reqWorkHqQuoteView;
+        const prevEvalView = !!m0.reqWorkHqEvalView;
+
         _reqWorkDraft = {
             ...req,
-            lines: (req.lines || []).map(l => ({ ...l })),
+            lines: normalizeReqLines(req.lines),
         };
         syncReqReportedByFromAuthor(_reqWorkDraft);
         _reqSheet.reqId = req.id;
@@ -6528,30 +6820,50 @@ const TVC_SpareMenu = (function () {
         modState(st).modalSpareGroupKey = null;
         st.treeSearch = '';
         clearReqWorkSearch(st);
-        await syncReqLineMap();
-        syncRequisitionDraftFromLines();
-        syncReqWorkHeaderFocusFromLines(st);
-        const preserveHist = opts.preserveHistPopover !== false
-            && _reqWorkHistOpen
-            && isRequisitionListWindow(m);
-        if (preserveHist) {
-            const histScroll = document.getElementById('reqWorkHistListScroll');
-            const histScrollTop = histScroll?.scrollTop ?? 0;
-            refreshReqWorkListUi();
-            applyReqWorkMetaFromSession(req);
-            syncReqWorkApprovalSection(req);
-            updateReqWorkHeadStats();
-            syncReqListRowSelection(document.getElementById('reqWorkHistPanel'));
-            // Lock form fields without touching hist toolbar (avoids button flicker)
-            applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
-            syncReqWorkListWindowHeadButtons();
+
+        const listScroll = document.getElementById('reqWorkListScroll');
+        const listScrollTop = listScroll?.scrollTop ?? 0;
+        const histPanel = document.getElementById('reqWorkHistPanel');
+        const histWasOpen = _reqWorkHistOpen && histPanel && !histPanel.classList.contains('hidden');
+        const histScroll = document.getElementById('reqWorkHistListScroll');
+        const histScrollTop = histScroll?.scrollTop ?? 0;
+        const nextLayout = reqWorkUsesGroupedList(st) ? 'grouped' : 'virtual';
+        const layoutChanged = !!prevLayout && prevLayout !== nextLayout;
+        const viewModeChanged = prevQuoteView !== !!m.reqWorkHqQuoteView || prevEvalView !== !!m.reqWorkHqEvalView;
+        const canSoftRefresh = uiMounted && !m.reqWorkListDocPreview && !layoutChanged && !viewModeChanged && !opts.forceFullRender;
+
+        await reloadSparesCache({ vesselId: req.vessel_id });
+
+        if (canSoftRefresh) {
+            await syncReqLineMap();
+            await refreshReqWorkListWindowFromSession(st, {
+                skipReload: true,
+                skipLineMap: true,
+                soft: true,
+                skipTree: true,
+                skipScrollLock: true,
+                skipHeadLayout: true,
+            });
+            applyReqWorkMetaFromSession(_reqWorkDraft);
+            syncReqWorkApprovalSection(_reqWorkDraft);
             syncReqWorkFlowBtns();
-            // Close O/S enable may change with selection; Confirm/Approve follow checks only
-            await syncReqHistPopoverToolbar();
+            syncSparePartsRequisitionWindowTitle();
+            syncReqWorkListWindowHeadButtons();
+            syncReqListRowSelection(document.getElementById('spareReqListBody'));
+            if (histWasOpen) {
+                syncReqListRowSelection(histPanel);
+                await syncReqHistPopoverToolbar();
+            }
+            if (listScroll) listScroll.scrollTop = listScrollTop;
             if (histScroll) histScroll.scrollTop = histScrollTop;
             return true;
         }
+
+        syncRequisitionDraftFromLines();
+        syncReqWorkHeaderFocusFromLines(st);
+        _reqWorkCachedList = filteredReqWorkSpares(st);
         await renderReqWorkModal();
+        if (histScroll) histScroll.scrollTop = histScrollTop;
         return true;
     }
 
@@ -6581,7 +6893,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(getState());
         m.selectedReqId = id;
         if (isRequisitionListWindow(m)) {
-            await loadRequisitionIntoListWindow(id, { preserveHistPopover: true });
+            await loadRequisitionIntoListWindow(id);
             syncReqWorkHqFlowBtns();
             return;
         }
@@ -6631,7 +6943,7 @@ const TVC_SpareMenu = (function () {
             const spareGroup = reqListSpareGroupNo(r, st);
             const canSelect = !_reqListXferExportKind || reqListCanXferExport(r);
             const chkDisabled = canSelect ? '' : ` disabled title="${escAttr(reqListXferExportSelectDisabledTitle(r))}"`;
-            return `<tr class="${sel ? 'sr-req-sel' : ''}${canSelect ? '' : ' menu-xfer-defect-row-disabled'}" data-req-id="${rid}" ${rowClick}>
+            return `<tr class="spare-req-list-row${sel ? ' sr-req-sel' : ''}${canSelect ? '' : ' menu-xfer-defect-row-disabled'}" data-req-id="${rid}" ${rowClick} style="cursor:pointer">
                 <td class="spare-req-list-chk" onclick="event.stopPropagation()">
                     <input type="checkbox" aria-label="Select requisition ${no}"
                         ${checked ? 'checked' : ''}${chkDisabled} onchange="TVC_SpareMenu.${toggleFn}('${rid}', this.checked)">
@@ -6663,7 +6975,7 @@ const TVC_SpareMenu = (function () {
         }
         if (isRequisitionListWindow(m)) {
             if (checked) {
-                await loadRequisitionIntoListWindow(id, { preserveHistPopover: true });
+                await loadRequisitionIntoListWindow(id);
                 syncReqWorkHqFlowBtns();
                 return;
             }
@@ -6764,6 +7076,7 @@ const TVC_SpareMenu = (function () {
         syncReqListFilterUi(st);
         syncSpareDateInputs(body);
         bindReqListKeyboard();
+        bindSpareReqListModalClicks();
         TVC_App.bindSearchClearInput?.('reqListSearch');
         TVC_App.updateSearchClearBtn?.('reqListSearch');
         requestAnimationFrame(syncReqListHeadPad);
@@ -8670,6 +8983,7 @@ const TVC_SpareMenu = (function () {
             showSpicsModal('spareReqWorkModal');
         }
         showSpicsModal('spareReqListModal');
+        bindSpareReqListModalClicks();
     }
 
     function closeReqListModal() {
@@ -8772,18 +9086,16 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqPreviewGroups(st, req) {
-        const spareById = new Map((st.spares || []).map(s => [String(s.id), s]));
         const groups = new Map();
-        (req.lines || []).forEach(line => {
-            const raw = spareById.get(String(line.spare_part_id));
-            const spare = raw ? canon(raw) : null;
+        normalizeReqLines(req?.lines).forEach(line => {
+            const displaySpare = spareForReqLine(st, line);
             let header = null;
             let key = '';
-            if (spare) {
-                header = resolveSpareHeaderFromSpare(st, spare);
+            if (displaySpare) {
+                header = resolveSpareHeaderFromSpare(st, displaySpare);
                 key = header.pmsGroupNo || '';
             }
-            if (!key) key = String(line.equipment || '').trim();
+            if (!key) key = String(line.group || line.equipment || '').trim();
             const gkey = key || 'Unclassified';
             if (!groups.has(gkey)) {
                 groups.set(gkey, {
@@ -8794,7 +9106,7 @@ const TVC_SpareMenu = (function () {
             } else if (header && !groups.get(gkey).header.machineryName && header.machineryName) {
                 groups.get(gkey).header = header;
             }
-            groups.get(gkey).rows.push({ spare, line });
+            groups.get(gkey).rows.push({ spare: displaySpare, line });
         });
         return [...groups.values()].sort((a, b) => {
             const na = pmsGroupSortNo(a.key);
@@ -9757,9 +10069,10 @@ const TVC_SpareMenu = (function () {
 
     // ── 그룹 단위 헤더 편집 ────────────────────────────────────────────
     function groupSelectedNode(st) {
-        const key = spareInventoryGroupKey(st);
+        const key = activeTreeGroupKey(st);
         if (!key || key === CRITICAL_GROUP_KEY || key === MERGED_GEN_ENGINE_KEY) return null;
-        return st.idx?.groupNodes?.find(n => n.key === key) || null;
+        if (st.currentTab === 'actual') return findPmsGroupNode(st, key);
+        return findSpareGroupNode(st, key);
     }
 
     function canEditGroupHeader(st) {
@@ -9792,35 +10105,63 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         if (!canEditGroupHeader(st)) {
             await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
+            return;
         }
-        if (window.TVC_App?.openOrigGroupAdd) return TVC_App.openOrigGroupAdd();
-        await TVC_Dialog.alert('Group append is unavailable.');
+        if (st.currentTab === 'actual') {
+            if (window.TVC_App?.openOrigGroupAdd) return TVC_App.openOrigGroupAdd();
+            await TVC_Dialog.alert('Group append is unavailable.');
+            return;
+        }
+        const label = await TVC_Dialog.promptText({
+            title: 'Add SPARE GROUP',
+            message: 'New SPARE GROUP name (e.g. 06. AUX BOILER):',
+            placeholder: '06. AUX BOILER',
+        });
+        if (!label) return;
+        try {
+            const { vesselId } = await vesselScope();
+            const dept = st.department || spareInventoryUser(st)?.department || 'ENGINE';
+            await TVC_SpareGroups.addGroup({ vesselId, department: dept, label, user: spareInventoryUser(st) });
+            await refresh();
+            await render();
+            await TVC_Dialog.alert('SPARE GROUP added.');
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || 'Add failed');
+        }
     }
 
     async function deleteGroupFromTree() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
             await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
+            return;
+        }
+        if (st.currentTab === 'actual') {
+            if (window.TVC_App?.deleteOrigGroup) return TVC_App.deleteOrigGroup();
+            return;
         }
         const node = groupSelectedNode(st);
-        if (!canDeleteSelectedGroup(st)) await TVC_Dialog.alert('Select a group to delete.');
-        if (!await TVC_Dialog.confirm({ message: `Delete GROUP "${node.label}"?\n\nOnly empty groups (no jobs, no spare parts) can be deleted.` })) return;
-        const user = spareInventoryUser(st) || st.user;
-        if (!user) await TVC_Dialog.alert('Login required.');
+        if (!canDeleteSelectedGroup(st)) {
+            await TVC_Dialog.alert('Select a group to delete.');
+            return;
+        }
+        if (!await TVC_Dialog.confirm({ message: `Delete SPARE GROUP "${node.label}"?\n\nOnly empty groups (no spare parts) can be deleted.` })) return;
         try {
-            const vesselOpts = (typeof TVC_App !== 'undefined' && TVC_App.masterVesselOpts)
-                ? TVC_App.masterVesselOpts()
-                : (st.selectedVesselId ? { vesselId: st.selectedVesselId, selectedVesselId: st.selectedVesselId } : {});
-            await TVC_MaintenancePlan.deleteGroup(user, node.department, node.label, vesselOpts);
+            const { vesselId } = await vesselScope();
+            await TVC_SpareGroups.deleteEmptyGroup({
+                department: node.department,
+                label: node.label,
+                vesselId,
+                spares: st.spares,
+            });
             setSpareInventoryGroupKey(st, null);
             await refresh();
             await render();
-            await TVC_Dialog.alert('Group deleted.');
+            await TVC_Dialog.alert('SPARE GROUP deleted.');
         } catch (e) {
             const code = e.code || '';
-            if (code === 'HAS_JOBS') await TVC_Dialog.alert(`Cannot delete: ${e.count || ''} maintenance job(s) in this group.`);
-            if (code === 'HAS_SPARES') await TVC_Dialog.alert('Cannot delete: spare parts exist in this group.');
-            await TVC_Dialog.alert(e.message || code || 'Delete failed');
+            if (code === 'HAS_SPARES') await TVC_Dialog.alert(`Cannot delete: ${e.count || ''} spare part(s) in this group.`);
+            else await TVC_Dialog.alert(e.message || code || 'Delete failed');
         }
     }
 
@@ -9828,12 +10169,14 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         if (!canEditGroupHeader(st)) {
             await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
+            return;
         }
-        const key = spareInventoryGroupKey(st);
+        const key = activeTreeGroupKey(st);
         const treeName = st.currentTab === 'actual'
             ? 'PMS GROUP Tree' : 'SPARE GROUP Tree';
         if (!key || key === CRITICAL_GROUP_KEY) {
             await TVC_Dialog.alert(`${treeName} — select a group to edit first.`);
+            return;
         }
         if (window.TVC_App?.isOrigJobInlineEditing?.() && window.TVC_App?.cancelOrigJobInlineEdit) {
             TVC_App.cancelOrigJobInlineEdit();
@@ -9841,7 +10184,11 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         m.inlineEditId = null;
         m.inlineDraft = null;
-        const header = resolveSpareGroupHeader(st);
+        const header = resolveSpareGroupHeader(st, {
+            groupKey: key,
+            focusedId: null,
+            headerStore: st.currentTab === 'actual' ? 'pms' : 'spare',
+        });
         setFocusedSpareId(st, null);
         m.groupHeaderEdit = true;
         m.groupHeaderEditKey = key;
@@ -9864,10 +10211,11 @@ const TVC_SpareMenu = (function () {
         if (!m.groupHeaderEdit) return;
         if (!canEditGroupHeader(st)) {
             await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
+            return;
         }
         const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
         const draft = m.groupHeaderDraft || {};
-        const key = spareInventoryGroupKey(st);
+        const key = activeTreeGroupKey(st);
         const isMerged = key === MERGED_GEN_ENGINE_KEY;
         const node = groupSelectedNode(st);
         const dept = node?.department || st.department || '';
@@ -9889,7 +10237,9 @@ const TVC_SpareMenu = (function () {
             assyName: draft.assyName || '',
             dwgNo: draft.dwgNo || '',
         };
-        const groupSpares = sparesInSelectedGroup(st);
+        const groupSpares = sparesInGroupKey(st, key);
+        const isPmsTreeEdit = st.currentTab === 'actual';
+        const norm = normalizeGroupLabel;
         try {
             if (equipment) {
                 await saveJobEquipmentHeader(spareInventoryUser(st), {
@@ -9912,29 +10262,82 @@ const TVC_SpareMenu = (function () {
                 return;
             }
 
-            // 컴포넌트/상위 장비 헤더 갱신 (기존 라벨로 조회 → 새 라벨로 rename)
-            const sampleRow = TVC_SpareSchema.toRow(groupSpares[0] || { group: oldLabel });
-            sampleRow.group = oldLabel;
-            // 각 아이템이 참조하는 상위 장비 컴포넌트도 함께 갱신해야 아이템 클릭 시 헤더에 반영됨
-            const itemComponentIds = new Set();
-            groupSpares.forEach(s => {
-                const pid = s.parentEquipmentID || s.parent_equipment_id;
-                if (pid) itemComponentIds.add(pid);
-            });
-            await saveGroupHeaderMeta(st, header, sampleRow, {
-                renameLabel: labelChanged,
-                itemComponentIds: [...itemComponentIds],
-            });
+            if (isPmsTreeEdit) {
+                const sampleRow = TVC_SpareSchema.toRow({ group: oldLabel });
+                sampleRow.group = oldLabel;
+                await saveGroupHeaderMeta(st, header, sampleRow, {
+                    renameLabel: labelChanged,
+                    itemComponentIds: [],
+                    groupKey: key,
+                });
 
-            // 그룹 헤더 메타를 maintenance_groups에 영속 저장
-            // (GROUP 컴포넌트/상위 장비가 없어도 헤더에 확실히 반영되도록 하는 authoritative 저장소)
-            const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
-            const norm = normalizeGroupLabel;
-            // 병합 그룹(03~05)은 가상 라벨로 저장하면 Original Plan 트리에 유령 노드가 생기므로
-            // 실제 개별 gen-engine 라벨(03/04/05)에 저장한다. 일반 그룹은 자기 라벨에 저장.
+                const { vesselId } = await vesselScope();
+                const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+                const critRaw = g('sgh_g_criticalEquipment');
+                const critVal = critRaw !== '' ? parseCriticalEquipmentValue(critRaw) : undefined;
+                let targetLabels = [newLabel];
+                for (const lab of [...new Set(targetLabels.filter(Boolean))]) {
+                    const existing = findMaintenanceGroupDef(defs, lab, dept);
+                    const defBase = existing || {
+                        id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+                        department: dept,
+                        label: lab,
+                        sort_order: 0,
+                        vessel_id: vesselId || null,
+                        created_at: new Date().toISOString(),
+                    };
+                    const savedRow = {
+                        ...defBase,
+                        label: lab,
+                        department: dept || defBase.department || '',
+                        vessel_id: defBase.vessel_id || vesselId || null,
+                        machinery_name: header.machineryName || '',
+                        model_type: header.modelType || '',
+                        maker: header.maker || '',
+                        capacity: header.capacity || '',
+                        dwg_no: header.dwgNo || '',
+                        serial_no: header.serialNo || '',
+                        ...(critVal !== undefined ? { is_critical_equipment: critVal } : {}),
+                        header_edited: true,
+                        updated_at: new Date().toISOString(),
+                        sync_status: 'LOCAL',
+                    };
+                    await TVC_DB.put('maintenance_groups', savedRow);
+                    upsertPmsGroupInState(st, savedRow);
+                }
+
+                if (labelChanged) {
+                    const jobs = await TVC_DB.getAll('maintenance_jobs');
+                    const jchg = jobs
+                        .filter(j => String(j.group || '').trim() === oldLabel && (!dept || j.department === dept))
+                        .map(j => ({ ...j, group: newLabel }));
+                    if (jchg.length) await TVC_DB.bulkPut('maintenance_jobs', jchg);
+                    const grps = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+                    const gchg = (grps || [])
+                        .filter(gr => norm(gr.label) === norm(oldLabel) && (!dept || !gr.department || gr.department === dept))
+                        .map(gr => ({ ...gr, label: newLabel, department: dept || gr.department, updated_at: new Date().toISOString(), sync_status: 'LOCAL' }));
+                    if (gchg.length) {
+                        await TVC_DB.bulkPut('maintenance_groups', gchg);
+                        gchg.forEach(row => upsertPmsGroupInState(st, row));
+                    }
+                }
+
+                if (st.idx) st.idx = TVC_Indexes.build(st);
+
+                m.groupHeaderEdit = false;
+                m.groupHeaderDraft = null;
+                m.groupHeaderEditKey = null;
+                await refresh();
+                if (labelChanged) st.selectedGroupKey = `${dept}|${newLabel}`;
+                afterSpareListChange(st);
+                await TVC_Dialog.alert('PMS Group header saved.');
+                return;
+            }
+
+            const defs = await TVC_DB.getAll('spare_groups').catch(() => []);
             let targetLabels;
             if (isMerged) {
-                targetLabels = (st.idx?.groupNodes || [])
+                targetLabels = (spareGroupTreeNodes(st) || [])
                     .filter(n => (!dept || n.department === dept) && isGeneratorEngineGroupLabel(n.label))
                     .map(n => n.label);
                 if (!targetLabels.length) targetLabels = [oldLabel];
@@ -9944,16 +10347,15 @@ const TVC_SpareMenu = (function () {
             for (const lab of [...new Set(targetLabels.filter(Boolean))]) {
                 const existing = (defs || []).find(gr => (!dept || gr.department === dept) && norm(gr.label) === norm(lab));
                 const defBase = existing || {
-                    id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+                    id: 'sgrp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
                     department: dept,
                     label: lab,
                     sort_order: 0,
                     created_at: new Date().toISOString(),
                 };
-                await TVC_DB.put('maintenance_groups', {
+                await TVC_DB.put('spare_groups', {
                     ...defBase,
                     label: lab,
-                    // 입력값을 그대로 저장(빈 값 포함) — 지우기가 반영되도록, header_edited로 authoritative 표시
                     machinery_name: header.machineryName || '',
                     model_type: header.modelType || '',
                     maker: header.maker || '',
@@ -9966,21 +10368,14 @@ const TVC_SpareMenu = (function () {
                 });
             }
 
-            // SPARE Group No. 변경 시: 유지보수 작업/그룹 정의의 라벨도 함께 rename (GROUP Tree 일관성)
             if (labelChanged) {
-                const jobs = await TVC_DB.getAll('maintenance_jobs');
-                const jchg = jobs
-                    .filter(j => String(j.group || '').trim() === oldLabel && (!dept || j.department === dept))
-                    .map(j => ({ ...j, group: newLabel }));
-                if (jchg.length) await TVC_DB.bulkPut('maintenance_jobs', jchg);
-                const grps = await TVC_DB.getAll('maintenance_groups').catch(() => []);
-                const gchg = (grps || [])
-                    .filter(gr => String(gr.label || '').trim() === oldLabel && (!dept || gr.department === dept))
-                    .map(gr => ({ ...gr, label: newLabel }));
-                if (gchg.length) await TVC_DB.bulkPut('maintenance_groups', gchg);
+                const sg = await TVC_DB.getAll('spare_groups').catch(() => []);
+                const sgchg = (sg || [])
+                    .filter(gr => norm(gr.label) === norm(oldLabel) && (!dept || gr.department === dept))
+                    .map(gr => ({ ...gr, label: newLabel, updated_at: new Date().toISOString(), sync_status: 'LOCAL' }));
+                if (sgchg.length) await TVC_DB.bulkPut('spare_groups', sgchg);
             }
 
-            // 그룹 내 Equipment 미지정 아이템에 Model/Maker 일괄 적용 (값이 있을 때만 덮어써 기존 값 보존)
             const rows = groupSpares.filter(s => !equipmentFromSpare(s)).map(s => {
                 const patch = { ...s };
                 if (header.modelType) patch.model = header.modelType;
@@ -9996,11 +10391,10 @@ const TVC_SpareMenu = (function () {
             m.groupHeaderDraft = null;
             m.groupHeaderEditKey = null;
             await refresh();
-            // rename 되었으면 새 라벨 그룹을 다시 선택
             if (labelChanged) setSpareInventoryGroupKey(st, `${dept}|${newLabel}`);
             afterSpareListChange(st);
             if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
-            await TVC_Dialog.alert(`Group header saved (${rows.length} item(s) updated)`);
+            await TVC_Dialog.alert(`SPARE Group header saved (${rows.length} item(s) updated)`);
         } catch (e) { await TVC_Dialog.alert(e.message || e.code || 'Save failed'); }
     }
 
@@ -10023,7 +10417,10 @@ const TVC_SpareMenu = (function () {
             sync_status: 'LOCAL',
         });
 
-        const groupLabels = groupLabelsForPmsGroup(header.pmsGroupNo || spare.group, st, spareInventoryGroupKey(st));
+        const groupKey = opts.groupKey !== undefined
+            ? opts.groupKey
+            : (st?.currentTab === 'actual' ? activeTreeGroupKey(st) : spareInventoryGroupKey(st));
+        const groupLabels = groupLabelsForPmsGroup(header.pmsGroupNo || spare.group, st, groupKey);
         // 라벨 변경 시(현재 아이템의 기존 group 라벨로도 조회) 기존 컴포넌트를 찾아 rename
         if (spare.group && !groupLabels.includes(spare.group)) groupLabels.push(spare.group);
         // 병합 그룹은 여러 컴포넌트(03/04/05)가 있을 수 있으므로 매칭되는 모든 GROUP 컴포넌트를 갱신
@@ -12033,12 +12430,12 @@ const TVC_SpareMenu = (function () {
         const req = _reqWorkDraft;
         if (!req) return false;
         const reqNo = String(req.req_no || document.getElementById('reqWorkReqNo')?.value || '').trim();
-        const hasLines = (req.lines || []).length > 0;
+        const hasLines = reqLineCount(req) > 0;
         if (reqNo && hasLines) return true;
         const loadedId = _reqSheet.reqId || req.id;
         if (!loadedId) return false;
         if (String(req.id || '') !== String(loadedId)) return false;
-        return !!reqNo;
+        return !!reqNo || hasLines;
     }
 
     function reqWorkHqRequestQuoteEnabled(m) {
@@ -12218,23 +12615,12 @@ const TVC_SpareMenu = (function () {
         if (grouped) head.innerHTML = '';
     }
 
-    function mountReqWorkGroupedList() {
-        setReqWorkListHeadGroupedMode(true);
-        const scroll = document.getElementById('reqWorkListScroll');
-        if (!scroll) return;
-        const hscroll = scroll.closest('.spare-req-table-hscroll');
-        const scrollTop = scroll.scrollTop;
-        const hScrollLeft = hscroll?.scrollLeft || 0;
-        if (vlReqWork) { vlReqWork.destroy(); vlReqWork = null; }
-        const st = getState();
+    function buildReqWorkGroupedListHtml(st) {
         const m = modState(st);
         const sections = reqWorkGroupedSections(st);
-        if (!sections.length) {
-            scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">Click <strong>Select Requisition</strong> to load requisition parts.</div>`;
-            return;
-        }
+        if (!sections.length) return null;
         const batchMap = st.spareListSelected || {};
-        const html = sections.map((g, i) => `
+        return sections.map((g, i) => `
             <section class="req-work-group-section" data-req-group="${escAttr(g.key)}">
                 ${renderSpareGroupHeaderFromResolved(g.header)}
                 ${reqWorkGroupListHeadHtml(i === 0)}
@@ -12242,9 +12628,9 @@ const TVC_SpareMenu = (function () {
                     ${g.spares.map(s => rowHtml(s, m.reqWorkFocusedId, batchMap, 'reqWork')).join('')}
                 </div>
             </section>`).join('');
-        scroll.innerHTML = `<div class="req-work-groups">${html}</div>`;
-        scroll.scrollTop = scrollTop;
-        if (hscroll) hscroll.scrollLeft = hScrollLeft;
+    }
+
+    function afterReqWorkGroupedListPaint(scroll) {
         bindHeadLayoutSync(scroll, syncReqWorkHeadLayout, 'reqWork');
         requestAnimationFrame(() => {
             updateReqWorkHeadCheckAll();
@@ -12254,6 +12640,47 @@ const TVC_SpareMenu = (function () {
                 setTimeout(syncReqWorkRowTableWidths, 120);
             });
         });
+    }
+
+    function patchReqWorkGroupedList() {
+        const scroll = document.getElementById('reqWorkListScroll');
+        if (!scroll) return false;
+        const root = scroll.querySelector('.req-work-groups');
+        if (!root) return false;
+        const hscroll = scroll.closest('.spare-req-table-hscroll');
+        const scrollTop = scroll.scrollTop;
+        const hScrollLeft = hscroll?.scrollLeft || 0;
+        const st = getState();
+        const html = buildReqWorkGroupedListHtml(st);
+        if (!html) {
+            scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">Click <strong>Select Requisition</strong> to load requisition parts.</div>`;
+            return true;
+        }
+        root.innerHTML = html;
+        scroll.scrollTop = scrollTop;
+        if (hscroll) hscroll.scrollLeft = hScrollLeft;
+        afterReqWorkGroupedListPaint(scroll);
+        return true;
+    }
+
+    function mountReqWorkGroupedList() {
+        setReqWorkListHeadGroupedMode(true);
+        const scroll = document.getElementById('reqWorkListScroll');
+        if (!scroll) return;
+        const hscroll = scroll.closest('.spare-req-table-hscroll');
+        const scrollTop = scroll.scrollTop;
+        const hScrollLeft = hscroll?.scrollLeft || 0;
+        if (vlReqWork) { vlReqWork.destroy(); vlReqWork = null; }
+        const st = getState();
+        const html = buildReqWorkGroupedListHtml(st);
+        if (!html) {
+            scroll.innerHTML = `<div class="spare-empty-list muted" style="padding:24px;text-align:center">Click <strong>Select Requisition</strong> to load requisition parts.</div>`;
+            return;
+        }
+        scroll.innerHTML = `<div class="req-work-groups">${html}</div>`;
+        scroll.scrollTop = scrollTop;
+        if (hscroll) hscroll.scrollLeft = hScrollLeft;
+        afterReqWorkGroupedListPaint(scroll);
     }
 
     function mountReqWorkVirtualList() {
@@ -12357,8 +12784,8 @@ const TVC_SpareMenu = (function () {
         }
 
         const byId = new Map();
-        (req.lines || []).forEach(l => {
-            const id = reqWorkSpareIdKey(l.spare_part_id);
+        normalizeReqLines(req.lines).forEach(l => {
+            const id = reqLineSpareKey(l);
             if (!id) return;
             byId.set(id, l);
         });
@@ -13441,6 +13868,7 @@ const TVC_SpareMenu = (function () {
         syncReqListFilterUi(st);
         syncSpareDateInputs(panel);
         bindReqListKeyboard();
+        bindReqWorkHistListClicks();
         TVC_App.bindSearchClearInput?.('reqHistSearch');
         TVC_App.updateSearchClearBtn?.('reqHistSearch');
         positionReqWorkHistPopover();
@@ -13479,6 +13907,37 @@ const TVC_SpareMenu = (function () {
         if (linesEl && req) linesEl.textContent = `${(req.lines || []).length} line(s)`;
     }
 
+    function remountReqWorkListBody(st, opts = {}) {
+        const scroll = document.getElementById('reqWorkListScroll');
+        const head = document.getElementById('reqWorkListHead');
+        const grouped = reqWorkUsesGroupedList(st);
+        const scrollGrouped = !!scroll?.querySelector('.req-work-groups');
+        if (grouped) {
+            setReqWorkListHeadGroupedMode(true);
+            if (opts.soft && patchReqWorkGroupedList()) return;
+            if (vlReqWork) { vlReqWork.destroy(); vlReqWork = null; }
+            mountReqWorkGroupedList();
+            return;
+        }
+        setReqWorkListHeadGroupedMode(false);
+        const hasVl = !!(vlReqWork && scroll?.querySelector('.vl-inner'));
+        if (opts.soft && hasVl && !scrollGrouped) {
+            const top = scroll.scrollTop;
+            vlReqWork.refresh();
+            scroll.scrollTop = top;
+            requestAnimationFrame(syncReqWorkHeadLayout);
+            return;
+        }
+        if (head && !head.querySelector('.spare-data-head')) {
+            head.innerHTML = `<div id="reqWorkListHeadTrack" class="spare-head-track"><table class="spare-data-table spare-data-head spare-data-table-req">
+                ${SPARE_REQ_COLGROUP}
+                ${SPARE_REQ_TABLE_HEAD}
+            </table></div>`;
+        }
+        if (vlReqWork) { vlReqWork.destroy(); vlReqWork = null; }
+        mountReqWorkVirtualList();
+    }
+
     function refreshReqWorkListRows() {
         const st = getState();
         const m = modState(st);
@@ -13493,61 +13952,33 @@ const TVC_SpareMenu = (function () {
             }
         }
         const scroll = document.getElementById('reqWorkListScroll');
-        const head = document.getElementById('reqWorkListHead');
-        if (reqWorkUsesGroupedList(st)) {
-            setReqWorkListHeadGroupedMode(true);
-        } else {
-            setReqWorkListHeadGroupedMode(false);
-            if (head && !head.querySelector('.spare-data-head')) {
-                head.innerHTML = `<div id="reqWorkListHeadTrack" class="spare-head-track"><table class="spare-data-table spare-data-head spare-data-table-req">
-                    ${SPARE_REQ_COLGROUP}
-                    ${SPARE_REQ_TABLE_HEAD}
-                </table></div>`;
-            }
-        }
-        if (reqWorkUsesGroupedList(st)) {
-            mountReqWorkGroupedList();
-        } else if (vlReqWork && scroll?.querySelector('.vl-inner')) {
-            vlReqWork.refresh();
-            requestAnimationFrame(syncReqWorkHeadLayout);
-        } else if (scroll) {
-            mountReqWorkVirtualList();
-        }
+        if (scroll) remountReqWorkListBody(st);
         syncSpareToolbarUi();
         updateReqWorkHeadStats();
         updateReqWorkHeadCheckAll();
         syncSpareItemHistoryBtns();
     }
 
-    function refreshReqWorkListUi() {
+    function refreshReqWorkListUi(opts = {}) {
         const st = getState();
         const m = modState(st);
         const allCanon = (st.spares || []).map(canon);
-        const prevCount = _reqWorkCachedList.length;
         _reqWorkCachedList = filteredReqWorkSpares(st);
-        const hadItems = prevCount > 0;
-        const hasItems = _reqWorkCachedList.length > 0;
         const scroll = document.getElementById('reqWorkListScroll');
-        const canRefresh = !!(vlReqWork && scroll?.querySelector('.vl-inner') && hadItems && hasItems);
         const block = document.getElementById('reqWorkEditBlock');
         if (block) {
             if (reqWorkUsesGroupedList(st)) {
-                block.innerHTML = '';
+                if (!opts.soft) block.innerHTML = '';
             } else if (m.inlineEditId && m.inlineDraft?.header) {
                 block.innerHTML = renderSpareEditBlockHtml(st);
+            } else if (opts.soft) {
+                syncReqWorkSingleGroupHeader(st);
             } else {
                 block.innerHTML = renderSpareGroupHeaderHtml(st, { focusedId: m.reqWorkFocusedId });
             }
         }
-        renderReqWorkGroupTree();
-        if (reqWorkUsesGroupedList(st)) {
-            mountReqWorkGroupedList();
-        } else if (canRefresh) {
-            vlReqWork.refresh();
-            requestAnimationFrame(syncReqWorkHeadLayout);
-        } else {
-            mountReqWorkVirtualList();
-        }
+        if (!opts.skipTree) renderReqWorkGroupTree();
+        if (scroll) remountReqWorkListBody(st, opts);
         syncSpareToolbarUi();
         updateReqWorkHeadStats();
         updateReqWorkHeadCheckAll();
@@ -13563,7 +13994,7 @@ const TVC_SpareMenu = (function () {
         }
         updateReqWorkSelectedBtn();
         updateSpareModalTreeToggleUi('reqWork');
-        if (isReqWorkListViewLocked()) {
+        if (!opts.skipScrollLock && isReqWorkListViewLocked()) {
             applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
         }
         if (isRequisitionListWindow(m)) syncReqWorkListWindowHeadButtons();
@@ -13682,7 +14113,7 @@ const TVC_SpareMenu = (function () {
                     onchange="TVC_SpareMenu.reqWorkToggleLowOnly()"> Low stock only</label>
                 <span class="count-label" id="reqWorkCount">${countLabel}</span>
               </div>`;
-        const useGroupedList = listMode && lineCount > 0;
+        const useGroupedList = reqWorkUsesGroupedList(st);
         const editBlock = useGroupedList
             ? '<div id="reqWorkEditBlock"></div>'
             : `<div id="reqWorkEditBlock">${renderSpareGroupHeaderHtml(st, { focusedId: m.reqWorkFocusedId })}</div>`;
@@ -13719,7 +14150,7 @@ const TVC_SpareMenu = (function () {
         </div>`;
 
         renderReqWorkGroupTree();
-        mountReqWorkVirtualList();
+        remountReqWorkListBody(st);
         updateReqWorkSelectedBtn();
         if (!preview && !docPreview) {
             bindSpareModalTreePopovers();
@@ -13736,6 +14167,7 @@ const TVC_SpareMenu = (function () {
         // Requisition List 조회 모드 · Complete 완료 후: 본문 잠금 (Select Requisition만 항상 활성)
         applyReqWorkScrollLock(body);
         bindReqWorkListKeyboard();
+        bindReqWorkHistListClicks();
         if (_reqWorkHistOpen) {
             setReqWorkHistOpen(true);
             await refreshReqWorkHistList();
@@ -20563,7 +20995,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
         const groupLabel = equipmentListGroupLabel(st);
         if (!groupLabel) {
-            await TVC_Dialog.alert('Select a group in SPARE GROUP Tree first.');
+            const treeName = st.currentTab === 'actual' ? 'PMS GROUP Tree' : 'SPARE GROUP Tree';
+            await TVC_Dialog.alert(`Select a group in ${treeName} first.`);
             return;
         }
         const m = modState(st);

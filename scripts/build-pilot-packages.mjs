@@ -82,7 +82,8 @@ for (const sku of Object.keys(SKUS)) {
 }
 
 console.log('\nPilot packages written under dist/');
-console.log('Packaged apps require a seat license (see docs/seat-license.md).');
+console.log('Packaged HQ/Vessel apps require a seat license (see docs/seat-license.md).');
+console.log('ADMIN_TVC (Admin Mode) does not require a seat license.');
 const dist = path.join(root, 'dist');
 if (fs.existsSync(dist)) {
     for (const f of fs.readdirSync(dist).filter(n => n.endsWith('.exe'))) {

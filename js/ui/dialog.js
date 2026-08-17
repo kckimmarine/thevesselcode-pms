@@ -85,7 +85,10 @@ const TVC_Dialog = (function () {
             }
         }
         msgEl.textContent = o.message || '';
-        if (extraEl && o.textarea) {
+        if (extraEl && o.password) {
+            extraEl.classList.remove('hidden');
+            extraEl.innerHTML = `<input type="password" id="tvcDialogInput" class="tvc-dialog-input" placeholder="${esc(o.placeholder || 'Password')}" autocomplete="off">`;
+        } else if (extraEl && o.textarea) {
             extraEl.classList.remove('hidden');
             extraEl.innerHTML = `<textarea id="tvcDialogInput" class="tvc-dialog-input" rows="${Number(o.rows) || 3}" placeholder="${esc(o.placeholder || '')}">${esc(o.defaultValue || '')}</textarea>`;
         }
@@ -106,6 +109,12 @@ const TVC_Dialog = (function () {
             const cancelBtn = document.getElementById('tvcDialogCancelBtn');
             const inputEl = document.getElementById('tvcDialogInput');
             (inputEl || confirmBtn)?.focus();
+            inputEl?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    confirmBtn?.click();
+                }
+            }, { once: true });
             confirmBtn?.addEventListener('click', () => finish(true), { once: true });
             cancelBtn?.addEventListener('click', () => finish(false), { once: true });
         });
@@ -149,5 +158,20 @@ const TVC_Dialog = (function () {
         return val;
     }
 
-    return { confirm, alert, success, error, promptText, dismiss };
+    /** Password prompt — resolves input string, or null when cancelled. */
+    async function promptPassword(opts = {}) {
+        const o = normalizeOpts(opts);
+        const ok = await show({
+            ...o,
+            kind: o.kind || 'confirm',
+            title: o.title || 'Password',
+            password: true,
+            confirmLabel: o.confirmLabel || 'Continue',
+            cancelLabel: o.cancelLabel || 'Cancel',
+        });
+        if (!ok) return null;
+        return document.getElementById('tvcDialogInput')?.value ?? '';
+    }
+
+    return { confirm, alert, success, error, promptText, promptPassword, dismiss };
 })();

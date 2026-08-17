@@ -147,10 +147,10 @@ const TVC_License = (function () {
         }
         const got = String(companyId || '').trim();
         if (!got) return { ok: true }; // legacy packages without company_id
-        if (got !== String(st.companyId || COMPANY_ID)) {
+        if (st.companyId && got !== String(st.companyId)) {
             return {
                 ok: false,
-                error: `Company mismatch: package is for "${got}", this installation is "${st.companyId || COMPANY_ID}".`,
+                error: `Company mismatch: package is for "${got}", this installation is licensed for "${st.companyId}".`,
             };
         }
         return { ok: true };

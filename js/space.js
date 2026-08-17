@@ -194,6 +194,8 @@ const TVC_Space = (function () {
     /** Approval: Master(Captain) → all depts; ECR(C/E) → Engine; CCR(C/O) → Deck */
     function canApproveReport(user, dept) {
         if (!user || !TVC_RBAC.isApprover(user)) return false;
+        dept = String(dept || '').trim().toUpperCase();
+        if (!dept) return false;
         if (isCaptainHub(user)) {
             return user.role === 'SHIP_CAPTAIN';
         }
@@ -205,7 +207,7 @@ const TVC_Space = (function () {
             return user.role === 'SHIP_CAPTAIN' && dept === 'DECK';
         }
         if (!station) {
-            return TVC_RBAC.isApprover(user) && user.department === dept;
+            return TVC_RBAC.isApprover(user) && String(user.department || '').trim().toUpperCase() === dept;
         }
         return false;
     }

@@ -1,7 +1,29 @@
 {
   "version": 1,
-  "updated_at": "2026-08-13",
+  "updated_at": "2026-08-17",
   "companies": [
+    {
+      "company_id": "TVC_LAB",
+      "name": "TVC 내부 QA",
+      "name_en": "TVC Lab",
+      "status": "active",
+      "hq_sku": "HQ_OFFICE",
+      "vessels": [
+        {
+          "vessel_id": "LAB_SHIP",
+          "name": "TVC Lab Ship",
+          "code": "LAB",
+          "imo_no": "9999999",
+          "delivery": "2026-01-01",
+          "status": "active"
+        }
+      ],
+      "contract": {
+        "start_date": "",
+        "term_months": 0,
+        "fee_note": "Internal — not a customer contract"
+      }
+    },
     {
       "company_id": "DAEMYUNG",
       "name": "대명상선",
@@ -15,7 +37,16 @@
           "code": "01",
           "imo_no": "9297711",
           "delivery": "2003-09-18",
-          "status": "active"
+          "status": "active",
+          "deploy": {
+            "app_version": {
+              "VESSEL_ENGINE": "1.0.1"
+            },
+            "app_updated_at": {
+              "VESSEL_ENGINE": "2026-08-17"
+            },
+            "license_issued_at": "2026-08-17"
+          }
         },
         {
           "vessel_id": "QUARTERBACK J",

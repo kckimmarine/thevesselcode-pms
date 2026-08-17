@@ -1,0 +1,40 @@
+<h1>TVC-PMS 소프트웨어 이용 계약서 (초안)</h1>
+<p class="meta">Contract draft · {{printed_at}}</p>
+
+<p><strong>공급자:</strong> THE VESSEL CODE (TVC)<br>
+<strong>수요자(선사):</strong> {{company.name}} ({{company.name_en}})<br>
+<strong>Company ID:</strong> {{company.company_id}}<br>
+<strong>주소:</strong> {{company.address}}<br>
+<strong>담당:</strong> {{company.contact_name}} · {{company.contact_email}}</p>
+
+<h2>1. 계약 개요</h2>
+<p>본 계약은 TVC-PMS(Planned Maintenance System) 및 SPARE 관리 소프트웨어의 설치·이용에 관한 사항을 정함을 목적으로 한다.</p>
+<ul>
+  <li><strong>계약 시작일:</strong> {{contract.start_date}}</li>
+  <li><strong>계약 기간:</strong> {{contract.term_months}} 개월</li>
+  <li><strong>요금:</strong> {{contract.fee_note}}</li>
+  <li><strong>배포 버전:</strong> {{deploy.setup_version}}</li>
+</ul>
+
+<h2>2. 계약 선박</h2>
+{{vessels_table}}
+
+<h2>3. 제공 범위</h2>
+<ul>
+  <li>선사 본사(HQ): TVC-PMS HQ Office Setup 1식</li>
+  <li>각 계약 선박: Vessel Master / Engine / Deck Setup 각 1식</li>
+  <li>선박별 PMS &amp; SPARE MASTER Excel 데이터</li>
+  <li>Seat license (PC·SKU별 활성화)</li>
+</ul>
+
+<h2>4. 기타</h2>
+<p>{{company.notes}}</p>
+<p class="meta">— 본 문서는 Admin Mode에서 자동 생성된 계약 초안입니다. 법무 검토 후 서명·체결하십시오. —</p>
+
+<p><br><br></p>
+<table class="sign-table">
+  <tr>
+    <td style="width:50%"><strong>THE VESSEL CODE</strong><br><br>서명: ___________________<br>일자: ___________________</td>
+    <td style="width:50%"><strong>{{company.name}}</strong><br><br>서명: ___________________<br>일자: ___________________</td>
+  </tr>
+</table>

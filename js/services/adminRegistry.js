@@ -5,6 +5,9 @@ const TVC_AdminRegistry = (function () {
     const LS_VESSEL = 'tvc_admin_selected_vessel';
     const STATUS_OPTS = ['active', 'inactive'];
     const HQ_SKU_OPTS = ['HQ_OFFICE'];
+    const VESSEL_SKUS = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+    const TVC_LAB_COMPANY_ID = 'TVC_LAB';
+    const TVC_LAB_VESSEL_ID = 'LAB_SHIP';
 
     let _cache = null;
 
@@ -18,6 +21,74 @@ const TVC_AdminRegistry = (function () {
 
     function invalidIdChars(id) {
         return /[\\/:*?"<>|]/.test(id);
+    }
+
+    function normalizeDeploy(raw, { isVessel = false } = {}) {
+        const d = raw && typeof raw === 'object' ? raw : {};
+        if (isVessel) {
+            const av = d.app_version && typeof d.app_version === 'object' ? d.app_version : {};
+            const au = d.app_updated_at && typeof d.app_updated_at === 'object' ? d.app_updated_at : {};
+            return {
+                setup_version: String(d.setup_version || '').trim(),
+                setup_sent_at: String(d.setup_sent_at || '').trim().slice(0, 10),
+                app_version: {
+                    VESSEL_MASTER: String(av.VESSEL_MASTER || d.app_version_master || '').trim(),
+                    VESSEL_ENGINE: String(av.VESSEL_ENGINE || d.app_version_engine || '').trim(),
+                    VESSEL_DECK: String(av.VESSEL_DECK || d.app_version_deck || '').trim(),
+                },
+                app_updated_at: {
+                    VESSEL_MASTER: String(au.VESSEL_MASTER || '').trim().slice(0, 10),
+                    VESSEL_DECK: String(au.VESSEL_DECK || '').trim().slice(0, 10),
+                    VESSEL_ENGINE: String(au.VESSEL_ENGINE || '').trim().slice(0, 10),
+                },
+                license_issued_at: String(d.license_issued_at || '').trim().slice(0, 10),
+                last_handoff_at: String(d.last_handoff_at || '').trim().slice(0, 10),
+            };
+        }
+        return {
+            setup_version: String(d.setup_version || '').trim(),
+            setup_sent_at: String(d.setup_sent_at || '').trim().slice(0, 10),
+            app_version: String(d.app_version || '').trim(),
+            app_updated_at: String(d.app_updated_at || '').trim().slice(0, 10),
+            license_issued_at: String(d.license_issued_at || '').trim().slice(0, 10),
+            last_handoff_at: String(d.last_handoff_at || '').trim().slice(0, 10),
+        };
+    }
+
+    function normalizeContract(raw) {
+        const c = raw && typeof raw === 'object' ? raw : {};
+        const months = Number(c.term_months);
+        return {
+            start_date: String(c.start_date || '').trim().slice(0, 10),
+            term_months: Number.isFinite(months) && months > 0 ? months : 0,
+            fee_note: String(c.fee_note || '').trim(),
+        };
+    }
+
+    function formatCompanyAppVersion(deploy) {
+        const v = deploy?.app_version;
+        return v ? String(v) : '—';
+    }
+
+    function formatVesselAppVersions(deploy) {
+        const av = deploy?.app_version || {};
+        const m = av.VESSEL_MASTER || '—';
+        const e = av.VESSEL_ENGINE || '—';
+        const d = av.VESSEL_DECK || '—';
+        if (m === '—' && e === '—' && d === '—') return '—';
+        return `${m} / ${e} / ${d}`;
+    }
+
+    function formatVesselSetupVersion(deploy) {
+        return deploy?.setup_version || '—';
+    }
+
+    function isTvcLabCompany(companyId) {
+        return cleanId(companyId) === TVC_LAB_COMPANY_ID;
+    }
+
+    function getTvcLabDefaults() {
+        return { companyId: TVC_LAB_COMPANY_ID, vesselId: TVC_LAB_VESSEL_ID };
     }
 
     async function load() {
@@ -36,6 +107,11 @@ const TVC_AdminRegistry = (function () {
             status: normalizeStatus(c.status),
             hq_sku: String(c.hq_sku || 'HQ_OFFICE').trim(),
             notes: String(c.notes || '').trim(),
+            address: String(c.address || '').trim(),
+            contact_name: String(c.contact_name || '').trim(),
+            contact_email: String(c.contact_email || '').trim(),
+            contract: normalizeContract(c.contract),
+            deploy: normalizeDeploy(c.deploy, { isVessel: false }),
             vessels: (c.vessels || []).map(v => ({
                 vessel_id: cleanId(v.vessel_id || v.id),
                 name: String(v.name || v.vessel_id || '').trim(),
@@ -45,6 +121,7 @@ const TVC_AdminRegistry = (function () {
                 status: normalizeStatus(v.status),
                 company_id: cleanId(c.company_id),
                 notes: String(v.notes || '').trim(),
+                deploy: normalizeDeploy(v.deploy, { isVessel: true }),
             })),
         })).filter(c => c.company_id);
         return {
@@ -84,6 +161,7 @@ const TVC_AdminRegistry = (function () {
                     ...v,
                     company_name: c.name,
                     company_id: c.company_id,
+                    deploy: v.deploy || normalizeDeploy({}, { isVessel: true }),
                 });
             }
         }
@@ -143,6 +221,90 @@ const TVC_AdminRegistry = (function () {
         if (!_cache) throw new Error('Registry not loaded.');
     }
 
+    function activeVesselIds(company) {
+        return (company.vessels || []).filter(v => v.status !== 'inactive').map(v => v.vessel_id);
+    }
+
+    function ensureCompanyDeploy(company) {
+        if (!company.deploy) company.deploy = normalizeDeploy({}, { isVessel: false });
+        return company.deploy;
+    }
+
+    function ensureVesselDeploy(vessel) {
+        if (!vessel.deploy) vessel.deploy = normalizeDeploy({}, { isVessel: true });
+        return vessel.deploy;
+    }
+
+    /** Record deploy / update / license in registry (call save() after). */
+    function recordDeploy(opts = {}) {
+        assertLoaded();
+        const companyId = cleanId(opts.companyId);
+        const company = getCompany(companyId);
+        if (!company) throw new Error('Company not found.');
+        const today = todayIso();
+        const appVersion = String(opts.appVersion || '').trim();
+        const kind = String(opts.kind || '').trim();
+        const sku = String(opts.sku || '').trim();
+        const vesselId = cleanId(opts.vesselId);
+        let vesselIds = Array.isArray(opts.vesselIds) ? opts.vesselIds.map(cleanId).filter(Boolean) : null;
+        if (!vesselIds?.length && kind === 'setup') {
+            vesselIds = activeVesselIds(company);
+        }
+
+        if (kind === 'setup') {
+            const cd = ensureCompanyDeploy(company);
+            if (appVersion) cd.setup_version = appVersion;
+            cd.setup_sent_at = today;
+            cd.last_handoff_at = today;
+            for (const vid of vesselIds || []) {
+                const v = getVessel(companyId, vid);
+                if (!v) continue;
+                const vd = ensureVesselDeploy(v);
+                if (appVersion) vd.setup_version = appVersion;
+                vd.setup_sent_at = today;
+                vd.last_handoff_at = today;
+            }
+        } else if (kind === 'update') {
+            if (sku === 'HQ_OFFICE') {
+                const cd = ensureCompanyDeploy(company);
+                if (appVersion) cd.app_version = appVersion;
+                cd.app_updated_at = today;
+            } else if (VESSEL_SKUS.includes(sku)) {
+                const targets = vesselIds?.length ? vesselIds : activeVesselIds(company);
+                for (const vid of targets) {
+                    const v = getVessel(companyId, vid);
+                    if (!v) continue;
+                    const vd = ensureVesselDeploy(v);
+                    if (appVersion) vd.app_version[sku] = appVersion;
+                    vd.app_updated_at[sku] = today;
+                }
+            }
+        } else if (kind === 'license') {
+            if (sku === 'HQ_OFFICE') {
+                const cd = ensureCompanyDeploy(company);
+                cd.license_issued_at = today;
+                if (appVersion) {
+                    cd.app_version = appVersion;
+                    cd.app_updated_at = today;
+                }
+            } else if (VESSEL_SKUS.includes(sku) && vesselId) {
+                const v = getVessel(companyId, vesselId);
+                if (v) {
+                    const vd = ensureVesselDeploy(v);
+                    vd.license_issued_at = today;
+                    if (appVersion) {
+                        vd.app_version[sku] = appVersion;
+                        vd.app_updated_at[sku] = today;
+                    }
+                }
+            }
+        } else {
+            throw new Error('Unknown deploy record kind.');
+        }
+        _cache.updated_at = today;
+        return { ok: true, companyId, kind, sku, appVersion };
+    }
+
     function validateCompanyInput(input, opts = {}) {
         const isEdit = !!opts.isEdit;
         const companyId = cleanId(input.company_id);
@@ -155,6 +317,10 @@ const TVC_AdminRegistry = (function () {
             return 'Company ID is required.';
         }
         if (!name) return 'Company name is required.';
+        const startDate = String(input.contract_start_date || '').trim();
+        if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+            return 'Contract start date must be YYYY-MM-DD.';
+        }
         return null;
     }
 
@@ -186,6 +352,7 @@ const TVC_AdminRegistry = (function () {
         const err = validateCompanyInput(input, { isEdit });
         if (err) throw new Error(err);
         const companyId = cleanId(input.company_id);
+        const termMonths = Number(input.contract_term_months);
         const next = {
             company_id: companyId,
             name: String(input.name || '').trim(),
@@ -193,13 +360,30 @@ const TVC_AdminRegistry = (function () {
             status: normalizeStatus(input.status),
             hq_sku: String(input.hq_sku || 'HQ_OFFICE').trim() || 'HQ_OFFICE',
             notes: String(input.notes || '').trim(),
+            address: String(input.address || '').trim(),
+            contact_name: String(input.contact_name || '').trim(),
+            contact_email: String(input.contact_email || '').trim(),
+            contract: normalizeContract({
+                start_date: input.contract_start_date,
+                term_months: Number.isFinite(termMonths) && termMonths > 0 ? termMonths : input.contract_term_months,
+                fee_note: input.contract_fee_note,
+            }),
+            deploy: normalizeDeploy({}, { isVessel: false }),
             vessels: [],
         };
         const idx = (_cache.companies || []).findIndex(c => c.company_id === companyId);
         if (isEdit) {
             if (idx < 0) throw new Error(`Company "${companyId}" not found.`);
-            next.vessels = _cache.companies[idx].vessels || [];
-            if (!next.notes) next.notes = _cache.companies[idx].notes || '';
+            const prev = _cache.companies[idx];
+            next.vessels = prev.vessels || [];
+            next.deploy = prev.deploy || next.deploy;
+            if (!next.notes) next.notes = prev.notes || '';
+            if (!next.address) next.address = prev.address || '';
+            if (!next.contact_name) next.contact_name = prev.contact_name || '';
+            if (!next.contact_email) next.contact_email = prev.contact_email || '';
+            if (!next.contract.start_date) next.contract.start_date = prev.contract?.start_date || '';
+            if (!next.contract.term_months) next.contract.term_months = prev.contract?.term_months || 0;
+            if (!next.contract.fee_note) next.contract.fee_note = prev.contract?.fee_note || '';
             _cache.companies[idx] = next;
         } else {
             _cache.companies.push({ ...next, vessels: [] });
@@ -226,12 +410,14 @@ const TVC_AdminRegistry = (function () {
             status: normalizeStatus(input.status),
             company_id: cid,
             notes: String(input.notes || '').trim(),
+            deploy: normalizeDeploy({}, { isVessel: true }),
         };
         const vessels = company.vessels || [];
         const idx = vessels.findIndex(v => v.vessel_id === vesselId);
         if (isEdit) {
             if (idx < 0) throw new Error(`Vessel "${vesselId}" not found.`);
             if (!next.notes) next.notes = vessels[idx].notes || '';
+            next.deploy = vessels[idx].deploy || next.deploy;
             vessels[idx] = next;
         } else {
             vessels.push(next);
@@ -259,27 +445,75 @@ const TVC_AdminRegistry = (function () {
         return vessel;
     }
 
+    function serializeCompanyDeploy(deploy) {
+        const d = normalizeDeploy(deploy, { isVessel: false });
+        const out = {};
+        if (d.setup_version) out.setup_version = d.setup_version;
+        if (d.setup_sent_at) out.setup_sent_at = d.setup_sent_at;
+        if (d.app_version) out.app_version = d.app_version;
+        if (d.app_updated_at) out.app_updated_at = d.app_updated_at;
+        if (d.license_issued_at) out.license_issued_at = d.license_issued_at;
+        if (d.last_handoff_at) out.last_handoff_at = d.last_handoff_at;
+        return Object.keys(out).length ? out : undefined;
+    }
+
+    function serializeVesselDeploy(deploy) {
+        const d = normalizeDeploy(deploy, { isVessel: true });
+        const av = d.app_version || {};
+        const au = d.app_updated_at || {};
+        const hasApp = VESSEL_SKUS.some(s => av[s] || au[s]);
+        const out = {};
+        if (d.setup_version) out.setup_version = d.setup_version;
+        if (d.setup_sent_at) out.setup_sent_at = d.setup_sent_at;
+        if (hasApp) {
+            out.app_version = {};
+            out.app_updated_at = {};
+            for (const s of VESSEL_SKUS) {
+                if (av[s]) out.app_version[s] = av[s];
+                if (au[s]) out.app_updated_at[s] = au[s];
+            }
+        }
+        if (d.license_issued_at) out.license_issued_at = d.license_issued_at;
+        if (d.last_handoff_at) out.last_handoff_at = d.last_handoff_at;
+        return Object.keys(out).length ? out : undefined;
+    }
+
     /** Serialize in-memory registry to on-disk file bundle */
     function buildPersistBundle() {
         assertLoaded();
         const registry = {
             version: _cache.version || 1,
             updated_at: _cache.updated_at || todayIso(),
-            companies: (_cache.companies || []).map(c => ({
-                company_id: c.company_id,
-                name: c.name,
-                name_en: c.name_en || '',
-                status: c.status || 'active',
-                hq_sku: c.hq_sku || 'HQ_OFFICE',
-                vessels: (c.vessels || []).map(v => ({
-                    vessel_id: v.vessel_id,
-                    name: v.name,
-                    code: v.code || '',
-                    imo_no: v.imo_no || '',
-                    delivery: v.delivery || '',
-                    status: v.status || 'active',
-                })),
-            })),
+            companies: (_cache.companies || []).map(c => {
+                const row = {
+                    company_id: c.company_id,
+                    name: c.name,
+                    name_en: c.name_en || '',
+                    status: c.status || 'active',
+                    hq_sku: c.hq_sku || 'HQ_OFFICE',
+                    vessels: (c.vessels || []).map(v => {
+                        const vr = {
+                            vessel_id: v.vessel_id,
+                            name: v.name,
+                            code: v.code || '',
+                            imo_no: v.imo_no || '',
+                            delivery: v.delivery || '',
+                            status: v.status || 'active',
+                        };
+                        const vd = serializeVesselDeploy(v.deploy);
+                        if (vd) vr.deploy = vd;
+                        return vr;
+                    }),
+                };
+                if (c.address) row.address = c.address;
+                if (c.contact_name) row.contact_name = c.contact_name;
+                if (c.contact_email) row.contact_email = c.contact_email;
+                const contract = normalizeContract(c.contract);
+                if (contract.start_date || contract.term_months || contract.fee_note) row.contract = contract;
+                const cd = serializeCompanyDeploy(c.deploy);
+                if (cd) row.deploy = cd;
+                return row;
+            }),
         };
         const files = [{ relPath: 'registry.json', data: registry }];
         for (const c of _cache.companies || []) {
@@ -292,6 +526,11 @@ const TVC_AdminRegistry = (function () {
                     status: c.status || 'active',
                     hq_sku: c.hq_sku || 'HQ_OFFICE',
                     notes: c.notes || '',
+                    address: c.address || '',
+                    contact_name: c.contact_name || '',
+                    contact_email: c.contact_email || '',
+                    contract: normalizeContract(c.contract),
+                    deploy: serializeCompanyDeploy(c.deploy) || {},
                     vessels: (c.vessels || []).map(v => v.vessel_id),
                 },
             });
@@ -308,6 +547,7 @@ const TVC_AdminRegistry = (function () {
                         status: v.status || 'active',
                         vessel_skus: [],
                         notes: v.notes || '',
+                        deploy: serializeVesselDeploy(v.deploy) || {},
                     },
                 });
             }
@@ -360,12 +600,21 @@ const TVC_AdminRegistry = (function () {
         upsertVessel,
         setCompanyStatus,
         setVesselStatus,
+        recordDeploy,
+        formatCompanyAppVersion,
+        formatVesselAppVersions,
+        formatVesselSetupVersion,
         buildPersistBundle,
         save,
         validateCompanyInput,
         validateVesselInput,
         STATUS_OPTS,
         HQ_SKU_OPTS,
+        VESSEL_SKUS,
+        TVC_LAB_COMPANY_ID,
+        TVC_LAB_VESSEL_ID,
+        isTvcLabCompany,
+        getTvcLabDefaults,
     };
 })();
 

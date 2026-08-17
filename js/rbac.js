@@ -292,11 +292,14 @@ const TVC_RBAC = (function () {
     /** 선장/기관장: Reported → Confirmed */
     function canConfirmDepartment(user, dept) {
         if (isHqAccount(user)) return true;
-        if (typeof TVC_Space !== 'undefined' && user?.station) {
-            return TVC_Space.canApproveReport(user, dept);
+        const d = String(dept || '').trim().toUpperCase();
+        if (!d) return false;
+        if (typeof TVC_Space !== 'undefined') {
+            const station = TVC_Space.getStation(user);
+            if (station) return TVC_Space.canApproveReport(user, d);
         }
         if (!isApprover(user)) return false;
-        return user.department === dept;
+        return String(user.department || '').trim().toUpperCase() === d;
     }
 
     /** HQ 공무감독: Confirmed → Approved */

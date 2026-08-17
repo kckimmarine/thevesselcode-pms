@@ -1,18 +1,20 @@
 /* Issue signed Pilot / seat license JSON for a SKU */
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
-const { SKUS, getSku } = require('../electron/sku.js');
-const { canonicalPayloadForSign } = require('../electron/license.js');
+const { SKUS } = require('../electron/sku.js');
+const {
+    issueSeatLicense,
+    readPrivateKeyPem,
+    buildLicense,
+    signLicense,
+} = require('../electron/license-issue.js');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
-const privPath = process.env.TVC_LICENSE_PRIVATE_KEY
-    || path.join(root, 'electron', 'keys', 'private.pem');
 
 function parseArgs(argv) {
     const out = {
@@ -37,40 +39,6 @@ function parseArgs(argv) {
     return out;
 }
 
-function signLicense(lic, privateKeyPem) {
-    const key = crypto.createPrivateKey(privateKeyPem);
-    const mid = lic.machineId == null || lic.machineId === '' ? null : String(lic.machineId);
-    const unsigned = {
-        ...lic,
-        machineId: mid,
-        seat: !!mid,
-    };
-    const sig = crypto.sign(null, Buffer.from(canonicalPayloadForSign(unsigned), 'utf8'), key);
-    return {
-        ...unsigned,
-        signature: sig.toString('base64'),
-    };
-}
-
-function buildLicense(skuKey, months, machineId) {
-    const def = getSku(skuKey);
-    if (!def) throw new Error(`Unknown SKU: ${skuKey}`);
-    const issuedAt = new Date().toISOString();
-    const exp = new Date();
-    exp.setMonth(exp.getMonth() + months);
-    const mid = machineId == null || machineId === '' ? null : String(machineId).trim();
-    return {
-        companyId: def.companyId,
-        vesselId: def.vesselId,
-        sku: def.sku,
-        allowedVesselIds: def.allowedVesselIds || (def.vesselId ? [def.vesselId] : null),
-        issuedAt,
-        expiresAt: exp.toISOString(),
-        machineId: mid,
-        seat: !!mid,
-    };
-}
-
 function loadRequest(file) {
     const abs = path.resolve(file);
     const req = JSON.parse(fs.readFileSync(abs, 'utf8'));
@@ -81,10 +49,7 @@ function loadRequest(file) {
 }
 
 function issueOne(skuKey, months, outPath, machineId) {
-    if (!fs.existsSync(privPath)) {
-        throw new Error(`Private key not found: ${privPath}\nRun: npm run license:keys`);
-    }
-    const priv = fs.readFileSync(privPath, 'utf8');
+    const priv = readPrivateKeyPem({ root });
     const unsigned = buildLicense(skuKey, months, machineId);
     const signed = signLicense(unsigned, priv);
     const dir = outPath
@@ -110,9 +75,12 @@ if (args.request) {
         process.exit(1);
     }
     const out = args.out || path.join(root, 'build', 'licenses', sku, `license-seat-${req.machineId.slice(0, 8)}.json`);
-    issueOne(sku, args.months, out, req.machineId);
+    const priv = readPrivateKeyPem({ root });
+    const { license } = issueSeatLicense(req, { months: args.months, sku, privateKeyPem: priv });
+    fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
+    fs.writeFileSync(path.resolve(out), JSON.stringify(license, null, 2));
+    console.log('Issued', sku, `seat:${req.machineId}`, '→', out);
 } else if (args.all) {
-    // Dev/unbound seeds only — packaged apps require seat licenses issued per PC.
     for (const sku of Object.keys(SKUS)) issueOne(sku, args.months, null, null);
 } else if (args.sku) {
     let machineId = args.machine || null;
@@ -122,8 +90,7 @@ if (args.request) {
         process.exit(1);
     }
     if (args.unbound) machineId = null;
-    const out = args.out || null;
-    issueOne(args.sku, args.months, out, machineId);
+    issueOne(args.sku, args.months, args.out || null, machineId);
 } else {
     console.log('Usage:');
     console.log('  # Dev seeds (unbound, local Electron only)');

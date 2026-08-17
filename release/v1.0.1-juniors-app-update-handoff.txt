@@ -1,0 +1,54 @@
+[TVC-PMS v1.0.1 App Update — 후배 전달용 (v1.0.0 → v1.0.1)]
+
+■ 대상
+  - 이미 v1.0.0 Setup으로 설치·사용 중인 PC (HQ / Engine / Deck / Master)
+  - Seat license 재발급 불필요
+  - 업무 데이터(Master / Work History / Requisition / Sync)는 AppData IndexedDB에 그대로 유지
+
+■ 전달 파일 (1개만)
+  dist/tvc_app_update_1.0.1_2026-08-17.zip  (약 329 MB)
+  ※ 카톡보다 Drive / OneDrive 링크 권장
+
+■ 후배 설치 방법 (각 PC · 해당 SKU 앱에서)
+  1. TVC-PMS 실행 (HQ / Engine / Deck / Master 중 본인 PC SKU)
+  2. Menu → Data Export & Import → Import → App Update
+  3. 받은 ZIP 선택 → Install update
+  4. 설치 마법사 완료 → 앱 재실행
+  5. 로그인 화면 footer **v1.0.1** 확인
+  6. 기존 Work History / Master / Requisition 데이터 그대로 있는지 확인
+
+■ 데이터 유지 원리
+  - App Update = 프로그램(Setup.exe)만 교체
+  - IndexedDB·license·AppData 폴더는 설치 마법사가 건드리지 않음
+  - Sync ZIP / Master Import 와 다름 — 업무 데이터는 변경되지 않음
+
+■ v1.0.1 변경 사항 (전체)
+  [기능]
+  - CE/CO Confirm 후 Monthly Report Export (Update Work Plan 전에도 가능)
+  - Defect / Postpone / Work Permit Confirm 후 Export Ready에서 바로 Export
+  - Data History Monthly 탭 — PMS/SPARE Master 기록 제외
+  - Work Plan PMS 그룹 헤더 Equipment 필드 제거
+  - SPARE Master Export/Import — SPARE GROUP Tree(spare_groups) 기준, PMS와 분리
+  - SPARE Append → Master Export → Excel에 SPARE GROUP만 표시
+  - Work Plan / SPARE Master Export·Import — password 0000
+  - Work Plan PMS GROUP Tree Modify — 선택 그룹 인식 오류 수정
+
+  [버그·UX 수정 — 2026-08-18 반영]
+  - F5 새로고침·앱 재시작 후 로그인 실패 / DB 준비 지연 수정
+  - HQ Requisition List → Data 로드 시 norm is not defined 오류 수정
+  - Requisition List Data 클릭·로드 속도 개선
+  - Requisition List Data 전환 시 화면 깜빡임 감소
+
+■ 설치 후 확인 체크
+  [ ] footer v1.0.1
+  [ ] 기존 Work History / Master / Requisition 데이터 그대로
+  [ ] F5 새로고침 후 로그인 정상
+  [ ] HQ Requisition List: Data 클릭 → spare 목록 정상
+  [ ] Engine CE: Confirm → Monthly Export
+  [ ] Defect / Postpone / Work Permit: Confirm → Export
+  [ ] DECK SPARE Append → F5 → Master Export
+
+■ 주의
+  - Admin Mode PC는 대상 아님
+  - ZIP 안 4종 Setup 중 본인 SKU만 자동 실행됨
+  - Setup.exe 수동 재설치 불필요 (App Update만 적용)

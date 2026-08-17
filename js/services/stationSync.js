@@ -1,7 +1,7 @@
 /** THE VESSEL CODE — Station sync (CCR/ECR → Captain Hub merge, Company export) */
 const TVC_StationSync = (function () {
     const STORE_KEYS = [
-        'maintenance_jobs', 'maintenance_groups', 'daily_work_reports',
+        'maintenance_jobs', 'maintenance_groups', 'spare_groups', 'daily_work_reports',
         'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog',
     ];
 

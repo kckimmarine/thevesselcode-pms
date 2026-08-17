@@ -8,6 +8,78 @@ const TVC_Transaction = (function () {
         return entity;
     }
 
+    /** Job department — prefer job row, then report, then station-fixed dept (legacy rows may omit job.department). */
+    function resolveReportScopeDepartment(report, user) {
+        const fromReport = String(report?.department || '').trim().toUpperCase();
+        if (fromReport) return fromReport;
+        if (typeof TVC_Space !== 'undefined') {
+            const fd = TVC_Space.fixedDepartment(TVC_Space.getStation(user));
+            if (fd) return fd;
+        }
+        return String(user?.department || '').trim().toUpperCase();
+    }
+
+    function resolveJobDepartment(job, report, user) {
+        const fromJob = String(job?.department || '').trim().toUpperCase();
+        if (fromJob) return fromJob;
+        return resolveReportScopeDepartment(report, user);
+    }
+
+    /** Confirm — report/station scope wins over stale cross-dept maintenance_job_id links. */
+    function resolveConfirmJobDepartment(user, job, report) {
+        const scopeDept = resolveReportScopeDepartment(report, user);
+        const jobDept = String(job?.department || '').trim().toUpperCase();
+        if (scopeDept && (!jobDept || (jobDept !== scopeDept && TVC_RBAC.canConfirmDepartment(user, scopeDept)))) {
+            return scopeDept;
+        }
+        return resolveJobDepartment(job, report, user);
+    }
+
+    function assertJobDepartmentAllowed(user, job, report, { confirm = true } = {}) {
+        const dept = confirm
+            ? resolveConfirmJobDepartment(user, job, report)
+            : resolveJobDepartment(job, report, user);
+        if (!dept) return;
+        const ok = confirm
+            ? TVC_RBAC.canConfirmDepartment(user, dept)
+            : TVC_RBAC.canAccessDepartment(user, dept);
+        if (!ok) {
+            const code = String(job?.job_code || '').trim();
+            throw Object.assign(new Error(code ? `DEPT_FORBIDDEN: ${code}` : 'DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
+        }
+    }
+
+    async function resolveJobForConfirm(api, item, report, user, cache) {
+        let job = cache?.jobsById?.get(item.maintenance_job_id);
+        if (!job) {
+            job = await api.get('maintenance_jobs', item.maintenance_job_id);
+            if (job && cache?.jobsById) cache.jobsById.set(item.maintenance_job_id, job);
+        }
+        if (!job) return null;
+        const scopeDept = resolveReportScopeDepartment(report, user);
+        const jobDept = String(job.department || '').trim().toUpperCase();
+        const code = String(item.job_code || job.job_code || '').trim();
+        if (!scopeDept || !code || jobDept === scopeDept) return job;
+        const cacheKey = `${scopeDept}|${code}`;
+        if (cache?.jobsByCodeDept?.has(cacheKey)) {
+            const hit = cache.jobsByCodeDept.get(cacheKey);
+            if (hit) {
+                item.maintenance_job_id = hit.id;
+                return hit;
+            }
+        }
+        if (!cache?.allJobs) cache.allJobs = await api.getAll('maintenance_jobs');
+        const alt = cache.allJobs.find(j => j.job_code === code
+            && String(j.department || '').trim().toUpperCase() === scopeDept);
+        if (cache?.jobsByCodeDept) cache.jobsByCodeDept.set(cacheKey, alt || null);
+        if (alt) {
+            item.maintenance_job_id = alt.id;
+            if (cache?.jobsById) cache.jobsById.set(alt.id, alt);
+            return alt;
+        }
+        return job;
+    }
+
     /** HQ에서 직접 작성한 Work Report — Work History 로드 조건(hq_synced + vessel_id)에 맞게 태깅 */
     async function stampHqLocalReport(report, user) {
         if (!report || !TVC_RBAC.isHqAccount(user)) return report;
@@ -161,9 +233,7 @@ const TVC_Transaction = (function () {
         return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'maintenance_groups', 'audit_logs'], async (api) => {
             const job = await api.get('maintenance_jobs', jobId);
             if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
-            if (user.department && user.department !== job.department) {
-                throw Object.assign(new Error(`DEPT_FORBIDDEN: ${job.job_code}`), { code: 'FORBIDDEN' });
-            }
+            assertJobDepartmentAllowed(user, job, null, { confirm: false });
 
             const status = payload.status || 'REPORTED';
             const jobItems = buildJobItemsFromPayload(job, payload, status);
@@ -183,6 +253,7 @@ const TVC_Transaction = (function () {
                 report_form: payload.form || null,
                 is_locked: false,
                 created_at: now(),
+                department: resolveJobDepartment(job, null, user),
             };
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
             await stampHqLocalReport(report, user);
@@ -212,12 +283,12 @@ const TVC_Transaction = (function () {
 
         return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
             const jobItems = [];
+            let firstJob = null;
             for (const entry of entries) {
                 const job = await api.get('maintenance_jobs', entry.maintenance_job_id);
                 if (!job) throw Object.assign(new Error(`JOB_NOT_FOUND: ${entry.job_code || entry.maintenance_job_id}`), { code: 'NOT_FOUND' });
-                if (user.department && user.department !== job.department) {
-                    throw Object.assign(new Error(`DEPT_FORBIDDEN: ${job.job_code}`), { code: 'FORBIDDEN' });
-                }
+                if (!firstJob) firstJob = job;
+                assertJobDepartmentAllowed(user, job, null, { confirm: false });
                 jobItems.push(TVC_WorkReport.blankJobItem(job, {
                     status: payload.status || 'REPORTED',
                     form: { ...(payload.sharedForm || {}), ...(entry.form || {}) },
@@ -246,6 +317,7 @@ const TVC_Transaction = (function () {
                 report_form: payload.sharedForm || null,
                 is_locked: false,
                 created_at: now(),
+                department: resolveJobDepartment(firstJob, null, user),
             };
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
             await stampHqLocalReport(report, user);
@@ -380,9 +452,7 @@ const TVC_Transaction = (function () {
             for (const item of rep.job_items) {
                 if (!TVC_RBAC.isConfirmedStatus(item.status)) continue;
                 const job = await api.get('maintenance_jobs', item.maintenance_job_id);
-                if (job && user.department && user.department !== job.department) {
-                    throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
-                }
+                if (job) assertJobDepartmentAllowed(user, job, rep);
                 if (rep.work_type !== 'POSTPONE') {
                     await rollbackApprovedItem(api, item, user, rep);
                 } else {
@@ -442,9 +512,7 @@ const TVC_Transaction = (function () {
                 if (!TVC_RBAC.isConfirmedStatus(item.status)) continue;
                 const job = await api.get('maintenance_jobs', item.maintenance_job_id);
                 if (!job) continue;
-                if (user.department && user.department !== job.department) {
-                    throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
-                }
+                assertJobDepartmentAllowed(user, job, report);
                 if (!isPostpone) {
                     await rollbackApprovedItem(api, item, user, report);
                 } else {
@@ -490,6 +558,7 @@ const TVC_Transaction = (function () {
             if (!report) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
             TVC_WorkReport.fromLegacy(report);
             if (report.is_locked) throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
+            if (!report.department) report.department = resolveReportScopeDepartment(report, user);
 
             const isPostpone = report.work_type === 'POSTPONE';
             TVC_RBAC.assertReportTransition(user, 'REPORTED', 'CONFIRMED');
@@ -500,14 +569,13 @@ const TVC_Transaction = (function () {
             const forceOk = payloadForceOk(user);
             const confirmTasks = [];
             let confirmDept = user.department || '';
+            const jobCache = { jobsById: new Map(), jobsByCodeDept: new Map(), allJobs: null };
 
             for (const item of reportedItems) {
-                const job = await api.get('maintenance_jobs', item.maintenance_job_id);
+                const job = await resolveJobForConfirm(api, item, report, user, jobCache);
                 if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
-                if (!confirmDept) confirmDept = job.department || '';
-                if (user.department && user.department !== job.department) {
-                    throw Object.assign(new Error('DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
-                }
+                assertJobDepartmentAllowed(user, job, report);
+                if (!confirmDept) confirmDept = resolveConfirmJobDepartment(user, job, report);
                 maybeSnapshotJobState(item, job, true);
                 if (!isPostpone) {
                     confirmTasks.push({ job, usedParts: item.used_parts || [] });

@@ -4,7 +4,16 @@
   "name_en": "Daemyung",
   "status": "active",
   "hq_sku": "HQ_OFFICE",
-  "notes": "Pilot company — HQ Mode + contracted vessels below.",
+  "notes": "",
+  "address": "",
+  "contact_name": "",
+  "contact_email": "",
+  "contract": {
+    "start_date": "",
+    "term_months": 0,
+    "fee_note": ""
+  },
+  "deploy": {},
   "vessels": [
     "INCHEON CHEMI",
     "QUARTERBACK J",

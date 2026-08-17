@@ -365,10 +365,12 @@ const TVC_SpareInventoryParser = (function () {
 
 const TVC_DB = (function () {
     let db = null;
+    let openPromise = null;
 
     function open() {
         if (db) return Promise.resolve(db);
-        return new Promise((resolve, reject) => {
+        if (openPromise) return openPromise;
+        openPromise = new Promise((resolve, reject) => {
             const req = indexedDB.open(TVC_SCHEMA.DB_NAME, TVC_SCHEMA.DB_VERSION);
             req.onupgradeneeded = (e) => {
                 const database = e.target.result;
@@ -382,9 +384,11 @@ const TVC_DB = (function () {
                         keyPath: cfg.keyPath,
                         autoIncrement: !!cfg.autoIncrement,
                     });
-                    } else {
+                    } else if (tx) {
                         // 기존 store: 누락된 인덱스만 추가 (파괴적 재생성 금지 → 하위호환)
                         store = tx.objectStore(name);
+                    } else {
+                        continue;
                     }
                     // v10: spare_parts.by_part_no unique → non-unique (선박별 동일 Part No)
                     if (oldVersion < 10 && name === 'spare_parts' && store.indexNames.contains('by_part_no')) {
@@ -397,55 +401,74 @@ const TVC_DB = (function () {
                     });
                 }
             };
-            req.onsuccess = () => { db = req.result; resolve(db); };
-            req.onerror = () => reject(req.error);
+            req.onsuccess = () => {
+                db = req.result;
+                db.onversionchange = () => {
+                    try { db.close(); } catch (_) { /* ignore */ }
+                    db = null;
+                    openPromise = null;
+                };
+                openPromise = null;
+                resolve(db);
+            };
+            req.onerror = () => {
+                openPromise = null;
+                reject(req.error);
+            };
+            req.onblocked = () => {
+                console.warn('[TVC_DB] open blocked — close other TVC windows using this database.');
+            };
         });
+        return openPromise;
     }
 
     function tx(storeNames, mode = 'readonly') {
+        if (!db) {
+            throw Object.assign(new Error('Local database is not ready. Wait a moment and try again, or restart the app.'), { code: 'DB_NOT_READY' });
+        }
         return db.transaction(storeNames, mode);
     }
 
     function getAll(storeName) {
-        return new Promise((resolve, reject) => {
+        return open().then(() => new Promise((resolve, reject) => {
             const r = tx(storeName).objectStore(storeName).getAll();
             r.onsuccess = () => resolve(r.result || []);
             r.onerror = () => reject(r.error);
-        });
+        }));
     }
 
     function get(storeName, key) {
-        return new Promise((resolve, reject) => {
+        return open().then(() => new Promise((resolve, reject) => {
             const r = tx(storeName).objectStore(storeName).get(key);
             r.onsuccess = () => resolve(r.result);
             r.onerror = () => reject(r.error);
-        });
+        }));
     }
 
     function put(storeName, value) {
-        return new Promise((resolve, reject) => {
+        return open().then(() => new Promise((resolve, reject) => {
             const r = tx(storeName, 'readwrite').objectStore(storeName).put(value);
             r.onsuccess = () => resolve(r.result);
             r.onerror = () => reject(r.error);
-        });
+        }));
     }
 
     function del(storeName, key) {
-        return new Promise((resolve, reject) => {
+        return open().then(() => new Promise((resolve, reject) => {
             const r = tx(storeName, 'readwrite').objectStore(storeName).delete(key);
             r.onsuccess = () => resolve(true);
             r.onerror = () => reject(r.error);
-        });
+        }));
     }
 
     function bulkPut(storeName, values) {
-        return new Promise((resolve, reject) => {
+        return open().then(() => new Promise((resolve, reject) => {
             const t = tx(storeName, 'readwrite');
             const store = t.objectStore(storeName);
             values.forEach(v => store.put(v));
             t.oncomplete = () => resolve(values.length);
             t.onerror = () => reject(t.error);
-        });
+        }));
     }
 
     function getMeta(key) {
@@ -457,13 +480,13 @@ const TVC_DB = (function () {
     }
 
     function indexGetAll(storeName, indexName, query) {
-        return new Promise((resolve, reject) => {
+        return open().then(() => new Promise((resolve, reject) => {
             const store = tx(storeName).objectStore(storeName);
             const idx = store.index(indexName);
             const r = query === undefined ? idx.getAll() : idx.getAll(query);
             r.onsuccess = () => resolve(r.result || []);
             r.onerror = () => reject(r.error);
-        });
+        }));
     }
 
     async function runTransaction(storeNames, fn) {

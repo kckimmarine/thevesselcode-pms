@@ -9,13 +9,14 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 10, // v10: master vessel_id scope (HQ multi-vessel PMS/SPARE)
+    DB_VERSION: 11, // v11: spare_groups (SPARE GROUP Tree — separate from maintenance_groups)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
         ship_components: { keyPath: 'id' },
         maintenance_jobs: { keyPath: 'id' },
         maintenance_groups: { keyPath: 'id' },
+        spare_groups: { keyPath: 'id' },
         spare_parts: { keyPath: 'id' },
         daily_work_reports: { keyPath: 'id' },
         audit_logs: { keyPath: 'id', autoIncrement: true },
@@ -46,6 +47,10 @@ const TVC_SCHEMA = {
             { name: 'by_vessel', keyPath: 'vessel_id' },
         ],
         maintenance_groups: [
+            { name: 'by_department', keyPath: 'department' },
+            { name: 'by_vessel', keyPath: 'vessel_id' },
+        ],
+        spare_groups: [
             { name: 'by_department', keyPath: 'department' },
             { name: 'by_vessel', keyPath: 'vessel_id' },
         ],

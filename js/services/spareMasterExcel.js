@@ -47,7 +47,7 @@ const TVC_SpareMasterExcel = (function () {
         return { no, name, label: buildGroupLabel(no, name) };
     }
 
-    function listPmsGenEngineLabels(groups, groupNodes, dept) {
+    function listSpareGenEngineLabels(spareGroups, groupNodes, dept) {
         const labels = new Set();
         (groupNodes || []).forEach(n => {
             if (dept && n.department !== dept) return;
@@ -55,7 +55,7 @@ const TVC_SpareMasterExcel = (function () {
             if (norm(n.label) === norm(SPARE_GEN_ENGINE_LABEL)) return;
             labels.add(n.label);
         });
-        (groups || []).forEach(g => {
+        (spareGroups || []).forEach(g => {
             if (g.item_sort1) return;
             if (dept && g.department !== dept) return;
             if (!isSpareGenEngineGroup(g.label)) return;
@@ -68,7 +68,7 @@ const TVC_SpareMasterExcel = (function () {
     async function upsertSpareGroupDef(row, itemSort1, ctx = {}) {
         const vesselId = ctx.vesselId;
         if (isSpareGenEngineMasterRow(row.groupNo, row.groupName)) {
-            const labels = listPmsGenEngineLabels(ctx.groups, ctx.groupNodes, row.department);
+            const labels = listSpareGenEngineLabels(ctx.spareGroups, ctx.groupNodes, row.department);
             if (labels.length) {
                 for (const lab of labels) {
                     await upsertGroupDef({ ...row, label: lab }, itemSort1 || null, vesselId);
@@ -319,7 +319,8 @@ const TVC_SpareMasterExcel = (function () {
         return map;
     }
 
-    function collectExportGroupCounts(exportSpares, groups, jobs, groupNodes) {
+    /** SPARE GROUP Tree (spare_groups) — not PMS maintenance_groups / jobs. */
+    function collectExportGroupCounts(exportSpares, spareGroups, groupNodes) {
         const counts = new Map();
         const ensure = (department, label, addParts = 0) => {
             const dept = String(department || '').trim().toUpperCase();
@@ -337,16 +338,10 @@ const TVC_SpareMasterExcel = (function () {
             ensure(dept, raw, 1);
         });
 
-        (groups || []).forEach(g => {
+        (spareGroups || []).forEach(g => {
             if (g.item_sort1) return;
             if (isSpareGenEngineGroup(g.label) && norm(g.label) !== norm(SPARE_GEN_ENGINE_LABEL)) return;
             ensure(g.department, g.label, 0);
-        });
-
-        (jobs || []).forEach(j => {
-            if (!j.group) return;
-            if (isSpareGenEngineGroup(j.group)) return;
-            ensure(j.department, j.group, 0);
         });
 
         return counts;
@@ -378,36 +373,26 @@ const TVC_SpareMasterExcel = (function () {
 
     async function loadExportData(department, opts = {}) {
         const dept = normDept(department);
-        const [spares, groups, jobs, meta] = await Promise.all([
+        const [spares, spareGroups, meta] = await Promise.all([
             TVC_DB.getAll('spare_parts'),
-            TVC_DB.getAll('maintenance_groups').catch(() => []),
-            TVC_DB.getAll('maintenance_jobs').catch(() => []),
+            TVC_DB.getAll('spare_groups').catch(() => []),
             TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null),
         ]);
         let vesselId = opts.vesselId || opts.selectedVesselId || meta || 'INCHEON CHEMI';
         if (!opts.vesselId && !opts.selectedVesselId && typeof TVC_Fleet !== 'undefined') {
             vesselId = TVC_Fleet.getSelectedId() || TVC_Fleet.getSelected()?.name || TVC_Fleet.PILOT_VESSEL_ID || vesselId;
         }
-        const vesselJobs = (jobs || []).filter(j => sameVessel(j, vesselId));
-        const vesselGroups = (groups || []).filter(g => sameVessel(g, vesselId));
+        const vesselSpareGroups = (spareGroups || []).filter(g => sameVessel(g, vesselId));
         const vesselSpares = (spares || []).filter(s => sameVessel(s, vesselId));
-        const scopedJobs = vesselJobs.filter(j => String(j.department || '').toUpperCase() === dept);
-        const scopedGroups = vesselGroups.filter(g => String(g.department || '').toUpperCase() === dept);
-        const idxState = {
-            jobs: scopedJobs,
-            groups: scopedGroups,
-            components: [],
-            spares: vesselSpares,
-            reports: [],
-        };
-        const groupNodes = (typeof TVC_Indexes !== 'undefined')
-            ? TVC_Indexes.build(idxState).groupNodes
-            : scopedGroups.filter(g => !g.item_sort1).map(g => ({ label: g.label, department: g.department }));
+        const scopedSpareGroups = vesselSpareGroups.filter(g => String(g.department || '').toUpperCase() === dept);
+        const groupNodes = (typeof TVC_SpareIndexes !== 'undefined')
+            ? TVC_SpareIndexes.buildSpareGroupTree(scopedSpareGroups, vesselSpares)
+            : scopedSpareGroups.filter(g => !g.item_sort1).map(g => ({ label: g.label, department: g.department }));
         const scopedSpares = vesselSpares.map(canonSpare).filter(s => spareDepartment(s, groupNodes) === dept);
         return {
             spares: scopedSpares,
-            groups: scopedGroups,
-            jobs: scopedJobs,
+            spareGroups: scopedSpareGroups,
+            groups: scopedSpareGroups,
             groupNodes,
             vesselId,
             department: dept,
@@ -418,13 +403,14 @@ const TVC_SpareMasterExcel = (function () {
         if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
         const department = normDept(opts.department);
         const data = opts.spares
-            ? { ...opts, department, jobs: opts.jobs || [], groups: opts.groups || [] }
+            ? { ...opts, department, spareGroups: opts.spareGroups || opts.groups || [], groups: opts.spareGroups || opts.groups || [] }
             : await loadExportData(department, opts);
-        const { groups, jobs, groupNodes, vesselId } = data;
+        const spareGroups = data.spareGroups || data.groups || [];
+        const { groupNodes, vesselId } = data;
         const exportSpares = (opts.spares || data.spares || []).map(canonSpare)
             .filter(s => spareDepartment(s, groupNodes) === department);
 
-        const groupCounts = collectExportGroupCounts(exportSpares, groups, jobs, groupNodes);
+        const groupCounts = collectExportGroupCounts(exportSpares, spareGroups, groupNodes);
 
         const groupRows = [...groupCounts.entries()].map(([k, count]) => {
             const [department, no, ...nameParts] = k.split('|');
@@ -434,7 +420,7 @@ const TVC_SpareMasterExcel = (function () {
             return a.no.localeCompare(b.no, undefined, { numeric: true });
         });
 
-        const groupMeta = buildGroupMetaMap(groups);
+        const groupMeta = buildGroupMetaMap(spareGroups);
 
         const wb = new ExcelJS.Workbook();
         wb.creator = 'TVC-PMS';
@@ -442,7 +428,7 @@ const TVC_SpareMasterExcel = (function () {
         const wsG = wb.addWorksheet('Group Headers', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         addMetaRows(wsG, [
             `Vessel: ${vesselId}  ·  SPARE Master — ${department} — Group Headers`,
-            'Live DB snapshot for this department only. Re-export after UI changes.',
+            'Live DB snapshot — SPARE GROUP Tree (spare_groups) for this department only. Re-export after UI changes.',
         ]);
         ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Parts (ref)'].forEach((h, i) => {
             wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
@@ -450,7 +436,7 @@ const TVC_SpareMasterExcel = (function () {
         styleHeaderRow(wsG.getRow(HDR_ROW), NAVY);
         groupRows.forEach((gr, idx) => {
             const r = wsG.getRow(DATA_START + idx);
-            const meta = pickSpareGroupMeta(groupMeta, groups, gr.department, gr.no, gr.name);
+            const meta = pickSpareGroupMeta(groupMeta, spareGroups, gr.department, gr.no, gr.name);
             r.getCell(1).value = gr.department;
             r.getCell(2).value = gr.no;
             r.getCell(3).value = gr.name;
@@ -472,7 +458,7 @@ const TVC_SpareMasterExcel = (function () {
         });
         styleHeaderRow(wsE.getRow(HDR_ROW), GREEN);
         let eqRow = 0;
-        (groups || []).filter(g => norm(g.item_sort1) && String(g.department || '').toUpperCase() === department).forEach(g => {
+        (spareGroups || []).filter(g => norm(g.item_sort1) && String(g.department || '').toUpperCase() === department).forEach(g => {
             const sg = isSpareGenEngineGroup(g.label)
                 ? { no: SPARE_GEN_ENGINE_NO, name: SPARE_GEN_ENGINE_NAME }
                 : splitGroupLabel(g.label);
@@ -492,7 +478,7 @@ const TVC_SpareMasterExcel = (function () {
         const wsP = wb.addWorksheet('Spare Parts', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         const simplifyCodes = opts.simplifyCodes !== false;
         const setupExport = !!opts.setupExport;
-        const codeMap = simplifyCodes !== false ? simplifiedExportCodes(exportSpares, groupNodes, groups) : null;
+        const codeMap = simplifyCodes !== false ? simplifiedExportCodes(exportSpares, groupNodes, spareGroups) : null;
         addMetaRows(wsP, [
             `Vessel: ${vesselId}  ·  ${department} — ${exportSpares.length} spare parts`,
             setupExport
@@ -512,7 +498,7 @@ const TVC_SpareMasterExcel = (function () {
             const eqName = String(c.equipment || '').trim();
             let eqNo = c.equipmentNo > 0 ? c.equipmentNo : 0;
             if (!eqNo && eqName) {
-                const hit = (groups || []).find(gr => norm(gr.label) === norm(raw) && norm(gr.item_sort1 || '') === norm(eqName));
+                const hit = (spareGroups || []).find(gr => norm(gr.label) === norm(raw) && norm(gr.item_sort1 || '') === norm(eqName));
                 eqNo = parseInt(String(hit?.equipment_no ?? hit?.sort_order ?? ''), 10) || 0;
             }
             if (!eqNo && typeof TVC_SpareCode !== 'undefined') eqNo = TVC_SpareCode.resolveEquipNo(c);
@@ -671,11 +657,11 @@ const TVC_SpareMasterExcel = (function () {
     function groupDefId(vesselId, dept, label, itemSort1) {
         const v = String(vesselId || '').replace(/[^\w.-]+/g, '_').slice(0, 40);
         const base = `${v}|${dept}|${norm(label)}|${norm(itemSort1 || '')}`;
-        return 'grp-' + base.replace(/[^\w|.-]/g, '_').slice(0, 100);
+        return 'sgrp-' + base.replace(/[^\w|.-]/g, '_').slice(0, 100);
     }
 
     async function upsertGroupDef(row, itemSort1, vesselId) {
-        const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+        const defs = await TVC_DB.getAll('spare_groups').catch(() => []);
         const label = row.label;
         const dept = row.department;
         const item = norm(itemSort1 || '');
@@ -694,16 +680,18 @@ const TVC_SpareMasterExcel = (function () {
             label,
             item_sort1: item || null,
             equipment_no: row.equipment_no != null ? row.equipment_no : (hit?.equipment_no ?? null),
+            sort_order: hit?.sort_order ?? 0,
             machinery_name: row.maker || hit?.machinery_name || '',
             maker: row.maker || hit?.maker || '',
             model_type: row.model_type || hit?.model_type || '',
             capacity: row.capacity || hit?.capacity || '',
             serial_no: row.serial_no || hit?.serial_no || '',
             header_edited: true,
+            created_at: hit?.created_at || new Date().toISOString(),
             updated_at: new Date().toISOString(),
             sync_status: hit?.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (hit?.sync_status || 'LOCAL'),
         };
-        await TVC_DB.put('maintenance_groups', next);
+        await TVC_DB.put('spare_groups', next);
     }
 
     function importGroupNoKey(dept, groupNo) {
@@ -727,7 +715,7 @@ const TVC_SpareMasterExcel = (function () {
         return byNo;
     }
 
-    function existingLabelsByGroupNo(jobs, groups, spares, vesselId) {
+    function existingLabelsByGroupNo(spareGroups, spares, vesselId) {
         const byNo = new Map();
         const add = (dept, label) => {
             if (!label) return;
@@ -738,8 +726,7 @@ const TVC_SpareMasterExcel = (function () {
             if (!byNo.has(key)) byNo.set(key, new Set());
             byNo.get(key).add(resolved.label || label);
         };
-        (jobs || []).filter(j => sameVessel(j, vesselId)).forEach(j => add(j.department, j.group));
-        (groups || []).filter(g => sameVessel(g, vesselId) && !g.item_sort1).forEach(g => add(g.department, g.label));
+        (spareGroups || []).filter(g => sameVessel(g, vesselId) && !g.item_sort1).forEach(g => add(g.department, g.label));
         (spares || []).filter(s => sameVessel(s, vesselId)).forEach(s => {
             add(String(s.category || 'ENGINE').toUpperCase(), s.group);
         });
@@ -751,7 +738,7 @@ const TVC_SpareMasterExcel = (function () {
         const newL = String(newLabel || '').trim();
         const dept = String(department || '').trim().toUpperCase();
         if (!oldL || !newL || norm(oldL) === norm(newL)) {
-            return { jobs: 0, groups: 0, spares: 0 };
+            return { groups: 0, spares: 0 };
         }
         const ts = new Date().toISOString();
         const touch = row => ({
@@ -759,16 +746,10 @@ const TVC_SpareMasterExcel = (function () {
             updated_at: ts,
             sync_status: row.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (row.sync_status || 'LOCAL'),
         });
-        const [jobs, grps, spares] = await Promise.all([
-            TVC_DB.getAll('maintenance_jobs').catch(() => []),
-            TVC_DB.getAll('maintenance_groups').catch(() => []),
+        const [grps, spares] = await Promise.all([
+            TVC_DB.getAll('spare_groups').catch(() => []),
             TVC_DB.getAll('spare_parts').catch(() => []),
         ]);
-        const jchg = (jobs || []).filter(j =>
-            sameVessel(j, vesselId)
-            && String(j.department || '').toUpperCase() === dept
-            && norm(j.group) === norm(oldL)
-        ).map(j => touch({ ...j, group: newL }));
         const gchg = (grps || []).filter(g =>
             sameVessel(g, vesselId)
             && String(g.department || '').toUpperCase() === dept
@@ -785,24 +766,22 @@ const TVC_SpareMasterExcel = (function () {
             row.vessel_id = vesselId;
             return touch(row);
         });
-        if (jchg.length) await TVC_DB.bulkPut('maintenance_jobs', jchg);
-        if (gchg.length) await TVC_DB.bulkPut('maintenance_groups', gchg);
+        if (gchg.length) await TVC_DB.bulkPut('spare_groups', gchg);
         if (schg.length) {
             if (typeof TVC_DB.bulkPut === 'function') await TVC_DB.bulkPut('spare_parts', schg);
             else for (const row of schg) await TVC_DB.put('spare_parts', row);
         }
-        return { jobs: jchg.length, groups: gchg.length, spares: schg.length };
+        return { groups: gchg.length, spares: schg.length };
     }
 
     async function applyImportGroupRenames(opts = {}) {
         const {
             vesselId, department, groupRows, equipRows, spareRows,
-            jobs, groups, existingSpares,
+            spareGroups, existingSpares,
         } = opts;
         const importLabels = collectImportGroupLabels(groupRows, equipRows, spareRows);
-        const existingLabels = existingLabelsByGroupNo(jobs, groups, existingSpares, vesselId);
+        const existingLabels = existingLabelsByGroupNo(spareGroups, existingSpares, vesselId);
         let renamed = 0;
-        let jobCount = 0;
         let groupDefCount = 0;
         let spareCount = 0;
         for (const [key, newLabel] of importLabels) {
@@ -812,13 +791,12 @@ const TVC_SpareMasterExcel = (function () {
             for (const oldLabel of olds) {
                 if (norm(oldLabel) === norm(newLabel)) continue;
                 const r = await renameGroupLabelInVessel(vesselId, dept, oldLabel, newLabel);
-                if (r.jobs || r.groups || r.spares) renamed++;
-                jobCount += r.jobs;
+                if (r.groups || r.spares) renamed++;
                 groupDefCount += r.groups;
                 spareCount += r.spares;
             }
         }
-        return { renamed, jobs: jobCount, groups: groupDefCount, spares: spareCount };
+        return { renamed, groups: groupDefCount, spares: spareCount };
     }
 
     function findSpareMatch(row, byId, byCode, byPart) {
@@ -828,6 +806,147 @@ const TVC_SpareMasterExcel = (function () {
         const partKey = `${row.department}|${norm(row.group)}|${norm(row.partNo).toLowerCase()}`;
         if (row.partNo && byPart.has(partKey)) return byPart.get(partKey);
         return null;
+    }
+
+    async function relinkSpareReferencesAfterImport(vesselId) {
+        const spares = (await TVC_DB.getAll('spare_parts').catch(() => []))
+            .filter(s => sameVessel(s, vesselId));
+        const byId = new Map(spares.map(s => [String(s.id), s]));
+        const byPart = new Map();
+        const byCode = new Map();
+        spares.forEach(s => {
+            const pno = norm(s.part_no || s.maker_part_no || '').toLowerCase();
+            if (pno) byPart.set(pno, s);
+            const code = norm(s.inventory_numbering || s.universal_item_code || s.universal_code || '').toLowerCase();
+            if (code) byCode.set(code, s);
+        });
+
+        function resolveSpareId(line) {
+            const sid = String(line?.spare_part_id || '').trim();
+            if (sid && byId.has(sid)) return sid;
+            const pno = norm(line?.part_no || '').toLowerCase();
+            if (pno && byPart.has(pno)) return byPart.get(pno).id;
+            const code = norm(line?.universal_code || line?.inventory_numbering || line?.code || '').toLowerCase();
+            if (code && byCode.has(code)) return byCode.get(code).id;
+            return sid || null;
+        }
+
+        function relinkLines(lines) {
+            let n = 0;
+            (lines || []).forEach(line => {
+                const nextId = resolveSpareId(line);
+                if (nextId && nextId !== line.spare_part_id) {
+                    line.spare_part_id = nextId;
+                    n++;
+                }
+            });
+            return n;
+        }
+
+        function relinkSpareIdField(currentId) {
+            const sid = String(currentId || '').trim();
+            if (sid && byId.has(sid)) return sid;
+            return null;
+        }
+
+        let requisitions = 0;
+        let reqLines = 0;
+        let consumeLogs = 0;
+        let consumeLines = 0;
+        let workReports = 0;
+        let usedParts = 0;
+        let defectCases = 0;
+        let defectParts = 0;
+        let workPermits = 0;
+        let permitParts = 0;
+        let jobBom = 0;
+
+        const reqs = (await TVC_DB.getAll('requisitions').catch(() => []))
+            .filter(r => sameVessel(r, vesselId));
+        for (const req of reqs) {
+            const n = relinkLines(req.lines);
+            if (n) {
+                reqLines += n;
+                requisitions++;
+                await TVC_DB.put('requisitions', req);
+            }
+        }
+
+        const logs = (await TVC_DB.getAll('consume_logs').catch(() => []))
+            .filter(r => sameVessel(r, vesselId));
+        for (const log of logs) {
+            const n = relinkLines(log.lines);
+            if (n) {
+                consumeLines += n;
+                consumeLogs++;
+                await TVC_DB.put('consume_logs', log);
+            }
+        }
+
+        const reports = (await TVC_DB.getAll('daily_work_reports').catch(() => []))
+            .filter(r => sameVessel(r, vesselId));
+        for (const rep of reports) {
+            let touched = false;
+            (rep.used_parts || []).forEach(part => {
+                const nextId = resolveSpareId(part);
+                if (nextId && nextId !== part.spare_part_id) {
+                    part.spare_part_id = nextId;
+                    usedParts++;
+                    touched = true;
+                }
+            });
+            (rep.job_items || []).forEach(item => {
+                (item.used_parts || []).forEach(part => {
+                    const nextId = resolveSpareId(part);
+                    if (nextId && nextId !== part.spare_part_id) {
+                        part.spare_part_id = nextId;
+                        usedParts++;
+                        touched = true;
+                    }
+                });
+            });
+            if (touched) {
+                workReports++;
+                await TVC_DB.put('daily_work_reports', rep);
+            }
+        }
+
+        const defects = (await TVC_DB.getAll('defect_cases').catch(() => []))
+            .filter(r => sameVessel(r, vesselId));
+        for (const dc of defects) {
+            const n = relinkLines(dc.used_parts);
+            if (n) {
+                defectParts += n;
+                defectCases++;
+                await TVC_DB.put('defect_cases', dc);
+            }
+        }
+
+        const permits = (await TVC_DB.getAll('work_permits').catch(() => []))
+            .filter(r => sameVessel(r, vesselId));
+        for (const wp of permits) {
+            const n = relinkLines(wp.estimated_parts);
+            if (n) {
+                permitParts += n;
+                workPermits++;
+                await TVC_DB.put('work_permits', wp);
+            }
+        }
+
+        const boms = await TVC_DB.getAll('job_bom').catch(() => []);
+        for (const bom of boms) {
+            const nextId = relinkSpareIdField(bom.spare_part_id);
+            if (nextId && nextId !== bom.spare_part_id) {
+                bom.spare_part_id = nextId;
+                jobBom++;
+                await TVC_DB.put('job_bom', bom);
+            }
+        }
+
+        return {
+            requisitions, reqLines, consumeLogs, consumeLines, workReports, usedParts,
+            defectCases, defectParts, workPermits, permitParts, jobBom,
+        };
     }
 
     async function importFromWorkbook(wb, user, opts = {}) {
@@ -851,37 +970,36 @@ const TVC_SpareMasterExcel = (function () {
         const spareRows = rowsForDepartment(parseSpareRows(wsP), department);
         if (!spareRows.length) throw new Error(`Spare Parts 시트에 ${department} 데이터가 없습니다.`);
 
-        const loaded = await loadExportData(department, { vesselId }).catch(() => ({ groupNodes: [], groups: [], jobs: [] }));
-        const [groups, jobs] = await Promise.all([
-            TVC_DB.getAll('maintenance_groups').catch(() => []),
-            TVC_DB.getAll('maintenance_jobs').catch(() => []),
-        ]);
+        const loaded = await loadExportData(department, { vesselId }).catch(() => ({ groupNodes: [], spareGroups: [], groups: [] }));
+        const spareGroupsAll = await TVC_DB.getAll('spare_groups').catch(() => []);
         const importCtx = {
             vesselId,
-            groups: (groups || []).filter(g => sameVessel(g, vesselId) && String(g.department || '').toUpperCase() === department),
+            spareGroups: (spareGroupsAll || []).filter(g => sameVessel(g, vesselId) && String(g.department || '').toUpperCase() === department),
             groupNodes: loaded.groupNodes || [],
-            jobs: (jobs || []).filter(j => sameVessel(j, vesselId) && String(j.department || '').toUpperCase() === department),
         };
+        importCtx.groups = importCtx.spareGroups;
 
         const allExisting = await TVC_DB.getAll('spare_parts');
         const existing = allExisting.filter(r => sameVessel(r, vesselId));
+        let foreignSpareIds = 0;
+        for (const row of spareRows) {
+            if (!row.spare_id) continue;
+            const hit = allExisting.find(s => s.id === row.spare_id);
+            if (hit && !sameVessel(hit, vesselId)) foreignSpareIds++;
+        }
         const renameStats = await applyImportGroupRenames({
             vesselId,
             department,
             groupRows,
             equipRows,
             spareRows,
-            jobs: importCtx.jobs,
-            groups: importCtx.groups,
+            spareGroups: importCtx.spareGroups,
             existingSpares: existing,
         });
-        if (renameStats.jobs || renameStats.groups || renameStats.spares) {
-            const [jobs2, groups2] = await Promise.all([
-                TVC_DB.getAll('maintenance_jobs').catch(() => []),
-                TVC_DB.getAll('maintenance_groups').catch(() => []),
-            ]);
-            importCtx.jobs = (jobs2 || []).filter(j => sameVessel(j, vesselId) && String(j.department || '').toUpperCase() === department);
-            importCtx.groups = (groups2 || []).filter(g => sameVessel(g, vesselId) && String(g.department || '').toUpperCase() === department);
+        if (renameStats.groups || renameStats.spares) {
+            const spareGroups2 = await TVC_DB.getAll('spare_groups').catch(() => []);
+            importCtx.spareGroups = (spareGroups2 || []).filter(g => sameVessel(g, vesselId) && String(g.department || '').toUpperCase() === department);
+            importCtx.groups = importCtx.spareGroups;
         }
 
         for (const g of groupRows) await upsertSpareGroupDef(g, null, importCtx);
@@ -1051,6 +1169,8 @@ const TVC_SpareMasterExcel = (function () {
             });
         }
 
+        const relinked = await relinkSpareReferencesAfterImport(vesselId);
+
         return {
             created, updated,
             groups: groupRows.length,
@@ -1059,9 +1179,20 @@ const TVC_SpareMasterExcel = (function () {
             vessel_id: vesselId,
             codesRenumbered: renumbered?.updated ?? 0,
             groupRenamed: renameStats.renamed,
-            groupRenameJobs: renameStats.jobs,
             groupRenameGroups: renameStats.groups,
             groupRenameSpares: renameStats.spares,
+            relinkedRequisitions: relinked.requisitions,
+            relinkedReqLines: relinked.reqLines,
+            relinkedConsumeLogs: relinked.consumeLogs,
+            relinkedConsumeLines: relinked.consumeLines,
+            relinkedWorkReports: relinked.workReports,
+            relinkedUsedParts: relinked.usedParts,
+            relinkedDefectCases: relinked.defectCases,
+            relinkedDefectParts: relinked.defectParts,
+            relinkedWorkPermits: relinked.workPermits,
+            relinkedPermitParts: relinked.permitParts,
+            relinkedJobBom: relinked.jobBom,
+            foreignSpareIds,
         };
     }
 

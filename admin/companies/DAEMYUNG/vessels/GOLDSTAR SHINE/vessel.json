@@ -7,5 +7,6 @@
   "delivery": "2004-09-27",
   "status": "active",
   "vessel_skus": [],
-  "notes": "In HQ fleet / allowlist. Dedicated Vessel Mode SKUs not built yet."
+  "notes": "",
+  "deploy": {}
 }

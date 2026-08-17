@@ -1,0 +1,12 @@
+{
+  "vessel_id": "LAB_SHIP",
+  "name": "TVC Lab Ship",
+  "company_id": "TVC_LAB",
+  "code": "LAB",
+  "imo_no": "9999999",
+  "delivery": "2026-01-01",
+  "status": "active",
+  "vessel_skus": [],
+  "notes": "",
+  "deploy": {}
+}

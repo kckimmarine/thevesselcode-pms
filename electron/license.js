@@ -5,7 +5,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
-const { getSku, COMPANY_ID } = require('./sku');
+const { getSku, COMPANY_ID, isUniversalSku } = require('./sku');
 
 const LICENSE_FILE_NAME = 'license.json';
 const SKU_STAMP_FILE_NAME = 'sku.json';
@@ -179,6 +179,33 @@ function validateLicenseBody(lic) {
     if (!skuDef) {
         return { ok: false, code: 'LICENSE_SKU', message: `Unknown SKU: ${lic.sku}` };
     }
+    if (String(lic.sku || '') !== String(skuDef.sku || '')) {
+        return {
+            ok: false,
+            code: 'LICENSE_SKU_MISMATCH',
+            message: `License SKU (${lic.sku}) does not match this installation (${skuDef.sku}).`,
+        };
+    }
+    if (isUniversalSku(skuDef)) {
+        if (!String(lic.companyId || '').trim()) {
+            return {
+                ok: false,
+                code: 'LICENSE_COMPANY',
+                message: 'Seat license missing companyId. Re-issue from Admin with company selected.',
+            };
+        }
+        if (skuDef.vesselId == null && skuDef.allowHq !== true && !String(lic.vesselId || '').trim()) {
+            const vesselSkus = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+            if (vesselSkus.includes(String(skuDef.sku))) {
+                return {
+                    ok: false,
+                    code: 'LICENSE_VESSEL',
+                    message: 'Seat license missing vesselId. Re-issue from Admin with vessel selected.',
+                };
+            }
+        }
+        return { ok: true, skuDef };
+    }
     if (String(lic.companyId || '') !== String(skuDef.companyId || COMPANY_ID)) {
         return {
             ok: false,
@@ -193,18 +220,42 @@ function validateLicenseBody(lic) {
             message: 'License vesselId does not match this product.',
         };
     }
-    if (String(lic.sku || '') !== String(skuDef.sku || '')) {
-        return {
-            ok: false,
-            code: 'LICENSE_SKU_MISMATCH',
-            message: `License SKU (${lic.sku}) does not match this installation (${skuDef.sku}).`,
-        };
-    }
-    // Packaged installs also require SKU stamp match when present
     return { ok: true, skuDef };
 }
 
+function isAdminModeInstallation(app) {
+    const paths = licensePaths(app);
+    return String(paths.sku || '').toUpperCase() === 'ADMIN_TVC';
+}
+
+function adminModeLicenseResult(app) {
+    const skuDef = getSku('ADMIN_TVC') || {};
+    const currentMachine = getMachineId();
+    const status = {
+        ok: true,
+        companyId: skuDef.companyId || 'THEVESSELCODE',
+        vesselId: null,
+        allowedVesselIds: skuDef.allowedVesselIds || [],
+        sku: 'ADMIN_TVC',
+        skuLabel: skuDef.label || 'TVC Admin Mode',
+        loginModes: [],
+        allowHq: false,
+        allowAdmin: true,
+        machineId: currentMachine,
+        issuedAt: null,
+        expiresAt: null,
+        boundAt: null,
+        seat: false,
+        noSeatRequired: true,
+        electron: true,
+    };
+    return { ok: true, status, license: null };
+}
+
 function ensureLicense(app) {
+    if (isAdminModeInstallation(app)) {
+        return adminModeLicenseResult(app);
+    }
     const paths = licensePaths(app);
     const currentMachine = getMachineId();
     const stamp = readJsonSafe(paths.skuStamp);
@@ -377,12 +428,13 @@ function buildMachineRequest(app) {
         machineId: getMachineId(),
         sku: skuDef.sku || sku,
         skuLabel: skuDef.label || sku,
-        companyId: skuDef.companyId || COMPANY_ID,
+        companyId: skuDef.companyId || null,
         vesselId: skuDef.vesselId || null,
         hostname: os.hostname(),
         platform: os.platform(),
         arch: os.arch(),
         username: os.userInfo().username,
+        appVersion: app.getVersion(),
         requestedAt: new Date().toISOString(),
     };
 }
@@ -395,6 +447,8 @@ module.exports = {
     canonicalPayloadLegacy,
     verifySignature,
     ensureLicense,
+    isAdminModeInstallation,
+    adminModeLicenseResult,
     applyLicenseFile,
     buildMachineRequest,
     licensePaths,

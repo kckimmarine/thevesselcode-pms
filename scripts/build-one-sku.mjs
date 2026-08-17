@@ -50,6 +50,7 @@ const stampSrc = path.join(stampDir, `${sku}.json`);
 fs.writeFileSync(stampSrc, JSON.stringify(stamp, null, 2));
 
 const winTarget = target === 'nsis' ? 'nsis' : 'dir';
+const buildOut = `dist/_build_${sku}`;
 const config = {
     ...pkg.build,
     appId: def.appId || `com.thevesselcode.tvc-pms.${sku.toLowerCase()}`,
@@ -57,7 +58,7 @@ const config = {
     executableName: def.executableName || def.productName,
     extraResources: [{ from: stampSrc.replace(/\\/g, '/'), to: 'sku.json' }],
     artifactName: `TVC-PMS-${sku}-\${version}-Setup.\${ext}`,
-    directories: { ...(pkg.build.directories || {}), output: 'dist' },
+    directories: { ...(pkg.build.directories || {}), output: buildOut },
     win: {
         ...(pkg.build.win || {}),
         executableName: def.executableName || def.productName,
@@ -72,5 +73,17 @@ run('npx', ['electron-builder', '--win', winTarget, '--config', cfgPath], {
     TVC_BUILD_SKU: sku,
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
 });
+
+const builtSetup = fs.readdirSync(path.join(root, buildOut))
+    .filter(n => n.startsWith(`TVC-PMS-${sku}-`) && n.endsWith('-Setup.exe'))
+    .sort()
+    .reverse()[0];
+if (builtSetup) {
+    const src = path.join(root, buildOut, builtSetup);
+    const dest = path.join(root, 'dist', builtSetup);
+    fs.mkdirSync(path.join(root, 'dist'), { recursive: true });
+    fs.copyFileSync(src, dest);
+    console.log('Copied to dist/', builtSetup);
+}
 
 console.log('\nDone. See dist/');

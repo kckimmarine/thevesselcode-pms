@@ -209,6 +209,7 @@ npm run electron:admin
 
 ## Related docs
 
+- **`docs/pilot-test-scenario-1page.md`** — 후배용 1페이지 요약 (handoff 시 함께 전달)
 - `docs/seat-license.md` — seat 정책
 - `docs/admin-mode.md` — App Update packaging
 - `docs/PILOT_CHECKLIST.md` — Deck/Engine/HQ 상세 시나리오

@@ -28,6 +28,6 @@ admin/
 1. Edit product source at repo root (`js/`, `electron/`, …).
 2. `npm run electron:admin` → login `tvc` / `0000` for App Update packaging.
 3. `npm run dist` → copy Setup / update ZIP into `admin/releases/<version>/` if you want a local archive.
-4. Add/edit companies and vessels in Admin UI (**+ Add company / + Add vessel**), or edit JSON under `admin/companies/…` if you prefer.
+4. Add/edit companies and vessels in Admin UI (**Add / edit company / vessel**), or edit JSON under `admin/companies/…` if you prefer.
 
-See also: `docs/admin-mode.md`, `docs/seat-license.md`.
+See also: `docs/admin-mode-sop.md`, `docs/admin-registry-id-guide.md`, `docs/tvc-internal-qa.md` (출시 후 Lab·App Update), `docs/admin-mode.md`, `docs/seat-license.md`.

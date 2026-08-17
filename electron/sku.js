@@ -1,9 +1,9 @@
 /* THE VESSEL CODE — Pilot SKU definitions (shared by main / issue scripts) */
 'use strict';
 
+/** @deprecated Legacy pilot constants — seat license is source of truth for universal SKUs */
 const COMPANY_ID = 'DAEMYUNG';
 const PILOT_VESSEL_ID = 'INCHEON CHEMI';
-/** HQ가 Import/선택 가능한 선박 목록 */
 const HQ_ALLOWED_VESSEL_IDS = [
     'INCHEON CHEMI',
     'QUARTERBACK J',
@@ -14,51 +14,53 @@ const HQ_ALLOWED_VESSEL_IDS = [
 const SKUS = {
     VESSEL_MASTER: {
         sku: 'VESSEL_MASTER',
-        label: 'INCHEON CHEMI — Master',
-        companyId: COMPANY_ID,
-        vesselId: PILOT_VESSEL_ID,
+        label: 'TVC-PMS — Master Hub',
+        companyId: null,
+        vesselId: null,
+        universal: true,
         loginModes: ['MASTER'],
         allowHq: false,
-        productName: 'TVC-PMS INCHEON CHEMI Master',
-        // Unique appId/exe so all 4 SKUs can coexist on one PC
+        productName: 'TVC-PMS Vessel Master',
         appId: 'com.thevesselcode.tvc-pms.vessel-master',
-        executableName: 'TVC-PMS-INCHEON-CHEMI-Master',
+        executableName: 'TVC-PMS-Vessel-Master',
     },
     VESSEL_ENGINE: {
         sku: 'VESSEL_ENGINE',
-        label: 'INCHEON CHEMI — Engine',
-        companyId: COMPANY_ID,
-        vesselId: PILOT_VESSEL_ID,
+        label: 'TVC-PMS — Engine',
+        companyId: null,
+        vesselId: null,
+        universal: true,
         loginModes: ['ENGINE'],
         allowHq: false,
-        productName: 'TVC-PMS INCHEON CHEMI Engine',
+        productName: 'TVC-PMS Vessel Engine',
         appId: 'com.thevesselcode.tvc-pms.vessel-engine',
-        executableName: 'TVC-PMS-INCHEON-CHEMI-Engine',
+        executableName: 'TVC-PMS-Vessel-Engine',
     },
     VESSEL_DECK: {
         sku: 'VESSEL_DECK',
-        label: 'INCHEON CHEMI — Deck',
-        companyId: COMPANY_ID,
-        vesselId: PILOT_VESSEL_ID,
+        label: 'TVC-PMS — Deck',
+        companyId: null,
+        vesselId: null,
+        universal: true,
         loginModes: ['DECK'],
         allowHq: false,
-        productName: 'TVC-PMS INCHEON CHEMI Deck',
+        productName: 'TVC-PMS Vessel Deck',
         appId: 'com.thevesselcode.tvc-pms.vessel-deck',
-        executableName: 'TVC-PMS-INCHEON-CHEMI-Deck',
+        executableName: 'TVC-PMS-Vessel-Deck',
     },
     HQ_OFFICE: {
         sku: 'HQ_OFFICE',
-        label: 'Daemyung HQ Office',
-        companyId: COMPANY_ID,
+        label: 'TVC-PMS — HQ Office',
+        companyId: null,
         vesselId: null,
-        allowedVesselIds: HQ_ALLOWED_VESSEL_IDS.slice(),
+        allowedVesselIds: null,
+        universal: true,
         loginModes: [],
         allowHq: true,
-        productName: 'TVC-PMS Daemyung HQ',
+        productName: 'TVC-PMS HQ Office',
         appId: 'com.thevesselcode.tvc-pms.hq-office',
-        executableName: 'TVC-PMS-Daemyung-HQ',
+        executableName: 'TVC-PMS-HQ-Office',
     },
-    /** THE VESSEL CODE — product improvement / app-update packaging only (no ship ops data) */
     ADMIN_TVC: {
         sku: 'ADMIN_TVC',
         label: 'TVC Admin Mode',
@@ -74,8 +76,19 @@ const SKUS = {
     },
 };
 
+function isUniversalSku(def) {
+    return !!(def && def.universal);
+}
+
 function getSku(sku) {
     return SKUS[String(sku || '').toUpperCase()] || null;
 }
 
-module.exports = { COMPANY_ID, PILOT_VESSEL_ID, HQ_ALLOWED_VESSEL_IDS, SKUS, getSku };
+module.exports = {
+    COMPANY_ID,
+    PILOT_VESSEL_ID,
+    HQ_ALLOWED_VESSEL_IDS,
+    SKUS,
+    getSku,
+    isUniversalSku,
+};

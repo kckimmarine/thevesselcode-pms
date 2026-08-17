@@ -364,11 +364,36 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .fleet-view-btn.active { background: var(--blue); color: #fff; border-color: var(--blue); }
 .fleet-search-bar { padding: 8px 10px; border-bottom: 1px solid #edf2f7; }
 .fleet-search-bar .search-input { width: 100%; box-sizing: border-box; }
+.admin-company-field {
+    padding: 8px 10px 10px;
+    border-bottom: 1px solid #edf2f7;
+    background: #fff;
+}
+.admin-company-label {
+    display: block;
+    font-size: 11px;
+    font-weight: 700;
+    color: #2d3748;
+    margin-bottom: 4px;
+}
+.admin-company-select {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 7px 8px;
+    border: 1px solid #cbd5e0;
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    color: #2d3748;
+}
+.fleet-list-panel[data-admin-layout="1"] .fleet-list-toolbar { display: none; }
 .fleet-table-wrap { flex: 1; min-height: 0; overflow-y: auto; max-height: 300px; -webkit-overflow-scrolling: touch; }
 .fleet-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
 .fleet-table .fleet-col-no { width: 32px; }
 .fleet-table .fleet-col-imo { width: 58px; }
 .fleet-table .fleet-col-delivery { width: 88px; }
+.fleet-table .fleet-col-appver { width: 96px; font-size: 10px; }
+.fleet-table .fleet-col-company { width: 72px; font-size: 10px; }
 .fleet-table .fleet-col-name { width: auto; }
 .fleet-table th { position: sticky; top: 0; background: var(--navy); color: #fff; padding: 7px 6px; text-align: left; font-weight: 600; z-index: 1; }
 .fleet-table th:first-child,
@@ -3766,7 +3791,7 @@ label.spare-file-pick input[type=file] { display: none; }
     color: var(--navy);
 }
 #spareEquipmentListModal .modal-box.spare-equipment-list-modal {
-    width: min(920px, calc(100vw - 32px));
+    width: min(1840px, calc(100vw - 32px));
     max-height: min(720px, calc(100vh - 32px));
     display: flex;
     flex-direction: column;
@@ -7587,6 +7612,93 @@ label.spare-file-pick input[type=file] { display: none; }
 .spare-sync-back { margin-right: auto; }
 
 .menu-xfer-wide { max-width: min(1080px, 96vw); }
+
+.admin-sop-modal .modal-box { max-height: min(88vh, 920px); overflow-y: auto; }
+.admin-sop-flow {
+    font-size: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 0 0 12px;
+    white-space: pre-wrap;
+}
+.admin-sop-h { margin: 14px 0 6px; font-size: 14px; }
+.admin-sop-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin: 0 0 8px;
+}
+.admin-sop-table th,
+.admin-sop-table td {
+    border: 1px solid #e2e8f0;
+    padding: 6px 8px;
+    text-align: left;
+    vertical-align: top;
+}
+.admin-sop-table th { background: #f1f5f9; font-weight: 600; }
+.admin-sop-num { width: 2.5em; text-align: center; }
+.admin-sop-table-compact td:first-child { white-space: nowrap; }
+.admin-sop-ol { margin: 8px 0 12px; padding-left: 22px; font-size: 13px; line-height: 1.5; }
+.admin-lab-banner {
+    background: #ebf8ff;
+    border: 1px solid #90cdf4;
+    border-radius: 6px;
+    padding: 8px 10px;
+    margin: 0 0 10px;
+    font-size: 12px;
+}
+.admin-release-log {
+    margin: 10px 0 0;
+    padding: 8px 10px;
+    max-height: 220px;
+    overflow: auto;
+    background: #0f172a;
+    color: #e2e8f0;
+    border-radius: 6px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 11px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+.admin-release-artifacts {
+    margin: 8px 0;
+    padding-left: 18px;
+    font-size: 12px;
+    line-height: 1.5;
+}
+.admin-release-modal .spare-sync-actions { flex-wrap: wrap; gap: 8px; }
+.tvc-section-admin-commercial .spare-flow-col { border-top-color: #3182ce; }
+
+/* Admin Mode — Commercial + Contract registry side by side (no outer section labels) */
+.tvc-admin-menu-grid {
+    min-width: 0;
+}
+.tvc-admin-menu-grid .menu-flow-panel.spare-flow-panel {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 0;
+}
+.tvc-admin-menu-grid .spare-flow-col.tone-daily { border-top-color: #3182ce; }
+@media (max-width: 900px) {
+    .tvc-admin-menu-grid .menu-flow-panel.spare-flow-panel {
+        grid-template-columns: 1fr;
+    }
+}
+.btn-linkish {
+    background: none;
+    border: none;
+    padding: 0;
+    color: #2563eb;
+    text-decoration: underline;
+    cursor: pointer;
+    font: inherit;
+}
+.btn-linkish:hover { color: #1d4ed8; }
+
 .menu-xfer-table-wrap {
     max-height: 280px;
     overflow: auto;

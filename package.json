@@ -1,6 +1,6 @@
 {
   "name": "thevesselcode-pms",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "THE VESSEL CODE — Unified PMS + SPICS (Offline-First)",
   "main": "electron/main.js",
   "author": "THE VESSEL CODE",
@@ -22,6 +22,8 @@
     "license:seat": "node scripts/issue-license.mjs",
     "icons:build": "node scripts/build-app-icon.mjs",
     "dist": "node scripts/build-pilot-packages.mjs",
+    "dist:app-update": "node scripts/build-app-update-zip.mjs",
+    "release": "node scripts/build-release.mjs",
     "dist:dir": "electron-builder --win dir",
     "vendor-sync": "node scripts/vendor-sync.mjs",
     "verify-rbac": "node scripts/verify-rbac.mjs",
