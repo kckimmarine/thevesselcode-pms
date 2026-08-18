@@ -14,7 +14,8 @@
     "F5 새로고침·앱 재시작 후 로그인 실패 / DB 준비 지연 수정 (IndexedDB 데이터 유지)",
     "HQ Requisition List → Data 로드 시 norm is not defined 오류 수정",
     "Requisition List Data 클릭·로드 속도 개선 (spares 캐시·부품 매칭 최적화)",
-    "Requisition List Data 전환 시 화면 깜빡임 감소"
+    "Requisition List Data 전환 시 화면 깜빡임 감소",
+    "설치 후 바로가기·창 이름: SKU별 구분 → Seat license 적용 후 TVC-PMS-{Company ID} / TVC-PMS-{Vessel ID}_Deck·Engine·Master 로 자동 변경"
   ],
   "test_checklist": [
     "Engine CE: Work Report Confirm → Monthly Report Export → Master Import",

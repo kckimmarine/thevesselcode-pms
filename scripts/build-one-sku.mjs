@@ -7,6 +7,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const { SKUS, getSku } = require('../electron/sku.js');
+const { defaultSkuDisplayName } = require('../electron/install-display-name.js');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -51,14 +52,20 @@ fs.writeFileSync(stampSrc, JSON.stringify(stamp, null, 2));
 
 const winTarget = target === 'nsis' ? 'nsis' : 'dir';
 const buildOut = `dist/_build_${sku}`;
+const installLabel = defaultSkuDisplayName(sku);
 const config = {
     ...pkg.build,
     appId: def.appId || `com.thevesselcode.tvc-pms.${sku.toLowerCase()}`,
-    productName: def.productName,
+    productName: installLabel,
     executableName: def.executableName || def.productName,
     extraResources: [{ from: stampSrc.replace(/\\/g, '/'), to: 'sku.json' }],
     artifactName: `TVC-PMS-${sku}-\${version}-Setup.\${ext}`,
     directories: { ...(pkg.build.directories || {}), output: buildOut },
+    nsis: {
+        ...(pkg.build.nsis || {}),
+        shortcutName: installLabel,
+        uninstallDisplayName: installLabel,
+    },
     win: {
         ...(pkg.build.win || {}),
         executableName: def.executableName || def.productName,

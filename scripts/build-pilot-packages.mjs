@@ -7,6 +7,7 @@ import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
 const { SKUS } = require('../electron/sku.js');
+const { defaultSkuDisplayName } = require('../electron/install-display-name.js');
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
@@ -46,10 +47,11 @@ for (const sku of Object.keys(SKUS)) {
 
     const cfgPath = path.join(cfgDir, `${sku}.json`);
     // Per-SKU appId + install dir so Master/Engine/Deck/HQ can all sit on one PC
+    const installLabel = defaultSkuDisplayName(sku);
     const config = {
         ...pkg.build,
         appId: def.appId || `com.thevesselcode.tvc-pms.${sku.toLowerCase()}`,
-        productName: def.productName,
+        productName: installLabel,
         executableName: def.executableName || def.productName,
         // Identity only — runnable seat license is applied after install (per PC).
         extraResources: [
@@ -62,10 +64,10 @@ for (const sku of Object.keys(SKUS)) {
         },
         nsis: {
             ...(pkg.build.nsis || {}),
-            shortcutName: def.productName,
+            shortcutName: installLabel,
             include: undefined,
             // Separate Start Menu / uninstall entries per SKU
-            uninstallDisplayName: def.productName,
+            uninstallDisplayName: installLabel,
         },
         win: {
             ...(pkg.build.win || {}),

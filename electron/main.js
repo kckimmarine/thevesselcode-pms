@@ -17,6 +17,7 @@ const {
     readPrivateKeyPem,
     resolvePrivateKeyPath,
 } = require('./license-issue');
+const { applyInstallDisplayName, resolveDisplayName, applyBestEffortDisplayName } = require('./install-display-name');
 
 const PROTOCOL = 'tvc-app';
 const WIDTH_RATIO = 0.78;
@@ -730,6 +731,11 @@ function refreshLicense() {
         message: result.message || (result.ok ? 'OK' : 'License invalid'),
         code: result.code || null,
     };
+    if (licenseState.ok && licenseState.status) {
+        applyInstallDisplayName(app, mainWindow, licenseState);
+    } else if (licenseState.status?.sku || app.isPackaged) {
+        applyBestEffortDisplayName(app, mainWindow, licenseState);
+    }
     return licenseState;
 }
 
@@ -746,9 +752,12 @@ function createWindow() {
     const bounds = computeWindowBounds();
     const iconPath = resolveAppIcon();
     const iconImage = iconPath ? nativeImage.createFromPath(iconPath) : null;
+    const windowTitle = licenseState.status
+        ? resolveDisplayName(licenseState.status)
+        : 'THE VESSEL CODE — TVC-PMS';
     mainWindow = new BrowserWindow({
         ...bounds,
-        title: 'THE VESSEL CODE — TVC-PMS',
+        title: windowTitle,
         icon: iconPath,
         show: false,
         autoHideMenuBar: true,
@@ -768,7 +777,10 @@ function createWindow() {
         mainWindow.webContents.session.clearCache().catch(() => {});
     }
 
-    mainWindow.once('ready-to-show', () => mainWindow.show());
+    mainWindow.once('ready-to-show', () => {
+        applyBestEffortDisplayName(app, mainWindow, licenseState);
+        mainWindow.show();
+    });
     mainWindow.webContents.setWindowOpenHandler(({ url }) => {
         const blank = !url || url === 'about:blank';
         if (blank) {
