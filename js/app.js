@@ -4964,6 +4964,19 @@ const TVC_App = (function () {
         `, { className: 'tvc-section-admin-selected' });
     }
 
+    function syncAdminFleetColgroup() {
+        const panel = document.getElementById('fleetListPanel');
+        if (!panel || panel.dataset.adminLayout !== '1') return;
+        const colgroup = panel.querySelector('.fleet-table colgroup');
+        const table = panel.querySelector('.fleet-table');
+        if (!colgroup || !table) return;
+        colgroup.innerHTML = `<col class="fleet-col-no"><col class="fleet-col-company"><col class="fleet-col-name"><col class="fleet-col-imo"><col class="fleet-col-delivery"><col class="fleet-col-appver">`;
+        table.classList.add('fleet-table--with-company');
+    }
+
+    const ADMIN_FLEET_TABLE_HEAD = '<th>No</th><th>Company ID</th><th>Ship\'s Name</th><th>IMO No</th><th>Delivery</th><th>App (M/E/D)</th>';
+    const ADMIN_FLEET_COLSPAN = 6;
+
     function ensureAdminFleetPanelLayout() {
         const panel = document.getElementById('fleetListPanel');
         if (!panel || panel.dataset.adminLayout === '1') return;
@@ -4978,17 +4991,16 @@ const TVC_App = (function () {
             </div>
             <div class="fleet-list-head">🚢 Ship List</div>
             <div class="fleet-table-wrap">
-                <table class="fleet-table">
+                <table class="fleet-table fleet-table--with-company">
                     <colgroup>
                         <col class="fleet-col-no">
+                        <col class="fleet-col-company">
                         <col class="fleet-col-name">
                         <col class="fleet-col-imo">
                         <col class="fleet-col-delivery">
                         <col class="fleet-col-appver">
                     </colgroup>
-                    <thead><tr>
-                        <th>No</th><th>Ship's Name</th><th>IMO No</th><th>Delivery</th><th>App (M/E/D)</th>
-                    </tr></thead>
+                    <thead><tr>${ADMIN_FLEET_TABLE_HEAD}</tr></thead>
                     <tbody id="fleetTableBody"></tbody>
                 </table>
             </div>`;
@@ -5045,16 +5057,11 @@ const TVC_App = (function () {
         }
 
         const listCompanyId = adminCompanyFilterForList();
-        const showCompanyCol = adminCompanyFilterValue() === ADMIN_COMPANY_FILTER_ALL;
-        const colSpan = showCompanyCol ? 6 : 5;
+        syncAdminFleetColgroup();
         const theadRow = document.querySelector('#fleetListPanel .fleet-table thead tr');
-        if (theadRow) {
-            theadRow.innerHTML = showCompanyCol
-                ? '<th>No</th><th>Company ID</th><th>Ship\'s Name</th><th>IMO No</th><th>Delivery</th><th>App (M/E/D)</th>'
-                : '<th>No</th><th>Ship\'s Name</th><th>IMO No</th><th>Delivery</th><th>App (M/E/D)</th>';
-        }
+        if (theadRow) theadRow.innerHTML = ADMIN_FLEET_TABLE_HEAD;
         if (listCompanyId === null) {
-            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">Select All or a Company ID</td></tr>`;
+            body.innerHTML = `<tr><td colspan="${ADMIN_FLEET_COLSPAN}" class="muted" style="text-align:center">Select All or a Company ID</td></tr>`;
             return;
         }
 
@@ -5066,7 +5073,7 @@ const TVC_App = (function () {
             })
             : [];
         if (!rows.length) {
-            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">No vessels found</td></tr>`;
+            body.innerHTML = `<tr><td colspan="${ADMIN_FLEET_COLSPAN}" class="muted" style="text-align:center">No vessels found</td></tr>`;
             return;
         }
         body.innerHTML = rows.map((v, i) => {
@@ -5076,16 +5083,13 @@ const TVC_App = (function () {
             const appVer = typeof TVC_AdminRegistry !== 'undefined'
                 ? TVC_AdminRegistry.formatVesselAppVersions(v.deploy)
                 : '—';
-            const coCell = showCompanyCol
-                ? `<td class="muted" style="font-size:11px">${esc(v.company_id || '—')}</td>`
-                : '';
             return `<tr class="fleet-row${sel}" onclick="TVC_App.selectAdminVessel('${escAttr(v.company_id)}','${escAttr(v.vessel_id)}')">
                 <td>${i + 1}</td>
-                ${coCell}
+                <td>${esc(v.company_id || '—')}</td>
                 <td><strong>${esc(v.name)}</strong>${inactive}</td>
                 <td>${esc(v.imo_no || '—')}</td>
                 <td>${esc(v.delivery || '—')}</td>
-                <td class="muted" style="font-size:11px">${esc(appVer)}</td>
+                <td class="muted">${esc(appVer)}</td>
             </tr>`;
         }).join('');
     }

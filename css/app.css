@@ -387,6 +387,40 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     color: #2d3748;
 }
 .fleet-list-panel[data-admin-layout="1"] .fleet-list-toolbar { display: none; }
+.cmaxs-body.hq-mode:has(#fleetListPanel[data-admin-layout="1"]) {
+    grid-template-columns: minmax(460px, 580px) minmax(0, 1fr);
+}
+.fleet-list-panel[data-admin-layout="1"] .fleet-table-wrap {
+    overflow: auto;
+    max-height: min(420px, 52vh);
+    -webkit-overflow-scrolling: touch;
+}
+.fleet-list-panel[data-admin-layout="1"] .fleet-table {
+    table-layout: auto;
+    width: max-content;
+    min-width: 100%;
+    font-size: 12px;
+}
+.fleet-list-panel[data-admin-layout="1"] .fleet-table th,
+.fleet-list-panel[data-admin-layout="1"] .fleet-table td {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: nowrap;
+}
+.fleet-list-panel[data-admin-layout="1"] .fleet-table .fleet-col-no { width: 40px; min-width: 40px; }
+.fleet-list-panel[data-admin-layout="1"] .fleet-table .fleet-col-company { width: 96px; min-width: 96px; }
+.fleet-list-panel[data-admin-layout="1"] .fleet-table .fleet-col-name { width: 148px; min-width: 128px; }
+.fleet-list-panel[data-admin-layout="1"] .fleet-table .fleet-col-imo { width: 76px; min-width: 76px; }
+.fleet-list-panel[data-admin-layout="1"] .fleet-table .fleet-col-delivery { width: 96px; min-width: 96px; }
+.fleet-list-panel[data-admin-layout="1"] .fleet-table .fleet-col-appver { width: 132px; min-width: 124px; font-size: 11px; }
+.fleet-list-panel[data-admin-layout="1"] .fleet-table th:first-child,
+.fleet-list-panel[data-admin-layout="1"] .fleet-table td:first-child { text-align: center; }
+.fleet-list-panel[data-admin-layout="1"] .fleet-table.fleet-table--with-company th:nth-child(4),
+.fleet-list-panel[data-admin-layout="1"] .fleet-table.fleet-table--with-company td:nth-child(4),
+.fleet-list-panel[data-admin-layout="1"] .fleet-table:not(.fleet-table--with-company) th:nth-child(3),
+.fleet-list-panel[data-admin-layout="1"] .fleet-table:not(.fleet-table--with-company) td:nth-child(3) {
+    text-align: center;
+}
 .fleet-table-wrap { flex: 1; min-height: 0; overflow-y: auto; max-height: 300px; -webkit-overflow-scrolling: touch; }
 .fleet-table { width: 100%; border-collapse: collapse; font-size: 12px; table-layout: fixed; }
 .fleet-table .fleet-col-no { width: 32px; }
