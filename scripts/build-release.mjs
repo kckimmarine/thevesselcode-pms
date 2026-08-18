@@ -44,7 +44,7 @@ function formatReleaseNotes(config) {
 function cleanDist(distDir, version, skus) {
     if (!fs.existsSync(distDir)) fs.mkdirSync(distDir, { recursive: true });
     for (const f of fs.readdirSync(distDir)) {
-        if (/^tvc_app_update_.*\.zip$/i.test(f)) {
+        if (/^tvc_app_update_.*\.zip$/i.test(f) || /^TVC-PMS App Update v/i.test(f)) {
             fs.unlinkSync(path.join(distDir, f));
             console.log('Removed old', f);
         }
@@ -93,9 +93,11 @@ function writeHandoff(config, zipPath, zipSizeMb) {
 }
 
 function findAppUpdateZip(distDir, version) {
+    const canonical = path.join(distDir, `TVC-PMS App Update v${version}.zip`);
+    if (fs.existsSync(canonical)) return canonical;
     const prefix = `tvc_app_update_${version.replace(/[^\w.-]+/g, '_')}_`;
     const matches = fs.readdirSync(distDir)
-        .filter(n => n.startsWith(prefix) && n.endsWith('.zip'))
+        .filter(n => (n.startsWith(prefix) || n.startsWith('TVC-PMS App Update v')) && n.endsWith('.zip'))
         .sort()
         .reverse();
     return matches.length ? path.join(distDir, matches[0]) : null;

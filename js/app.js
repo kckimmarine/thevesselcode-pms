@@ -294,7 +294,7 @@ const TVC_App = (function () {
                 if (pkg?.version) return String(pkg.version);
             }
         } catch (_) { /* ignore */ }
-        return '1.0.1';
+        return '1.0.2';
     }
 
     async function syncLoginAppVersion() {
@@ -2587,22 +2587,17 @@ const TVC_App = (function () {
                     title: 'Commercial — TVC delivers',
                     items: [
                         {
-                            label: '① Universal Setup · ② Seat license · ③ Master Excel · ④ App Update',
+                            label: 'Path A: App Update (기존 pool 선박) · Path B: Setup (신규 계약 선박)',
                             textOnly: true,
                         },
                         {
-                            label: 'Commercial core & TVC Lab guide (상용화 · 내부 QA)',
+                            label: 'Path A — Export App Update ZIP (공용 · 기존 pool 선박)',
                             tag: 'A',
-                            action: 'TVC_App.openAdminCommercialModal()',
+                            action: 'TVC_App.openAdminAppUpdateModal()',
                         },
                         {
-                            label: 'Release (Build & Export Setup + App Update)',
-                            tag: 'A',
-                            action: 'TVC_App.openAdminReleaseModal()',
-                        },
-                        {
-                            label: 'Export Setup handoff (universal HQ + Vessel → ZIP)',
-                            tag: 'A',
+                            label: 'Path B — Export Setup handoff (Registry 등록 후 · 신규 선박)',
+                            tag: 'B',
                             action: 'TVC_App.openAdminSetupExportModal()',
                         },
                         {
@@ -2611,9 +2606,14 @@ const TVC_App = (function () {
                             action: 'TVC_App.openAdminSeatLicenseModal()',
                         },
                         {
-                            label: 'Package App Update (Setup.exe → ZIP → send to company HQ)',
+                            label: 'Release (Dev — Build & Export Setup + App Update)',
+                            tag: 'Dev',
+                            action: 'TVC_App.openAdminReleaseModal()',
+                        },
+                        {
+                            label: 'Commercial core & TVC Lab guide (상용화 · 내부 QA)',
                             tag: 'A',
-                            action: 'TVC_App.openMenuXferMenu()',
+                            action: 'TVC_App.openAdminCommercialModal()',
                         },
                     ],
                 },
@@ -3111,14 +3111,27 @@ const TVC_App = (function () {
         const dept = getPlanLockDept();
         const dest = menuXferExportTargetLabel(menuXferResolveExportTarget(state.user, 'postpone'));
         const count = stationPendingConfirmedPostponeCount(dept);
+        let note = 'Critical equipment postpone reports only (CE Confirm required).';
+        if (!count) {
+            const confirmed = workHistoryReports().filter(r => {
+                TVC_WorkReport.fromLegacy(r);
+                return r.work_type === 'POSTPONE'
+                    && workReportListWorkflowStatus(r) === 'Confirmed'
+                    && reportDept(r) === dept;
+            });
+            const nonCritical = confirmed.filter(r => !postponeRequiresCompanyApproval(r));
+            if (nonCritical.length) {
+                note = `${nonCritical.length} confirmed postpone(s) on file do not require company export (non-Critical only).`;
+            }
+        }
         return menuXferConfirmedExportReadyHtml({
             title: 'Postpone Report',
             count,
             dest,
             exportAction: 'TVC_App.menuXferConfirmPostponeExportAll()',
             selectAction: 'TVC_App.menuXferOpenPostponeSelect()',
-            emptyMsg: 'No confirmed postpone reports pending export.',
-            note: 'Critical equipment postpone reports only.',
+            emptyMsg: 'No critical postpone reports pending export.',
+            note,
         });
     }
 
@@ -3728,7 +3741,7 @@ const TVC_App = (function () {
                     _menuXfer.appUpdateVersion = await resolveAppVersion();
                 }
             } catch (_) {
-                _menuXfer.appUpdateVersion = '1.0.1';
+                _menuXfer.appUpdateVersion = '1.0.2';
             }
         }
         renderMenuXferModal();
@@ -3837,7 +3850,7 @@ const TVC_App = (function () {
         const ver = _menuXfer.appUpdateVersion
             || (typeof TVC_AppUpdate !== 'undefined' && TVC_AppUpdate.currentAppVersion
                 ? TVC_AppUpdate.currentAppVersion()
-                : '1.0.1');
+                : '1.0.2');
         const notes = _menuXfer.appUpdateNotes || '';
         const companyId = _menuXfer.appUpdateCompanyId || state.selectedAdminCompanyId || '';
         const recordDeploy = _menuXfer.appUpdateRecordDeploy !== false;
@@ -4960,7 +4973,22 @@ const TVC_App = (function () {
                         <td style="padding:4px 8px">${esc(vesselVer)}</td></tr>
                 </tbody>
             </table>
-            <p class="spare-sync-note muted">Workflow: <button type="button" class="btn-linkish" onclick="TVC_App.openAdminSopModal()">Contract SOP checklist</button> · <strong>Release</strong> (build + export) · <strong>Export Setup handoff</strong> · <strong>Package App Update</strong>.</p>
+            <p class="spare-sync-note muted">Workflow: <button type="button" class="btn-linkish" onclick="TVC_App.openAdminSopModal()">Contract SOP checklist</button></p>
+            <div class="admin-deploy-workflow">
+                <div class="admin-deploy-path">
+                    <strong>Path A — 기존 pool 선박</strong>
+                    <p class="spare-sync-note muted">이미 TVC-PMS 사용 중 · 업무 데이터 있음 → <strong>공용 App Update ZIP</strong>만 전달</p>
+                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminAppUpdateModal()">Export App Update ZIP…</button>
+                </div>
+                <div class="admin-deploy-path">
+                    <strong>Path B — 신규 계약 선박</strong>
+                    <p class="spare-sync-note muted">Registry에 선박 등록 후 → <strong>범용 Setup ZIP</strong> 전달 → PC 설치 + Seat license</p>
+                    <div class="admin-deploy-path-actions">
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselForm('add')">Add / edit vessel</button>
+                        <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminSetupExportModal()">Export Setup handoff…</button>
+                    </div>
+                </div>
+            </div>
         `, { className: 'tvc-section-admin-selected' });
     }
 
@@ -5149,6 +5177,54 @@ const TVC_App = (function () {
         } catch (e) {
             if (!silent) await TVC_Dialog.alert(e.message || String(e));
         }
+    }
+
+    function adminPoolCompanies({ includeLab = false } = {}) {
+        if (typeof TVC_AdminRegistry === 'undefined') return [];
+        return TVC_AdminRegistry.listCompanies({ includeInactive: false })
+            .filter(c => includeLab || !TVC_AdminRegistry.isTvcLabCompany(c.company_id));
+    }
+
+    function buildPoolAppUpdateDeployRecords(appVersion, skus, { includeLab = false } = {}) {
+        const ver = String(appVersion || '').trim();
+        const skuList = Array.isArray(skus) ? skus : [];
+        if (!ver || !skuList.length) return [];
+        const records = [];
+        for (const co of adminPoolCompanies({ includeLab })) {
+            for (const sku of skuList) {
+                records.push({ companyId: co.company_id, kind: 'update', sku, appVersion: ver });
+            }
+        }
+        return records;
+    }
+
+    function adminSetupExportVesselPreviewHtml(companyId) {
+        if (!companyId || typeof TVC_AdminRegistry === 'undefined') {
+            return '<p class="spare-sync-note muted">Select a company to preview registered vessels.</p>';
+        }
+        const vessels = TVC_AdminRegistry.listVessels({ companyId, includeInactive: false });
+        if (!vessels.length) {
+            return `<p class="spare-sync-note" style="color:#c53030">No active vessels in registry for this company.
+                <button type="button" class="btn-linkish" onclick="TVC_App.openAdminVesselForm('add')">Add / edit vessel</button> first.</p>`;
+        }
+        const rows = vessels.map(v => `<tr>
+            <td style="padding:4px 8px">${esc(v.vessel_id || '—')}</td>
+            <td style="padding:4px 8px">${esc(v.name || '—')}</td>
+            <td style="padding:4px 8px">${esc(v.imo_no || '—')}</td>
+            <td style="padding:4px 8px" class="muted">${esc(typeof TVC_AdminRegistry.formatVesselSetupVersion === 'function'
+                ? TVC_AdminRegistry.formatVesselSetupVersion(v.deploy) : '—')}</td>
+        </tr>`).join('');
+        return `
+            <p class="spare-sync-note muted">Registry vessels included in Setup handoff manifest (${vessels.length}):</p>
+            <table style="width:100%;margin:8px 0;border-collapse:collapse;font-size:12px">
+                <thead><tr>
+                    <th style="text-align:left;padding:4px 8px">Vessel ID</th>
+                    <th style="text-align:left;padding:4px 8px">Name</th>
+                    <th style="text-align:left;padding:4px 8px">IMO</th>
+                    <th style="text-align:left;padding:4px 8px">Setup sent</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
     }
 
     async function adminPrintContractDraft() {
@@ -5447,7 +5523,7 @@ const TVC_App = (function () {
 
     const _adminSetupExport = {
         companyId: null,
-        appVersion: '1.0.1',
+        appVersion: '1.0.2',
         notes: '',
         skus: {},
         sourceSetups: [],
@@ -5487,10 +5563,19 @@ const TVC_App = (function () {
         const sourceNote = source.configured
             ? `<span class="muted">Setup folder: ${esc(source.path || '')}</span>`
             : `<span class="muted">Setup folder not found. Run <code>npm run dist</code>, then select the <code>dist</code> folder.</span>`;
+        const vesselCount = _adminSetupExport.companyId && typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.listVessels({ companyId: _adminSetupExport.companyId, includeInactive: false }).length
+            : 0;
+        const canExport = source.configured && _adminSetupExport.companyId && vesselCount > 0;
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminSetupExportModal()">×</button>
-            <h3 class="spare-sync-title">Export Setup Handoff</h3>
-            <p class="spare-sync-hint">Universal <strong>HQ + Vessel</strong> Setup.exe → one ZIP for a company contract.</p>
+            <h3 class="spare-sync-title">Path B — Export Setup Handoff</h3>
+            <p class="spare-sync-hint">신규 계약 선박: Registry에 선박 정보를 먼저 등록한 뒤, 범용 <strong>HQ + Vessel</strong> Setup.exe ZIP을 전달합니다.</p>
+            <ol class="admin-sop-ol" style="margin:8px 0">
+                <li><button type="button" class="btn-linkish" onclick="TVC_App.openAdminVesselForm('add')">Add / edit vessel</button> — 계약 선박 정보 등록</li>
+                <li>아래 Company 선택 · Registry 선박 확인</li>
+                <li>Export Setup ZIP → 선박 PC에 Setup 설치 → Seat license 발급</li>
+            </ol>
             <p class="spare-sync-note">${sourceNote}</p>
             <div class="spare-sync-actions" style="margin:8px 0">
                 <button type="button" class="btn spare-sync-btn" onclick="TVC_App.adminSetupExportPickFolder()">Select dist folder…</button>
@@ -5498,10 +5583,11 @@ const TVC_App = (function () {
             <label class="spare-sync-note" style="display:block;margin:12px 0">
                 Company
                 <select class="admin-company-select" style="margin-top:4px"
-                    onchange="TVC_App.adminSetupExportSetCompany(this.value)">
+                    onchange="TVC_App.adminSetupExportSetCompany(this.value);TVC_App.renderAdminSetupExportModal()">
                     ${adminSeatLicenseCompanyOptions(_adminSetupExport.companyId)}
                 </select>
             </label>
+            ${adminSetupExportVesselPreviewHtml(_adminSetupExport.companyId)}
             <label class="spare-sync-note" style="display:block;margin:8px 0">
                 App version
                 <input type="text" value="${escAttr(_adminSetupExport.appVersion)}" style="width:100%;margin-top:4px"
@@ -5520,7 +5606,7 @@ const TVC_App = (function () {
                 onchange="TVC_App.adminSetupExportSetRecordDeploy(this.checked)"> Update deploy version in registry after export</label>
             <div class="modal-actions spare-sync-footer">
                 <button type="button" class="btn btn-green" onclick="TVC_App.adminSetupExportRun()"
-                    ${source.configured && _adminSetupExport.companyId ? '' : ' disabled'}>Export Setup ZIP…</button>
+                    ${canExport ? '' : ' disabled'}>Export Setup ZIP…</button>
                 <button type="button" class="btn" onclick="TVC_App.closeAdminSetupExportModal()">Close</button>
             </div>`;
     }
@@ -5534,9 +5620,9 @@ const TVC_App = (function () {
         try {
             _adminSetupExport.appVersion = typeof TVC_AppUpdate !== 'undefined'
                 ? await TVC_AppUpdate.resolveAppVersion()
-                : '1.0.1';
+                : '1.0.2';
         } catch (_) {
-            _adminSetupExport.appVersion = '1.0.1';
+            _adminSetupExport.appVersion = '1.0.2';
         }
         _adminSetupExport.companyId = state.selectedAdminCompanyId || null;
         await renderAdminSetupExportModal();
@@ -5623,9 +5709,17 @@ const TVC_App = (function () {
     async function adminSetupExportRun() {
         const user = TVC_Auth.getCurrentUser();
         try {
+            const companyId = _adminSetupExport.companyId;
+            if (!companyId) throw new Error('Select a company.');
+            const vessels = typeof TVC_AdminRegistry !== 'undefined'
+                ? TVC_AdminRegistry.listVessels({ companyId, includeInactive: false })
+                : [];
+            if (!vessels.length) {
+                throw new Error('No active vessels in registry for this company. Add / edit vessel first, then export Setup handoff.');
+            }
             const selectedSkus = TVC_SetupExport.HANDOFF_SKUS.filter(s => _adminSetupExport.skus?.[s]);
             const { blob, filename, manifest } = await TVC_SetupExport.buildZip(user, {
-                companyId: _adminSetupExport.companyId,
+                companyId,
                 appVersion: _adminSetupExport.appVersion,
                 notes: _adminSetupExport.notes,
                 skus: selectedSkus,
@@ -5634,15 +5728,179 @@ const TVC_App = (function () {
             await TVC_FileExport.save(blob, filename);
             if (_adminSetupExport.recordDeploy !== false) {
                 await recordAdminDeployAndSave({
-                    companyId: _adminSetupExport.companyId,
+                    companyId,
                     kind: 'setup',
                     appVersion: _adminSetupExport.appVersion,
                 });
             }
             await TVC_Dialog.alert(
-                `Setup handoff exported.\n${filename}\n\nCompany: ${manifest.company_name}\nSetups: ${(manifest.setups || []).map(s => s.sku).join(', ')}\n\nSend ZIP → install Setup → Issue seat license per PC.`
+                `Setup handoff exported.\n${filename}\n\nCompany: ${manifest.company_name}\nVessels: ${(manifest.vessels || []).map(v => v.vessel_id).join(', ')}\nSetups: ${(manifest.setups || []).map(s => s.sku).join(', ')}\n\nSend ZIP → install Setup on each PC → Issue seat license per PC.`
             );
             closeAdminSetupExportModal();
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
+    }
+
+    const _adminAppUpdate = {
+        appVersion: '1.0.2',
+        notes: '',
+        skus: {},
+        sourceSetups: [],
+        sourcePath: null,
+        recordDeploy: true,
+        recordPool: true,
+    };
+
+    async function renderAdminAppUpdateModal() {
+        const body = document.getElementById('adminAppUpdateBody');
+        if (!body || typeof TVC_AppUpdate === 'undefined') return;
+        let source = { configured: false, path: null, setups: [] };
+        try {
+            if (typeof TVC_SetupExport !== 'undefined') {
+                source = await TVC_SetupExport.getSourceStatus();
+            }
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
+        _adminAppUpdate.sourcePath = source.path || null;
+        _adminAppUpdate.sourceSetups = source.setups || [];
+        if (!_adminAppUpdate.skus || !Object.keys(_adminAppUpdate.skus).length) {
+            _adminAppUpdate.skus = {};
+            for (const s of TVC_SetupExport?.HANDOFF_SKUS || ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK']) {
+                _adminAppUpdate.skus[s] = !!_adminAppUpdate.sourceSetups.find(x => x.sku === s);
+            }
+        }
+        const poolCompanies = adminPoolCompanies();
+        const poolVesselCount = poolCompanies.reduce((n, co) => {
+            const vs = typeof TVC_AdminRegistry !== 'undefined'
+                ? TVC_AdminRegistry.listVessels({ companyId: co.company_id, includeInactive: false })
+                : [];
+            return n + vs.length;
+        }, 0);
+        const setupRows = (TVC_SetupExport?.HANDOFF_SKUS || ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK']).map(sku => {
+            const hit = _adminAppUpdate.sourceSetups.find(s => s.sku === sku);
+            const checked = _adminAppUpdate.skus[sku] && hit ? 'checked' : '';
+            const sizeMb = hit?.bytes ? `${(hit.bytes / (1024 * 1024)).toFixed(1)} MB` : '— missing';
+            return `<tr>
+                <td style="padding:4px 8px"><label><input type="checkbox" ${checked}${hit ? '' : ' disabled'}
+                    onchange="TVC_App.adminAppUpdateToggleSku('${escAttr(sku)}', this.checked)"> ${esc(sku)}</label></td>
+                <td style="padding:4px 8px">${esc(hit?.filename || '—')}</td>
+                <td style="padding:4px 8px" class="muted">${esc(sizeMb)}</td>
+            </tr>`;
+        }).join('');
+        const sourceNote = source.configured
+            ? `<span class="muted">Setup folder: ${esc(source.path || '')}</span>`
+            : `<span class="muted">Setup folder not found. Run <code>Release</code> or <code>npm run dist</code>, then select the <code>dist</code> folder.</span>`;
+        body.innerHTML = `
+            <button type="button" class="modal-x" onclick="TVC_App.closeAdminAppUpdateModal()">×</button>
+            <h3 class="spare-sync-title">Path A — Export App Update ZIP</h3>
+            <p class="spare-sync-hint">기존 pool 선박(이미 TVC-PMS 사용 중): <strong>공용 App Update ZIP</strong> 하나를 전달합니다.</p>
+            <p class="spare-sync-note muted">고객 PC: <strong>Data Export &amp; Import → App Update → Import → Install update</strong> · Master / History / IndexedDB 유지</p>
+            <p class="spare-sync-note">Pool: ${poolCompanies.length} companies · ${poolVesselCount} active vessels (TVC_LAB 제외)</p>
+            <p class="spare-sync-note">${sourceNote}</p>
+            <div class="spare-sync-actions" style="margin:8px 0">
+                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.adminAppUpdatePickFolder()">Select dist folder…</button>
+            </div>
+            <label class="spare-sync-note" style="display:block;margin:8px 0">App version
+                <input type="text" value="${escAttr(_adminAppUpdate.appVersion)}" style="width:100%;margin-top:4px"
+                    oninput="TVC_App.adminAppUpdateSetVersion(this.value)">
+            </label>
+            <label class="spare-sync-note" style="display:block;margin:8px 0">Update notes
+                <textarea rows="3" style="width:100%;margin-top:4px"
+                    oninput="TVC_App.adminAppUpdateSetNotes(this.value)">${esc(_adminAppUpdate.notes || '')}</textarea>
+            </label>
+            <table style="width:100%;margin:12px 0;border-collapse:collapse">
+                <thead><tr><th style="text-align:left;padding:4px 8px">SKU</th><th style="text-align:left;padding:4px 8px">Setup file</th><th style="text-align:left;padding:4px 8px">Size</th></tr></thead>
+                <tbody>${setupRows}</tbody>
+            </table>
+            <label class="spare-sync-note"><input type="checkbox"${_adminAppUpdate.recordDeploy !== false ? ' checked' : ''}
+                onchange="TVC_App.adminAppUpdateSetRecordDeploy(this.checked)"> Update deploy version in registry after export</label>
+            <label class="spare-sync-note"><input type="checkbox"${_adminAppUpdate.recordPool !== false ? ' checked' : ''}
+                onchange="TVC_App.adminAppUpdateSetRecordPool(this.checked)"> Record for all active pool companies (shared ZIP)</label>
+            <div class="modal-actions spare-sync-footer">
+                <button type="button" class="btn btn-green" onclick="TVC_App.adminAppUpdateRun()"
+                    ${source.configured ? '' : ' disabled'}>Export App Update ZIP…</button>
+                <button type="button" class="btn" onclick="TVC_App.closeAdminAppUpdateModal()">Close</button>
+            </div>`;
+    }
+
+    async function openAdminAppUpdateModal() {
+        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
+        if (typeof TVC_AppUpdate === 'undefined') {
+            await TVC_Dialog.alert('App Update module not loaded.');
+            return;
+        }
+        try {
+            _adminAppUpdate.appVersion = await TVC_AppUpdate.resolveAppVersion();
+        } catch (_) {
+            _adminAppUpdate.appVersion = '1.0.2';
+        }
+        _adminAppUpdate.skus = {};
+        await renderAdminAppUpdateModal();
+        showModal('adminAppUpdateModal');
+    }
+
+    function closeAdminAppUpdateModal() {
+        closeModal('adminAppUpdateModal');
+    }
+
+    function adminAppUpdateSetVersion(v) {
+        _adminAppUpdate.appVersion = String(v || '').trim();
+    }
+
+    function adminAppUpdateSetNotes(v) {
+        _adminAppUpdate.notes = String(v || '');
+    }
+
+    function adminAppUpdateSetRecordDeploy(on) {
+        _adminAppUpdate.recordDeploy = !!on;
+    }
+
+    function adminAppUpdateSetRecordPool(on) {
+        _adminAppUpdate.recordPool = !!on;
+    }
+
+    function adminAppUpdateToggleSku(sku, on) {
+        _adminAppUpdate.skus = _adminAppUpdate.skus || {};
+        _adminAppUpdate.skus[sku] = !!on;
+    }
+
+    async function adminAppUpdatePickFolder() {
+        try {
+            const r = await TVC_SetupExport.pickSourceFolder();
+            if (r?.canceled) return;
+            _adminAppUpdate.skus = {};
+            await renderAdminAppUpdateModal();
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
+    }
+
+    async function adminAppUpdateRun() {
+        const user = TVC_Auth.getCurrentUser();
+        try {
+            const handoffSkus = TVC_SetupExport?.HANDOFF_SKUS
+                || ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+            const selectedSkus = handoffSkus.filter(s => _adminAppUpdate.skus?.[s]);
+            if (!selectedSkus.length) throw new Error('Select at least one SKU with Setup.exe in dist/.');
+            const { blob, filename, manifest } = await TVC_AppUpdate.buildZipFromSource(user, {
+                appVersion: _adminAppUpdate.appVersion,
+                notes: _adminAppUpdate.notes,
+                skus: selectedSkus,
+                sourceSetups: _adminAppUpdate.sourceSetups,
+            });
+            await TVC_FileExport.save(blob, filename);
+            if (_adminAppUpdate.recordDeploy !== false) {
+                const records = _adminAppUpdate.recordPool !== false
+                    ? buildPoolAppUpdateDeployRecords(_adminAppUpdate.appVersion, selectedSkus)
+                    : [];
+                if (records.length) await recordAdminDeployAndSave(records);
+            }
+            await TVC_Dialog.alert(
+                `App Update exported.\n${filename}\n\nVersion: ${manifest.app_version}\nSKUs: ${(manifest.setups || []).map(s => s.sku).join(', ')}\n\nSend this shared ZIP to pool vessels → Import → Install update on each PC (HQ / Master / Engine / Deck).`
+            );
+            closeAdminAppUpdateModal();
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
         }
@@ -13363,7 +13621,8 @@ const TVC_App = (function () {
         openAdminSeatLicenseModal, closeAdminSeatLicenseModal,
         adminSeatLicensePickKey, adminSeatLicenseLoadFile, adminSeatLicenseSetMonths,
         adminSeatLicenseSetCompany, adminSeatLicenseSetVessel, adminSeatLicenseIssueAndSave,
-        openAdminSetupExportModal, closeAdminSetupExportModal,
+        openAdminSetupExportModal, closeAdminSetupExportModal, renderAdminSetupExportModal,
+        openAdminAppUpdateModal, closeAdminAppUpdateModal, renderAdminAppUpdateModal,
         openAdminReleaseModal, closeAdminReleaseModal,
         adminReleaseSetRunBuild, adminReleaseSetIncludeSetups, adminReleaseSetIncludeAppUpdate,
         adminReleaseSetIncludeHandoff, adminReleaseSetCompany, adminReleaseSetRecordDeploy,
@@ -13376,6 +13635,8 @@ const TVC_App = (function () {
         adminPrintRegistrySetCompany, adminPrintRegistrySetIncludeInactive, adminPrintRegistryRun,
         adminSetupExportPickFolder, adminSetupExportSetCompany, adminSetupExportSetVersion,
         adminSetupExportSetNotes, adminSetupExportSetRecordDeploy, adminSetupExportToggleSku, adminSetupExportRun,
+        adminAppUpdatePickFolder, adminAppUpdateSetVersion, adminAppUpdateSetNotes,
+        adminAppUpdateSetRecordDeploy, adminAppUpdateSetRecordPool, adminAppUpdateToggleSku, adminAppUpdateRun,
         saveAdminCompanyForm, saveAdminVesselForm, deactivateAdminCompany, deactivateAdminVessel,
         setSearch, setTreeSearch, clearSearchField, clearListFilterSearch, updateSearchClearBtn, updateSearchClearBtnForEl, ensureSearchClearUi, bindSearchClearInput, bindListFilterSearchClear, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, syncReportPeriodInputs, hasReportPeriodFilter, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, isTreeDeptCollapsed, toggleTreeDept, renderGroupTree,
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,

@@ -11,7 +11,7 @@ const TVC_AppUpdate = (function () {
     }
 
     function currentAppVersion() {
-        return '1.0.1';
+        return '1.0.2';
     }
 
     async function resolveAppVersion() {
@@ -52,6 +52,11 @@ const TVC_AppUpdate = (function () {
         };
     }
 
+    function appUpdateZipFilename(appVersion) {
+        const ver = String(appVersion || '').trim() || '1.0.2';
+        return `TVC-PMS App Update v${ver}.zip`;
+    }
+
     async function buildZip(user, opts = {}) {
         if (!isAdminUser(user)) {
             throw Object.assign(new Error('App Update Export는 Admin Mode(tvc)에서만 가능합니다.'), { code: 'FORBIDDEN' });
@@ -90,19 +95,74 @@ const TVC_AppUpdate = (function () {
         zip.file(JSON_NAME, JSON.stringify(manifest, null, 2));
 
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        let filename = `tvc_app_update_${appVersion.replace(/[^\w.-]+/g, '_')}_${new Date().toISOString().slice(0, 10)}.zip`;
-        if (typeof TVC_Filename !== 'undefined' && TVC_Filename.build) {
-            try {
-                filename = await TVC_Filename.build({
-                    kind: 'app_update',
-                    vesselId: 'tvc',
-                    dept: 'ADMIN',
-                    date: new Date(),
-                    ext: 'zip',
-                    label: `app_update_${appVersion}`,
-                });
-            } catch (_) { /* keep default */ }
+        const filename = appUpdateZipFilename(appVersion);
+        return { blob, filename, manifest };
+    }
+
+    async function readSetupBytesFromSource(filename) {
+        if (!window.tvcElectron?.readSetupFile) {
+            throw new Error('Setup export requires Electron Admin Mode.');
         }
+        const r = await window.tvcElectron.readSetupFile({ filename });
+        if (!r?.ok) throw new Error(r?.error || 'Could not read Setup file.');
+        return new Uint8Array(r.bytes || []);
+    }
+
+    /** Build shared App Update ZIP from dist/ Setup.exe (Admin — no manual attach). */
+    async function buildZipFromSource(user, opts = {}) {
+        if (!isAdminUser(user)) {
+            throw Object.assign(new Error('App Update Export는 Admin Mode(tvc)에서만 가능합니다.'), { code: 'FORBIDDEN' });
+        }
+        if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
+
+        const appVersion = String(opts.appVersion || '').trim();
+        if (!appVersion) throw new Error('App version is required (e.g. 1.0.2).');
+        const notes = String(opts.notes || '').trim();
+        const selectedSkus = Array.isArray(opts.skus) && opts.skus.length
+            ? opts.skus
+            : ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+        const sourceSetups = Array.isArray(opts.sourceSetups) ? opts.sourceSetups : [];
+        const bySku = new Map(sourceSetups.map(s => [s.sku, s]));
+
+        const zip = new JSZip();
+        const setups = [];
+        for (const sku of selectedSkus) {
+            const meta = bySku.get(sku);
+            if (!meta?.filename) continue;
+            const buf = await readSetupBytesFromSource(meta.filename);
+            const name = String(meta.filename).replace(/[\\/]/g, '_');
+            zip.file(SETUPS_DIR + name, buf);
+            setups.push({ sku, filename: name, bytes: buf.byteLength });
+        }
+        if (!setups.length) {
+            throw new Error('No Setup.exe files found. Run npm run dist or Release build, then set the dist folder.');
+        }
+
+        const manifest = normalizeManifest({
+            app_version: appVersion,
+            notes,
+            setups,
+            target_skus: setups.map(s => s.sku),
+            exported_at: new Date().toISOString(),
+            exported_by: user.username || 'tvc',
+        });
+        zip.file(JSON_NAME, JSON.stringify(manifest, null, 2));
+        zip.file('README.txt', [
+            'TVC-PMS App Update (shared — all contracted pool vessels)',
+            '',
+            `App version: ${manifest.app_version}`,
+            '',
+            'For vessels already using TVC-PMS (data on PC):',
+            '  HQ / Vessel → Data Export & Import → App Update → Import → Install update',
+            '',
+            'Does NOT replace Master Excel, Work History, or IndexedDB operational data.',
+            '',
+            'Setups in this package:',
+            ...setups.map(s => `  - ${s.sku}: ${s.filename}`),
+        ].join('\r\n'));
+
+        const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+        const filename = appUpdateZipFilename(appVersion);
         return { blob, filename, manifest };
     }
 
@@ -119,7 +179,10 @@ const TVC_AppUpdate = (function () {
     }
 
     function isAppUpdateZipName(name) {
-        return /app_update/i.test(String(name || '')) || /tvc_app_update/i.test(String(name || ''));
+        const n = String(name || '');
+        return /TVC-PMS App Update v/i.test(n)
+            || /app_update/i.test(n)
+            || /tvc_app_update/i.test(n);
     }
 
     async function detectInZip(zip) {
@@ -225,6 +288,7 @@ const TVC_AppUpdate = (function () {
         currentAppVersion,
         resolveAppVersion,
         buildZip,
+        buildZipFromSource,
         parseFile,
         detectInZip,
         isAppUpdateZipName,

@@ -1,6 +1,6 @@
 {
   "name": "thevesselcode-pms",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "THE VESSEL CODE — Unified PMS + SPICS (Offline-First)",
   "main": "electron/main.js",
   "author": "THE VESSEL CODE",

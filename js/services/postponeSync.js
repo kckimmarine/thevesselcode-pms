@@ -131,10 +131,22 @@ const TVC_PostponeSync = (function () {
         if (!row) throw new Error('Postpone report not found.');
         TVC_WorkReport.fromLegacy(row);
         if (row.work_type !== 'POSTPONE') throw new Error('Not a postpone report.');
-        if (!row.requires_company_approval) throw new Error('Only critical postpone reports require company export.');
         const jobId = row.job_items?.[0]?.maintenance_job_id;
         const job = jobId ? await TVC_DB.get('maintenance_jobs', jobId) : null;
+        if (!postponeRequiresCompanyExport(row, job)) {
+            throw new Error('Only critical postpone reports require company export.');
+        }
         return { row, job };
+    }
+
+    function postponeRequiresCompanyExport(row, job) {
+        if (!row || row.work_type !== 'POSTPONE') return false;
+        if (row.requires_company_approval === true) return true;
+        if (row.requires_company_approval === false) return false;
+        if (!job) return false;
+        const sort = String(job.sort || '').trim().toUpperCase();
+        if (sort.startsWith('C.') || sort.includes('CRITICAL')) return true;
+        return String(job.item_sort1 || '').toUpperCase().includes('CRITICAL');
     }
 
     async function exportRequestZip(user, reportId) {
@@ -234,11 +246,12 @@ const TVC_PostponeSync = (function () {
         const payload = JSON.parse(text);
         const direction = payload.export_meta?.direction;
         const isHq = TVC_RBAC.isHqAccount(user);
+        const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
 
         const HQ_ONLY = new Set(['POSTPONE_REQUEST_TO_HQ']);
         const SHIP_ONLY = new Set(['POSTPONE_REPLY_HQ_TO_SHIP']);
-        if (HQ_ONLY.has(direction) && !isHq) {
-            throw new Error('This postpone package is for HQ import only.');
+        if (HQ_ONLY.has(direction) && !isHq && !isHub) {
+            throw new Error('This postpone package is for HQ or Master Hub import only.');
         }
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This postpone package is for ship import only.');

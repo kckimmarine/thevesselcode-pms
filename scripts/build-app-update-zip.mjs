@@ -35,7 +35,7 @@ function loadReleaseNotes(version) {
 function parseArgs(argv) {
     let version = pkg.version;
     let notes = loadReleaseNotes(version) || [
-        'TVC-PMS v1.0.1 Pilot',
+        `TVC-PMS v${version}`,
         '· CE/CO Confirm 후 Monthly Report Export → Master Hub',
         '· Defect / Postpone / Work Permit Confirm 후 Export',
         '· Data History Monthly 탭 PMS/SPARE Master 제외',
@@ -113,8 +113,7 @@ async function main() {
         zip.file(SETUPS_DIR + s.filename, fs.readFileSync(s.path));
     }
 
-    const dateTag = new Date().toISOString().slice(0, 10);
-    const outName = `tvc_app_update_${version.replace(/[^\w.-]+/g, '_')}_${dateTag}.zip`;
+    const outName = `TVC-PMS App Update v${version}.zip`;
     const outPath = path.join(distDir, outName);
     const buf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE', compressionOptions: { level: 6 } });
     fs.writeFileSync(outPath, buf);

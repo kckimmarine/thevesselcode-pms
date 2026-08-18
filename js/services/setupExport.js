@@ -6,6 +6,37 @@ const TVC_SetupExport = (function () {
     const SETUPS_DIR = 'setups/';
     const HANDOFF_SKUS = ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
 
+    function sanitizeSetupFilename(name) {
+        return String(name || '')
+            .replace(/[\\/:*?"<>|]/g, '-')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function skuRoleLabel(sku) {
+        const s = String(sku || '').toUpperCase();
+        if (s === 'VESSEL_DECK') return 'Deck';
+        if (s === 'VESSEL_ENGINE') return 'Engine';
+        if (s === 'VESSEL_MASTER') return 'Master';
+        return '';
+    }
+
+    /** Handoff Setup.exe name: TVC-PMS INCHEON CHEMI_Master v1.0.2 Setup.exe */
+    function handoffSetupFilename(sku, companyId, vesselId, appVersion) {
+        const ver = String(appVersion || '').trim();
+        const verTag = ver ? ` v${ver}` : '';
+        const co = sanitizeSetupFilename(companyId);
+        const vessel = sanitizeSetupFilename(vesselId);
+        if (String(sku).toUpperCase() === 'HQ_OFFICE' && co) {
+            return sanitizeSetupFilename(`TVC-PMS ${co}${verTag} Setup.exe`);
+        }
+        const role = skuRoleLabel(sku);
+        if (role && vessel) {
+            return sanitizeSetupFilename(`TVC-PMS ${vessel}_${role}${verTag} Setup.exe`);
+        }
+        return sanitizeSetupFilename(`TVC-PMS ${role || sku}${verTag} Setup.exe`);
+    }
+
     function isAdminUser(user) {
         return !!(user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isAdminAccount?.(user));
     }
@@ -66,22 +97,23 @@ const TVC_SetupExport = (function () {
         const selectedSkus = Array.isArray(opts.skus) ? opts.skus : HANDOFF_SKUS;
         const sourceSetups = Array.isArray(opts.sourceSetups) ? opts.sourceSetups : [];
         const bySku = new Map(sourceSetups.map(s => [s.sku, s]));
+        const vessels = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.listVessels({ companyId, includeInactive: false })
+            : [];
+        const primaryVesselId = vessels[0]?.vessel_id || vessels[0]?.name || '';
         const zip = new JSZip();
         const setups = [];
         for (const sku of selectedSkus) {
             const meta = bySku.get(sku);
             if (!meta?.filename) continue;
             const buf = await readSetupBytes(meta.filename);
-            const name = String(meta.filename).replace(/[\\/]/g, '_');
+            const name = handoffSetupFilename(sku, companyId, primaryVesselId, appVersion);
             zip.file(SETUPS_DIR + name, buf);
-            setups.push({ sku, filename: name, bytes: buf.byteLength });
+            setups.push({ sku, filename: name, bytes: buf.byteLength, source: meta.filename });
         }
         if (!setups.length) {
             throw new Error('No Setup.exe files found. Run npm run dist, then set the dist folder in Admin.');
         }
-        const vessels = typeof TVC_AdminRegistry !== 'undefined'
-            ? TVC_AdminRegistry.listVessels({ companyId, includeInactive: false })
-            : [];
         const manifest = normalizeManifest({
             app_version: appVersion,
             company_id: companyId,
@@ -98,10 +130,12 @@ const TVC_SetupExport = (function () {
         }));
         zip.file(JSON_NAME, JSON.stringify(manifest, null, 2));
         zip.file('README.txt', [
-            'TVC-PMS Setup Handoff (Universal HQ + Vessel)',
+            'TVC-PMS Setup Handoff (Path B — Universal HQ + Vessel)',
             '',
             `Company: ${manifest.company_name} (${manifest.company_id})`,
             `App version: ${manifest.app_version}`,
+            '',
+            'Prerequisite: vessel contract info registered in Admin registry before export.',
             '',
             '1. Install Setup.exe on each PC (HQ once · Master/Engine/Deck on vessel PC).',
             '2. Export machine request JSON from each installation.',

@@ -1,0 +1,39 @@
+{
+  "version": "1.0.2",
+  "label": "TVC-PMS v1.0.2 — 정호 PC 피드백 · Hub · 데이터 분리",
+  "target_skus": ["HQ_OFFICE", "VESSEL_ENGINE", "VESSEL_DECK", "VESSEL_MASTER"],
+  "changelog": [
+    "창/바로가기/Setup 파일명: TVC-PMS {VESSEL_ID}_{Master|Engine|Deck} v1.0.2 / TVC-PMS {COMPANY_ID} v1.0.2",
+    "App Update ZIP: TVC-PMS App Update v1.0.2.zip (Data Import → App Update)",
+    "HQ/Master/Engine/Deck 업무 데이터(AppData) SKU·License별 폴더 분리 — 한 PC 다중 모드 DB 섞임 방지",
+    "Master Hub: Engine/Deck Defect·Postpone·Work Permit ZIP Import 허용 (Station Export와 동일 파일명·호환)",
+    "Master Hub Re-Export: defect_engine / postpone_engine scope 유지 (hub scope 제거)",
+    "Critical Postpone Export: requires_company_approval 추론 수정 — CE Confirm 후 Export 목록 노출",
+    "Admin Mode: Path A App Update / Path B Setup handoff 워크플로"
+  ],
+  "test_checklist": [
+    "한 PC HQ+Master+Engine 설치 — AppData 폴더 3개 분리 · Work History Import 없이 섞이지 않음",
+    "Seat license 후 창 제목 TVC-PMS INCHEON CHEMI_Master v1.0.2 형식",
+    "Engine Defect Export → Master Import 성공 (HQ import only 오류 없음)",
+    "Master Re-Export → incheonchemi_defect_engine_* 파일명",
+    "Engine Critical Postpone CE Confirm → Export Postpone 목록 표시",
+    "App Update: TVC-PMS App Update v1.0.2.zip → Import → Install update · 데이터 유지",
+    "Setup handoff: TVC-PMS {Vessel}_{Role} v1.0.2 Setup.exe 파일명",
+    "로그인 footer v1.0.2"
+  ],
+  "handoff": {
+    "delivery": "Drive/OneDrive 링크 권장",
+    "install_steps": [
+      "해당 SKU TVC 앱 실행",
+      "Menu → Data Export & Import → Import → App Update",
+      "TVC-PMS App Update v1.0.2.zip 선택 → Install update",
+      "설치 완료 후 재실행 → footer v1.0.2 확인",
+      "기존 Work History / Master 데이터 유지 확인"
+    ],
+    "warnings": [
+      "App Update는 프로그램만 교체 — IndexedDB/Master/History 유지",
+      "Seat license 재발급 불필요",
+      "신규 선박은 Path B Setup handoff · 기존 pool은 Path A App Update ZIP"
+    ]
+  }
+}

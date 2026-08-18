@@ -15,17 +15,17 @@
             <table class="admin-sop-table">
                 <thead><tr><th>#</th><th>항목</th><th>Admin / TVC</th></tr></thead>
                 <tbody>
-                    <tr><td class="admin-sop-num">1</td><td><strong>범용 Setup</strong></td>
-                        <td><code>npm run dist</code> → <strong>Export Setup handoff</strong><br>
-                        HQ 1 + Vessel Master/Engine/Deck · 선사·선박명 없음 · seat license로 scope</td></tr>
+                    <tr><td class="admin-sop-num">1</td><td><strong>Path B — 범용 Setup</strong></td>
+                        <td>Registry 선박 등록 → <strong>Export Setup handoff</strong><br>
+                        HQ 1 + Vessel Master/Engine/Deck · seat license로 scope</td></tr>
                     <tr><td class="admin-sop-num">2</td><td><strong>Seat license</strong></td>
                         <td>설치 PC → machine request → <strong>Issue seat license</strong><br>
                         필요할 때마다 발급 (신규 PC · renewal · 선박 추가)</td></tr>
                     <tr><td class="admin-sop-num">3</td><td><strong>PMS &amp; SPARE MASTER.xlsx</strong></td>
                         <td>TVC가 선박별 작성·갱신 → HQ / Vessel에 전달<br>
                         고객: 앱 Menu → Master Excel <strong>Import</strong> (Admin 밖)</td></tr>
-                    <tr><td class="admin-sop-num">4</td><td><strong>App Update</strong></td>
-                        <td><code>npm run dist</code> → <strong>Package App Update</strong> → ZIP<br>
+                    <tr><td class="admin-sop-num">4</td><td><strong>Path A — App Update</strong></td>
+                        <td><strong>Export App Update ZIP</strong> (pool 공용) → HQ/Vessel Import → Install<br>
                         프로그램만 · PMS/SPARE Master · Work History <strong>무손</strong></td></tr>
                 </tbody>
             </table>
@@ -46,7 +46,7 @@
             <ol class="admin-sop-ol">
                 <li>버전 bump → <code>npm run dist</code></li>
                 <li>Lab PC에서 Setup 또는 App Update로 반영 · 기능 테스트</li>
-                <li>Admin → <strong>Package App Update</strong> (Company = <strong>TVC_LAB</strong>) → ZIP</li>
+                <li>Admin → <strong>Export App Update ZIP</strong> (Company = <strong>TVC_LAB</strong> deploy 기록) → ZIP</li>
                 <li>Lab PC에서 같은 ZIP Import → Install → 재검증</li>
                 <li>통과 → <strong>동일 ZIP</strong>을 고객 HQ (Company = 실제 선사, deploy 기록)</li>
             </ol>

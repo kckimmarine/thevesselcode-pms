@@ -100,7 +100,17 @@ const TVC_WorkPermitSync = (function () {
             }
             return 'hq';
         }
-        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) return 'hub';
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) {
+            const dept = department
+                || (typeof TVC_App !== 'undefined' ? TVC_App.getAppDepartment?.() : null)
+                || user?.department;
+            if (typeof TVC_Filename !== 'undefined') {
+                return TVC_Filename.scopeToken(dept, false);
+            }
+            const d = String(dept || '').trim().toUpperCase();
+            if (d === 'DECK') return 'deck';
+            return 'engine';
+        }
         if (typeof TVC_Filename !== 'undefined') {
             return TVC_Filename.scopeToken(department || user?.department, false);
         }
@@ -284,11 +294,12 @@ const TVC_WorkPermitSync = (function () {
         const payload = JSON.parse(text);
         const direction = payload.export_meta?.direction;
         const isHq = TVC_RBAC.isHqAccount(user);
+        const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
 
         const HQ_ONLY = new Set(['WORK_PERMIT_REQUEST_TO_HQ']);
         const SHIP_ONLY = new Set(['WORK_PERMIT_REPLY_HQ_TO_SHIP']);
-        if (HQ_ONLY.has(direction) && !isHq) {
-            throw new Error('This Work Permit package is for HQ import only.');
+        if (HQ_ONLY.has(direction) && !isHq && !isHub) {
+            throw new Error('This Work Permit package is for HQ or Master Hub import only.');
         }
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This Work Permit package is for ship import only.');

@@ -40,12 +40,12 @@
           "status": "active",
           "deploy": {
             "app_version": {
-              "VESSEL_MASTER": "1.0.1",
-              "VESSEL_ENGINE": "1.0.1"
+              "VESSEL_MASTER": "1.0.2",
+              "VESSEL_ENGINE": "1.0.2"
             },
             "app_updated_at": {
-              "VESSEL_MASTER": "2026-08-18",
-              "VESSEL_ENGINE": "2026-08-18"
+              "VESSEL_MASTER": "2026-08-19",
+              "VESSEL_ENGINE": "2026-08-19"
             },
             "license_issued_at": "2026-08-18"
           }
@@ -76,8 +76,8 @@
         }
       ],
       "deploy": {
-        "app_version": "1.0.1",
-        "app_updated_at": "2026-08-18",
+        "app_version": "1.0.2",
+        "app_updated_at": "2026-08-19",
         "license_issued_at": "2026-08-18"
       }
     }

@@ -18,6 +18,9 @@ const {
     resolvePrivateKeyPath,
 } = require('./license-issue');
 const { applyInstallDisplayName, resolveDisplayName, applyBestEffortDisplayName } = require('./install-display-name');
+const { configureUserDataPath, migrateSkuDirToLicensed } = require('./user-data-path');
+
+configureUserDataPath(app);
 
 const PROTOCOL = 'tvc-app';
 const WIDTH_RATIO = 0.78;
@@ -308,9 +311,12 @@ function readPackageVersion(root) {
 
 function findAppUpdateZip(distDir, version) {
     if (!distDir || !fs.existsSync(distDir) || !version) return null;
+    const canonical = `TVC-PMS App Update v${version}.zip`;
+    const canonicalPath = path.join(distDir, canonical);
+    if (fs.existsSync(canonicalPath)) return canonicalPath;
     const prefix = `tvc_app_update_${version.replace(/[^\w.-]+/g, '_')}_`;
     const matches = fs.readdirSync(distDir)
-        .filter(n => n.startsWith(prefix) && n.endsWith('.zip'))
+        .filter(n => (n === canonical || n.startsWith(prefix) || n.startsWith('TVC-PMS App Update v')) && n.endsWith('.zip'))
         .sort()
         .reverse();
     return matches.length ? path.join(distDir, matches[0]) : null;
@@ -665,14 +671,6 @@ function detectSkuFromResources() {
         || '';
 }
 
-function applySkuUserData() {
-    const sku = detectSkuFromResources();
-    if (!sku) return;
-    process.env.TVC_BUILD_SKU = sku;
-    const base = app.getPath('userData');
-    app.setPath('userData', path.join(path.dirname(base), `tvc-pms-${sku}`));
-}
-
 function registerProtocol() {
     const root = appRoot();
     const rootNorm = path.normalize(root + path.sep);
@@ -732,6 +730,7 @@ function refreshLicense() {
         code: result.code || null,
     };
     if (licenseState.ok && licenseState.status) {
+        migrateSkuDirToLicensed(app, licenseState.status);
         applyInstallDisplayName(app, mainWindow, licenseState);
     } else if (licenseState.status?.sku || app.isPackaged) {
         applyBestEffortDisplayName(app, mainWindow, licenseState);
@@ -814,7 +813,6 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
-    applySkuUserData();
     const gotLock = app.requestSingleInstanceLock();
     if (!gotLock) {
         app.quit();
@@ -878,6 +876,9 @@ app.whenReady().then(() => {
                 };
             }
             refreshLicense();
+            if (licenseState.ok && licenseState.status) {
+                migrateSkuDirToLicensed(app, licenseState.status);
+            }
             if (mainWindow && !mainWindow.isDestroyed()) {
                 mainWindow.loadURL(`${PROTOCOL}://localhost/index.html`);
             }
