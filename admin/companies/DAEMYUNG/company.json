@@ -14,8 +14,8 @@
     "fee_note": ""
   },
   "deploy": {
-    "app_version": "1.0.2",
-    "app_updated_at": "2026-08-19",
+    "app_version": "1.0.3",
+    "app_updated_at": "2026-08-20",
     "license_issued_at": "2026-08-18"
   },
   "vessels": [

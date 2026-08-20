@@ -721,7 +721,7 @@ function registerProtocol() {
     });
 }
 
-function refreshLicense() {
+function refreshLicense(options = {}) {
     const result = ensureLicense(app);
     licenseState = {
         ok: !!result.ok,
@@ -731,9 +731,9 @@ function refreshLicense() {
     };
     if (licenseState.ok && licenseState.status) {
         migrateSkuDirToLicensed(app, licenseState.status);
-        applyInstallDisplayName(app, mainWindow, licenseState);
+        applyInstallDisplayName(app, mainWindow, licenseState, options);
     } else if (licenseState.status?.sku || app.isPackaged) {
-        applyBestEffortDisplayName(app, mainWindow, licenseState);
+        applyBestEffortDisplayName(app, mainWindow, licenseState, options);
     }
     return licenseState;
 }
@@ -875,7 +875,7 @@ app.whenReady().then(() => {
                     message: result.message || 'License import failed.',
                 };
             }
-            refreshLicense();
+            refreshLicense({ syncShortcuts: true });
             if (licenseState.ok && licenseState.status) {
                 migrateSkuDirToLicensed(app, licenseState.status);
             }

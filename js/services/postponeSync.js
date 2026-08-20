@@ -22,6 +22,9 @@ const TVC_PostponeSync = (function () {
         const confirmed = TVC_RBAC.isConfirmedStatus(row.status, row.is_locked);
         const postponeDate = esc(row.postpone_date || form.postponeDate || '—');
         const approvedDate = esc(row.approved_postpone_date || '—');
+        const originalDueDate = esc(
+            TVC_WorkReport.postponeOriginalDueDate(row, job) || '—',
+        );
         const hdr = job || {};
         return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Postpone Report ${jobCode}</title>
 <style>
@@ -53,7 +56,7 @@ const TVC_PostponeSync = (function () {
   <tr><th>SORT-1</th><td>${esc(hdr.item_sort1 || '—')}</td><th>SORT-2</th><td>${esc(hdr.item_sort2 || '—')}</td></tr>
   <tr><th>Job Detail</th><td colspan="3">${esc(hdr.job_detail || row.description || '—')}</td></tr>
   <tr><th>Maker</th><td>${esc(form.maker || '—')}</td><th>Model / Type</th><td>${esc(form.modelType || '—')}</td></tr>
-  <tr><th>Original Due Date</th><td>${esc(hdr.next_date || '—')}</td><th>Requested Postpone Date</th><td>${postponeDate}</td></tr>
+  <tr><th>Original Due Date</th><td>${originalDueDate}</td><th>Requested Postpone Date</th><td>${postponeDate}</td></tr>
   <tr><th>Last Maintenance Date</th><td>${esc(form.lastMaintDate || '—')}</td><th>Total Run Hrs</th><td>${esc(form.runHrs || '—')}</td></tr>
   <tr><th>Ship's Comments (Reason)</th><td colspan="3">${esc(form.shipComments || row.description || '—')}</td></tr>
   <tr><th>Reported by</th><td>${esc(row.reporter_name || '—')}</td><th>Confirmed by</th><td>${confirmed ? esc(row.confirmed_at?.slice(0, 10) || 'Yes') : '<i>Pending</i>'}</td></tr>
@@ -154,7 +157,12 @@ const TVC_PostponeSync = (function () {
         if (!TVC_RBAC.isConfirmedStatus(row.status, row.is_locked)) {
             throw new Error('Confirm the postpone report before export.');
         }
-        if (row.sync_status === 'SYNCED') {
+        const isHub = typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
+        if (isHub) {
+            if (!TVC_HubRelay.canHubLegExport(row)) {
+                throw new Error(TVC_HubRelay.hubExportBlockedTitle());
+            }
+        } else if (!TVC_HubRelay.canStationLegExport(row)) {
             throw new Error('Already exported (Submitted).');
         }
         const payload = await buildRequestPayload(user, row, job);
@@ -171,7 +179,11 @@ const TVC_PostponeSync = (function () {
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
 
-        row.sync_status = 'SYNCED';
+        if (typeof TVC_HubRelay !== 'undefined') {
+            TVC_HubRelay.stampExport(user, row);
+        } else {
+            row.sync_status = 'SYNCED';
+        }
         row.submitted_to_company_at = now();
         row.last_synced_at = now();
         await TVC_DB.put('daily_work_reports', row);

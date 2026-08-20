@@ -10,13 +10,15 @@
   "notes": "",
   "deploy": {
     "app_version": {
-      "VESSEL_MASTER": "1.0.2",
-      "VESSEL_ENGINE": "1.0.2"
+      "VESSEL_MASTER": "1.0.3",
+      "VESSEL_ENGINE": "1.0.3",
+      "VESSEL_DECK": "1.0.3"
     },
     "app_updated_at": {
-      "VESSEL_MASTER": "2026-08-19",
-      "VESSEL_ENGINE": "2026-08-19"
+      "VESSEL_MASTER": "2026-08-20",
+      "VESSEL_ENGINE": "2026-08-20",
+      "VESSEL_DECK": "2026-08-20"
     },
-    "license_issued_at": "2026-08-18"
+    "license_issued_at": "2026-08-19"
   }
 }

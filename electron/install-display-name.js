@@ -26,7 +26,7 @@ function readAppVersion(app) {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
         if (pkg?.version) return String(pkg.version).trim();
     } catch (_) { /* ignore */ }
-    return '1.0.2';
+    return '1.0.3';
 }
 
 function versionSuffix(app, explicitVersion) {
@@ -68,7 +68,7 @@ function defaultSkuDisplayName(sku, app, explicitVersion) {
 }
 
 /**
- * Licensed display: TVC-PMS INCHEON CHEMI_Master v1.0.2 / TVC-PMS DAEMYUNG v1.0.2
+ * Licensed display: TVC-PMS INCHEON CHEMI_Master v1.0.3 / TVC-PMS DAEMYUNG v1.0.3
  */
 function computeLicensedDisplayName(status, app, explicitVersion) {
     const sku = String(status?.sku || '').toUpperCase();
@@ -95,7 +95,7 @@ function computeLicensedDataDirName(status) {
     return '';
 }
 
-/** Setup.exe display filename: TVC-PMS INCHEON CHEMI_Master v1.0.2 Setup.exe */
+/** Setup.exe display filename: TVC-PMS INCHEON CHEMI_Master v1.0.3 Setup.exe */
 function computeSetupExeName(status, app, explicitVersion) {
     const base = computeLicensedDisplayName(status, app, explicitVersion);
     if (status?.ok && (status.companyId || status.vesselId)) {
@@ -125,13 +125,35 @@ function readState(app) {
     }
 }
 
-function writeState(app, displayName) {
+function persistState(app, patch) {
+    const merged = { ...(readState(app) || {}), ...patch, updatedAt: new Date().toISOString() };
     try {
-        fs.writeFileSync(statePath(app), JSON.stringify({
-            displayName,
-            updatedAt: new Date().toISOString(),
-        }, null, 2), 'utf8');
+        fs.writeFileSync(statePath(app), JSON.stringify(merged, null, 2), 'utf8');
     } catch (_) { /* ignore */ }
+    return merged;
+}
+
+/** Stable licensed identity — version bumps must not re-sync shortcuts. */
+function licensedShortcutKey(status) {
+    if (!status?.sku) return '';
+    if (status.ok === false) return '';
+    const sku = String(status.sku).toUpperCase();
+    const companyId = sanitizeDisplayName(status.companyId || '');
+    const vesselId = sanitizeDisplayName(status.vesselId || '');
+    if (!companyId && !vesselId) return '';
+    return `lic:${sku}:${vesselId}:${companyId}`;
+}
+
+function refreshDesktopShortcutOptOut(app, state, displayName) {
+    if (process.platform !== 'win32' || !app.isPackaged) return state || {};
+    if (!state?.shortcutLicensedKey || state.desktopShortcutRemovedByUser) return state || {};
+    const name = sanitizeDisplayName(displayName || state.displayName);
+    if (!name) return state || {};
+    const desktop = shortcutCandidates(app, name, process.execPath).desktop;
+    if (state.shortcutsDesktopSynced && !fs.existsSync(desktop)) {
+        return persistState(app, { desktopShortcutRemovedByUser: true });
+    }
+    return state || {};
 }
 
 function runPowerShell(script) {
@@ -211,18 +233,19 @@ function readSkuFromApp(app) {
     return process.env.TVC_BUILD_SKU || '';
 }
 
-function applyBestEffortDisplayName(app, browserWindow, licenseState) {
+function applyBestEffortDisplayName(app, browserWindow, licenseState, options = {}) {
     const status = licenseState?.status;
     if (licenseState?.ok && status) {
-        return applyInstallDisplayName(app, browserWindow, licenseState);
+        return applyInstallDisplayName(app, browserWindow, licenseState, options);
     }
     const sku = status?.sku || readSkuFromApp(app);
     if (!sku) return null;
-    return applyInstallDisplayName(app, browserWindow, { ok: false, status: { sku } });
+    return applyInstallDisplayName(app, browserWindow, { ok: false, status: { sku } }, options);
 }
 
-function syncWindowsShortcuts(app, displayName) {
+function syncWindowsShortcuts(app, displayName, options = {}) {
     if (process.platform !== 'win32' || !app.isPackaged) return;
+    const includeDesktop = options.includeDesktop !== false;
     const exePath = process.execPath;
     const name = sanitizeDisplayName(displayName);
     if (!name) return;
@@ -234,12 +257,14 @@ function syncWindowsShortcuts(app, displayName) {
         removeShortcutIfExists(stale);
     }
 
-    upsertWindowsShortcut(paths.desktop, exePath, name);
+    if (includeDesktop) {
+        upsertWindowsShortcut(paths.desktop, exePath, name);
+    }
     upsertWindowsShortcut(paths.startMenu, exePath, name);
     upsertWindowsShortcut(paths.startMenuFolder, exePath, name);
 }
 
-function applyInstallDisplayName(app, browserWindow, licenseStatus) {
+function applyInstallDisplayName(app, browserWindow, licenseStatus, options = {}) {
     const status = licenseStatus?.status || licenseStatus;
     const displayName = sanitizeDisplayName(resolveDisplayName(status, app));
     if (!displayName) return displayName;
@@ -250,11 +275,28 @@ function applyInstallDisplayName(app, browserWindow, licenseStatus) {
         browserWindow.setTitle(displayName);
     }
 
-    const prev = readState(app)?.displayName;
-    if (prev !== displayName) {
-        syncWindowsShortcuts(app, displayName);
-        writeState(app, displayName);
+    let state = readState(app) || {};
+    if (state.displayName !== displayName) {
+        state = persistState(app, { displayName });
     }
+    state = refreshDesktopShortcutOptOut(app, state, displayName);
+
+    const licKey = licensedShortcutKey(status);
+    const firstLicensed = licKey && licKey !== state.shortcutLicensedKey;
+    if (firstLicensed && options.syncShortcuts && !state.desktopShortcutRemovedByUser) {
+        syncWindowsShortcuts(app, displayName, { includeDesktop: true });
+        persistState(app, {
+            shortcutLicensedKey: licKey,
+            shortcutsDesktopSynced: true,
+        });
+    } else if (firstLicensed) {
+        const desktop = shortcutCandidates(app, displayName, process.execPath).desktop;
+        persistState(app, {
+            shortcutLicensedKey: licKey,
+            shortcutsDesktopSynced: fs.existsSync(desktop),
+        });
+    }
+
     return displayName;
 }
 

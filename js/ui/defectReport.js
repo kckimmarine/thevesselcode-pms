@@ -967,14 +967,13 @@ const TVC_DefectReport = (function () {
         const label = kind === 'company' ? "Company's Attachment" : "Ship's Attachment";
         const inputId = kind === 'company' ? 'dfCompanyAttachInput' : 'dfShipAttachInput';
         const list = dfAttachmentList(kind);
-        const items = list.map(a => `
-            <li class="wr-attach-item">
-                ${forPrint
-                    ? `<span class="wr-attach-link">📎 ${esc(a.name)}</span>`
-                    : `<a class="wr-attach-link" href="${esc(a.dataUrl)}" download="${esc(a.name)}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>`}
-                <span class="wr-attach-size">${Math.max(1, Math.round((a.size || 0) / 1024))}KB</span>
-                ${(!forPrint && canUpload) ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_DefectReport.removeAttachment('${kind}','${esc(a.id)}')">×</button>` : ''}
-            </li>`).join('');
+        const items = list.map(a => TVC_Attachments.renderListItemHtml(a, {
+            forPrint,
+            canRemove: !forPrint && canUpload,
+            removeOnclick: (!forPrint && canUpload)
+                ? `TVC_DefectReport.removeAttachment('${kind}','${esc(a.id)}')`
+                : '',
+        })).join('');
         if (forPrint) {
             const listHtml = list.length ? `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>` : '';
             return `<div class="wr-attach-block wr-attach-print">
@@ -1233,7 +1232,10 @@ const TVC_DefectReport = (function () {
         if (!row || !getState().user) return false;
         if (!isHq()) {
             const st = TVC_DefectCase.listWorkflowStatus(row);
-            if (st === 'Submitted' || st === 'Approved') return false;
+            if (st === 'Submitted') return false;
+            if (st === 'Approved') {
+                return TVC_DefectCase.isShipVerificationEditable(row);
+            }
         } else if (TVC_DefectCase.isHqReplyExported(row)) {
             return false;
         }

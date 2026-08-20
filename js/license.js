@@ -31,6 +31,7 @@ const TVC_License = (function () {
                 allowHq: true,
                 allowAdmin: true,
             };
+            syncFleetFromLicense(_cache);
             return _cache;
         }
         const r = await window.tvcElectron.getLicense();
@@ -50,7 +51,14 @@ const TVC_License = (function () {
             ...r.status,
             message: r.message || 'OK',
         };
+        syncFleetFromLicense(_cache);
         return _cache;
+    }
+
+    function syncFleetFromLicense(st) {
+        if (!st?.ok || !st.allowHq || typeof TVC_Fleet === 'undefined') return;
+        const ids = st.allowedVesselIds;
+        if (Array.isArray(ids) && ids.length) TVC_Fleet.syncFromAllowedVesselIds(ids);
     }
 
     async function getStatus() {

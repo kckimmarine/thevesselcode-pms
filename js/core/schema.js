@@ -515,6 +515,13 @@ const TVC_WorkReport = (function () {
         return status || 'REPORTED';
     }
 
+    function backfillPostponeOriginalDue(report) {
+        if (!report || report.work_type !== 'POSTPONE' || report.original_due_date) return;
+        const item = (report.job_items || [])[0];
+        const fromPrev = item?.prev_job_state?.next_date || report.prev_job_state?.next_date;
+        if (fromPrev) report.original_due_date = String(fromPrev).slice(0, 10);
+    }
+
     function migrateReportMeta(report) {
         if (!report) return report;
         const raw = report.status;
@@ -540,6 +547,7 @@ const TVC_WorkReport = (function () {
         (report.job_items || []).forEach(item => {
             item.status = normalizeItemStatus(item.status, report.is_locked);
         });
+        backfillPostponeOriginalDue(report);
         return report;
     }
 
@@ -657,6 +665,21 @@ const TVC_WorkReport = (function () {
         return [...items].sort((x, y) => compareJobCodes(x.job_code, y.job_code))[0];
     }
 
+    /** Postpone — Original Due Date (저장 시점 Job NEXT DATE, Postpone Date와 분리) */
+    function postponeOriginalDueDate(report, job, itemIndex = 0) {
+        if (report) fromLegacy(report);
+        if (report?.work_type === 'POSTPONE') {
+            const item = getJobItems(report)[itemIndex];
+            const od = report.original_due_date
+                || item?.form?.originalDueDate
+                || report.report_form?.originalDueDate
+                || item?.prev_job_state?.next_date
+                || report.prev_job_state?.next_date;
+            if (od) return String(od).slice(0, 10);
+        }
+        return String(job?.next_date || '').slice(0, 10);
+    }
+
     return {
         ITEM_STATUSES,
         blankJobItem,
@@ -671,6 +694,7 @@ const TVC_WorkReport = (function () {
         buildRecord,
         compareJobCodes,
         primaryJobItem,
+        postponeOriginalDueDate,
     };
 })();
 

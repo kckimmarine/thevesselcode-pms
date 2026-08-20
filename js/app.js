@@ -294,7 +294,7 @@ const TVC_App = (function () {
                 if (pkg?.version) return String(pkg.version);
             }
         } catch (_) { /* ignore */ }
-        return '1.0.2';
+        return '1.0.3';
     }
 
     async function syncLoginAppVersion() {
@@ -2587,23 +2587,13 @@ const TVC_App = (function () {
                     title: 'Commercial — TVC delivers',
                     items: [
                         {
-                            label: 'Path A: App Update (기존 pool 선박) · Path B: Setup (신규 계약 선박)',
+                            label: 'Deliver: Setup · App Update (pool / company) · Seat license',
                             textOnly: true,
                         },
                         {
-                            label: 'Path A — Export App Update ZIP (공용 · 기존 pool 선박)',
+                            label: 'Deliver files & license (3종 + MR → License → Import)',
                             tag: 'A',
-                            action: 'TVC_App.openAdminAppUpdateModal()',
-                        },
-                        {
-                            label: 'Path B — Export Setup handoff (Registry 등록 후 · 신규 선박)',
-                            tag: 'B',
-                            action: 'TVC_App.openAdminSetupExportModal()',
-                        },
-                        {
-                            label: 'Issue seat license (machine request → license.json)',
-                            tag: 'A',
-                            action: 'TVC_App.openAdminSeatLicenseModal()',
+                            action: 'TVC_App.openAdminDeliverModal()',
                         },
                         {
                             label: 'Release (Dev — Build & Export Setup + App Update)',
@@ -2632,6 +2622,11 @@ const TVC_App = (function () {
                             action: 'TVC_App.selectTvcLabInList()',
                         },
                         {
+                            label: 'Company & Vessel Registry (Select · Add · Modify · Set inactive)',
+                            tag: 'B',
+                            action: 'TVC_App.openAdminRegistryHub()',
+                        },
+                        {
                             label: 'Contract SOP checklist (신규 / 선박추가 / 계약종료)',
                             tag: 'B',
                             action: 'TVC_App.openAdminSopModal()',
@@ -2645,16 +2640,6 @@ const TVC_App = (function () {
                             label: 'Print contract registry (계약 선사·선박 목록)',
                             tag: 'B',
                             action: 'TVC_App.openAdminPrintRegistryModal()',
-                        },
-                        {
-                            label: 'Add / edit company (registry)',
-                            tag: 'B',
-                            action: "TVC_App.openAdminCompanyForm('add')",
-                        },
-                        {
-                            label: 'Add / edit vessel (registry)',
-                            tag: 'B',
-                            action: "TVC_App.openAdminVesselForm('add')",
                         },
                     ],
                 },
@@ -2780,6 +2765,7 @@ const TVC_App = (function () {
             body._menuXferDefectBound = false;
             body._menuXferPostponeBound = false;
             body._menuXferWorkPermitBound = false;
+            body._menuXferMonthlyBound = false;
         }
     }
 
@@ -2923,6 +2909,14 @@ const TVC_App = (function () {
             return shipSubmitted;
         }
         const st = TVC_DefectCase.listWorkflowStatus(row);
+        if (isMasterHubMode()) {
+            if (!TVC_HubRelay.canHubLegExport(row)) return false;
+            if (st === 'Submitted') return true;
+            if (row.defect_cleared && String(row.ship_verified_date || '').trim()
+                && (row.approved_at || st === 'Approved')) return true;
+            return false;
+        }
+        if (!TVC_HubRelay.canStationLegExport(row)) return false;
         if (st === 'Confirmed') return true;
         if (row.defect_cleared && String(row.ship_verified_date || '').trim()
             && (row.approved_at || st === 'Approved')) return true;
@@ -2938,7 +2932,12 @@ const TVC_App = (function () {
             return 'Not exportable';
         }
         const st = TVC_DefectCase.listWorkflowStatus(row);
-        if (st === 'Submitted') return 'Already exported (Submitted)';
+        if (isMasterHubMode()) {
+            if (TVC_HubRelay.isHubSynced(row)) return TVC_HubRelay.hubExportBlockedTitle();
+            if (st !== 'Submitted' && st !== 'Approved') return 'Awaiting station export first';
+            return 'Not exportable';
+        }
+        if (st === 'Submitted') return TVC_HubRelay.stationExportBlockedTitle();
         if (st === 'Approved') return 'Approved — not exportable here';
         if (st === 'Draft') return 'Draft — not in list workflow';
         if (st === 'Reported') return 'Reported — confirm first';
@@ -2946,6 +2945,174 @@ const TVC_App = (function () {
     }
 
     const MENU_XFER_EXPORT_COLSPAN = 10;
+
+    function workReportXferTypeHtml(report) {
+        const wt = report?.work_type;
+        if (wt === 'POSTPONE') {
+            return '<td class="hist-type hist-type-postpone" title="Postpone Report"><span class="hist-type-mark">P</span></td>';
+        }
+        if (wt === 'TROUBLE') {
+            return '<td class="hist-type hist-type-trouble" title="Trouble Report"><span class="hist-type-mark">T</span></td>';
+        }
+        return '<td class="hist-type hist-type-maint" title="Maintenance Report"><span class="hist-type-mark">M</span></td>';
+    }
+
+    function workReportHistoryColumns(report) {
+        const job = resolveReportJob(report);
+        return {
+            jobCode: report.job_code || report.job_codes?.[0] || job?.job_code || '',
+            sort1: job?.item_sort1 || '',
+            sort2: job?.item_sort2 || '',
+        };
+    }
+
+    function monthlyExportWorkReportRows(dept, opts = {}) {
+        const snapshot = opts.snapshot === true;
+        if (!snapshot) return stationPendingConfirmedReportRows(dept);
+        const target = dept || getPlanLockDept();
+        return (state.reports || []).filter(r => {
+            TVC_WorkReport.fromLegacy(r);
+            return reportDept(r) === target;
+        }).sort(compareReportByReportedDate);
+    }
+
+    function menuXferMonthlyRowSelectable(row) {
+        TVC_WorkReport.fromLegacy(row);
+        if (row.work_type === 'POSTPONE' && postponeRequiresCompanyApproval(row)) return false;
+        if (isMasterHubMode()) {
+            if (workReportListWorkflowStatus(row) !== 'Submitted') return false;
+            return TVC_HubRelay.canHubLegExport(row);
+        }
+        if (workReportListWorkflowStatus(row) !== 'Confirmed') return false;
+        return TVC_HubRelay.canStationLegExport(row);
+    }
+
+    function menuXferMonthlySelectDisabledTitle(row) {
+        if (isMasterHubMode()) {
+            if (TVC_HubRelay.isHubSynced(row)) return TVC_HubRelay.hubExportBlockedTitle();
+            const st = workReportListWorkflowStatus(row);
+            if (st !== 'Submitted') return 'Awaiting station export first';
+            return 'Not exportable';
+        }
+        if (!TVC_HubRelay.canStationLegExport(row)) return TVC_HubRelay.stationExportBlockedTitle();
+        const st = workReportListWorkflowStatus(row);
+        if (st === 'Reported') return 'Reported — confirm first';
+        if (row.work_type === 'POSTPONE' && postponeRequiresCompanyApproval(row)) {
+            return 'Critical Postpone — use Postpone Report export';
+        }
+        if (st !== 'Confirmed') return 'Confirm first';
+        return 'Not exportable';
+    }
+
+    function menuXferMonthlySelectHtml() {
+        const dept = getPlanLockDept();
+        const snapshot = monthlyExportUsesSnapshot(state.user, dept);
+        const dest = menuXferExportTargetLabel(menuXferResolveExportTarget(state.user, 'monthly'));
+        const rows = monthlyExportWorkReportRows(dept, { snapshot });
+        const sel = _menuXfer.selectedMonthlyReportIds || {};
+        const lookup = _menuXfer.exportFilenameLookup || {};
+        const selectable = rows.filter(menuXferMonthlyRowSelectable);
+        const selectedCount = selectable.filter(r => sel[r.id]).length;
+        const allChecked = selectable.length > 0 && selectable.every(r => sel[r.id]);
+        const searchQ = (_menuXfer.monthlySearch || '').trim().toLowerCase();
+        const filteredRows = searchQ
+            ? rows.filter(row => {
+                const cols = workReportHistoryColumns(row);
+                const hay = [
+                    row.id, cols.jobCode, cols.sort1, cols.sort2,
+                    workReportListWorkflowStatus(row),
+                    row.report_date,
+                ].filter(Boolean).join(' ').toLowerCase();
+                return hay.includes(searchQ);
+            })
+            : rows;
+        let tableBody = '';
+        if (!rows.length) {
+            tableBody = `<tr><td colspan="${MENU_XFER_EXPORT_COLSPAN}" class="muted menu-xfer-empty">No Work Reports in scope for ${esc(dest)}.</td></tr>`;
+        } else if (!filteredRows.length) {
+            tableBody = `<tr><td colspan="${MENU_XFER_EXPORT_COLSPAN}" class="muted menu-xfer-empty">No matches for search.</td></tr>`;
+        } else {
+            tableBody = filteredRows.map(row => {
+                const cols = workReportHistoryColumns(row);
+                const st = workReportListWorkflowStatus(row);
+                const dt = formatCmaxsHistDate(row.report_date || row.created_at);
+                const form = row.report_form || row.job_items?.[0]?.form || {};
+                const fileNo = String(form.fileNo || '').trim() || '—';
+                const job = resolveReportJob(row);
+                const canSelect = menuXferMonthlyRowSelectable(row);
+                const checked = canSelect && !!sel[row.id];
+                const chk = canSelect
+                    ? `<input type="checkbox" class="menu-xfer-monthly-chk" data-monthly-id="${escAttr(row.id)}"${checked ? ' checked' : ''}>`
+                    : `<input type="checkbox" disabled title="${escAttr(menuXferMonthlySelectDisabledTitle(row))}">`;
+                return `<tr class="menu-xfer-monthly-row${canSelect ? '' : ' menu-xfer-monthly-row-disabled'}">
+                    <td class="menu-xfer-chk">${chk}</td>
+                    ${workReportXferTypeHtml(row)}
+                    <td>${esc(fileNo)}</td>
+                    ${menuXferCritCell(!!(job && jobShowsCriticalEquipmentMark(job)))}
+                    <td>${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
+                    <td>${histCellHtml(cols.sort1)}</td>
+                    <td>${histCellHtml(cols.sort2)}</td>
+                    <td>${esc(dt || '—')}</td>
+                    <td class="hist-status">${esc(st)}</td>
+                    <td class="menu-xfer-file">${menuXferRowExportFilename(row, lookup, 'monthly')}</td>
+                </tr>`;
+            }).join('');
+        }
+        const hint = snapshot
+            ? `Work Reports in <strong>Monthly Report</strong> snapshot → <strong>${esc(dest)}</strong>`
+            : `Select Work Reports for Monthly export → <strong>${esc(dest)}</strong> (Confirmed, not yet Submitted)`;
+        const note = snapshot
+            ? (isMasterHubMode()
+                ? `${rows.length} in list · ${selectable.length} selectable (Submitted, hub export pending). Full department snapshot is exported.`
+                : `${rows.length} in list · ${selectable.length} selectable (Confirmed, not yet Submitted). Full department snapshot is exported.`)
+            : `${rows.length} in list · ${selectable.length} selectable (Confirmed, not yet Submitted). Critical Postpone uses Postpone Report export.`;
+        const exportDisabled = snapshot ? false : !selectedCount;
+        const exportLabel = snapshot ? 'Export' : (selectedCount ? `Export (${selectedCount})` : 'Export');
+        return `
+            <p class="spare-sync-hint">${hint}</p>
+            <p class="spare-sync-note muted">${note}</p>
+            <div class="search-field-wrap menu-xfer-monthly-search">
+                <input type="text" class="search-input" id="menuXferMonthlySearch" placeholder="Search File No / Job Code / SORT…" value="${escAttr(_menuXfer.monthlySearch || '')}">
+            </div>
+            <div class="menu-xfer-table-wrap">
+                <table class="menu-xfer-table menu-xfer-monthly-table">
+                    ${menuXferExportColgroupHtml()}
+                    ${menuXferExportTheadHtml('menuXferMonthlySelectAll', allChecked, selectable)}
+                    <tbody>${tableBody}</tbody>
+                </table>
+            </div>
+            <div class="spare-sync-actions">
+                <button type="button" id="menuXferMonthlyExportBtn" class="btn btn-green spare-sync-btn"${exportDisabled ? ' disabled' : ''} onclick="TVC_App.menuXferConfirmMonthlyExport()">${exportLabel}</button>
+            </div>`;
+    }
+
+    async function menuXferOpenMonthlySelect() {
+        _menuXfer.step = 'export-monthly-select';
+        _menuXfer.selectedMonthlyReportIds = {};
+        _menuXfer.monthlySearch = '';
+        _menuXfer.exportFilenameLookup = await buildMenuXferExportFilenameLookup('monthly');
+        renderMenuXferModal();
+    }
+
+    function menuXferUpdateMonthlyExportBtn() {
+        const btn = document.getElementById('menuXferMonthlyExportBtn');
+        if (!btn) return;
+        const dept = getPlanLockDept();
+        const snapshot = monthlyExportUsesSnapshot(state.user, dept);
+        if (snapshot) {
+            btn.removeAttribute('disabled');
+            btn.textContent = 'Export';
+            return;
+        }
+        const count = Object.keys(_menuXfer.selectedMonthlyReportIds || {}).filter(id => _menuXfer.selectedMonthlyReportIds[id]).length;
+        if (count === 0) {
+            btn.setAttribute('disabled', '');
+            btn.textContent = 'Export';
+        } else {
+            btn.removeAttribute('disabled');
+            btn.textContent = `Export (${count})`;
+        }
+    }
 
     function menuXferExportColgroupHtml() {
         return `<colgroup>
@@ -3025,8 +3192,8 @@ const TVC_App = (function () {
         }).join('');
         }
         return `
-            <p class="spare-sync-hint">Check the defect reports to export → <strong>${esc(dest)}</strong> (Confirmed only)</p>
-            <p class="spare-sync-note muted">${rows.length} in list · ${selectable.length} selectable (Confirmed, not yet Submitted). Same scope as Work History / Defect tab.</p>
+            <p class="spare-sync-hint">Check the defect reports to export → <strong>${esc(dest)}</strong>${isMasterHubMode() ? ' (Submitted, hub export pending)' : ' (Confirmed only)'}</p>
+            <p class="spare-sync-note muted">${rows.length} in list · ${selectable.length} selectable${isMasterHubMode() ? ' (Submitted, hub export pending)' : ' (Confirmed, not yet Submitted)'}. Same scope as Work History / Defect tab.</p>
             <div class="search-field-wrap menu-xfer-defect-search">
                 <input type="text" class="search-input" id="menuXferDefectSearch" placeholder="Search File No / Job Code / SORT…" value="${escAttr(_menuXfer.defectSearch || '')}">
             </div>
@@ -3042,13 +3209,33 @@ const TVC_App = (function () {
             </div>`;
     }
 
-    function stationPendingConfirmedReportCount(dept) {
+    function stationPendingConfirmedReportRows(dept) {
         const target = dept || getPlanLockDept();
-        return (state.reports || []).filter(r =>
-            r.sync_status !== 'SYNCED'
-            && reportDept(r) === target
-            && workReportListWorkflowStatus(r) === 'Confirmed'
-        ).length;
+        return (state.reports || []).filter(r => {
+            TVC_WorkReport.fromLegacy(r);
+            if (r.sync_status === 'SYNCED') return false;
+            if (reportDept(r) !== target) return false;
+            if (workReportListWorkflowStatus(r) !== 'Confirmed') return false;
+            if (r.work_type === 'POSTPONE' && postponeRequiresCompanyApproval(r)) return false;
+            return true;
+        }).sort(compareReportByReportedDate);
+    }
+
+    /** Critical Postpone — Postpone Export 전용; Monthly pending 목록·건수에서 제외 */
+    function stationPendingCriticalPostponeExcluded(dept) {
+        const target = dept || getPlanLockDept();
+        return (state.reports || []).filter(r => {
+            TVC_WorkReport.fromLegacy(r);
+            return r.work_type === 'POSTPONE'
+                && postponeRequiresCompanyApproval(r)
+                && r.sync_status !== 'SYNCED'
+                && reportDept(r) === target
+                && workReportListWorkflowStatus(r) === 'Confirmed';
+        }).sort(compareReportByReportedDate);
+    }
+
+    function stationPendingConfirmedReportCount(dept) {
+        return stationPendingConfirmedReportRows(dept).length;
     }
 
     function stationPendingConfirmedDefectCount(dept) {
@@ -3166,20 +3353,15 @@ const TVC_App = (function () {
         const isStation = typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(state.user);
         const pendingConfirmed = isStation ? stationPendingConfirmedReportCount(dept) : 0;
         if (isStation && !locked && !TVC_RBAC.isHqAccount(state.user) && !isMasterHubMode()) {
-            const exportLabel = pendingConfirmed
-                ? `Export pending changes (${pendingConfirmed} confirmed report${pendingConfirmed === 1 ? '' : 's'})`
-                : 'Export';
-            return `
-                <p class="spare-sync-hint">Export <strong>confirmed Work Reports</strong> to Master Hub</p>
-                <p class="muted">Destination: <strong>${esc(dest)}</strong></p>
-                ${pendingConfirmed
-                    ? `<p class="spare-sync-note">Ready to send: <strong>${pendingConfirmed}</strong> confirmed report(s) not yet Submitted.</p>`
-                    : `<p class="menu-xfer-block-msg">No confirmed reports pending export.</p>
-                       <p class="spare-sync-note muted">Confirm Work Report in Work History first, then return here.</p>`}
-                <p class="spare-sync-note muted">End-of-month <strong>Monthly Report</strong> (full department snapshot) requires <strong>Update Work Plan</strong> first.</p>
-                <div class="spare-sync-actions">
-                    <button type="button" id="menuXferMonthlyExportBtn" class="btn btn-green spare-sync-btn"${pendingConfirmed ? '' : ' disabled'} onclick="TVC_App.menuXferConfirmMonthlyExport()">${esc(exportLabel)}</button>
-                </div>`;
+            return menuXferConfirmedExportReadyHtml({
+                title: 'confirmed Work Reports (pending changes)',
+                count: pendingConfirmed,
+                dest,
+                exportAction: 'TVC_App.menuXferConfirmMonthlyExport()',
+                selectAction: 'TVC_App.menuXferOpenMonthlySelect()',
+                emptyMsg: 'No confirmed reports pending export.',
+                note: 'End-of-month Monthly Report (full snapshot) requires Update Work Plan first. Critical Postpone → Postpone Report export.',
+            });
         }
         const lock = state._originalPlanLock?.[dept];
         const month = lock?.month || '—';
@@ -3199,11 +3381,17 @@ const TVC_App = (function () {
         } else if (TVC_RBAC.isHqAccount(state.user)) {
             summary += `<p class="muted">HQ export for ${esc(TVC_RBAC.getDeptLabel(dept) || dept || 'selected department')}.</p>`;
         }
+        const snapshot = monthlyExportUsesSnapshot(state.user, dept);
+        const reportCount = monthlyExportWorkReportRows(dept, { snapshot }).length;
         return `
             <p class="spare-sync-hint">Export <strong>Monthly Report</strong></p>
             ${summary}
+            ${reportCount
+                ? `<p class="spare-sync-note">Work Reports in package: <strong>${reportCount}</strong> (view list before export).</p>`
+                : ''}
             <div class="spare-sync-actions">
                 <button type="button" id="menuXferMonthlyExportBtn" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferConfirmMonthlyExport()">Export</button>
+                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferOpenMonthlySelect()">Select individually…</button>
             </div>`;
     }
 
@@ -3273,7 +3461,11 @@ const TVC_App = (function () {
         if (TVC_RBAC.isHqAccount(state.user)) {
             return workReportListWorkflowStatus(row) === 'Approved' && row.sync_status !== 'SYNCED';
         }
-        return workReportListWorkflowStatus(row) === 'Confirmed';
+        const st = workReportListWorkflowStatus(row);
+        if (isMasterHubMode()) {
+            return st === 'Submitted' && TVC_HubRelay.canHubLegExport(row);
+        }
+        return st === 'Confirmed' && TVC_HubRelay.canStationLegExport(row);
     }
 
     function menuXferPostponeSelectDisabledTitle(row) {
@@ -3284,7 +3476,12 @@ const TVC_App = (function () {
             if (st === 'Reported') return 'Reported — confirm first';
             return 'Not exportable';
         }
-        if (st === 'Submitted') return 'Already exported (Submitted)';
+        if (isMasterHubMode()) {
+            if (TVC_HubRelay.isHubSynced(row)) return TVC_HubRelay.hubExportBlockedTitle();
+            if (st !== 'Submitted') return 'Awaiting station export first';
+            return 'Not exportable';
+        }
+        if (st === 'Submitted') return TVC_HubRelay.stationExportBlockedTitle();
         if (st === 'Approved') return 'Approved — use HQ reply import';
         if (st === 'Reported') return 'Reported — confirm first';
         return 'Not exportable';
@@ -3451,7 +3648,11 @@ const TVC_App = (function () {
         if (TVC_RBAC.isHqAccount(state.user)) {
             return TVC_WorkPermit.listWorkflowStatus(row) === 'Approved' && row.sync_status !== 'SYNCED';
         }
-        return TVC_WorkPermit.listWorkflowStatus(row) === 'Confirmed';
+        const st = TVC_WorkPermit.listWorkflowStatus(row);
+        if (isMasterHubMode()) {
+            return st === 'Submitted' && TVC_HubRelay.canHubLegExport(row);
+        }
+        return st === 'Confirmed' && TVC_HubRelay.canStationLegExport(row);
     }
 
     function menuXferWorkPermitSelectDisabledTitle(row) {
@@ -3462,7 +3663,12 @@ const TVC_App = (function () {
             if (st === 'Reported') return 'Reported — confirm first';
             return 'Not exportable';
         }
-        if (st === 'Submitted') return 'Already exported (Submitted)';
+        if (isMasterHubMode()) {
+            if (TVC_HubRelay.isHubSynced(row)) return TVC_HubRelay.hubExportBlockedTitle();
+            if (st !== 'Submitted') return 'Awaiting station export first';
+            return 'Not exportable';
+        }
+        if (st === 'Submitted') return TVC_HubRelay.stationExportBlockedTitle();
         if (st === 'Approved') return 'Approved — use HQ reply import';
         if (st === 'Reported') return 'Reported — confirm first';
         return 'Not exportable';
@@ -3593,12 +3799,59 @@ const TVC_App = (function () {
         });
     }
 
+    function bindMenuXferMonthlyTableEvents() {
+        const body = document.getElementById('menuXferBody');
+        if (!body || body._menuXferMonthlyBound) return;
+        body._menuXferMonthlyBound = true;
+        body.addEventListener('change', (ev) => {
+            const all = ev.target.closest('#menuXferMonthlySelectAll');
+            if (all) {
+                const checked = all.checked;
+                if (!_menuXfer.selectedMonthlyReportIds) _menuXfer.selectedMonthlyReportIds = {};
+                const dept = getPlanLockDept();
+                const snapshot = monthlyExportUsesSnapshot(state.user, dept);
+                monthlyExportWorkReportRows(dept, { snapshot })
+                    .filter(menuXferMonthlyRowSelectable)
+                    .forEach(row => {
+                        if (checked) _menuXfer.selectedMonthlyReportIds[row.id] = true;
+                        else delete _menuXfer.selectedMonthlyReportIds[row.id];
+                    });
+                renderMenuXferModal();
+                return;
+            }
+            const cb = ev.target.closest('.menu-xfer-monthly-chk');
+            if (!cb || !cb.dataset.monthlyId) return;
+            if (!_menuXfer.selectedMonthlyReportIds) _menuXfer.selectedMonthlyReportIds = {};
+            if (cb.checked) _menuXfer.selectedMonthlyReportIds[cb.dataset.monthlyId] = true;
+            else delete _menuXfer.selectedMonthlyReportIds[cb.dataset.monthlyId];
+            menuXferUpdateMonthlyExportBtn();
+            const dept = getPlanLockDept();
+            const snapshot = monthlyExportUsesSnapshot(state.user, dept);
+            const selectable = monthlyExportWorkReportRows(dept, { snapshot }).filter(menuXferMonthlyRowSelectable);
+            const selectAll = document.getElementById('menuXferMonthlySelectAll');
+            if (selectAll) {
+                selectAll.checked = selectable.length > 0 && selectable.every(r => _menuXfer.selectedMonthlyReportIds[r.id]);
+            }
+        });
+        body.addEventListener('input', (ev) => {
+            if (ev.target.id === 'menuXferMonthlySearch') {
+                _menuXfer.monthlySearch = ev.target.value;
+                renderMenuXferModal();
+            }
+        });
+    }
+
     function renderMenuXferModal() {
         const body = document.getElementById('menuXferBody');
         if (!body) return;
         const step = _menuXfer.step || 'mode';
         const modalBox = document.querySelector('#menuXferModal .modal-box');
-        if (modalBox) modalBox.classList.toggle('menu-xfer-wide', step === 'export-defect-select' || step === 'export-postpone-select' || step === 'export-work-permit-select');
+        if (modalBox) {
+            modalBox.classList.toggle('menu-xfer-wide', step === 'export-defect-select'
+                || step === 'export-postpone-select'
+                || step === 'export-work-permit-select'
+                || step === 'export-monthly-select');
+        }
         let content = '';
         if (step === 'mode') {
             const hint = menuXferDefaultChannelHint(state.user);
@@ -3648,6 +3901,8 @@ const TVC_App = (function () {
             content = menuXferPostponeReadyHtml();
         } else if (step === 'export-monthly-ready') {
             content = menuXferMonthlyReadyHtml();
+        } else if (step === 'export-monthly-select') {
+            content = menuXferMonthlySelectHtml();
         } else if (step === 'export-vessel-profile-ready') {
             content = menuXferVesselProfileExportHtml();
         } else if (step === 'import-vessel-profile-preview') {
@@ -3690,6 +3945,7 @@ const TVC_App = (function () {
                 : step === 'export-postpone-ready' ? '3. Export — Postpone Report'
                     : step === 'export-postpone-select' ? '3. Export — select postpone reports'
                         : step === 'export-monthly-ready' ? '3. Export — monthly report'
+                        : step === 'export-monthly-select' ? '3. Export — monthly report (review)'
                         : step === 'export-vessel-profile-ready' ? '3. Export — Vessel Profile'
                         : step === 'import-vessel-profile-preview' ? '3. Import — Vessel Profile preview'
                         : step === 'import-app-update-preview' ? '3. Import — App Update preview'
@@ -3711,6 +3967,7 @@ const TVC_App = (function () {
         if (step === 'export-defect-select') bindMenuXferDefectTableEvents();
         if (step === 'export-postpone-select') bindMenuXferPostponeTableEvents();
         if (step === 'export-work-permit-select') bindMenuXferWorkPermitTableEvents();
+        if (step === 'export-monthly-select') bindMenuXferMonthlyTableEvents();
     }
 
     async function openMenuXferMenu() {
@@ -3741,7 +3998,7 @@ const TVC_App = (function () {
                     _menuXfer.appUpdateVersion = await resolveAppVersion();
                 }
             } catch (_) {
-                _menuXfer.appUpdateVersion = '1.0.2';
+                _menuXfer.appUpdateVersion = '1.0.3';
             }
         }
         renderMenuXferModal();
@@ -3770,6 +4027,10 @@ const TVC_App = (function () {
             _menuXfer.step = 'export-defect-ready';
             delete _menuXfer.selectedDefectIds;
             delete _menuXfer.defectSearch;
+        } else if (_menuXfer.step === 'export-monthly-select') {
+            _menuXfer.step = 'export-monthly-ready';
+            delete _menuXfer.monthlySearch;
+            delete _menuXfer.selectedMonthlyReportIds;
         } else if (_menuXfer.step === 'export-postpone-select' && isStation) {
             _menuXfer.step = 'export-postpone-ready';
             delete _menuXfer.selectedPostponeIds;
@@ -3782,14 +4043,17 @@ const TVC_App = (function () {
             || _menuXfer.step === 'export-work-permit-ready'
             || _menuXfer.step === 'export-defect-select' || _menuXfer.step === 'export-postpone-select'
             || _menuXfer.step === 'export-work-permit-select' || _menuXfer.step === 'export-monthly-ready'
+            || _menuXfer.step === 'export-monthly-select'
             || _menuXfer.step === 'export-vessel-profile-ready') {
             _menuXfer.step = 'export-type';
             delete _menuXfer.selectedDefectIds;
             delete _menuXfer.selectedPostponeIds;
             delete _menuXfer.selectedWorkPermitIds;
+            delete _menuXfer.selectedMonthlyReportIds;
             delete _menuXfer.defectSearch;
             delete _menuXfer.postponeSearch;
             delete _menuXfer.workPermitSearch;
+            delete _menuXfer.monthlySearch;
         } else if (_menuXfer.step === 'import-vessel-profile-preview' || _menuXfer.step === 'import-app-update-preview') {
             _menuXfer.step = 'import';
             delete _menuXfer.vesselProfilePending;
@@ -3850,7 +4114,7 @@ const TVC_App = (function () {
         const ver = _menuXfer.appUpdateVersion
             || (typeof TVC_AppUpdate !== 'undefined' && TVC_AppUpdate.currentAppVersion
                 ? TVC_AppUpdate.currentAppVersion()
-                : '1.0.2');
+                : '1.0.3');
         const notes = _menuXfer.appUpdateNotes || '';
         const companyId = _menuXfer.appUpdateCompanyId || state.selectedAdminCompanyId || '';
         const recordDeploy = _menuXfer.appUpdateRecordDeploy !== false;
@@ -3980,9 +4244,15 @@ const TVC_App = (function () {
         if (!pending) return '<p class="muted">No App Update loaded.</p>';
         const m = pending.manifest || {};
         const setups = (m.setups || []).map(s => `<li>${esc(s.sku)} — ${esc(s.filename)}</li>`).join('') || '<li>—</li>';
+        const isCompany = m.delivery_mode === 'company';
+        const vesselLines = (m.registry_vessels || []).map(v =>
+            `<li>${esc(v.vessel_id)} — ${esc(v.name || '')}</li>`
+        ).join('') || (m.allowed_vessel_ids || []).map(id => `<li>${esc(id)}</li>`).join('');
         return `
-            <p class="spare-sync-hint">App Update <strong>v${esc(m.app_version || '—')}</strong></p>
+            <p class="spare-sync-hint">App Update <strong>v${esc(m.app_version || '—')}</strong>${isCompany ? ` · <strong>${esc(m.company_name || m.company_id || '')}</strong>` : ' · pool'}</p>
             <p class="spare-sync-note muted">Operational data (PMS/SPARE Master, Work History) is <strong>not</strong> modified. Only the application installer runs.</p>
+            ${isCompany ? `<p class="spare-sync-note">Company scope · allowedVesselIds / Ship List:</p><ul>${vesselLines || '<li>—</li>'}</ul>
+                <p class="spare-sync-note muted">HQ: Import new seat license from TVC for full Ship List enforcement.</p>` : ''}
             <p class="spare-sync-note">${esc(m.notes || '(no notes)')}</p>
             <p class="spare-sync-note muted">Setups in package:</p>
             <ul>${setups}</ul>
@@ -4005,6 +4275,10 @@ const TVC_App = (function () {
             sku: check.sku,
             setup: check.setup,
         };
+        if (parsed.manifest?.delivery_mode === 'company' && typeof TVC_AppUpdate !== 'undefined') {
+            TVC_AppUpdate.applyCompanyScopeToFleet(parsed.manifest);
+            if (TVC_RBAC.isHqAccount?.(state.user)) renderFleetList();
+        }
         _menuXfer.step = 'import-app-update-preview';
         renderMenuXferModal();
     }
@@ -4021,6 +4295,10 @@ const TVC_App = (function () {
             if (!result.ok) {
                 await TVC_Dialog.alert(result.error || 'Install failed.');
                 return;
+            }
+            if (pending.manifest?.delivery_mode === 'company' && typeof TVC_AppUpdate !== 'undefined') {
+                TVC_AppUpdate.applyCompanyScopeToFleet(pending.manifest);
+                if (TVC_RBAC.isHqAccount?.(state.user)) renderFleetList();
             }
             await TVC_Dialog.alert(result.message || 'Installer launched.');
             closeMenuXferMenu();
@@ -4219,32 +4497,54 @@ const TVC_App = (function () {
 
     async function menuXferConfirmMonthlyExport() {
         const dept = getPlanLockDept();
-        const isStation = typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(state.user);
+        const user = state.user;
+        const isStation = typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user);
         const locked = isOriginalPlanUpdateLocked(dept);
-        if (isStation && !locked && !TVC_RBAC.isHqAccount(state.user) && !isMasterHubMode()) {
+        const snapshot = monthlyExportUsesSnapshot(user, dept);
+        if (isStation && !locked && !TVC_RBAC.isHqAccount(user) && !isMasterHubMode()) {
             if (stationPendingConfirmedReportCount(dept) === 0) {
                 await TVC_Dialog.alert('No confirmed Work Reports ready to export.\n\nConfirm reports in Work History first.');
                 return;
             }
-        } else if (!TVC_RBAC.isHqAccount(state.user) && !isMasterHubMode() && !locked) {
+        } else if (!TVC_RBAC.isHqAccount(user) && !isMasterHubMode() && !locked) {
             await TVC_Dialog.alert('Update Work Plan must be completed first.');
             return;
         }
-        const target = menuXferResolveExportTarget(state.user, 'monthly');
-        if (!target || !menuXferCanExportTarget(state.user, target)) {
+        const target = menuXferResolveExportTarget(user, 'monthly');
+        if (!target || !menuXferCanExportTarget(user, target)) {
             await TVC_Dialog.alert('No permission to export monthly report.');
             return;
         }
+        let reportIds = null;
+        if (!snapshot) {
+            if (_menuXfer.step === 'export-monthly-select') {
+                const ids = Object.keys(_menuXfer.selectedMonthlyReportIds || {})
+                    .filter(id => _menuXfer.selectedMonthlyReportIds[id]);
+                const selectable = new Set(
+                    monthlyExportWorkReportRows(dept, { snapshot: false })
+                        .filter(menuXferMonthlyRowSelectable)
+                        .map(r => r.id),
+                );
+                reportIds = ids.filter(id => selectable.has(id));
+                if (!reportIds.length) {
+                    await TVC_Dialog.alert('No selected Work Reports are exportable (Confirmed, not yet Submitted).');
+                    return;
+                }
+            } else {
+                reportIds = stationPendingConfirmedReportRows(dept).map(r => r.id);
+            }
+        }
         const destLabel = menuXferExportTargetLabel(target);
-        const user = state.user;
-        const snapshot = monthlyExportUsesSnapshot(user, dept);
+        const exportCount = snapshot
+            ? monthlyExportWorkReportRows(dept, { snapshot }).length
+            : reportIds.length;
         const confirmMsg = snapshot
-            ? `Export Monthly Report to ${destLabel}?`
-            : `Export confirmed Work Reports (pending changes) to ${destLabel}?`;
+            ? `Export Monthly Report (${exportCount} Work Report(s)) to ${destLabel}?`
+            : `Export ${exportCount} confirmed Work Report(s) (pending changes) to ${destLabel}?`;
         if (!await TVC_Dialog.confirm({ message: confirmMsg })) return;
         closeMenuXferMenu();
         try {
-            await menuXferExportMonthly(target);
+            await menuXferExportMonthly(target, { reportIds });
         } catch (e) { await TVC_Dialog.alert(e.message || e); }
     }
 
@@ -4253,7 +4553,7 @@ const TVC_App = (function () {
         return (cases || []).filter(c => String(c.department || '').toUpperCase() === target);
     }
 
-    async function menuXferExportMonthly(target) {
+    async function menuXferExportMonthly(target, opts = {}) {
         const user = TVC_Auth.getCurrentUser();
         if (!user) return;
 
@@ -4267,7 +4567,10 @@ const TVC_App = (function () {
 
         const dept = target;
         const snapshot = monthlyExportUsesSnapshot(user, dept);
-        const monthlyOpts = { monthlyExport: snapshot };
+        const monthlyOpts = {
+            monthlyExport: snapshot,
+            reportIds: snapshot ? undefined : opts.reportIds,
+        };
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user)) {
             TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.STATION_EXPORT);
             await TVC_Sync.exportZip(user, TVC_Space.Direction.STATION_TO_HUB, dept, {
@@ -4313,7 +4616,10 @@ const TVC_App = (function () {
             return;
         }
         if (TVC_DefectCase.listWorkflowStatus(caseRow) !== 'Confirmed') {
-            throw new Error(`${caseRow.case_no}: only Confirmed cases can be exported.`);
+            if (!(isMasterHubMode() && TVC_HubRelay.canHubLegExport(caseRow)
+                && TVC_DefectCase.listWorkflowStatus(caseRow) === 'Submitted')) {
+                throw new Error(`${caseRow.case_no}: only Confirmed cases can be exported.`);
+            }
         }
         if (caseRow.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) {
             throw new Error(`${caseRow.case_no}: complete defect clearance before export.`);
@@ -4973,19 +5279,21 @@ const TVC_App = (function () {
                         <td style="padding:4px 8px">${esc(vesselVer)}</td></tr>
                 </tbody>
             </table>
-            <p class="spare-sync-note muted">Workflow: <button type="button" class="btn-linkish" onclick="TVC_App.openAdminSopModal()">Contract SOP checklist</button></p>
+            <p class="spare-sync-note muted">Workflow: <button type="button" class="btn-linkish" onclick="TVC_App.openAdminSopModal()">Contract SOP checklist</button>
+                · <button type="button" class="btn-linkish" onclick="TVC_App.openAdminDeliverModal()">Deliver files</button>
+                · <button type="button" class="btn-linkish" onclick="TVC_App.openAdminRegistryHub()">Registry</button></p>
             <div class="admin-deploy-workflow">
                 <div class="admin-deploy-path">
-                    <strong>Path A — 기존 pool 선박</strong>
-                    <p class="spare-sync-note muted">이미 TVC-PMS 사용 중 · 업무 데이터 있음 → <strong>공용 App Update ZIP</strong>만 전달</p>
-                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminAppUpdateModal()">Export App Update ZIP…</button>
+                    <strong>범용 App Update</strong>
+                    <p class="spare-sync-note muted">기존 pool · 프로그램만 교체 (MR/License 불필요)</p>
+                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminAppUpdateModal()">Export pool App Update…</button>
                 </div>
                 <div class="admin-deploy-path">
-                    <strong>Path B — 신규 계약 선박</strong>
-                    <p class="spare-sync-note muted">Registry에 선박 등록 후 → <strong>범용 Setup ZIP</strong> 전달 → PC 설치 + Seat license</p>
+                    <strong>범용 Setup · 선사용 App Update</strong>
+                    <p class="spare-sync-note muted">신규 선사·선박 → Setup · 선박 추가 → Company App Update + HQ license</p>
                     <div class="admin-deploy-path-actions">
-                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselForm('add')">Add / edit vessel</button>
-                        <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminSetupExportModal()">Export Setup handoff…</button>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminRegistryHub()">Company &amp; Vessel Registry</button>
+                        <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminDeliverModal()">Deliver files…</button>
                     </div>
                 </div>
             </div>
@@ -5198,6 +5506,197 @@ const TVC_App = (function () {
         return records;
     }
 
+    function buildCompanyAppUpdateDeployRecords(companyId, appVersion, skus) {
+        const cid = String(companyId || '').trim();
+        const ver = String(appVersion || '').trim();
+        const skuList = Array.isArray(skus) ? skus : [];
+        if (!cid || !ver || !skuList.length) return [];
+        return skuList.map(sku => ({ companyId: cid, kind: 'update', sku, appVersion: ver }));
+    }
+
+    function adminRegistryActiveVesselRows(companyId) {
+        if (!companyId || typeof TVC_AdminRegistry === 'undefined') return [];
+        return TVC_AdminRegistry.listVessels({ companyId, includeInactive: false });
+    }
+
+    function adminRegistryManifestVessels(companyId) {
+        return adminRegistryActiveVesselRows(companyId).map(v => ({
+            vessel_id: v.vessel_id,
+            name: v.name,
+            code: v.code,
+            imo_no: v.imo_no,
+            delivery: v.delivery,
+        }));
+    }
+
+    function renderAdminRegistryHub() {
+        const host = document.getElementById('adminRegistryBody');
+        if (!host || typeof TVC_AdminRegistry === 'undefined') return;
+        state._adminRegView = 'hub';
+        const companies = TVC_AdminRegistry.listCompanies({ includeInactive: true });
+        if (!state.selectedAdminCompanyId && companies[0]) {
+            state.selectedAdminCompanyId = companies[0].company_id;
+        }
+        const companyId = state.selectedAdminCompanyId;
+        const vessels = companyId
+            ? TVC_AdminRegistry.listVessels({ companyId, includeInactive: true })
+            : [];
+        if (companyId && vessels.length && !state.selectedAdminVesselId) {
+            state.selectedAdminVesselId = vessels[0].vessel_id;
+        }
+        const vesselId = state.selectedAdminVesselId;
+        const company = companyId ? TVC_AdminRegistry.getCompany(companyId) : null;
+        const vessel = companyId && vesselId ? TVC_AdminRegistry.getVessel(companyId, vesselId) : null;
+        const companyOpts = companies.map(c =>
+            `<option value="${escAttr(c.company_id)}"${c.company_id === companyId ? ' selected' : ''}>${esc(c.name)} (${esc(c.company_id)})${c.status === 'inactive' ? ' [inactive]' : ''}</option>`
+        ).join('') || '<option value="">—</option>';
+        const vesselOpts = vessels.map(v =>
+            `<option value="${escAttr(v.vessel_id)}"${v.vessel_id === vesselId ? ' selected' : ''}>${esc(v.name)}${v.status === 'inactive' ? ' [inactive]' : ''}</option>`
+        ).join('') || '<option value="">—</option>';
+        host.innerHTML = `
+            <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
+            <h3 class="spare-sync-title">Company &amp; Vessel Registry</h3>
+            <p class="spare-sync-hint muted">Select · Add · Modify · Delete = <strong>Set inactive</strong> (registry files 유지)</p>
+            <label class="spare-sync-note" style="display:block;margin:12px 0">Company
+                <select class="admin-company-select" style="margin-top:4px;width:100%"
+                    onchange="TVC_App.adminRegistryHubSelectCompany(this.value)">${companyOpts}</select>
+            </label>
+            <label class="spare-sync-note" style="display:block;margin:12px 0">Vessel
+                <select class="admin-company-select" style="margin-top:4px;width:100%"
+                    onchange="TVC_App.adminRegistryHubSelectVessel(this.value)">${vesselOpts}</select>
+            </label>
+            ${company ? `<p class="spare-sync-note muted">Status: company <strong>${esc(company.status)}</strong>${vessel ? ` · vessel <strong>${esc(vessel.status)}</strong>` : ''}</p>` : ''}
+            <div class="admin-deploy-path-actions" style="margin:12px 0">
+                <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminCompanyFormFromHub('add')">Add company</button>
+                <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminCompanyFormFromHub('edit')" ${company ? '' : ' disabled'}>Modify company</button>
+                <button type="button" class="btn btn-red btn-sm" onclick="TVC_App.deactivateAdminCompany()" ${company && company.status !== 'inactive' ? '' : ' disabled'}>Set company inactive</button>
+            </div>
+            <div class="admin-deploy-path-actions" style="margin:12px 0">
+                <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselFormFromHub('add')" ${company ? '' : ' disabled'}>Add vessel</button>
+                <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselFormFromHub('edit')" ${vessel ? '' : ' disabled'}>Modify vessel</button>
+                <button type="button" class="btn btn-red btn-sm" onclick="TVC_App.deactivateAdminVessel()" ${vessel && vessel.status !== 'inactive' ? '' : ' disabled'}>Set vessel inactive</button>
+            </div>
+            <div class="modal-actions spare-sync-footer">
+                <button type="button" class="btn" onclick="TVC_App.closeAdminRegistryModal()">Close</button>
+            </div>`;
+    }
+
+    async function openAdminRegistryHub() {
+        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
+        if (typeof TVC_AdminRegistry === 'undefined') {
+            await TVC_Dialog.alert('Admin registry module not loaded.');
+            return;
+        }
+        state._adminRegFromHub = false;
+        renderAdminRegistryHub();
+        showModal('adminRegistryModal');
+    }
+
+    function adminRegistryHubSelectCompany(companyId) {
+        state.selectedAdminCompanyId = String(companyId || '').trim() || null;
+        state.selectedAdminVesselId = null;
+        if (typeof TVC_AdminRegistry !== 'undefined') {
+            TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, null);
+        }
+        renderAdminRegistryHub();
+        renderMainMenu();
+    }
+
+    function adminRegistryHubSelectVessel(vesselId) {
+        state.selectedAdminVesselId = String(vesselId || '').trim() || null;
+        if (typeof TVC_AdminRegistry !== 'undefined') {
+            TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
+        }
+        renderAdminRegistryHub();
+        renderMainMenu();
+    }
+
+    function adminRegistryCancelForm() {
+        if (state._adminRegFromHub) {
+            state._adminRegFromHub = false;
+            state._adminRegForm = null;
+            renderAdminRegistryHub();
+            return;
+        }
+        closeAdminRegistryModal();
+    }
+
+    function openAdminCompanyFormFromHub(mode) {
+        state._adminRegFromHub = true;
+        openAdminCompanyForm(mode);
+    }
+
+    function openAdminVesselFormFromHub(mode) {
+        state._adminRegFromHub = true;
+        openAdminVesselForm(mode);
+    }
+
+    function renderAdminDeliverModal() {
+        const body = document.getElementById('adminDeliverBody');
+        if (!body) return;
+        body.innerHTML = `
+            <button type="button" class="modal-x" onclick="TVC_App.closeAdminDeliverModal()">×</button>
+            <h3 class="spare-sync-title">Deliver files &amp; license</h3>
+            <p class="spare-sync-hint muted">Registry 등록 후 전달 파일 3종 · 신규 PC는 3–5단계(MR → License → Import) 필요</p>
+            <div class="admin-deploy-workflow" style="margin:12px 0">
+                <div class="admin-deploy-path">
+                    <strong>① 범용 Setup</strong>
+                    <p class="spare-sync-note muted">신규 선사·선박 · Registry 확인 후 HQ + Vessel Setup.exe ZIP</p>
+                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminDeliverOpenSetup()">Export Setup handoff…</button>
+                </div>
+                <div class="admin-deploy-path">
+                    <strong>② 범용 App Update</strong>
+                    <p class="spare-sync-note muted">기존 pool · 프로그램만 교체 · MR/License 불필요</p>
+                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminDeliverOpenPoolUpdate()">Export pool App Update…</button>
+                </div>
+                <div class="admin-deploy-path">
+                    <strong>③ 선사용 App Update</strong>
+                    <p class="spare-sync-note muted">선박 추가 등 · manifest에 <strong>allowedVesselIds</strong> 반영 → HQ license 재발급</p>
+                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminDeliverOpenCompanyUpdate()">Export company App Update…</button>
+                </div>
+            </div>
+            <h4 class="admin-sop-h" style="margin-top:16px">Steps 3–5 (신규 PC · 선박 추가)</h4>
+            <ol class="admin-sop-ol">
+                <li>고객 PC → Machine Request JSON</li>
+                <li>Admin → <strong>Issue seat license</strong> (HQ=Company · Vessel=Company+Vessel)</li>
+                <li>고객 PC → Import seat license · (선사용 App Update 후 HQ license 필수)</li>
+            </ol>
+            <div class="modal-actions spare-sync-footer">
+                <button type="button" class="btn btn-green" onclick="TVC_App.adminDeliverOpenSeatLicense()">Issue seat license…</button>
+                <button type="button" class="btn" onclick="TVC_App.closeAdminDeliverModal()">Close</button>
+            </div>`;
+    }
+
+    function openAdminDeliverModal() {
+        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
+        renderAdminDeliverModal();
+        showModal('adminDeliverModal');
+    }
+
+    function closeAdminDeliverModal() {
+        closeModal('adminDeliverModal');
+    }
+
+    function adminDeliverOpenSetup() {
+        closeAdminDeliverModal();
+        openAdminSetupExportModal();
+    }
+
+    function adminDeliverOpenPoolUpdate() {
+        closeAdminDeliverModal();
+        openAdminAppUpdateModal({ scope: 'pool' });
+    }
+
+    function adminDeliverOpenCompanyUpdate() {
+        closeAdminDeliverModal();
+        openAdminCompanyAppUpdateModal();
+    }
+
+    function adminDeliverOpenSeatLicense() {
+        closeAdminDeliverModal();
+        openAdminSeatLicenseModal();
+    }
+
     function adminSetupExportVesselPreviewHtml(companyId) {
         if (!companyId || typeof TVC_AdminRegistry === 'undefined') {
             return '<p class="spare-sync-note muted">Select a company to preview registered vessels.</p>';
@@ -5205,7 +5704,7 @@ const TVC_App = (function () {
         const vessels = TVC_AdminRegistry.listVessels({ companyId, includeInactive: false });
         if (!vessels.length) {
             return `<p class="spare-sync-note" style="color:#c53030">No active vessels in registry for this company.
-                <button type="button" class="btn-linkish" onclick="TVC_App.openAdminVesselForm('add')">Add / edit vessel</button> first.</p>`;
+                <button type="button" class="btn-linkish" onclick="TVC_App.openAdminRegistryHub()">Company &amp; Vessel Registry</button> first.</p>`;
         }
         const rows = vessels.map(v => `<tr>
             <td style="padding:4px 8px">${esc(v.vessel_id || '—')}</td>
@@ -5523,7 +6022,7 @@ const TVC_App = (function () {
 
     const _adminSetupExport = {
         companyId: null,
-        appVersion: '1.0.2',
+        appVersion: '1.0.3',
         notes: '',
         skus: {},
         sourceSetups: [],
@@ -5569,10 +6068,10 @@ const TVC_App = (function () {
         const canExport = source.configured && _adminSetupExport.companyId && vesselCount > 0;
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminSetupExportModal()">×</button>
-            <h3 class="spare-sync-title">Path B — Export Setup Handoff</h3>
-            <p class="spare-sync-hint">신규 계약 선박: Registry에 선박 정보를 먼저 등록한 뒤, 범용 <strong>HQ + Vessel</strong> Setup.exe ZIP을 전달합니다.</p>
+            <h3 class="spare-sync-title">범용 Setup — Export handoff</h3>
+            <p class="spare-sync-hint">신규 선사·선박: Registry에 선박 정보를 먼저 등록한 뒤, 범용 <strong>HQ + Vessel</strong> Setup.exe ZIP을 전달합니다.</p>
             <ol class="admin-sop-ol" style="margin:8px 0">
-                <li><button type="button" class="btn-linkish" onclick="TVC_App.openAdminVesselForm('add')">Add / edit vessel</button> — 계약 선박 정보 등록</li>
+                <li><button type="button" class="btn-linkish" onclick="TVC_App.openAdminRegistryHub()">Company &amp; Vessel Registry</button> — 계약 선박 정보 등록</li>
                 <li>아래 Company 선택 · Registry 선박 확인</li>
                 <li>Export Setup ZIP → 선박 PC에 Setup 설치 → Seat license 발급</li>
             </ol>
@@ -5620,9 +6119,9 @@ const TVC_App = (function () {
         try {
             _adminSetupExport.appVersion = typeof TVC_AppUpdate !== 'undefined'
                 ? await TVC_AppUpdate.resolveAppVersion()
-                : '1.0.2';
+                : '1.0.3';
         } catch (_) {
-            _adminSetupExport.appVersion = '1.0.2';
+            _adminSetupExport.appVersion = '1.0.3';
         }
         _adminSetupExport.companyId = state.selectedAdminCompanyId || null;
         await renderAdminSetupExportModal();
@@ -5743,13 +6242,15 @@ const TVC_App = (function () {
     }
 
     const _adminAppUpdate = {
-        appVersion: '1.0.2',
+        appVersion: '1.0.3',
         notes: '',
         skus: {},
         sourceSetups: [],
         sourcePath: null,
         recordDeploy: true,
         recordPool: true,
+        scope: 'pool',
+        companyId: null,
     };
 
     async function renderAdminAppUpdateModal() {
@@ -5778,6 +6279,15 @@ const TVC_App = (function () {
                 : [];
             return n + vs.length;
         }, 0);
+        const isCompanyScope = _adminAppUpdate.scope === 'company';
+        if (isCompanyScope && !_adminAppUpdate.companyId && state.selectedAdminCompanyId) {
+            _adminAppUpdate.companyId = state.selectedAdminCompanyId;
+        }
+        const companyId = _adminAppUpdate.companyId;
+        const company = companyId && typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.getCompany(companyId) : null;
+        const companyVessels = isCompanyScope ? adminRegistryActiveVesselRows(companyId) : [];
+        const allowedIds = companyVessels.map(v => v.vessel_id);
         const setupRows = (TVC_SetupExport?.HANDOFF_SKUS || ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK']).map(sku => {
             const hit = _adminAppUpdate.sourceSetups.find(s => s.sku === sku);
             const checked = _adminAppUpdate.skus[sku] && hit ? 'checked' : '';
@@ -5794,10 +6304,21 @@ const TVC_App = (function () {
             : `<span class="muted">Setup folder not found. Run <code>Release</code> or <code>npm run dist</code>, then select the <code>dist</code> folder.</span>`;
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminAppUpdateModal()">×</button>
-            <h3 class="spare-sync-title">Path A — Export App Update ZIP</h3>
-            <p class="spare-sync-hint">기존 pool 선박(이미 TVC-PMS 사용 중): <strong>공용 App Update ZIP</strong> 하나를 전달합니다.</p>
+            <h3 class="spare-sync-title">${isCompanyScope ? '선사용 App Update (allowedVesselIds)' : '범용 App Update (pool)'}</h3>
+            <p class="spare-sync-hint">${isCompanyScope
+                ? '선박 추가 등 Registry 변경 후 · manifest에 active 선박 목록 포함 → <strong>HQ seat license 재발급</strong> 필수'
+                : '기존 pool 선박(이미 TVC-PMS 사용 중): <strong>공용 App Update ZIP</strong> 하나를 전달합니다.'}</p>
             <p class="spare-sync-note muted">고객 PC: <strong>Data Export &amp; Import → App Update → Import → Install update</strong> · Master / History / IndexedDB 유지</p>
-            <p class="spare-sync-note">Pool: ${poolCompanies.length} companies · ${poolVesselCount} active vessels (TVC_LAB 제외)</p>
+            ${isCompanyScope ? `
+            <label class="spare-sync-note" style="display:block;margin:8px 0">Company
+                <select class="admin-company-select" style="margin-top:4px;width:100%"
+                    onchange="TVC_App.adminAppUpdateSetCompany(this.value);TVC_App.renderAdminAppUpdateModal()">
+                    ${adminSeatLicenseCompanyOptions(companyId)}
+                </select>
+            </label>
+            ${adminSetupExportVesselPreviewHtml(companyId)}
+            <p class="spare-sync-note muted">allowedVesselIds (${allowedIds.length}): ${allowedIds.length ? esc(allowedIds.join(', ')) : '— none — register vessels first'}</p>
+            ` : `<p class="spare-sync-note">Pool: ${poolCompanies.length} companies · ${poolVesselCount} active vessels (TVC_LAB 제외)</p>`}
             <p class="spare-sync-note">${sourceNote}</p>
             <div class="spare-sync-actions" style="margin:8px 0">
                 <button type="button" class="btn spare-sync-btn" onclick="TVC_App.adminAppUpdatePickFolder()">Select dist folder…</button>
@@ -5816,16 +6337,16 @@ const TVC_App = (function () {
             </table>
             <label class="spare-sync-note"><input type="checkbox"${_adminAppUpdate.recordDeploy !== false ? ' checked' : ''}
                 onchange="TVC_App.adminAppUpdateSetRecordDeploy(this.checked)"> Update deploy version in registry after export</label>
-            <label class="spare-sync-note"><input type="checkbox"${_adminAppUpdate.recordPool !== false ? ' checked' : ''}
-                onchange="TVC_App.adminAppUpdateSetRecordPool(this.checked)"> Record for all active pool companies (shared ZIP)</label>
+            ${isCompanyScope ? '' : `<label class="spare-sync-note"><input type="checkbox"${_adminAppUpdate.recordPool !== false ? ' checked' : ''}
+                onchange="TVC_App.adminAppUpdateSetRecordPool(this.checked)"> Record for all active pool companies (shared ZIP)</label>`}
             <div class="modal-actions spare-sync-footer">
                 <button type="button" class="btn btn-green" onclick="TVC_App.adminAppUpdateRun()"
-                    ${source.configured ? '' : ' disabled'}>Export App Update ZIP…</button>
+                    ${source.configured && (!isCompanyScope || (companyId && allowedIds.length)) ? '' : ' disabled'}>Export App Update ZIP…</button>
                 <button type="button" class="btn" onclick="TVC_App.closeAdminAppUpdateModal()">Close</button>
             </div>`;
     }
 
-    async function openAdminAppUpdateModal() {
+    async function openAdminAppUpdateModal(opts = {}) {
         if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
         if (typeof TVC_AppUpdate === 'undefined') {
             await TVC_Dialog.alert('App Update module not loaded.');
@@ -5834,11 +6355,23 @@ const TVC_App = (function () {
         try {
             _adminAppUpdate.appVersion = await TVC_AppUpdate.resolveAppVersion();
         } catch (_) {
-            _adminAppUpdate.appVersion = '1.0.2';
+            _adminAppUpdate.appVersion = '1.0.3';
         }
+        _adminAppUpdate.scope = opts.scope === 'company' ? 'company' : 'pool';
+        _adminAppUpdate.companyId = _adminAppUpdate.scope === 'company'
+            ? (opts.companyId || state.selectedAdminCompanyId || null)
+            : null;
         _adminAppUpdate.skus = {};
         await renderAdminAppUpdateModal();
         showModal('adminAppUpdateModal');
+    }
+
+    async function openAdminCompanyAppUpdateModal() {
+        await openAdminAppUpdateModal({ scope: 'company' });
+    }
+
+    function adminAppUpdateSetCompany(companyId) {
+        _adminAppUpdate.companyId = String(companyId || '').trim() || null;
     }
 
     function closeAdminAppUpdateModal() {
@@ -5879,28 +6412,58 @@ const TVC_App = (function () {
 
     async function adminAppUpdateRun() {
         const user = TVC_Auth.getCurrentUser();
+        const isCompanyScope = _adminAppUpdate.scope === 'company';
+        const companyId = _adminAppUpdate.companyId;
         try {
             const handoffSkus = TVC_SetupExport?.HANDOFF_SKUS
                 || ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
             const selectedSkus = handoffSkus.filter(s => _adminAppUpdate.skus?.[s]);
             if (!selectedSkus.length) throw new Error('Select at least one SKU with Setup.exe in dist/.');
+            if (isCompanyScope) {
+                if (!companyId) throw new Error('Select a company.');
+                const vessels = adminRegistryActiveVesselRows(companyId);
+                if (!vessels.length) throw new Error('No active vessels in registry for this company.');
+            }
+            const company = isCompanyScope && typeof TVC_AdminRegistry !== 'undefined'
+                ? TVC_AdminRegistry.getCompany(companyId) : null;
+            const registryVessels = isCompanyScope ? adminRegistryManifestVessels(companyId) : null;
+            const allowedVesselIds = isCompanyScope ? registryVessels.map(v => v.vessel_id) : null;
             const { blob, filename, manifest } = await TVC_AppUpdate.buildZipFromSource(user, {
                 appVersion: _adminAppUpdate.appVersion,
                 notes: _adminAppUpdate.notes,
                 skus: selectedSkus,
                 sourceSetups: _adminAppUpdate.sourceSetups,
+                deliveryMode: isCompanyScope ? 'company' : 'pool',
+                companyId: isCompanyScope ? companyId : null,
+                companyName: company?.name || companyId,
+                allowedVesselIds,
+                registryVessels,
             });
             await TVC_FileExport.save(blob, filename);
             if (_adminAppUpdate.recordDeploy !== false) {
-                const records = _adminAppUpdate.recordPool !== false
-                    ? buildPoolAppUpdateDeployRecords(_adminAppUpdate.appVersion, selectedSkus)
-                    : [];
+                const records = isCompanyScope
+                    ? buildCompanyAppUpdateDeployRecords(companyId, _adminAppUpdate.appVersion, selectedSkus)
+                    : (_adminAppUpdate.recordPool !== false
+                        ? buildPoolAppUpdateDeployRecords(_adminAppUpdate.appVersion, selectedSkus)
+                        : []);
                 if (records.length) await recordAdminDeployAndSave(records);
             }
-            await TVC_Dialog.alert(
-                `App Update exported.\n${filename}\n\nVersion: ${manifest.app_version}\nSKUs: ${(manifest.setups || []).map(s => s.sku).join(', ')}\n\nSend this shared ZIP to pool vessels → Import → Install update on each PC (HQ / Master / Engine / Deck).`
-            );
-            closeAdminAppUpdateModal();
+            if (isCompanyScope) {
+                const issueLicense = await TVC_Dialog.confirm({
+                    message: `Company App Update exported.\n${filename}\n\nallowedVesselIds: ${allowedVesselIds.join(', ')}\n\nNext: Issue HQ seat license for this company → HQ Import.\n\nOpen Issue seat license now?`,
+                });
+                closeAdminAppUpdateModal();
+                if (issueLicense) {
+                    _adminSeatLicense.companyId = companyId;
+                    _adminSeatLicense.vesselId = null;
+                    await openAdminSeatLicenseModal();
+                }
+            } else {
+                await TVC_Dialog.alert(
+                    `App Update exported.\n${filename}\n\nVersion: ${manifest.app_version}\nSKUs: ${(manifest.setups || []).map(s => s.sku).join(', ')}\n\nSend this shared ZIP to pool vessels → Import → Install update on each PC (HQ / Master / Engine / Deck).`
+                );
+                closeAdminAppUpdateModal();
+            }
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
         }
@@ -6224,7 +6787,7 @@ const TVC_App = (function () {
                     <textarea name="notes" rows="2" placeholder="Optional contract notes">${esc(company?.notes || '')}</textarea>
                 </label>
                 <div class="orig-job-actions span2">
-                    <button type="button" class="btn" onclick="TVC_App.closeAdminRegistryModal()">Cancel</button>
+                    <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
                     ${isEdit ? `<button type="button" class="btn btn-red" onclick="TVC_App.deactivateAdminCompany()">Set inactive</button>` : ''}
                     <button type="submit" class="btn btn-green">${isEdit ? 'Save company' : 'Add company'}</button>
                 </div>
@@ -6272,7 +6835,7 @@ const TVC_App = (function () {
                     <textarea name="notes" rows="2" placeholder="Optional">${esc(vessel?.notes || '')}</textarea>
                 </label>
                 <div class="orig-job-actions span2">
-                    <button type="button" class="btn" onclick="TVC_App.closeAdminRegistryModal()">Cancel</button>
+                    <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
                     ${isEdit ? `<button type="button" class="btn btn-red" onclick="TVC_App.deactivateAdminVessel()">Set inactive</button>` : ''}
                     <button type="submit" class="btn btn-green">${isEdit ? 'Save vessel' : 'Add vessel'}</button>
                 </div>
@@ -6580,6 +7143,10 @@ const TVC_App = (function () {
                 if (!d.startsWith('POSTPONE_')) continue;
                 const ref = r.job_code || r.ref_key || parsePostponeFilenameRef(fn);
                 xferFilenameLookupKey(ref).forEach(k => { map[k] = fn; });
+            } else if (category === 'monthly') {
+                if (d !== 'STATION_TO_HUB' && d !== 'SHIP_TO_HQ') continue;
+                const parsed = typeof TVC_Filename !== 'undefined' ? TVC_Filename.parseScoped(fn) : null;
+                if (parsed?.type === 'monthly' || /_monthly_/i.test(fn)) map.__monthly__ = fn;
             }
         }
         return map;
@@ -6595,6 +7162,9 @@ const TVC_App = (function () {
             ? (st === 'Submitted' || row.sync_status === 'SYNCED' || TVC_DefectCase.isHqReplyExported(row))
             : (row.sync_status === 'SYNCED' || st === 'Submitted');
         if (!exported) return histFilenameCellHtml('');
+        if (kind === 'monthly') {
+            return histFilenameCellHtml(String(lookup?.__monthly__ || '').trim());
+        }
         if (kind === 'workPermit' || kind === 'defect') {
             const batchFn = String(row.last_export_filename || '').trim();
             if (batchFn) return histFilenameCellHtml(batchFn);
@@ -10006,13 +10576,13 @@ const TVC_App = (function () {
     function renderWpAttachmentList(attachments, canRemove) {
         const list = attachments || [];
         if (!list.length) return '';
-        const items = list.map(a => `
-            <li class="wr-attach-item">
-                <a class="wr-attach-link" href="${escAttr(a.dataUrl)}" download="${escAttr(a.name)}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>
-                <span class="wr-attach-size">${Math.max(1, Math.round(a.size / 1024))}KB</span>
-                ${canRemove ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_App.removeWorkProcedureAttachment('${escAttr(String(a.id))}')">×</button>` : ''}
-            </li>`).join('');
-        return `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>`;
+        const items = list.map(a => TVC_Attachments.renderListItemHtml(a, {
+            canRemove,
+            removeOnclick: canRemove
+                ? `TVC_App.removeWorkProcedureAttachment('${escAttr(String(a.id))}')`
+                : '',
+        })).join('');
+        return items ? `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>` : '';
     }
 
     function renderWorkProcedureModal() {
@@ -11839,6 +12409,7 @@ const TVC_App = (function () {
         };
         const roWf = (key, val) => `<input class="wr-ro" data-wf="${key}" value="${esc(wf(key, val))}" readonly tabindex="-1">`;
         const approvedPostponeDefault = rep?.approved_postpone_date || rep?.postpone_date || wf('postponeDate') || '';
+        const originalDueDate = TVC_WorkReport.postponeOriginalDueDate(rep, job);
         const jobInfoBlock = renderWrJobRowsBlock(job, rep, ro, forPrint);
         const approvedPostponeField = isCriticalPostpone && (canApproveNow || isRepApproved)
             ? fld('Approved Postpone Date',
@@ -11881,7 +12452,7 @@ const TVC_App = (function () {
                     ${fld('Running Hrs after Last Maint.', fieldInp('rhAfterLastMaint', ''))}
                 </div>
                 <div class="wr-maint-grid wr-maint-grid-2 wr-maint-grid-gap">
-                    ${fld('Original Due Date', forPrint ? `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly tabindex="-1">` : `<input class="wr-ro" value="${esc(job.next_date || '—')}" readonly>`)}
+                    ${fld('Original Due Date', forPrint ? `<input class="wr-ro" value="${esc(originalDueDate || '—')}" readonly tabindex="-1">` : `<input class="wr-ro" value="${esc(originalDueDate || '—')}" readonly>`)}
                     ${fld('Postpone Date', forPrint
                         ? `<input class="wr-ro" value="${esc(wf('postponeDate') || '')}" readonly tabindex="-1">`
                         : `<input type="date" class="tvc-date-input" data-wf="postponeDate" placeholder="YYYY-MM-DD" value="${esc(wf('postponeDate'))}"${ro ? ' disabled' : ''}>`, 'wr-postpone-date')}
@@ -11993,14 +12564,13 @@ const TVC_App = (function () {
         const label = kind === 'company' ? "Company's Attachment" : "Ship's Attachment";
         const inputId = kind === 'company' ? 'wrCompanyAttachInput' : 'wrShipAttachInput';
         const list = wrAttachmentList(formKey);
-        const items = list.map(a => `
-            <li class="wr-attach-item">
-                ${forPrint
-                    ? `<span class="wr-attach-link">📎 ${esc(a.name)}</span>`
-                    : `<a class="wr-attach-link" href="${escAttr(a.dataUrl)}" download="${escAttr(a.name)}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>`}
-                <span class="wr-attach-size">${Math.max(1, Math.round(a.size / 1024))}KB</span>
-                ${(!forPrint && canUpload) ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_App.removeWrAttachment('${kind}','${escAttr(a.id)}')">×</button>` : ''}
-            </li>`).join('');
+        const items = list.map(a => TVC_Attachments.renderListItemHtml(a, {
+            forPrint,
+            canRemove: !forPrint && canUpload,
+            removeOnclick: (!forPrint && canUpload)
+                ? `TVC_App.removeWrAttachment('${kind}','${escAttr(a.id)}')`
+                : '',
+        })).join('');
         if (forPrint) {
             const listHtml = list.length ? `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>` : '';
             return `<div class="wr-attach-block wr-attach-print">
@@ -12505,6 +13075,7 @@ const TVC_App = (function () {
                                 form: { ...(prev.form || {}), ...entry.form },
                                 used_parts: entry.used_parts,
                                 description: entry.description,
+                                prev_job_state: prev.prev_job_state || null,
                             });
                         });
                         updatePayload.form = form;
@@ -13618,11 +14189,16 @@ const TVC_App = (function () {
         setFleetView, setFleetSearch, selectVessel,
         setAdminSearch, selectAdminCompany, selectAdminVessel,
         openAdminCompanyForm, openAdminVesselForm, closeAdminRegistryModal,
+        openAdminRegistryHub, adminRegistryHubSelectCompany, adminRegistryHubSelectVessel,
+        adminRegistryCancelForm, openAdminCompanyFormFromHub, openAdminVesselFormFromHub,
+        openAdminDeliverModal, closeAdminDeliverModal,
+        adminDeliverOpenSetup, adminDeliverOpenPoolUpdate, adminDeliverOpenCompanyUpdate, adminDeliverOpenSeatLicense,
         openAdminSeatLicenseModal, closeAdminSeatLicenseModal,
         adminSeatLicensePickKey, adminSeatLicenseLoadFile, adminSeatLicenseSetMonths,
         adminSeatLicenseSetCompany, adminSeatLicenseSetVessel, adminSeatLicenseIssueAndSave,
         openAdminSetupExportModal, closeAdminSetupExportModal, renderAdminSetupExportModal,
-        openAdminAppUpdateModal, closeAdminAppUpdateModal, renderAdminAppUpdateModal,
+        openAdminAppUpdateModal, openAdminCompanyAppUpdateModal, closeAdminAppUpdateModal, renderAdminAppUpdateModal,
+        adminAppUpdateSetCompany,
         openAdminReleaseModal, closeAdminReleaseModal,
         adminReleaseSetRunBuild, adminReleaseSetIncludeSetups, adminReleaseSetIncludeAppUpdate,
         adminReleaseSetIncludeHandoff, adminReleaseSetCompany, adminReleaseSetRecordDeploy,
@@ -13698,7 +14274,7 @@ const TVC_App = (function () {
         menuXferTryOnlineSync,
         menuXferExportDefect, menuXferExportPostpone, menuXferExportWorkPermit, menuXferExportMonthly, onMenuXferImportFile,
         menuXferConfirmWorkPermitExport, menuXferConfirmWorkPermitExportAll,
-        menuXferOpenDefectSelect, menuXferOpenPostponeSelect, menuXferOpenWorkPermitSelect,
+        menuXferOpenDefectSelect, menuXferOpenPostponeSelect, menuXferOpenWorkPermitSelect, menuXferOpenMonthlySelect,
         openMenuHistoryModal, closeMenuHistoryModal, setMenuHistCategory, menuHistPeerLabel,
         openMasterBackupModal, closeMasterBackupModal, runMasterBackup, triggerMasterRestore, onMasterRestoreFile,
         uploadAttachment, saveDetailReport, closeModal, showModal, swapHistoryModals, dismissSpicsAlerts, openSpicsRequisition,

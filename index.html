@@ -80,7 +80,7 @@
         </div>
     </main>
 
-    <footer class="login-footer"><span id="loginAppVersion">v1.0.1</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
+    <footer class="login-footer"><span id="loginAppVersion">v1.0.3</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
 </div>
 
 <div id="appShell" class="hidden">
@@ -428,6 +428,9 @@
 <div id="adminAppUpdateModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeAdminAppUpdateModal()">
     <div class="modal-box spare-sync-modal menu-xfer-wide" onclick="event.stopPropagation()"><div id="adminAppUpdateBody"></div></div>
 </div>
+<div id="adminDeliverModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeAdminDeliverModal()">
+    <div class="modal-box spare-sync-modal menu-xfer-wide" onclick="event.stopPropagation()"><div id="adminDeliverBody"></div></div>
+</div>
 <div id="adminReleaseModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeAdminReleaseModal()">
     <div class="modal-box spare-sync-modal menu-xfer-wide admin-release-modal" onclick="event.stopPropagation()"><div id="adminReleaseBody"></div></div>
 </div>
@@ -661,12 +664,13 @@
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js?v=20260810-modal-nodrag"></script>
 <script src="js/ui/dialog.js?v=20260811-company-comment"></script>
+<script src="js/ui/attachments.js?v=20260820-preview"></script>
 <script src="js/ui/runHours.js?v=20260808-critical-postpone"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
 <script src="js/core/filename.js?v=20260812-defect-hq-batch"></script>
 <script src="js/services/spareSync.js?v=20260806-req-excel"></script>
 <script src="js/services/spareMeta.js"></script>
-<script src="js/ui/spareMenu.js?v=20260811-consume-job-ui"></script>
+<script src="js/ui/spareMenu.js?v=20260820-vessel-order-tabs"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -684,32 +688,33 @@
 <script src="js/services/spareMasterExcel.js?v=20260813-vessel-master"></script>
 <script src="js/services/defectCase.js?v=20260812-hq-pre-export"></script>
 <script src="js/services/workPermitCase.js?v=20260810-wp-comments"></script>
-<script src="js/services/workPermitSync.js?v=20260810-wp-comments"></script>
-<script src="js/services/defectSync.js?v=20260812-defect-vessel-batch"></script>
-<script src="js/services/postponeSync.js?v=20260810-import-scope"></script>
-<script src="js/services/sync.js?v=20260812-hq-defect-import"></script>
+<script src="js/services/hubRelay.js?v=20260820-hub-relay"></script>
+<script src="js/services/workPermitSync.js?v=20260820-hub-relay"></script>
+<script src="js/services/defectSync.js?v=20260820-hub-relay"></script>
+<script src="js/services/postponeSync.js?v=20260820-hub-relay"></script>
+<script src="js/services/sync.js?v=20260820-hub-relay"></script>
 <script src="js/services/masterBackup.js?v=20260813-vessel-master"></script>
 <script src="js/services/vesselProfileSync.js?v=20260813-vessel-profile"></script>
-<script src="js/services/appUpdate.js?v=20260813-app-version-1"></script>
+<script src="js/services/appUpdate.js?v=20260820-company-scope"></script>
 <script src="js/services/adminCommercial.js?v=20260817-admin-commercial"></script>
-<script src="js/services/adminSop.js?v=20260816-admin-sop"></script>
+<script src="js/services/adminSop.js?v=20260820-admin-deliver"></script>
 <script src="js/services/adminPrint.js?v=20260816-admin-print"></script>
 <script src="js/services/seatLicense.js?v=20260816-admin-seat"></script>
 <script src="js/services/setupExport.js?v=20260816-setup-handoff"></script>
 <script src="js/services/adminRelease.js?v=20260818-admin-release"></script>
 <script src="js/services/stationSync.js?v=20260811-monthly-export"></script>
 <script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
-<script src="js/services/fleet.js?v=20260813-hq-fleet4"></script>
+<script src="js/services/fleet.js?v=20260820-fleet-sync"></script>
 <script src="js/services/adminRegistry.js?v=20260813-admin-registry-crud"></script>
 <script src="js/services/masterVesselScope.js?v=20260813-vessel-master"></script>
 <script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260811-list-search-clear"></script>
-<script src="js/ui/defectReport.js?v=20260812-hq-pre-export"></script>
+<script src="js/ui/defectReport.js?v=20260820-hub-relay"></script>
 <script src="js/ui/workPermit.js?v=20260811-wrspare-cos-dot"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260804-pms-scope"></script>
-<script src="js/app.js?v=20260817-v1.0.1"></script>
+<script src="js/app.js?v=20260820-admin-deliver"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

@@ -290,22 +290,32 @@ const TVC_DefectSync = (function () {
         return exportHqReplyBatchZip(user, [caseId]);
     }
 
-    async function loadDefectUrgentBatch(caseIds) {
+    async function loadDefectUrgentBatch(caseIds, user) {
         const ids = (caseIds || []).filter(Boolean);
         if (!ids.length) throw new Error('No defect reports selected.');
+        const isHub = typeof TVC_HubRelay !== 'undefined' && user && TVC_HubRelay.isHubRelayExport(user);
         const rows = [];
         for (const id of ids) {
             const row = await TVC_DefectCaseService.get(id);
             if (!row) throw new Error('Defect case not found.');
             const st = TVC_DefectCase.listWorkflowStatus(row);
-            if (st !== 'Confirmed') {
-                throw new Error(`${row.case_no}: only Confirmed cases can be exported.`);
-            }
-            if (row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) {
-                throw new Error(`${row.case_no}: complete defect clearance before export.`);
-            }
-            if (row.sync_status === 'SYNCED') {
-                throw new Error(`${row.case_no}: already exported (Submitted).`);
+            if (isHub) {
+                if (!TVC_HubRelay.canHubLegExport(row)) {
+                    throw new Error(`${row.case_no}: ${TVC_HubRelay.hubExportBlockedTitle()}.`);
+                }
+                if (st !== 'Submitted') {
+                    throw new Error(`${row.case_no}: awaiting station export first.`);
+                }
+            } else {
+                if (st !== 'Confirmed') {
+                    throw new Error(`${row.case_no}: only Confirmed cases can be exported.`);
+                }
+                if (row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS) {
+                    throw new Error(`${row.case_no}: complete defect clearance before export.`);
+                }
+                if (!TVC_HubRelay.canStationLegExport(row)) {
+                    throw new Error(`${row.case_no}: already exported (Submitted).`);
+                }
             }
             rows.push(row);
         }
@@ -315,7 +325,11 @@ const TVC_DefectSync = (function () {
     async function saveBatchUrgentExport(user, rows, payload, filename) {
         const ts = now();
         for (const row of rows) {
-            row.sync_status = 'SYNCED';
+            if (typeof TVC_HubRelay !== 'undefined') {
+                TVC_HubRelay.stampExport(user, row);
+            } else {
+                row.sync_status = 'SYNCED';
+            }
             row.last_synced_at = ts;
             row.last_export_filename = filename;
             await TVC_DB.put('defect_cases', row);
@@ -341,7 +355,7 @@ const TVC_DefectSync = (function () {
     }
 
     async function exportUrgentBatchZip(user, caseIds) {
-        await loadDefectUrgentBatch(caseIds);
+        await loadDefectUrgentBatch(caseIds, user);
         for (const id of caseIds) {
             const row = await TVC_DefectCaseService.get(id);
             if (row && row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) {
@@ -441,7 +455,11 @@ const TVC_DefectSync = (function () {
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
 
-        row.sync_status = 'SYNCED';
+        if (typeof TVC_HubRelay !== 'undefined') {
+            TVC_HubRelay.stampExport(user, row);
+        } else {
+            row.sync_status = 'SYNCED';
+        }
         row.last_synced_at = now();
         row.last_export_filename = filename;
         await TVC_DB.put('defect_cases', row);

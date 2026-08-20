@@ -1,0 +1,36 @@
+[TVC-PMS v1.0.3 App Update — 후배 전달용]
+
+■ 파일: TVC-PMS App Update v1.0.3.zip
+■ 경로: dist\TVC-PMS App Update v1.0.3.zip (npm run dist:app-update 또는 npm run release 후)
+
+■ 주요 변경 (v1.0.2 → v1.0.3)
+- Attachment preview A4 크기
+- Monthly Report export — Confirmed·미제출만 선택
+- Hub Relay — Station/Hub leg 분리 · Master Hub re-export
+- Defect Approved — 선박 Modify/clear
+- Spare Requisition — 스크롤 유지 · Req 0 Save 차단
+- Consumption Report — Draft→Reported · Confirm 수정
+- Master Import 버튼명 Order
+- Vessel Order import 후 Received 탭 활성화
+
+■ v1.0.4 예정
+- Spare Requisition 견적/평가 UI (단가·통화·납기)
+
+■ 설치 (기존 pool PC — Path A)
+1. 해당 SKU TVC 앱 실행
+2. Menu → Data Export & Import → Import → App Update
+3. TVC-PMS App Update v1.0.3.zip 선택 → Install update
+4. 설치 완료 후 재실행 → footer v1.0.3 확인
+5. Work History / Master 데이터 유지 확인
+
+■ 테스트 체크리스트
+[ ] footer / 창 제목 v1.0.3
+[ ] Consumption Save → Reported → Confirm
+[ ] Spare Req 체크·Req 입력 시 스크롤 유지
+[ ] Master Import → Order 버튼명
+[ ] Vessel Order import → Received 탭 활성
+[ ] Hub Relay — Master Submitted 후 Hub export 가능
+
+■ 주의
+- App Update는 프로그램만 교체 (DB 유지)
+- Seat license 재발급 불필요

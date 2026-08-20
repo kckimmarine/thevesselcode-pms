@@ -136,8 +136,45 @@ const TVC_Fleet = (function () {
         return getAll();
     }
 
+    /** HQ license allowedVesselIds → Ship List upsert */
+    function syncFromAllowedVesselIds(ids) {
+        const list = (ids || []).map(String).filter(Boolean);
+        if (!list.length) return getAll();
+        for (const id of list) {
+            const prev = getAll().find(v => v.id === id) || DEFAULT_FLEET.find(v => v.id === id);
+            upsert(prev ? { ...prev, id } : {
+                id,
+                name: id.replace(/_/g, ' '),
+                code: '—',
+                imo_no: '—',
+                delivery: '—',
+            });
+        }
+        return getAll();
+    }
+
+    /** Company App Update manifest registry_vessels → Ship List upsert */
+    function syncFromRegistryVessels(rows) {
+        const list = Array.isArray(rows) ? rows : [];
+        for (const r of list) {
+            const id = String(r.vessel_id || r.id || '').trim();
+            if (!id) continue;
+            const prev = getAll().find(v => v.id === id) || DEFAULT_FLEET.find(v => v.id === id);
+            upsert({
+                ...(prev || {}),
+                id,
+                name: String(r.name || prev?.name || id).trim(),
+                code: String(r.code || prev?.code || '—').trim() || '—',
+                imo_no: String(r.imo_no || prev?.imo_no || '—').trim() || '—',
+                delivery: String(r.delivery || prev?.delivery || '—').trim().slice(0, 10) || '—',
+            });
+        }
+        return getAll();
+    }
+
     return {
         ensureFleet, getAll, getSelected, getSelectedId, select, upsert, remove, resolveById,
+        syncFromAllowedVesselIds, syncFromRegistryVessels,
         COMPANY_ID, PILOT_VESSEL_ID, LEGACY_VESSEL_ID, DEFAULT_FLEET,
     };
 })();

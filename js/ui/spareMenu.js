@@ -2761,6 +2761,7 @@ const TVC_SpareMenu = (function () {
         return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-req-qty-input" value="${qty}"
             onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
             onfocus="event.stopPropagation();this.select()"
+            oninput="TVC_SpareMenu.reqWorkSetRequestQty('${sid}', this.value, { syncOnly: true })"
             onchange="TVC_SpareMenu.reqWorkSetRequestQty('${sid}', this.value)">`;
     }
 
@@ -4046,8 +4047,10 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         if (modState(st).reqWorkShowSelectedOnly && !reqWorkCheckedSpareCount(st)) {
             modState(st).reqWorkShowSelectedOnly = false;
+            refreshReqWorkListUi();
+        } else {
+            refreshReqWorkListUiSoft();
         }
-        refreshReqWorkListUi();
     }
 
     function consumeToggleAll(checked) {
@@ -5517,6 +5520,17 @@ const TVC_SpareMenu = (function () {
         return reqVesselReceivedExportComplete(req);
     }
 
+    /** Order import 완료 — Eval·Ordered 반영 후 Received 단계 진입 */
+    function reqVesselOrderImportComplete(req) {
+        if (!req) return false;
+        if (req?.vessel_flow?.orderImported) return true;
+        if (!reqVesselHasEvalData(req)) return false;
+        if (reqVesselListWorkflowStatus(req) === VESSEL_REQ_LIST_STATUS.ORDERED) return true;
+        if (String(req.ordered_on || '').trim()) return true;
+        const RS = TVC_Inventory?.REQ_STATUS || {};
+        return String(req.status || '').toUpperCase() === RS.APPROVED;
+    }
+
     function reqVesselReportTabHint(req) {
         if (!req) return 'Select a requisition first.';
         if (reqVesselFlowStageEnabled(req, 'report')) return '';
@@ -5566,8 +5580,11 @@ const TVC_SpareMenu = (function () {
         if (!req) return 'Select a requisition first.';
         if (reqVesselFlowStageEnabled(req, 'received')) return '';
         if (reqVesselWorkflowComplete(req)) return 'Workflow complete.';
-        if (!reqVesselSubmitExportComplete(req)) {
+        if (!reqVesselOrderImportComplete(req) && !reqVesselSubmitExportComplete(req)) {
             return 'Export requisition first (Requisition tab → Data Export).';
+        }
+        if (!reqVesselOrderImportComplete(req)) {
+            return 'Import order first (Order tab → Data Import).';
         }
         return 'Received tab is not available.';
     }
@@ -5648,7 +5665,10 @@ const TVC_SpareMenu = (function () {
         } else {
             const status = reqVesselListWorkflowStatus(req);
             if (status === VESSEL_REQ_LIST_STATUS.RECEIVED) bump('received');
-            else if (status === VESSEL_REQ_LIST_STATUS.ORDERED || reqVesselHasEvalData(req)) bump('evaluated');
+            else if (status === VESSEL_REQ_LIST_STATUS.ORDERED || reqVesselHasEvalData(req)) {
+                bump('evaluated');
+                if (reqVesselOrderImportComplete(req)) bump('received');
+            }
             else if (status === VESSEL_REQ_LIST_STATUS.SUBMITTED || reqVesselSubmitExportComplete(req)) bump('submitted');
             else if (status === VESSEL_REQ_LIST_STATUS.CONFIRMED) bump('confirm');
             else bump('report');
@@ -5705,12 +5725,14 @@ const TVC_SpareMenu = (function () {
                 ].includes(status);
             case 'submitted':
             case 'evaluation-import':
-            case 'received':
-                return reqVesselSubmitExportComplete(req);
+                return reqVesselSubmitExportComplete(req) || reqVesselOrderImportComplete(req);
             case 'evaluated':
-                return reqVesselSubmitExportComplete(req) && reqVesselHasEvalData(req);
+                return (reqVesselSubmitExportComplete(req) && reqVesselHasEvalData(req))
+                    || reqVesselOrderImportComplete(req);
+            case 'received':
+                return reqVesselSubmitExportComplete(req) || reqVesselOrderImportComplete(req);
             case 'received-export':
-                return reqVesselReceiveRecorded(req);
+                return reqVesselOrderImportComplete(req) || reqVesselReceiveRecorded(req);
             default:
                 return false;
         }
@@ -8318,8 +8340,10 @@ const TVC_SpareMenu = (function () {
         if (!idsToConfirm.length) {
             if (checkedIds.length) {
                 await TVC_Dialog.alert('None of the selected logs can be confirmed. Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
+            } else {
+                await TVC_Dialog.alert('Check one or more Reported logs to confirm.');
             }
-            await TVC_Dialog.alert('Check one or more Reported logs to confirm.');
+            return;
         }
         const loadedId = _consumeDraft?.log_id || m.selectedConsumeLogId;
         let confirmed = 0;
@@ -8362,8 +8386,10 @@ const TVC_SpareMenu = (function () {
         if (!idsToApprove.length) {
             if (checkedIds.length) {
                 await TVC_Dialog.alert('None of the selected logs can be approved. Confirmed logs, or HQ-authored Reported logs, can be approved with HQ Superintendent permission.');
+            } else {
+                await TVC_Dialog.alert('Check one or more approvable Consumption logs to approve.');
             }
-            await TVC_Dialog.alert('Check one or more approvable Consumption logs to approve.');
+            return;
         }
         const loadedId = _consumeDraft?.log_id || m.selectedConsumeLogId;
         let approved = 0;
@@ -11103,7 +11129,7 @@ const TVC_SpareMenu = (function () {
 
     const MASTER_IMPORT_TYPES = [
         { key: 'requisition', label: 'Requisition' },
-        { key: 'evaluation', label: 'Evaluation' },
+        { key: 'evaluation', label: 'Order' },
         { key: 'received', label: 'Received' },
         { key: 'inventory', label: 'Inventory' },
     ];
@@ -11302,7 +11328,7 @@ const TVC_SpareMenu = (function () {
                         onclick="TVC_SpareMenu.spareXferSelectMasterImportType('${t.key}')">${esc(t.label)}${masterType === t.key ? ' ✓' : ''}</button>`).join('');
                 content = `
                 <p class="spare-sync-hint">Select import type, then open the file.</p>
-                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Evaluation <strong>.xlsx / .json</strong> · Inventory <strong>.xls / .xlsx / .csv</strong></p>
+                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Order <strong>.xlsx / .json</strong> · Inventory <strong>.xls / .xlsx / .csv</strong></p>
                 <div class="spare-sync-actions">
                     ${typeBtns}
                     <button type="button" class="btn btn-green spare-sync-btn"
@@ -11528,7 +11554,7 @@ const TVC_SpareMenu = (function () {
         if (!String(_reqWorkDraft.ordered_on || '').trim()) {
             _reqWorkDraft.ordered_on = new Date().toISOString().slice(0, 10);
         }
-        reqVesselBumpMaxFlowStage(_reqWorkDraft, 'evaluated');
+        reqVesselBumpMaxFlowStage(_reqWorkDraft, 'received');
         await persistReqWorkVesselDraft();
         applyReqWorkVesselStageOnLoad(_reqWorkDraft, m);
         await refreshReqWorkListUi();
@@ -12729,6 +12755,8 @@ const TVC_SpareMenu = (function () {
         if (vlReqWork) vlReqWork.refresh();
         if (head) bindHeadLayoutSync(scroll, syncReqWorkHeadLayout, 'reqWork');
         requestAnimationFrame(() => {
+            scroll.scrollTop = scrollTop;
+            if (hscroll) hscroll.scrollLeft = hScrollLeft;
             syncReqWorkHeadLayout();
             requestAnimationFrame(syncReqWorkHeadLayout);
         });
@@ -12796,15 +12824,19 @@ const TVC_SpareMenu = (function () {
         return (lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id) && (Number(l.qty_requested) || 0) <= 0);
     }
 
+    function reqWorkReqQtyValidationActive(m) {
+        const s = m?.reqWorkOpen !== undefined ? m : modState(getState());
+        if (reqWorkFormLocked()) return false;
+        if (isRequisitionListWindow(s)) return !!s.reqWorkListEditing;
+        return isNewRequisitionWindow(s);
+    }
+
     function reqWorkSaveQtyValid(m) {
         const req = getReqWorkSession();
         const lines = (req?.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
         if (!lines.length) return false;
-        const newInList = isRequisitionListWindow(m) && m.reqWorkListEditing && !reqWorkListHasDisplayedReq(m);
-        if (newInList || isNewRequisitionWindow(m)) {
-            return reqWorkLinesMissingRequestQty(lines).length === 0;
-        }
-        return true;
+        if (!reqWorkReqQtyValidationActive(m)) return true;
+        return reqWorkLinesMissingRequestQty(lines).length === 0;
     }
 
     async function reqWorkMissingRequestQtyAlert(lines) {
@@ -12822,7 +12854,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(getState());
         const completeDone = !!m.reqWorkCompleted;
         const listViewLocked = isRequisitionListWindow(m) && !m.reqWorkListEditing;
-        const qtyBlocked = isRequisitionListWindow(m) && m.reqWorkListEditing && !reqWorkSaveQtyValid(m);
+        const qtyBlocked = reqWorkReqQtyValidationActive(m) && !reqWorkSaveQtyValid(m);
         const disabled = completeDone || listViewLocked || qtyBlocked;
         btn.disabled = disabled;
         btn.title = qtyBlocked
@@ -12939,6 +12971,10 @@ const TVC_SpareMenu = (function () {
         if (record.list_status === SPARE_LIST_STATUS.REPORTED) return SPARE_LIST_STATUS.REPORTED;
         // Saved requisition with req no + reported date → Reported (legacy Draft list_status)
         if (record.req_no && reqListReportedDate(record)) return SPARE_LIST_STATUS.REPORTED;
+        // Saved consumption log with stock applied → Reported (legacy Draft list_status)
+        if (record.stock_applied_at && record.made_on && (record.lines?.length || record.line_count)) {
+            return SPARE_LIST_STATUS.REPORTED;
+        }
         if (record.list_status) return record.list_status;
         if (record.log_id || (record.id && record.req_no)) return SPARE_LIST_STATUS.REPORTED;
         return SPARE_LIST_STATUS.DRAFT;
@@ -13922,10 +13958,17 @@ const TVC_SpareMenu = (function () {
         setReqWorkListHeadGroupedMode(false);
         const hasVl = !!(vlReqWork && scroll?.querySelector('.vl-inner'));
         if (opts.soft && hasVl && !scrollGrouped) {
+            const hscroll = scroll.closest('.spare-req-table-hscroll');
             const top = scroll.scrollTop;
+            const left = hscroll?.scrollLeft || 0;
             vlReqWork.refresh();
             scroll.scrollTop = top;
-            requestAnimationFrame(syncReqWorkHeadLayout);
+            if (hscroll) hscroll.scrollLeft = left;
+            requestAnimationFrame(() => {
+                scroll.scrollTop = top;
+                if (hscroll) hscroll.scrollLeft = left;
+                syncReqWorkHeadLayout();
+            });
             return;
         }
         if (head && !head.querySelector('.spare-data-head')) {
@@ -13957,6 +14000,10 @@ const TVC_SpareMenu = (function () {
         updateReqWorkHeadStats();
         updateReqWorkHeadCheckAll();
         syncSpareItemHistoryBtns();
+    }
+
+    function refreshReqWorkListUiSoft() {
+        refreshReqWorkListUi({ soft: true, skipTree: true });
     }
 
     function refreshReqWorkListUi(opts = {}) {
@@ -13998,6 +14045,7 @@ const TVC_SpareMenu = (function () {
             applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
         }
         if (isRequisitionListWindow(m)) syncReqWorkListWindowHeadButtons();
+        syncReqWorkSaveBtn();
     }
 
     async function renderReqWorkModal() {
@@ -14038,7 +14086,9 @@ const TVC_SpareMenu = (function () {
         const docPreview = listMode && !!m.reqWorkListDocPreview;
         const hasDisplayedReq = reqWorkListHasDisplayedReq(m);
         const listViewLocked = listMode && !m.reqWorkListEditing;
-        const saveDisabled = completeDone || listViewLocked || (listMode && m.reqWorkListEditing && !reqWorkSaveQtyValid(m));
+        const saveDisabled = completeDone || listViewLocked
+            || (reqWorkReqQtyValidationActive(m) && !reqWorkSaveQtyValid(m));
+        const saveQtyBlocked = reqWorkReqQtyValidationActive(m) && !reqWorkSaveQtyValid(m);
         const printPreviewDisabled = listMode && !hasDisplayedReq;
         const canRequisition = canCreateRequisition(st);
         const headNewDisabled = !canRequisition || m.reqWorkListEditing || docPreview;
@@ -14060,7 +14110,7 @@ const TVC_SpareMenu = (function () {
         const headCancelBtn = listMode && !docPreview && isReviewer
             ? `<button type="button" id="reqWorkCancelBtn" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkCancelEdit()"${listViewLocked ? ' disabled' : ''}>Cancel</button>`
             : '';
-        const headSaveBtn = `<button type="button" id="reqWorkSaveBtn" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkSave()"${saveDisabled ? ' disabled' : ''}${saveDisabled && listMode && m.reqWorkListEditing && !completeDone && !listViewLocked ? ' title="Enter Request quantity for each selected part before Save."' : ''}>Save</button>`;
+        const headSaveBtn = `<button type="button" id="reqWorkSaveBtn" class="btn btn-sm" onclick="TVC_SpareMenu.reqWorkSave()"${saveDisabled ? ' disabled' : ''}${saveQtyBlocked ? ' title="Enter Request quantity for each selected part before Save."' : ''}>Save</button>`;
         const headCloseBtn = `<button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.closeReqWorkModal()">Close</button>
             <button type="button" class="modal-x" onclick="TVC_SpareMenu.closeReqWorkModal()">×</button>`;
         const reviewerListHeadBtns = listMode && !docPreview && isReviewer
@@ -14277,20 +14327,16 @@ const TVC_SpareMenu = (function () {
         }
         finalizeReqWorkDraftForSave();
         const req = getReqWorkSession();
-        if (!req || !_reqWorkDraft) await TVC_Dialog.alert('Requisition not found.');
-        if (!_reqWorkDraft.req_no?.trim()) await TVC_Dialog.alert('Enter Requisition No.');
+        if (!req || !_reqWorkDraft) { await TVC_Dialog.alert('Requisition not found.'); return; }
+        if (!_reqWorkDraft.req_no?.trim()) { await TVC_Dialog.alert('Enter Requisition No.'); return; }
 
         _reqWorkDraft.lines = (_reqWorkDraft.lines || []).filter(l => reqWorkSpareIdKey(l.spare_part_id));
         if (!_reqWorkDraft.lines.length) {
             await TVC_Dialog.alert('Select part(s).');
+            return;
         }
 
-        const missingQty = reqWorkLinesMissingRequestQty(_reqWorkDraft.lines);
-        if (missingQty.length) {
-            const names = missingQty.slice(0, 5).map(l => l.part_no || l.name || '—').join(', ');
-            const more = missingQty.length > 5 ? ` and ${missingQty.length - 5} more` : '';
-            await TVC_Dialog.alert(`Some selected parts have no Request quantity.\n\n${names}${more}\n\nEnter Request quantity for each selected part, then save.`);
-        }
+        if (await reqWorkMissingRequestQtyAlert(_reqWorkDraft.lines)) return;
 
         // 작성/수정 완료 확인 — 취소 시 현재 화면 유지
         if (!await TVC_Dialog.confirm({ message: 'Complete this requisition?' })) return;
@@ -14384,7 +14430,7 @@ const TVC_SpareMenu = (function () {
 
         const isNewReqSave = isRequisitionListWindow(m) && m.reqWorkListEditing && !reqWorkListHasDisplayedReq(m);
         if (isNewReqSave && !await TVC_Dialog.confirm({ message: 'Save changes?' })) return;
-        if (isNewReqSave && await reqWorkMissingRequestQtyAlert(_reqWorkDraft.lines)) return;
+        if (reqWorkReqQtyValidationActive(m) && await reqWorkMissingRequestQtyAlert(_reqWorkDraft.lines)) return;
 
         const dept = _reqWorkDraft.department || st.department;
         let pendingConfirm = false;
@@ -14820,11 +14866,13 @@ const TVC_SpareMenu = (function () {
         syncReqLineMap();
         if (modState(getState()).reqWorkShowSelectedOnly && !reqWorkCheckedSpareCount(getState())) {
             modState(getState()).reqWorkShowSelectedOnly = false;
+            refreshReqWorkListUi();
+        } else {
+            refreshReqWorkListUiSoft();
         }
-        refreshReqWorkListUi();
     }
 
-    function reqWorkSetRequestQty(spareId, rawQty) {
+    function reqWorkSetRequestQty(spareId, rawQty, opts = {}) {
         if (reqWorkHqEvalStageActive()) return;
         if (reqWorkFormLocked() && !reqWorkHqQuoteViewActive()) return;
         const req = getReqWorkSession();
@@ -14843,10 +14891,16 @@ const TVC_SpareMenu = (function () {
         }
         syncRequisitionDraftFromLines();
         syncReqLineMap();
-        refreshReqWorkListUi();
-        if (reqWorkHqQuoteViewActive()) syncReqWorkQuoteTotalsDom();
         syncReqWorkSaveBtn();
         touchReqWorkHqDraft();
+        if (opts.syncOnly) return;
+        if (modState(getState()).reqWorkShowSelectedOnly && !reqWorkCheckedSpareCount(getState())) {
+            modState(getState()).reqWorkShowSelectedOnly = false;
+            refreshReqWorkListUi();
+        } else {
+            refreshReqWorkListUiSoft();
+        }
+        if (reqWorkHqQuoteViewActive()) syncReqWorkQuoteTotalsDom();
     }
 
     function reqWorkEvalQtyKeydown(e, spareId) {
@@ -14884,7 +14938,7 @@ const TVC_SpareMenu = (function () {
         line.qty_received = qty;
         syncReqLineMap();
         syncReportedWaitMap().then(() => {
-            refreshReqWorkListUi();
+            refreshReqWorkListUiSoft();
             refreshReqListUi();
         });
     }
@@ -18372,7 +18426,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             sort1: draft.sort1 || '',
             sort2: draft.sort2 || '',
             job_detail: draft.job_detail || '',
-            list_status: draft.list_status || nextStatus,
+            list_status: nextStatus,
             confirmed_by: draft.confirmed_by || '',
             confirmed_at: draft.confirmed_at || '',
             approved_by: draft.approved_by || '',
@@ -19799,13 +19853,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     function renderSpareItemNoteAttachmentList(attachments, canRemove) {
         const list = attachments || [];
         if (!list.length) return '';
-        const items = list.map(a => `
-            <li class="wr-attach-item">
-                <a class="wr-attach-link" href="${escAttr(a.dataUrl)}" download="${escAttr(a.name)}" target="_blank" rel="noopener">📎 ${esc(a.name)}</a>
-                <span class="wr-attach-size">${Math.max(1, Math.round(a.size / 1024))}KB</span>
-                ${canRemove ? `<button type="button" class="wr-attach-remove" title="Remove" onclick="TVC_SpareMenu.removeSpareItemNoteAttachment('${escAttr(String(a.id))}')">×</button>` : ''}
-            </li>`).join('');
-        return `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>`;
+        const items = list.map(a => TVC_Attachments.renderListItemHtml(a, {
+            canRemove,
+            removeOnclick: canRemove
+                ? `TVC_SpareMenu.removeSpareItemNoteAttachment('${escAttr(String(a.id))}')`
+                : '',
+        })).join('');
+        return items ? `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>` : '';
     }
 
     function spareItemHistoryBtnHtml() {

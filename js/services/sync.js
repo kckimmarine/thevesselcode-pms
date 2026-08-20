@@ -220,17 +220,29 @@ const TVC_Sync = (function () {
     }
 
     /** dept 지정 시 해당 부서 데이터만 델타에 포함 (영구 분리) */
-    async function collectDelta(dept) {
-        return collectDeptRows(dept, { pendingOnly: true });
+    async function collectDelta(dept, opts = {}) {
+        const rows = await collectDeptRows(dept, {
+            pendingOnly: !opts.hubRelayPending,
+            hubRelayPending: !!opts.hubRelayPending,
+        });
+        if (opts.reportIds?.length) {
+            const idSet = new Set(opts.reportIds);
+            rows.daily_work_reports = (rows.daily_work_reports || []).filter(r => idSet.has(r.id));
+        }
+        return rows;
     }
 
     /** Monthly Report — 부서 전체 스냅샷 (sync_status 무관, Master→HQ 재전송용) */
-    async function collectMonthlySnapshot(dept) {
+    async function collectMonthlySnapshot(dept, opts = {}) {
+        if (opts.hubRelayPending) {
+            return collectDeptRows(dept, { pendingOnly: false, hubRelayPending: true });
+        }
         return collectDeptRows(dept, { pendingOnly: false });
     }
 
     async function collectDeptRows(dept, opts = {}) {
-        const pendingOnly = opts.pendingOnly !== false;
+        const hubRelayPending = opts.hubRelayPending === true;
+        const pendingOnly = opts.pendingOnly !== false && !hubRelayPending;
         const [jobs, reports, spares, components, audits, requisitions, jobBom, catalog, groups, spareGroups, defects] = await Promise.all([
             TVC_DB.getAll('maintenance_jobs'),
             TVC_DB.getAll('daily_work_reports'),
@@ -244,11 +256,32 @@ const TVC_Sync = (function () {
             TVC_DB.getAll('spare_groups').catch(() => []),
             TVC_DB.getAll('defect_cases').catch(() => []),
         ]);
-        const pending = (rows) => pendingOnly ? rows.filter(r => r.sync_status !== 'SYNCED') : rows;
+        const pending = (rows) => {
+            if (hubRelayPending && typeof TVC_HubRelay !== 'undefined') {
+                return TVC_HubRelay.filterHubPending(rows);
+            }
+            return pendingOnly ? rows.filter(r => r.sync_status !== 'SYNCED') : rows;
+        };
         const deptByCode = new Map(jobs.map(j => [j.job_code, j.department]));
+
+        function isCriticalPostponeReport(row) {
+            if (!row || row.work_type !== 'POSTPONE') return false;
+            if (row.requires_company_approval === true) return true;
+            if (row.requires_company_approval === false) return false;
+            const jobId = row.job_items?.[0]?.maintenance_job_id || row.maintenance_job_id;
+            const code = row.job_code || row.job_items?.[0]?.job_code;
+            const job = jobId ? jobs.find(j => j.id === jobId) : (code ? jobs.find(j => j.job_code === code) : null);
+            if (!job) return false;
+            const sort = String(job.sort || '').trim().toUpperCase();
+            if (sort.startsWith('C.') || sort.includes('CRITICAL')) return true;
+            return String(job.item_sort1 || '').toUpperCase().includes('CRITICAL');
+        }
 
         let pJobs = pending(jobs);
         let pReports = pending(reports);
+        if (pendingOnly) {
+            pReports = pReports.filter(r => !isCriticalPostponeReport(r));
+        }
         let pComponents = pending(components);
         let pReqs = pending(requisitions);
         let pGroups = pending(groups);
@@ -290,7 +323,13 @@ const TVC_Sync = (function () {
             : TVC_RBAC.canAccessDepartment(user, dept);
         if (!accessDept) throw new Error(`이 계정은 ${dept} 부서 데이터를보낼 권한이 없습니다.`);
 
-        const delta = opts.monthlyExport ? await collectMonthlySnapshot(dept) : await collectDelta(dept);
+        const hubRelayPending = typeof TVC_HubRelay !== 'undefined'
+            && TVC_HubRelay.isHubRelayExport(user)
+            && direction === 'SHIP_TO_HQ';
+
+        const delta = opts.monthlyExport
+            ? await collectMonthlySnapshot(dept, { hubRelayPending })
+            : await collectDelta(dept, { reportIds: opts.reportIds, hubRelayPending });
         const recordCount = Object.values(delta).reduce((sum, rows) => sum + (rows?.length || 0), 0);
         if (!opts.monthlyExport && recordCount === 0) {
             throw new Error('보낼 변경 데이터가 없습니다. Confirm된 Work Report가 있는지 확인하세요.');
@@ -352,7 +391,7 @@ const TVC_Sync = (function () {
         }
         await TVC_FileExport.save(blob, filename);
 
-        await markExported(delta);
+        await markExported(delta, user);
         await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
@@ -396,11 +435,15 @@ const TVC_Sync = (function () {
         return rows.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, limit);
     }
 
-    async function markExported(delta) {
+    async function markExported(delta, user) {
         const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups', 'spare_groups', 'defect_cases'];
         for (const store of stores) {
             for (const row of delta[store] || []) {
-                row.sync_status = 'SYNCED';
+                if (typeof TVC_HubRelay !== 'undefined') {
+                    TVC_HubRelay.stampExport(user, row);
+                } else {
+                    row.sync_status = 'SYNCED';
+                }
                 row.last_synced_at = now();
                 await TVC_DB.put(store, row);
             }
@@ -828,7 +871,7 @@ const TVC_Sync = (function () {
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
 
-        await markExported(merged);
+        await markExported(merged, user);
         await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),

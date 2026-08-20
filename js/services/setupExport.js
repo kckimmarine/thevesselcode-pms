@@ -21,7 +21,7 @@ const TVC_SetupExport = (function () {
         return '';
     }
 
-    /** Handoff Setup.exe name: TVC-PMS INCHEON CHEMI_Master v1.0.2 Setup.exe */
+    /** Handoff Setup.exe name: TVC-PMS INCHEON CHEMI_Master v1.0.3 Setup.exe */
     function handoffSetupFilename(sku, companyId, vesselId, appVersion) {
         const ver = String(appVersion || '').trim();
         const verTag = ver ? ` v${ver}` : '';

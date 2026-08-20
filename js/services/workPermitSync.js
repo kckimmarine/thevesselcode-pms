@@ -177,9 +177,10 @@ const TVC_WorkPermitSync = (function () {
         return row;
     }
 
-    async function loadPermitBatch(permitIds, { hqReply = false } = {}) {
+    async function loadPermitBatch(permitIds, { hqReply = false, user = null } = {}) {
         const ids = (permitIds || []).filter(Boolean);
         if (!ids.length) throw new Error('No Work Permits selected.');
+        const isHub = !hqReply && user && typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
         const rows = [];
         for (const id of ids) {
             const row = await loadPermitContext(id);
@@ -188,10 +189,20 @@ const TVC_WorkPermitSync = (function () {
                 if (st !== 'Approved') {
                     throw new Error(`${row.permit_no || row.job_code}: only Approved permits can be reply-exported.`);
                 }
-            } else if (st !== 'Confirmed') {
-                throw new Error(`${row.permit_no || row.job_code}: only Confirmed permits can be exported.`);
-            } else if (row.sync_status === 'SYNCED') {
-                throw new Error(`${row.permit_no || row.job_code}: already exported (Submitted).`);
+            } else if (isHub) {
+                if (!TVC_HubRelay.canHubLegExport(row)) {
+                    throw new Error(`${row.permit_no || row.job_code}: ${TVC_HubRelay.hubExportBlockedTitle()}.`);
+                }
+                if (st !== 'Submitted') {
+                    throw new Error(`${row.permit_no || row.job_code}: awaiting station export first.`);
+                }
+            } else {
+                if (st !== 'Confirmed') {
+                    throw new Error(`${row.permit_no || row.job_code}: only Confirmed permits can be exported.`);
+                }
+                if (!TVC_HubRelay.canStationLegExport(row)) {
+                    throw new Error(`${row.permit_no || row.job_code}: already exported (Submitted).`);
+                }
             }
             rows.push(row);
         }
@@ -201,7 +212,11 @@ const TVC_WorkPermitSync = (function () {
     async function saveBatchExport(user, rows, payload, filename, direction) {
         const ts = now();
         for (const row of rows) {
-            row.sync_status = 'SYNCED';
+            if (typeof TVC_HubRelay !== 'undefined') {
+                TVC_HubRelay.stampExport(user, row);
+            } else {
+                row.sync_status = 'SYNCED';
+            }
             row.last_synced_at = ts;
             row.last_export_filename = filename;
             await TVC_DB.put('work_permits', row);
@@ -227,7 +242,7 @@ const TVC_WorkPermitSync = (function () {
     }
 
     async function exportRequestBatchZip(user, permitIds) {
-        const rows = await loadPermitBatch(permitIds, { hqReply: false });
+        const rows = await loadPermitBatch(permitIds, { hqReply: false, user });
         const vesselId = await resolveVesselId(user, rows[0]);
         const payload = buildBatchRequestPayload(user, rows, vesselId);
         const filename = await buildExportFilename(user, vesselId, rows[0]?.department);

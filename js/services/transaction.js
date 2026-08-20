@@ -138,6 +138,32 @@ const TVC_Transaction = (function () {
         }
     }
 
+    function stampPostponeOriginalDue(report) {
+        if (!report || report.work_type !== 'POSTPONE') return;
+        const items = report.job_items || [];
+        for (const item of items) {
+            const fromPrev = item?.prev_job_state?.next_date;
+            if (!fromPrev) continue;
+            const od = String(fromPrev).slice(0, 10);
+            item.form = item.form || {};
+            if (!item.form.originalDueDate) item.form.originalDueDate = od;
+        }
+        if (items.length === 1) {
+            const item = items[0];
+            report.prev_job_state = item.prev_job_state || report.prev_job_state || null;
+            report.original_due_date = report.original_due_date
+                || item.form?.originalDueDate
+                || item.prev_job_state?.next_date
+                || null;
+            if (report.original_due_date) {
+                report.report_form = report.report_form || {};
+                if (!report.report_form.originalDueDate) {
+                    report.report_form.originalDueDate = report.original_due_date;
+                }
+            }
+        }
+    }
+
     function normalizeGroupLabel(label) {
         return String(label || '').trim().toUpperCase();
     }
@@ -261,6 +287,7 @@ const TVC_Transaction = (function () {
                 report.requires_company_approval = await jobRequiresCompanyPostponeApproval(api, job);
             }
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
+            stampPostponeOriginalDue(report);
             await api.put('daily_work_reports', report);
             const postponeNote = report.work_type === 'POSTPONE'
                 ? `NEXT ${job.next_date || '—'}${report.requires_company_approval ? ' · awaiting Company approval' : ''}`
@@ -322,6 +349,7 @@ const TVC_Transaction = (function () {
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
             await stampHqLocalReport(report, user);
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
+            stampPostponeOriginalDue(report);
             await api.put('daily_work_reports', report);
             const scheduleNote = report.work_type === 'POSTPONE'
                 ? `NEXT DATE → ${postponeDate || '—'}`
@@ -381,6 +409,7 @@ const TVC_Transaction = (function () {
             report.status = TVC_WorkReport.aggregateStatus(report.job_items);
             await stampHqLocalReport(report, user);
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
+            stampPostponeOriginalDue(report);
             markPending(report);
             await api.put('daily_work_reports', report);
             const modScheduleNote = report.work_type === 'POSTPONE'

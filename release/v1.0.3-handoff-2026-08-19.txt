@@ -1,0 +1,46 @@
+[TVC-PMS v1.0.3 App Update — 후배 전달용]
+
+■ 파일: TVC-PMS App Update v1.0.3.zip
+■ 경로: C:\Users\zzang\Desktop\thevesselcode-pms\dist\TVC-PMS App Update v1.0.3.zip
+■ 용량: 약 329.0 MB
+■ Drive/OneDrive link recommended
+
+■ 포함 SKU: HQ_OFFICE, VESSEL_ENGINE, VESSEL_DECK, VESSEL_MASTER
+
+■ 변경 사항
+- 창/바로가기/Setup 파일명: TVC-PMS {VESSEL_ID}_{Master|Engine|Deck} v1.0.3 / TVC-PMS {COMPANY_ID} v1.0.3
+- App Update ZIP: TVC-PMS App Update v1.0.3.zip (Data Import → App Update)
+- Attachment preview modal — A4 (210×297mm) print size
+- Monthly Report export — selectable rows: Confirmed and not yet Submitted only
+- Hub Relay — Station leg (sync_status) vs Hub leg (hub_sync_status); Master Submitted items remain Hub-exportable until hub_sync_status = SYNCED
+- Defect Report — Approved items editable on ship (Modify / clear defect)
+- Spare Requisition — list scroll preserved on check / Req qty input
+- Spare Requisition — Save blocked when checked line has Req qty 0 or empty
+- Consumption Report — Save promotes Draft → Reported; Confirm works from list
+- Master Data Import — Evaluation button renamed to Order (align with CE)
+- Vessel Order import — Ordered / Received / (Data Export) Received tabs enabled after import
+
+■ 설치
+1. Run the target SKU TVC app
+2. Menu → Data Export & Import → Import → App Update
+3. Select TVC-PMS App Update v1.0.3.zip → Install update
+4. Restart after install → confirm footer v1.0.3
+5. Verify existing Work History / Master data preserved
+
+■ 주의
+- App Update replaces program only — IndexedDB / Master / History preserved
+- Seat license re-issue not required
+- New vessels: Path B Setup handoff · existing pool: Path A App Update ZIP
+- Spare Requisition quote/eval UI (unit price, currency, delivery) deferred to v1.0.4
+
+■ 설치 후 테스트
+[ ] 로그인 footer · 창 제목 v1.0.3
+[ ] Attachment preview — A4 modal size
+[ ] Monthly export list — only Confirmed + not Submitted selectable
+[ ] Master imports CE Defect ZIP → Submitted, still Hub-exportable until hub export
+[ ] Spare Req — check / Req qty does not scroll list to top
+[ ] Spare Req — checked line with empty Req cannot Save
+[ ] Consumption — Save → Reported → Confirm → Confirmed
+[ ] Master Import type button shows Order (not Evaluation)
+[ ] Vessel Order import → Ordered / Received / Received Export tabs active
+[ ] App Update: TVC-PMS App Update v1.0.3.zip → Import → Install update · data preserved
