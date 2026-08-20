@@ -17,6 +17,12 @@ const DECK_LEGACY_CATALOG = [
     { legacy: 26, no: '01', name: 'CARGO TANK MONITORING SYSTEM' },
     { legacy: 28, no: '02', name: 'LSA/FFE' },
 ];
+const LEGACY_DECK_NOS = new Set([26, 28, 29, 30, 31, 32, 33, 34, 35, 36]);
+function usesLegacyDeckGroupNumber(label) {
+    const m = norm(label).match(/^(\d{1,2})\./);
+    const leg = m ? parseInt(m[1], 10) : null;
+    return leg != null && LEGACY_DECK_NOS.has(leg);
+}
 const DECK_LEGACY_MAP = new Map(DECK_LEGACY_CATALOG.map(c => [c.legacy, c]));
 const FORCE_ENGINE_GROUP_NOS = new Set([24, 25]);
 const JOB_DEPT_OVERRIDES = {
@@ -70,6 +76,8 @@ function forceDeptForJob(job) {
     if (fromSplit26) return fromSplit26;
     const code = String(job?.job_code || '').trim().toUpperCase();
     if (JOB_DEPT_OVERRIDES[code]) return JOB_DEPT_OVERRIDES[code];
+    const dept = String(job?.department || '').toUpperCase();
+    if (dept === 'ENGINE') return null;
     return forceDeptForGroupLabel(job?.group);
 }
 function normalizeGroupDepartments(jobs) {
@@ -150,6 +158,46 @@ function loadPmsMasterExcel() {
     return globalThis.__TVC_PmsMasterExcel;
 }
 
+function loadTvcPms(scope = 'SHIP', vesselId = 'INCHEON CHEMI') {
+    const storage = {};
+    global.localStorage = {
+        getItem(k) { return storage[k] ?? null; },
+        setItem(k, v) { storage[k] = String(v); },
+        removeItem(k) { delete storage[k]; },
+        key(i) { return Object.keys(storage)[i] ?? null; },
+        get length() { return Object.keys(storage).length; },
+    };
+    global.TVC_Indexes = {
+        groupKey(job) {
+            const g = String(job?.group ?? '').replace(/\s+/g, ' ').trim();
+            return `${job.department || ''}|${g}`;
+        },
+        build(state) {
+            const jobsByGroupKey = new Map();
+            (state.jobs || []).forEach(j => {
+                const gk = this.groupKey(j);
+                if (!jobsByGroupKey.has(gk)) jobsByGroupKey.set(gk, []);
+                jobsByGroupKey.get(gk).push(j.id);
+            });
+            return { jobsByGroupKey, groupKey: this.groupKey };
+        },
+    };
+    const code = fs.readFileSync(path.join(ROOT, 'js', 'pms.js'), 'utf8')
+        + '\nglobalThis.__TVC_PMS = TVC_PMS;';
+    eval(code);
+    global.TVC_PMS = globalThis.__TVC_PMS;
+    globalThis.__TVC_PMS.setSpace(scope, vesselId);
+    return globalThis.__TVC_PMS;
+}
+
+function seedRunHourExpected(department, group, expectedNextMonth, scope = 'SHIP') {
+    const key = `${department || ''}|${String(group || '').trim()}`;
+    const storeKey = scope === 'SHIP' ? 'tvc_run_hrs_SHIP' : `tvc_run_hrs_HQ_${scope.replace(/^HQ_/, '')}`;
+    const store = {};
+    store[key] = { totalRunHours: 0, prevMonth: 0, expectedNextMonth, updated: null };
+    global.localStorage.setItem(storeKey, JSON.stringify(store));
+}
+
 const CE_USER = { username: 'ce', display_name: 'Chief engineer', role: 'SHIP_CHIEF', department: 'ENGINE' };
 const HQ_USER = { username: 'hq', display_name: 'Superintendent', role: 'HQ_SUPERVISOR', account_type: 'HQ' };
 const CAPTAIN_USER = { username: 'captain', display_name: 'Captain', role: 'SHIP_CAPTAIN', department: 'DECK', station: 'CAPTAIN' };
@@ -214,6 +262,15 @@ async function importWorkbookToDb(Pms, db, wb, user, department) {
     return { result, after };
 }
 
+/** Jobs sheet columns (no JOB_ID) */
+const J_COL = {
+    DEPT: 1, GNO: 2, GNAME: 3, CODE: 4, S1: 5, S2: 6, DETAIL: 7, PERIOD: 8, UNIT: 9, PIC: 10, LAST: 11,
+};
+
+function jobCell(row, col) {
+    return String(row.getCell(col).value || '').trim();
+}
+
 function setJobCell(ws, rowNo, patch) {
     const HDR = 5;
     const h = {};
@@ -232,6 +289,8 @@ function setJobCell(ws, rowNo, patch) {
     if (patch.jobCode != null) set('JOB CODE', patch.jobCode);
     if (patch.jobId != null) set('JOB_ID', patch.jobId);
     if (patch.detail != null) set('JOB DETAIL', patch.detail);
+    if (patch.lastDone != null) set('LAST DONE', patch.lastDone);
+    if (patch.period != null) set('PERIOD', patch.period);
 }
 
 function addGroupHeader(ws, rowNo, row) {
@@ -239,7 +298,7 @@ function addGroupHeader(ws, rowNo, row) {
     ws.getRow(rowNo).getCell(1).value = row.department;
     ws.getRow(rowNo).getCell(2).value = row.groupNo;
     ws.getRow(rowNo).getCell(3).value = row.groupName;
-    ws.getRow(rowNo).getCell(9).value = row.jobs ?? 0;
+    ws.getRow(rowNo).getCell(8).value = row.jobs ?? 0;
 }
 
 async function main() {
@@ -314,7 +373,6 @@ async function main() {
         const wsJ = wb.getWorksheet('Jobs');
         const rowNo = 6;
         setJobCell(wsJ, rowNo, {
-            jobId: 'hq-exported-uuid-999',
             department: 'ENGINE',
             groupNo: '26',
             groupName: 'F.O TANK MONITORING SYSTEM',
@@ -342,15 +400,15 @@ async function main() {
             const keepRows = [];
             wsJ.eachRow((row, n) => {
                 if (n < 6) return;
-                const dept = String(row.getCell(2).value || '').toUpperCase();
+                const dept = jobCell(row, J_COL.DEPT).toUpperCase();
                 if (dept !== 'DECK') { keepRows.push(n); return; }
-                const gname = String(row.getCell(4).value || '').toUpperCase();
+                const gname = jobCell(row, J_COL.GNAME).toUpperCase();
                 if (gname.includes('LSA/FFE')) keepRows.push(n);
             });
             const deckRows = [];
             wsJ.eachRow((row, n) => { if (n >= 6) deckRows.push({ row, n }); });
             for (const { row, n } of deckRows) {
-                const dept = String(row.getCell(2).value || '').toUpperCase();
+                const dept = jobCell(row, J_COL.DEPT).toUpperCase();
                 if (dept !== 'DECK') continue;
                 if (!keepRows.includes(n)) wsJ.spliceRows(n, 1);
             }
@@ -363,7 +421,7 @@ async function main() {
             let idx = 0;
             wsJ.eachRow((row, n) => {
                 if (n < 6) return;
-                if (String(row.getCell(2).value || '').toUpperCase() !== 'DECK') return;
+                if (jobCell(row, J_COL.DEPT).toUpperCase() !== 'DECK') return;
                 idx++;
                 setJobCell(wsJ, n, { groupNo: '01', groupName: 'LSA/FFE', jobCode: `01-${String(idx).padStart(3, '0')}` });
             });
@@ -391,13 +449,13 @@ async function main() {
 
             wsJ.eachRow((row, n) => {
                 if (n < 6) return;
-                if (String(row.getCell(2).value || '').toUpperCase() !== 'ENGINE') return;
-                const gname = String(row.getCell(4).value || '').toUpperCase();
+                if (jobCell(row, J_COL.DEPT).toUpperCase() !== 'ENGINE') return;
+                const gname = jobCell(row, J_COL.GNAME).toUpperCase();
                 if (gname.includes(renameFrom)) {
                     setJobCell(wsJ, n, {
                         groupNo: renameToNo,
                         groupName: renameToName,
-                        jobCode: String(row.getCell(6).value || '').replace(/^24-/, `${renameToNo}-`),
+                        jobCode: jobCell(row, J_COL.CODE).replace(/^24-/, `${renameToNo}-`),
                     });
                 }
             });
@@ -405,8 +463,8 @@ async function main() {
             const rowsToDrop = [];
             wsJ.eachRow((row, n) => {
                 if (n < 6) return;
-                if (String(row.getCell(2).value || '').toUpperCase() !== 'ENGINE') return;
-                const code = String(row.getCell(6).value || '');
+                if (jobCell(row, J_COL.DEPT).toUpperCase() !== 'ENGINE') return;
+                const code = jobCell(row, J_COL.CODE);
                 if (code === '88-002' || code === '88-003') rowsToDrop.push(n);
             });
             rowsToDrop.sort((a, b) => b - a).forEach(n => wsJ.spliceRows(n, 1));
@@ -418,6 +476,15 @@ async function main() {
                 if (name.includes(renameFrom)) {
                     row.getCell(2).value = renameToNo;
                     row.getCell(3).value = renameToName;
+                }
+                if (String(row.getCell(2).value) === renameToNo) {
+                    let nJobs = 0;
+                    wsJ.eachRow((jr, jn) => {
+                        if (jn < 6) return;
+                        if (jobCell(jr, J_COL.DEPT).toUpperCase() !== 'ENGINE') return;
+                        if (jobCell(jr, J_COL.GNO) === renameToNo) nJobs++;
+                    });
+                    row.getCell(8).value = nJobs;
                 }
             });
 
@@ -503,6 +570,437 @@ async function main() {
         assert('DECK import rejects ENGINE file', /ENGINE data|ENGINE-only|contains ENGINE/i.test(errMsg), errMsg);
     });
 
+    await runScenario('9) Vessel field-test — 27-002 + group 28 NEW(ENGINE)', async () => {
+        const db = createMockDb(seed);
+        const { result, after } = await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+            const wsJ = wb.getWorksheet('Jobs');
+            const wsG = wb.getWorksheet('Group Headers');
+            let lastJ = 5, lastG = 5;
+            wsJ.eachRow((r, n) => { if (n >= 6) lastJ = n; });
+            wsG.eachRow((r, n) => { if (n >= 6) lastG = n; });
+            setJobCell(wsJ, lastJ + 1, {
+                department: 'ENGINE', groupNo: '27', groupName: 'LUB. OIL ANALYSIS',
+                jobCode: '27-002', detail: 'LUB. OIL ANALYSIS NEW1111',
+            });
+            wsG.eachRow((row, n) => {
+                if (n < 6) return;
+                if (String(row.getCell(2).value) === '27') row.getCell(8).value = 2;
+            });
+            addGroupHeader(wsG, lastG + 1, {
+                department: 'ENGINE', groupNo: '28', groupName: 'NEW(ENGINE)', jobs: 1,
+            });
+            setJobCell(wsJ, lastJ + 2, {
+                department: 'ENGINE', groupNo: '28', groupName: 'NEW(ENGINE)',
+                jobCode: '28-001', detail: '111 222 333',
+            });
+        }, 'ENGINE');
+        const j27002 = after.find(j => j.job_code === '27-002' && j.department === 'ENGINE');
+        const j28001 = after.find(j => j.job_code === '28-001' && j.department === 'ENGINE');
+        assert('27-002 created', !!j27002 && j27002.job_detail === 'LUB. OIL ANALYSIS NEW1111');
+        assert('28-001 present', !!j28001);
+        assert('import reports creates', result.created >= 2, `created=${result.created}`);
+    });
+
+    await runScenario('10) Reject group-only row — Jobs (ref)>0 but Jobs sheet missing', async () => {
+        const db = createMockDb(seed);
+        let errMsg = '';
+        try {
+            await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+                const wsG = wb.getWorksheet('Group Headers');
+                let lastG = 5;
+                wsG.eachRow((r, n) => { if (n >= 6) lastG = n; });
+                addGroupHeader(wsG, lastG + 1, {
+                    department: 'ENGINE', groupNo: '98', groupName: 'GROUP ONLY TEST', jobs: 1,
+                });
+            }, 'ENGINE');
+        } catch (e) {
+            errMsg = e.message || '';
+        }
+        assert('group-only import rejected', /Jobs \(ref\)=1|검증 실패/i.test(errMsg), errMsg.slice(0, 120));
+    });
+
+    await runScenario('11) LAST DONE in Excel → NEXT DATE from PERIOD on import', async () => {
+        const db = createMockDb(seed);
+        const target = db.cloneJobs().find(j => j.department === 'ENGINE' && j.job_code === '27-001');
+        assert('seed has 27-001', !!target);
+        const { after } = await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+            const wsJ = wb.getWorksheet('Jobs');
+            wsJ.eachRow((row, n) => {
+                if (n < 6) return;
+                if (jobCell(row, J_COL.CODE) !== '27-001') return;
+                setJobCell(wsJ, n, { lastDone: '2026-01-15' });
+                setJobCell(wsJ, n, { period: '6' });
+            });
+        }, 'ENGINE');
+        const hit = after.find(j => j.job_code === '27-001' && j.department === 'ENGINE');
+        assert('last_done applied', hit?.last_done === '2026-01-15', `last_done=${hit?.last_done}`);
+        assert('next_date computed from 6M', hit?.next_date === '2026-07-15', `next_date=${hit?.next_date}`);
+    });
+
+    await runScenario('12) H job LAST DONE uses Run-hour modal expectedNextMonth on import', async () => {
+        const db = createMockDb(seed);
+        const target = db.cloneJobs().find(j => j.department === 'ENGINE' && j.job_code === '01-004');
+        assert('seed has 01-004 H job', !!target && target.unit === 'H');
+        loadTvcPms('SHIP');
+        seedRunHourExpected('ENGINE', target.group, 400);
+        const PmsWithRunHr = loadPmsMasterExcel();
+        const { after } = await exportImportCycle(PmsWithRunHr, db, CE_USER, async (wb) => {
+            const wsJ = wb.getWorksheet('Jobs');
+            wsJ.eachRow((row, n) => {
+                if (n < 6) return;
+                if (jobCell(row, J_COL.CODE) !== '01-004') return;
+                setJobCell(wsJ, n, { lastDone: '2026-01-15' });
+            });
+        }, 'ENGINE');
+        const hit = after.find(j => j.job_code === '01-004' && j.department === 'ENGINE');
+        const expectedNext = globalThis.__TVC_PMS.addMonths('2026-01-15', 8000 / 400);
+        assert('last_done applied', hit?.last_done === '2026-01-15', `last_done=${hit?.last_done}`);
+        assert('next_date from expected 400h/mo', hit?.next_date === expectedNext, `next_date=${hit?.next_date} expected=${expectedNext}`);
+        assert('run_hours_expected set', hit?.run_hours_expected === 400, `run_hours_expected=${hit?.run_hours_expected}`);
+        assert('schedule_basis RUN_HOUR', hit?.schedule_basis === 'RUN_HOUR', `schedule_basis=${hit?.schedule_basis}`);
+    });
+
+    await runScenario('13) Replace group 29 MOORING → SCRUBBER removes old group/jobs', async () => {
+        const db = createMockDb(seed);
+        const moorLabel = '29. MOORING WINCH & WINDLASS and RELATED AUX. MACHINERY / SYSTEM';
+        const scrubLabel = '29. SCRUBBER';
+        for (let i = 1; i <= 3; i++) {
+            await db.put('maintenance_jobs', {
+                id: `eng-29-00${i}`,
+                department: 'ENGINE',
+                vessel_id: 'INCHEON CHEMI',
+                group: moorLabel,
+                job_code: `29-00${i}`,
+                job_detail: i === 1 ? 'INSPECTION' : `DETAIL-${i}`,
+                period: 12,
+                unit: 'M',
+            });
+        }
+        await db.put('maintenance_groups', {
+            id: 'grp-29-moor',
+            department: 'ENGINE',
+            vessel_id: 'INCHEON CHEMI',
+            label: moorLabel,
+            item_sort1: null,
+        });
+        const { after } = await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+            const wsG = wb.getWorksheet('Group Headers');
+            const wsJ = wb.getWorksheet('Jobs');
+            wsG.eachRow((row, n) => {
+                if (n < 6) return;
+                if (String(row.getCell(2).value) !== '29') return;
+                row.getCell(3).value = 'SCRUBBER';
+                row.getCell(8).value = 2;
+            });
+            const keep = new Set(['29-001', '29-002']);
+            const rows = [];
+            wsJ.eachRow((row, n) => { if (n >= 6) rows.push(n); });
+            for (const n of rows) {
+                const row = wsJ.getRow(n);
+                const code = jobCell(row, J_COL.CODE);
+                if (!code.startsWith('29-')) continue;
+                if (!keep.has(code)) {
+                    wsJ.spliceRows(n, 1);
+                    continue;
+                }
+                row.getCell(J_COL.GNAME).value = 'SCRUBBER';
+                row.getCell(J_COL.DETAIL).value = 'Safety inspection';
+            }
+        }, 'ENGINE');
+        const moorJobs = after.filter(j => j.department === 'ENGINE' && norm(j.group).includes('MOORING'));
+        const scrubJobs = after.filter(j => j.department === 'ENGINE' && norm(j.group) === scrubLabel);
+        const groups = await db.getAll('maintenance_groups');
+        const moorDef = groups.find(g => norm(g.label).includes('MOORING') && g.department === 'ENGINE');
+        const scrubDef = groups.find(g => norm(g.label) === scrubLabel);
+        assert('MOORING jobs removed', moorJobs.length === 0, `moor=${moorJobs.length}`);
+        assert('SCRUBBER has 29-001', scrubJobs.some(j => j.job_code === '29-001'));
+        assert('SCRUBBER has 29-002', scrubJobs.some(j => j.job_code === '29-002'));
+        assert('29-003 ENGINE removed', !after.some(j => j.department === 'ENGINE' && j.job_code === '29-003'));
+        assert('MOORING group def pruned', !moorDef);
+        assert('SCRUBBER group def exists', !!scrubDef);
+    });
+
+    await runScenario('14) DECK legacy group 29 defs purged — jobs renumbered to 03', async () => {
+        const db = createMockDb(seed);
+        await db.put('maintenance_groups', {
+            id: 'deck-29-legacy',
+            department: 'DECK',
+            vessel_id: 'INCHEON CHEMI',
+            label: '29. MOORING WINCH & WINDLASS and RELATED AUX. MACHINERY / SYSTEM',
+        });
+        const jobs = await db.getAll('maintenance_jobs');
+        const groups = await db.getAll('maintenance_groups');
+        const moorBefore = jobs.filter(j => j.department === 'DECK' && usesLegacyDeckGroupNumber(j.group));
+        assert('seed has legacy DECK 29 jobs', moorBefore.length > 0, `count=${moorBefore.length}`);
+        const result = await Pms.applyDeckCatalogNormalization(jobs, groups);
+        const afterJobs = await db.getAll('maintenance_jobs');
+        const afterGroups = await db.getAll('maintenance_groups');
+        const leg29Jobs = afterJobs.filter(j => j.department === 'DECK' && usesLegacyDeckGroupNumber(j.group));
+        const leg29Def = afterGroups.find(g => g.department === 'DECK' && usesLegacyDeckGroupNumber(g.label));
+        const cat03Jobs = afterJobs.filter(j => j.department === 'DECK' && norm(j.group).startsWith('03.'));
+        assert('legacy 29 DECK jobs migrated', leg29Jobs.length === 0, `remaining=${leg29Jobs.length}`);
+        assert('catalog 03 DECK jobs exist', cat03Jobs.length > 0, `count=${cat03Jobs.length}`);
+        assert('legacy 29 group def purged', !leg29Def);
+        assert('normalization updated jobs', result.updated > 0, `updated=${result.updated}`);
+    });
+
+    await runScenario('15) SCRUBBER 29-001 re-links detached __tvc_ job with Work Report history', async () => {
+        const db = createMockDb(seed);
+        const moorLabel = '29. MOORING WINCH & WINDLASS and RELATED AUX. MACHINERY / SYSTEM';
+        const scrubLabel = '29. SCRUBBER';
+        const jobId = '62649d7e-f15c-8123-abcd-000000000001';
+        await db.put('maintenance_jobs', {
+            id: jobId,
+            department: 'ENGINE',
+            vessel_id: 'INCHEON CHEMI',
+            group: moorLabel,
+            job_code: '__tvc_62649d7ef15c8',
+            detached_from_code: '29-001',
+            job_detail: 'INSPECTION',
+            period: 12,
+            unit: 'M',
+        });
+        await db.put('daily_work_reports', {
+            id: 'rep-29-001',
+            job_items: [{ maintenance_job_id: jobId, job_code: '__tvc_62649d7ef15c8', status: 'CONFIRMED' }],
+        });
+        const { after } = await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+            const wsG = wb.getWorksheet('Group Headers');
+            const wsJ = wb.getWorksheet('Jobs');
+            let lastJ = 5;
+            wsJ.eachRow((r, n) => { if (n >= 6) lastJ = n; });
+            let has29Header = false;
+            wsG.eachRow((row, n) => {
+                if (n < 6) return;
+                if (String(row.getCell(2).value) !== '29') return;
+                has29Header = true;
+                row.getCell(3).value = 'SCRUBBER';
+                row.getCell(8).value = 1;
+            });
+            if (!has29Header) addGroupHeader(wsG, lastJ + 1, { department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER', jobs: 1 });
+            setJobCell(wsJ, lastJ + 1, {
+                department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER',
+                jobCode: '29-001', detail: 'Safety inspection', period: 1, lastDone: '2022-07-18',
+            });
+        }, 'ENGINE');
+        const hit = after.find(j => j.id === jobId);
+        assert('detached job restored to 29-001', hit?.job_code === '29-001', `code=${hit?.job_code}`);
+        assert('group moved to SCRUBBER', norm(hit?.group) === scrubLabel, `group=${hit?.group}`);
+        assert('detached_from_code cleared', !hit?.detached_from_code);
+        assert('no duplicate ENGINE 29-001', after.filter(j => j.department === 'ENGINE' && j.job_code === '29-001').length === 1);
+    });
+
+    await runScenario('16) MOORING 29-001 with Work Report updates in place to SCRUBBER (not detached)', async () => {
+        const db = createMockDb(seed);
+        const moorLabel = '29. MOORING WINCH & WINDLASS and RELATED AUX. MACHINERY / SYSTEM';
+        const scrubLabel = '29. SCRUBBER';
+        const jobId = 'eng-29-001-wr';
+        await db.put('maintenance_jobs', {
+            id: jobId,
+            department: 'ENGINE',
+            vessel_id: 'INCHEON CHEMI',
+            group: moorLabel,
+            job_code: '29-001',
+            job_detail: 'INSPECTION',
+            period: 12,
+            unit: 'M',
+        });
+        await db.put('daily_work_reports', {
+            id: 'rep-moor-29',
+            job_items: [{ maintenance_job_id: jobId, job_code: '29-001', status: 'CONFIRMED' }],
+        });
+        const { after } = await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+            const wsG = wb.getWorksheet('Group Headers');
+            const wsJ = wb.getWorksheet('Jobs');
+            let lastJ = 5;
+            wsJ.eachRow((r, n) => { if (n >= 6) lastJ = n; });
+            let has29Header = false;
+            wsG.eachRow((row, n) => {
+                if (n < 6) return;
+                if (String(row.getCell(2).value) !== '29') return;
+                has29Header = true;
+                row.getCell(3).value = 'SCRUBBER';
+                row.getCell(8).value = 1;
+            });
+            if (!has29Header) addGroupHeader(wsG, lastJ + 1, { department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER', jobs: 1 });
+            setJobCell(wsJ, lastJ + 1, {
+                department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER',
+                jobCode: '29-001', detail: 'Safety inspection', period: 1,
+            });
+        }, 'ENGINE');
+        const hit = after.find(j => j.id === jobId);
+        assert('keeps 29-001 code', hit?.job_code === '29-001', `code=${hit?.job_code}`);
+        assert('not detached', !String(hit?.job_code || '').startsWith('__tvc_'));
+        assert('group is SCRUBBER', norm(hit?.group) === scrubLabel, `group=${hit?.group}`);
+    });
+
+    await runScenario('17) SCRUBBER 29-001/29-002 same JOB DETAIL import as two jobs', async () => {
+        const db = createMockDb(seed);
+        const scrubLabel = '29. SCRUBBER';
+        const sharedJobId = '62649d7e-f95a-4436-8878-45557adce151';
+        await db.put('maintenance_jobs', {
+            id: sharedJobId,
+            department: 'ENGINE',
+            vessel_id: 'INCHEON CHEMI',
+            group: scrubLabel,
+            job_code: '__tvc_62649d7ef95a',
+            detached_from_code: '29-001',
+            job_detail: 'Safety inspection',
+            item_sort1: 'SCRUBBER',
+            item_sort2: 'WATER SYSTEM',
+            period: 1,
+            unit: 'M',
+        });
+        const { after } = await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+            const wsG = wb.getWorksheet('Group Headers');
+            const wsJ = wb.getWorksheet('Jobs');
+            let lastJ = 5, lastG = 5;
+            wsJ.eachRow((r, n) => { if (n >= 6) lastJ = n; });
+            wsG.eachRow((r, n) => { if (n >= 6) lastG = n; });
+            addGroupHeader(wsG, lastG + 1, { department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER', jobs: 2 });
+            setJobCell(wsJ, lastJ + 1, {
+                department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER',
+                jobCode: '29-001', detail: 'Safety inspection',
+                period: 1,
+            });
+            setJobCell(wsJ, lastJ + 2, {
+                department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER',
+                jobCode: '29-002', detail: 'Safety inspection',
+                period: 1,
+            });
+        }, 'ENGINE');
+        const j1 = after.find(j => j.department === 'ENGINE' && j.job_code === '29-001');
+        const j2 = after.find(j => j.department === 'ENGINE' && j.job_code === '29-002');
+        assert('29-001 exists', !!j1);
+        assert('29-002 exists', !!j2);
+        assert('29-001 not detached', !String(j1?.job_code || '').startsWith('__tvc_'));
+        assert('distinct job ids', j1?.id !== j2?.id);
+    });
+
+    await runScenario('19) MOORING stub + detached __tvc_ — import prefers detached (Work Report)', async () => {
+        const db = createMockDb(seed);
+        const moorLabel = '29. MOORING WINCH & WINDLASS and RELATED AUX. MACHINERY / SYSTEM';
+        const scrubLabel = '29. SCRUBBER';
+        const detachedId = '62649d7e-f15c-8123-abcd-000000000001';
+        await db.put('maintenance_jobs', {
+            id: 'moor-stub-29-001',
+            department: 'ENGINE',
+            vessel_id: 'INCHEON CHEMI',
+            group: moorLabel,
+            job_code: '29-001',
+            job_detail: 'Old mooring',
+            period: 1,
+            unit: 'M',
+        });
+        await db.put('maintenance_jobs', {
+            id: detachedId,
+            department: 'ENGINE',
+            vessel_id: 'INCHEON CHEMI',
+            group: moorLabel,
+            job_code: '__tvc_62649d7ef15c8',
+            detached_from_code: '29-001',
+            job_detail: 'Inspection',
+            item_sort1: 'SCRUBBER',
+            item_sort2: 'Exhaust System',
+            period: 1,
+            unit: 'M',
+        });
+        await db.put('daily_work_reports', {
+            id: 'rep-moor-detached',
+            job_items: [{ maintenance_job_id: detachedId, job_code: '__tvc_62649d7ef15c8', status: 'CONFIRMED' }],
+        });
+        const { after } = await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+            const wsG = wb.getWorksheet('Group Headers');
+            const wsJ = wb.getWorksheet('Jobs');
+            let lastJ = 5, lastG = 5;
+            wsJ.eachRow((r, n) => { if (n >= 6) lastJ = n; });
+            wsG.eachRow((r, n) => { if (n >= 6) lastG = n; });
+            addGroupHeader(wsG, lastG + 1, { department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER', jobs: 2 });
+            setJobCell(wsJ, lastJ + 1, {
+                department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER',
+                jobCode: '29-001', detail: 'Inspection',
+            });
+            setJobCell(wsJ, lastJ + 2, {
+                department: 'ENGINE', groupNo: '29', groupName: 'SCRUBBER',
+                jobCode: '29-002', detail: 'Inspection',
+            });
+        }, 'ENGINE');
+        const eng29 = after.filter(j => j.department === 'ENGINE' && /^29-/.test(j.job_code || ''));
+        assert('single ENGINE 29-001', eng29.filter(j => j.job_code === '29-001').length === 1);
+        const j1 = eng29.find(j => j.job_code === '29-001');
+        assert('29-001 id kept (Work Report)', j1?.id === detachedId, `id=${j1?.id}`);
+        assert('29-001 on SCRUBBER', norm(j1?.group) === scrubLabel, `group=${j1?.group}`);
+        assert('29-002 exists', eng29.some(j => j.job_code === '29-002'));
+        const idx = TVC_Indexes.build({
+            jobs: after.filter(j => j.department === 'ENGINE'),
+            components: [],
+            groups: await db.getAll('maintenance_groups'),
+            reports: [],
+            spares: [],
+            spareGroups: [],
+        });
+        const gk = `${'ENGINE'}|${scrubLabel}`;
+        const scrubIds = idx.jobsByGroupKey.get(gk) || [];
+        assert('SCRUBBER group index has jobs', scrubIds.length >= 2, `count=${scrubIds.length}`);
+    });
+
+    await runScenario('20) Group 29 SCRUBBER → ECR LAPTOP (008 handoff) + UI group 30 kept', async () => {
+        const db = createMockDb(seed);
+        await db.put('maintenance_groups', {
+            id: 'grp-scrub', department: 'ENGINE', vessel_id: 'INCHEON CHEMI', label: '29. SCRUBBER',
+        });
+        await db.put('maintenance_groups', {
+            id: 'grp-rpm-ui', department: 'ENGINE', vessel_id: 'INCHEON CHEMI', label: '30. RPM INDICATOR',
+        });
+        await db.put('maintenance_jobs', {
+            id: 'scrub-1', department: 'ENGINE', vessel_id: 'INCHEON CHEMI',
+            group: '29. SCRUBBER', job_code: '29-001', job_detail: 'Inspection', period: 1, unit: 'M',
+        });
+        await db.put('maintenance_jobs', {
+            id: 'scrub-2', department: 'ENGINE', vessel_id: 'INCHEON CHEMI',
+            group: '29. SCRUBBER', job_code: '29-002', job_detail: 'Inspection', period: 1, unit: 'M',
+        });
+        const { after } = await exportImportCycle(Pms, db, CE_USER, async (wb) => {
+            const wsG = wb.getWorksheet('Group Headers');
+            const wsJ = wb.getWorksheet('Jobs');
+            let lastJ = 5, lastG = 5;
+            wsJ.eachRow((r, n) => { if (n >= 6) lastJ = n; });
+            wsG.eachRow((r, n) => { if (n >= 6) lastG = n; });
+            addGroupHeader(wsG, lastG + 1, { department: 'ENGINE', groupNo: '29', groupName: 'ECR LAPTOP', jobs: 1 });
+            addGroupHeader(wsG, lastG + 2, { department: 'ENGINE', groupNo: '30', groupName: 'RPM INDICATOR', jobs: 1 });
+            setJobCell(wsJ, lastJ + 1, {
+                department: 'ENGINE', groupNo: '29', groupName: 'ECR LAPTOP',
+                jobCode: '29-001', detail: '1 MONTH',
+            });
+            setJobCell(wsJ, lastJ + 2, {
+                department: 'ENGINE', groupNo: '30', groupName: 'RPM INDICATOR',
+                jobCode: '30-001', detail: 'VISUAL CHECK',
+            });
+        }, 'ENGINE');
+        const defs29 = (await db.getAll('maintenance_groups')).filter(g =>
+            g.department === 'ENGINE' && /^29\./.test(String(g.label || ''))
+        );
+        const j29 = after.filter(j => j.department === 'ENGINE' && j.job_code === '29-001');
+        const j30 = after.find(j => j.department === 'ENGINE' && j.job_code === '30-001');
+        assert('only one group-29 def', defs29.length === 1, `defs=${defs29.map(g => g.label).join(', ')}`);
+        assert('group 29 is ECR LAPTOP', norm(defs29[0]?.label) === '29. ECR LAPTOP');
+        assert('no SCRUBBER group def', !(await db.getAll('maintenance_groups')).some(g => norm(g.label) === '29. SCRUBBER'));
+        assert('29-001 on ECR LAPTOP', norm(j29[0]?.group) === '29. ECR LAPTOP', `group=${j29[0]?.group}`);
+        assert('29-002 removed', !after.some(j => j.job_code === '29-002'));
+        assert('30-001 exists', !!j30);
+        assert('30-001 on RPM INDICATOR', norm(j30?.group) === '30. RPM INDICATOR');
+    });
+
+    await runScenario('18) Legacy Excel with JOB_ID column still imports', async () => {
+        const db = createMockDb(seed);
+        const wb = await exportEngineWorkbook(Pms, db);
+        const wsJ = wb.getWorksheet('Jobs');
+        wsJ.spliceColumns(1, 0, ['JOB_ID']);
+        wsJ.getRow(5).getCell(1).value = 'JOB_ID';
+        const { result } = await importWorkbookToDb(Pms, db, wb, CE_USER, 'ENGINE');
+        assert('legacy JOB_ID column import ok', result.jobs > 0);
+    });
+
     await runScenario('8) Legacy combined group 26 still splits by job code (pre-master seed)', async () => {
         const legacySeed = {
             maintenance_jobs: [{
@@ -520,6 +1018,67 @@ async function main() {
         const jobs = legacySeed.maintenance_jobs.map(j => ({ ...j }));
         normalizeGroupDepartments(jobs);
         assert('legacy 26-001 → DECK', jobs[0].department === 'DECK');
+    });
+
+    await runScenario('21) ENGINE group 30 HOSE HANDLING CRANE — never reclassified to DECK on load', async () => {
+        const jobs = [{
+            id: 'eng-30-001',
+            department: 'ENGINE',
+            group: '30. HOSE HANDLING CRANE',
+            job_code: '30-001',
+            job_detail: 'Inspection',
+            period: 1,
+            unit: 'M',
+        }];
+        normalizeGroupDepartments(jobs);
+        assert('ENGINE 30-001 stays ENGINE', jobs[0].department === 'ENGINE');
+    });
+
+    await runScenario('22) DECK catalog rename 29-001 → 03-001 does not touch ENGINE 29-001 Work Report', async () => {
+        const db = createMockDb({ maintenance_jobs: [], maintenance_groups: [], ship_components: [] });
+        await db.put('maintenance_jobs', {
+            id: 'deck-29-001',
+            department: 'DECK',
+            vessel_id: 'INCHEON CHEMI',
+            group: '29. MOORING WINCH & WINDLASS and RELATED AUX. MACHINERY / SYSTEM',
+            job_code: '29-001',
+            job_detail: 'DECK mooring',
+            period: 1,
+            unit: 'M',
+        });
+        await db.put('maintenance_jobs', {
+            id: 'eng-29-001',
+            department: 'ENGINE',
+            vessel_id: 'INCHEON CHEMI',
+            group: '29. ECR LAPTOP',
+            job_code: '29-001',
+            job_detail: 'ECR',
+            period: 1,
+            unit: 'M',
+        });
+        await db.put('daily_work_reports', {
+            id: 'rep-eng-29',
+            department: 'ENGINE',
+            job_items: [{ maintenance_job_id: 'eng-29-001', job_code: '29-001', status: 'CONFIRMED' }],
+        });
+        await db.put('daily_work_reports', {
+            id: 'rep-deck-29',
+            department: 'DECK',
+            job_items: [{ maintenance_job_id: 'deck-29-001', job_code: '29-001', status: 'CONFIRMED' }],
+        });
+        const jobs = await db.getAll('maintenance_jobs');
+        const groups = await db.getAll('maintenance_groups');
+        global.TVC_DB = db;
+        await Pms.applyDeckCatalogNormalization(jobs, groups);
+        const afterJobs = await db.getAll('maintenance_jobs');
+        const deckJob = afterJobs.find(j => j.id === 'deck-29-001');
+        const engJob = afterJobs.find(j => j.id === 'eng-29-001');
+        const engRep = await db.get('daily_work_reports', 'rep-eng-29');
+        const deckRep = await db.get('daily_work_reports', 'rep-deck-29');
+        assert('ENGINE 29-001 unchanged', engJob?.job_code === '29-001' && engJob?.department === 'ENGINE');
+        assert('DECK job renumbered off legacy 29', deckJob?.job_code?.startsWith('03-'), `deck code=${deckJob?.job_code}`);
+        assert('ENGINE report still 29-001', engRep.job_items[0].job_code === '29-001');
+        assert('DECK report follows deck rename', deckRep.job_items[0].job_code?.startsWith('03-'));
     });
 
     console.log(`\n${pass} passed, ${fail} failed`);

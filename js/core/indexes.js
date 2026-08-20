@@ -44,7 +44,62 @@ const TVC_Indexes = (function () {
     }
 
     function groupKey(job) {
-        return `${job.department || ''}|${(job.group || '').trim()}`;
+        const g = String(job?.group ?? '').replace(/\s+/g, ' ').trim();
+        return `${job.department || ''}|${g}`;
+    }
+
+    function groupNoFromLabel(label) {
+        const s = String(label ?? '').replace(/\s+/g, ' ').trim();
+        const m = s.match(/^(\d{1,2})\./);
+        return m ? m[1].padStart(2, '0') : '';
+    }
+
+    function groupNoFromJobCode(code) {
+        const m = String(code || '').trim().match(/^(\d{1,2})-/);
+        return m ? m[1].padStart(2, '0') : '';
+    }
+
+    function groupNoFromJob(job) {
+        if (!job) return '';
+        const code = String(job.job_code || '').startsWith('__tvc_')
+            ? job.detached_from_code
+            : job.job_code;
+        return groupNoFromJobCode(code) || groupNoFromLabel(job.group);
+    }
+
+    function mergeGroupNodesByNumber(nodes) {
+        const out = [];
+        const byDeptNo = new Map();
+        for (const n of nodes) {
+            const gNo = groupNoFromLabel(n.label);
+            if (!gNo) {
+                out.push(n);
+                continue;
+            }
+            const k = `${n.department}|${gNo}`;
+            const prev = byDeptNo.get(k);
+            if (!prev) {
+                byDeptNo.set(k, { ...n, jobIds: [...(n.jobIds || [])] });
+                continue;
+            }
+            const mergedIds = [...new Set([...(prev.jobIds || []), ...(n.jobIds || [])])];
+            let pick = (prev.jobIds?.length || 0) >= (n.jobIds?.length || 0) ? prev : n;
+            if (!mergedIds.length) pick = n;
+            byDeptNo.set(k, {
+                department: pick.department,
+                label: pick.label,
+                key: pick.key,
+                jobIds: mergedIds,
+                isEmpty: mergedIds.length === 0,
+            });
+        }
+        out.push(...byDeptNo.values());
+        out.sort((a, b) => {
+            const deptOrder = (d) => (d === 'DECK' ? 0 : d === 'ENGINE' ? 1 : 9);
+            const dc = deptOrder(a.department) - deptOrder(b.department);
+            return dc || a.label.localeCompare(b.label);
+        });
+        return out;
     }
 
     function buildGroupTree(jobs, jobsByGroupKey, groupDefs) {
@@ -73,19 +128,19 @@ const TVC_Indexes = (function () {
                 isEmpty: true,
             });
         });
-        nodes.sort((a, b) => {
-            const deptOrder = (d) => (d === 'DECK' ? 0 : d === 'ENGINE' ? 1 : 9);
-            const dc = deptOrder(a.department) - deptOrder(b.department);
-            return dc || a.label.localeCompare(b.label);
-        });
-        return nodes;
+        return mergeGroupNodesByNumber(nodes);
     }
 
-    function isJobUnderGroup(job, groupKeyStr, jobById) {
+    function isJobUnderGroup(job, groupKeyStr, jobById, nodeHint) {
         const j = typeof job === 'string' ? jobById.get(job) : job;
         if (!j) return false;
-        return groupKey(j) === groupKeyStr;
+        if (groupKey(j) === groupKeyStr) return true;
+        const node = nodeHint || null;
+        if (node?.jobIds?.includes(j.id)) return true;
+        const nodeNo = groupNoFromLabel(node?.label);
+        if (nodeNo && groupNoFromJob(j) === nodeNo && j.department === node?.department) return true;
+        return false;
     }
 
-    return { build, groupKey, isJobUnderGroup };
+    return { build, groupKey, groupNoFromJob, groupNoFromLabel, isJobUnderGroup };
 })();

@@ -1,6 +1,6 @@
 /**
  * INCHEON CHEMI — PMS Master Excel sample generator (CLI)
- * Matches TVC-PMS V.1 format: Group NO/NAME · ⚠ · hidden JOB_ID
+ * Matches TVC-PMS V.1 format: Group NO/NAME · Jobs by DEPARTMENT + JOB CODE
  *
  * Usage: npm run export-pms-master-sample
  */
@@ -17,6 +17,14 @@ const OUT_PATH = path.join(ROOT, 'data', 'INCHEON CHEMI_PMS_MASTER_SAMPLE.xlsx')
 const NAVY = 'FF1A365D';
 const GREEN = 'FF217346';
 const HDR_FONT = { bold: true, color: { argb: 'FFFFFFFF' } };
+const CELL_ALIGN = { vertical: 'top', horizontal: 'left', wrapText: false };
+const TEXT_FMT = '@';
+const REQUIRED_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+const REQUIRED_HDR_FONT = { bold: true, color: { argb: 'FF1A365D' } };
+const TEMPLATE_ROWS = 3;
+const REQ_GROUP_COLS = [1, 2, 3, 8];
+const REQ_EQUIP_COLS = [1, 2, 3, 4];
+const REQ_JOB_COLS = [1, 2, 3, 4, 7, 8, 9];
 const HDR_ROW = 5;
 const DATA_START = 6;
 
@@ -91,20 +99,63 @@ function renumberJobsForExport(jobs) {
         return String(a.job_code || '').localeCompare(String(b.job_code || ''), undefined, { numeric: true });
     });
 }
-function styleHeaderRow(row, fillArgb) {
-    row.eachCell(cell => {
-        cell.font = HDR_FONT;
-        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillArgb } };
-        cell.alignment = { vertical: 'middle', wrapText: true };
+function styleHeaderRow(row, fillArgb, requiredCols = []) {
+    const reqSet = new Set(requiredCols);
+    row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+        if (reqSet.has(colNumber)) {
+            cell.font = REQUIRED_HDR_FONT;
+            cell.fill = REQUIRED_FILL;
+        } else {
+            cell.font = HDR_FONT;
+            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillArgb } };
+        }
+        cell.numFmt = TEXT_FMT;
+        cell.alignment = { ...CELL_ALIGN };
     });
     row.height = 22;
 }
-function addMetaRows(ws, lines, colSpan = 9) {
+function markRequiredCell(cell) { cell.fill = REQUIRED_FILL; }
+function applyRequiredDataFill(ws, cols, dataRowCount) {
+    if (!cols.length || dataRowCount <= 0) return;
+    for (let i = 0; i < dataRowCount; i++) {
+        const row = ws.getRow(DATA_START + i);
+        for (const col of cols) markRequiredCell(row.getCell(col));
+    }
+}
+function appendRequiredTemplateRows(ws, cols, count = TEMPLATE_ROWS) {
+    if (!cols.length || count <= 0) return;
+    const base = Math.max(ws.rowCount, DATA_START - 1);
+    for (let i = 0; i < count; i++) {
+        const row = ws.getRow(base + 1 + i);
+        for (const col of cols) {
+            const cell = row.getCell(col);
+            markRequiredCell(cell);
+            cell.numFmt = TEXT_FMT;
+            cell.alignment = { ...CELL_ALIGN };
+        }
+    }
+}
+function addMetaRows(ws, lines, startCol = 1) {
     lines.forEach((text, i) => {
-        const r = ws.getRow(i + 1);
-        r.getCell(1).value = text;
-        r.getCell(1).font = { italic: true, color: { argb: 'FF4A5568' }, size: 10 };
-        ws.mergeCells(i + 1, 1, i + 1, colSpan);
+        const cell = ws.getRow(i + 1).getCell(startCol);
+        cell.value = String(text);
+        cell.numFmt = TEXT_FMT;
+        cell.alignment = { ...CELL_ALIGN };
+        cell.font = { italic: true, color: { argb: 'FF4A5568' }, size: 10 };
+    });
+}
+function applySheetTextStyle(ws) {
+    ws.eachRow({ includeEmpty: false }, row => {
+        row.eachCell({ includeEmpty: false }, cell => {
+            const v = cell.value;
+            if (v instanceof Date) cell.value = v.toISOString().slice(0, 10);
+            else if (v != null && typeof v === 'object') {
+                if (v.richText) cell.value = v.richText.map(t => t.text).join('');
+                else if (v.result != null && v.formula == null) cell.value = String(v.result);
+            } else if (v != null && typeof v !== 'string') cell.value = String(v);
+            cell.numFmt = TEXT_FMT;
+            cell.alignment = { ...CELL_ALIGN };
+        });
     });
 }
 
@@ -140,21 +191,20 @@ async function main() {
         `Vessel: ${vesselId}  ·  PMS Master — Group Headers`,
         'GROUP NO + GROUP NAME per department (each dept starts 01).',
     ]);
-    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Critical Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Jobs (ref)'].forEach((h, i) => {
+    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Jobs (ref)'].forEach((h, i) => {
         wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
     });
-    styleHeaderRow(wsG.getRow(HDR_ROW), NAVY);
+    styleHeaderRow(wsG.getRow(HDR_ROW), NAVY, REQ_GROUP_COLS);
     groupRows.forEach((gr, idx) => {
         const r = wsG.getRow(DATA_START + idx);
         r.getCell(1).value = gr.department;
         r.getCell(2).value = gr.no;
         r.getCell(3).value = gr.name;
-        r.getCell(9).value = gr.count;
+        r.getCell(8).value = gr.count;
         if (gr.department === 'ENGINE' && gr.no === '01') {
-            r.getCell(4).value = 'Yes';
-            r.getCell(5).value = 'MAN B&W';
-            r.getCell(6).value = '6S50ME-C';
-            r.getCell(7).value = '6220 kW';
+            r.getCell(4).value = 'MAN B&W';
+            r.getCell(5).value = '6S50ME-C';
+            r.getCell(6).value = '6220 kW';
         }
     });
 
@@ -163,51 +213,55 @@ async function main() {
         `Vessel: ${vesselId}  ·  Optional item_sort1 overrides (sparse)`,
         'Add rows only where group header is not enough.',
     ]);
-    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'ITEM (SORT-1)', 'Critical Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.'].forEach((h, i) => {
+    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'ITEM (SORT-1)', 'Maker', 'Model/Type', 'Capacity', 'Serial No.'].forEach((h, i) => {
         wsE.getRow(HDR_ROW).getCell(i + 1).value = h;
     });
-    styleHeaderRow(wsE.getRow(HDR_ROW), GREEN);
+    styleHeaderRow(wsE.getRow(HDR_ROW), GREEN, REQ_EQUIP_COLS);
     EQUIPMENT_SAMPLES.forEach((eq, idx) => {
         const r = wsE.getRow(DATA_START + idx);
         r.getCell(1).value = eq.department;
         r.getCell(2).value = eq.no;
         r.getCell(3).value = eq.name;
         r.getCell(4).value = eq.item;
-        r.getCell(5).value = eq.critical;
-        r.getCell(6).value = eq.maker;
-        r.getCell(7).value = eq.model;
-        r.getCell(9).value = eq.serial;
+        r.getCell(5).value = eq.maker;
+        r.getCell(6).value = eq.model;
+        r.getCell(8).value = eq.serial;
     });
 
     const wsJ = wb.addWorksheet('Jobs', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
     addMetaRows(wsJ, [
         `Vessel: ${vesselId}  ·  ${jobs.length} jobs`,
-        'JOB_ID column hidden (export only). DECK codes renumbered 01-001… per group.',
-    ], 14);
-    ['JOB_ID', 'DEPARTMENT', 'GROUP NO', 'GROUP NAME', '⚠', 'JOB CODE', 'SORT-1', 'SORT-2', 'JOB DETAIL', 'PERIOD', 'UNIT', 'P.I.C', 'NEXT DATE', 'LAST DONE'].forEach((h, i) => {
+        'Import matches jobs by DEPARTMENT + JOB CODE. DECK codes renumbered 01-001… per group.',
+    ], 2);
+    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'JOB CODE', 'SORT-1', 'SORT-2', 'JOB DETAIL', 'PERIOD', 'UNIT', 'P.I.C', 'LAST DONE'].forEach((h, i) => {
         wsJ.getRow(HDR_ROW).getCell(i + 1).value = h;
     });
-    styleHeaderRow(wsJ.getRow(HDR_ROW), NAVY);
-    wsJ.getColumn(1).hidden = true;
+    styleHeaderRow(wsJ.getRow(HDR_ROW), NAVY, REQ_JOB_COLS);
 
     jobs.forEach((j, idx) => {
         const g = resolveGroup(j.department, j.group);
         const r = wsJ.getRow(DATA_START + idx);
-        r.getCell(1).value = j.id || '';
-        r.getCell(2).value = j.department;
-        r.getCell(3).value = g.no;
-        r.getCell(4).value = g.name;
-        r.getCell(5).value = criticalDisplay(j);
-        r.getCell(6).value = j.job_code;
-        r.getCell(7).value = norm(j.item_sort1);
-        r.getCell(8).value = norm(j.item_sort2);
-        r.getCell(9).value = j.job_detail || '';
-        r.getCell(10).value = j.period != null ? Number(j.period) : '';
-        r.getCell(11).value = (j.unit || 'M').toUpperCase();
-        r.getCell(12).value = j.pic || '';
-        if (j.next_date) r.getCell(13).value = j.next_date;
-        if (j.last_done) r.getCell(14).value = j.last_done;
+        r.getCell(1).value = j.department;
+        r.getCell(2).value = g.no;
+        r.getCell(3).value = g.name;
+        r.getCell(4).value = j.job_code;
+        r.getCell(5).value = norm(j.item_sort1);
+        r.getCell(6).value = norm(j.item_sort2);
+        r.getCell(7).value = j.job_detail || '';
+        r.getCell(8).value = j.period != null ? Number(j.period) : '';
+        r.getCell(9).value = (j.unit || 'M').toUpperCase();
+        r.getCell(10).value = j.pic || '';
+        if (j.last_done) r.getCell(11).value = j.last_done;
     });
+
+    applyRequiredDataFill(wsG, REQ_GROUP_COLS, groupRows.length);
+    appendRequiredTemplateRows(wsG, REQ_GROUP_COLS);
+    applyRequiredDataFill(wsE, REQ_EQUIP_COLS, EQUIPMENT_SAMPLES.length);
+    appendRequiredTemplateRows(wsE, REQ_EQUIP_COLS);
+    applyRequiredDataFill(wsJ, REQ_JOB_COLS, jobs.length);
+    appendRequiredTemplateRows(wsJ, REQ_JOB_COLS);
+
+    [wsG, wsE, wsJ].forEach(applySheetTextStyle);
 
     await wb.xlsx.writeFile(OUT_PATH);
     console.log(`Written: ${OUT_PATH}`);

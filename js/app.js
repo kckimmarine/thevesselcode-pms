@@ -472,6 +472,8 @@ const TVC_App = (function () {
         if (fromSplit26) return fromSplit26;
         const code = String(job?.job_code || '').trim().toUpperCase();
         if (JOB_DEPT_OVERRIDES[code]) return JOB_DEPT_OVERRIDES[code];
+        const dept = String(job?.department || '').toUpperCase();
+        if (dept === 'ENGINE') return null;
         return forceDeptForGroupLabel(job?.group);
     }
 
@@ -485,6 +487,8 @@ const TVC_App = (function () {
     }
 
     function forceDeptForComponent(c) {
+        const rootDept = Array.isArray(c.path) ? String(c.path[0] || '').toUpperCase() : '';
+        if (rootDept === 'ENGINE') return null;
         const fromSplit26 = forceDeptForGroup26Component(c);
         if (fromSplit26) return fromSplit26;
         const grpLabel = Array.isArray(c.path) ? c.path[1] : null;
@@ -514,6 +518,7 @@ const TVC_App = (function () {
         });
         const changedGroups = [];
         (groups || []).forEach(g => {
+            if (String(g.department || '').toUpperCase() === 'ENGINE') return;
             const n = pmsGroupNoFromLabel(g.label);
             if (n === 26) return;
             const target = forceDeptForGroupLabel(g.label);
@@ -735,12 +740,31 @@ const TVC_App = (function () {
 
     async function loadData() {
         const allComponents = await TVC_DB.getAll('ship_components');
-        const allJobs = await TVC_DB.getAll('maintenance_jobs');
-        const allGroups = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+        let allJobs = await TVC_DB.getAll('maintenance_jobs');
+        let allGroups = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         await normalizeGroupDepartments(allJobs, allComponents, allGroups);
         if (typeof TVC_PmsMasterExcel !== 'undefined' && TVC_PmsMasterExcel.applyDeckCatalogNormalization) {
             await TVC_PmsMasterExcel.applyDeckCatalogNormalization(allJobs, allGroups);
         }
+
+        const masterVesselIdEarly = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null))
+            || state.user?.vessel_id
+            || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.getSelectedId() : null)
+            || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : null);
+        if (typeof TVC_PmsMasterExcel !== 'undefined' && TVC_PmsMasterExcel.repairDuplicateGroupNumbers && masterVesselIdEarly) {
+            for (const dept of ['ENGINE', 'DECK']) {
+                const canonical = TVC_PmsMasterExcel.loadCanonicalGroupMap
+                    ? await TVC_PmsMasterExcel.loadCanonicalGroupMap(masterVesselIdEarly, dept)
+                    : null;
+                await TVC_PmsMasterExcel.repairDuplicateGroupNumbers(masterVesselIdEarly, {
+                    department: dept,
+                    canonicalByNo: canonical || undefined,
+                });
+            }
+            allJobs = await TVC_DB.getAll('maintenance_jobs');
+            allGroups = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+        }
+
         state._allJobs = allJobs;
         state._allGroups = allGroups;
         const allReports = await TVC_DB.getAll('daily_work_reports');
@@ -1892,6 +1916,15 @@ const TVC_App = (function () {
         return jobActualStatusCellHtml(j);
     }
 
+    function jobMatchesSelectedGroup(job, idx) {
+        if (!job || !state.selectedGroupKey) return true;
+        const key = state.selectedGroupKey;
+        if (TVC_Indexes.groupKey(job) === key) return true;
+        const node = idx?.groupNodes?.find(n => n.key === key);
+        if (!node) return false;
+        return TVC_Indexes.isJobUnderGroup(job, key, idx.jobById, node);
+    }
+
     /** 부서 필터(전역) 후 mode별 세부 필터 적용 */
     function sheetIds(mode) {
         const idx = state.idx;
@@ -1900,8 +1933,7 @@ const TVC_App = (function () {
             const crit = new Set(criticalJobIdsInDept());
             ids = ids.filter(id => crit.has(id));
         } else if (state.selectedGroupKey) {
-            const set = new Set(idx.jobsByGroupKey.get(state.selectedGroupKey) || []);
-            ids = ids.filter(id => set.has(id));
+            ids = ids.filter(id => jobMatchesSelectedGroup(idx.jobById.get(id), idx));
         }
         if (mode === 'actual') {
             const af = state.actualFilter;
@@ -7499,11 +7531,6 @@ const TVC_App = (function () {
         return 'Work Procedure를 편집할 수 없습니다.';
     }
 
-    /** HQ MODE — Original Plan GROUP Tree 그룹명 수정·추가 · PMS Master Excel */
-    function canEditOriginalPlanGroups() {
-        return canEditOriginalPlanItems() && TVC_RBAC.isHqAccount(state.user);
-    }
-
     /** PMS/SPARE Master Excel — plan lock과 무관, ce/co/captain/hq + 부서 토글(DECK|ENGINE) 필수 */
     function canPmsMasterExcel() {
         if (!state.user) return false;
@@ -7621,16 +7648,25 @@ const TVC_App = (function () {
 
     async function saveGroupEditor() {
         const user = TVC_Auth.getCurrentUser();
-        if (!user || !canEditOriginalPlanGroups()) return;
+        if (!user || !canEditPlanGroupHeader()) {
+            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+            return;
+        }
         const form = document.getElementById('groupEditorForm');
         if (!form) return;
         const fd = new FormData(form);
         const label = String(fd.get('label') || '').trim();
-        if (!label) await TVC_Dialog.alert('Enter a GROUP name.');
+        if (!label) {
+            await TVC_Dialog.alert('Enter a GROUP name.');
+            return;
+        }
         try {
             if (state._groupEditMode === 'rename') {
                 const node = selectedGroupNode();
-                if (!node) await TVC_Dialog.alert('Select a GROUP.');
+                if (!node) {
+                    await TVC_Dialog.alert('Select a GROUP.');
+                    return;
+                }
                 const { newKey } = await TVC_MaintenancePlan.renameGroup(
                     user, node.department, node.label, label, masterVesselOpts()
                 );
@@ -7648,7 +7684,10 @@ const TVC_App = (function () {
             }
         } catch (e) {
             const code = e.code || '';
-            if (code === 'DUPLICATE') await TVC_Dialog.alert('A GROUP with the same name already exists in this department.');
+            if (code === 'DUPLICATE') {
+                await TVC_Dialog.alert('A GROUP with the same name already exists in this department.');
+                return;
+            }
             await TVC_Dialog.alert(e.message || code || 'Save failed');
         }
     }
@@ -14056,8 +14095,18 @@ const TVC_App = (function () {
             const orphanLine = (r.removed || r.detached)
                 ? `\n제외: ${r.removed || 0} · Work Report 격리: ${r.detached || 0}`
                 : '';
+            const reuseLine = (r.codeReuseNotes && r.codeReuseNotes.length)
+                ? `\n\n기존 JOB CODE 갱신 (그룹 이동):\n${r.codeReuseNotes.join('\n')}`
+                : '';
+            const warnLine = (r.warnings && r.warnings.length)
+                ? `\n\n⚠ 확인:\n${r.warnings.slice(0, 5).join('\n')}${r.warnings.length > 5 ? '\n…' : ''}`
+                : '';
             const vesselLine = r.vessel_id ? `\nVessel: ${r.vessel_id}` : '';
-            await TVC_Dialog.alert(`Import 완료${vesselLine}\n\nJobs: ${r.jobs}행 (신규 ${r.created}, 수정 ${r.updated}, CODE 변경 ${r.renamed})${orphanLine}\nGroups: ${r.groups} · Equipment: ${r.equipment}`);
+            const repairLine = (r.groupRepair?.defsPruned || r.rehomedJobs)
+                ? `\n그룹 정리: def ${r.groupRepair?.defsPruned || 0} · job 이동 ${r.rehomedJobs || 0}`
+                : '';
+            const buildLine = r.importBuild ? `\nEngine: ${r.importBuild}` : '';
+            await TVC_Dialog.alert(`Import 완료${vesselLine}\n\nJobs: ${r.jobs}행 (신규 ${r.created}, 수정 ${r.updated}, CODE 변경 ${r.renamed})${orphanLine}${repairLine}${reuseLine}${warnLine}${buildLine}`);
         } catch (e) {
             await TVC_Dialog.alert(e.message || e.code || 'Import failed');
         }

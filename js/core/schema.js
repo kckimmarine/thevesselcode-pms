@@ -133,6 +133,11 @@ const TVC_META_KEYS = {
     MASTER_VESSEL_SCOPE: 'master_vessel_scope_v1',
 };
 
+function pmsMasterCanonicalMetaKey(vesselId, department) {
+    const v = String(vesselId || 'SHIP').replace(/[^\w.-]+/g, '_').slice(0, 40);
+    return `pms_master_group_canonical_${v}_${String(department || '').toUpperCase()}`;
+}
+
 /** 번들 ENGINE CSV 경로 (우선순위 순) */
 const TVC_ENGINE_CSV_PATHS = [
     'data/spare inventory.xls - ENGINE.csv',

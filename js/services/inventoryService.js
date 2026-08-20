@@ -277,6 +277,57 @@ const TVC_InventoryService = (function () {
         });
     }
 
+    /** SPARE Requisition Received 수정 — 이전/신규 입고 수량 diff 반영 */
+    async function applyDeliveryDiff(user, prevLines, nextLines, opts = {}) {
+        const prev = normalizePartLines(prevLines);
+        const next = normalizePartLines(nextLines);
+        const ids = new Set([...prev.keys(), ...next.keys()]);
+        const deliveryLines = [];
+        const reverseLines = [];
+        for (const id of ids) {
+            const d = (next.get(id) || 0) - (prev.get(id) || 0);
+            if (d > 0) deliveryLines.push({ spare_part_id: id, qty: d });
+            else if (d < 0) reverseLines.push({ spare_part_id: id, qty: -d });
+        }
+        if (!deliveryLines.length && !reverseLines.length) {
+            return { count: 0 };
+        }
+        return TVC_DB.runTransaction(['spare_parts', 'inventory_history', 'audit_logs'], async (api) => {
+            let count = 0;
+            const baseMeta = {
+                ref: opts.ref || '',
+                note: opts.note || 'Requisition received updated',
+                source_id: opts.source_id || '',
+                source_type: opts.source_type || 'requisition',
+                skipRbac: true,
+            };
+            if (reverseLines.length) {
+                const r = await applyStockTxApi(api, user, reverseLines, {
+                    ...baseMeta,
+                    tx_type: TVC_INVENTORY_TX.REVERSAL,
+                    note: opts.note || 'Requisition received qty reduced',
+                });
+                count += r.count || 0;
+            }
+            if (deliveryLines.length) {
+                const r = await applyStockTxApi(api, user, deliveryLines, {
+                    ...baseMeta,
+                    tx_type: TVC_INVENTORY_TX.DELIVERY,
+                    note: opts.note || 'Requisition received qty increased',
+                });
+                count += r.count || 0;
+            }
+            if (count > 0) {
+                await api.put('audit_logs', {
+                    timestamp: new Date().toLocaleString(),
+                    log: `📦 [RECEIVED_DIFF] ${count} items — ${operatorName(user)}`,
+                    sync_status: 'LOCAL',
+                });
+            }
+            return { count };
+        });
+    }
+
     /** SPARE Consumed log 수정 — 이전/신규 수량 diff 반영 */
     async function applyConsumptionDiff(user, prevLines, nextLines, opts = {}) {
         const prev = normalizePartLines(prevLines);
@@ -454,6 +505,7 @@ const TVC_InventoryService = (function () {
         deductTaskPartsBatchApi,
         reverseTaskPartsApi,
         applyConsumptionDiff,
+        applyDeliveryDiff,
         reverseConsumption,
         normalizePartLines,
         getHistory,

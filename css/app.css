@@ -901,7 +901,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     opacity: 0.35;
     accent-color: #cbd5e0;
 }
-.c-code { width: 72px; flex-shrink: 0; }
+.c-code { width: 72px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .c-s1,
 .c-d1,
 .c-d2 {
@@ -4654,6 +4654,16 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 #reqWorkListScroll .spare-data-table tr:hover { background: #f7fafc; }
 #reqWorkListScroll .spare-data-table tr.row-overdue { background: #fff5f5; }
+#reqWorkListScroll .spare-data-table td.qty-mismatch,
+.spare-data-table td.qty-mismatch {
+    background: #fff8e6;
+    color: #9a6700;
+    font-weight: 600;
+}
+#reqWorkListScroll .spare-data-table tr.row-selected td.qty-mismatch,
+#reqWorkListScroll .spare-data-table tr.spare-row-focused.row-selected td.qty-mismatch {
+    background: #fde68a;
+}
 #reqWorkListScroll .spare-data-table tr.row-selected,
 #reqWorkListScroll .spare-data-table tr.spare-row-focused.row-selected {
     background: rgba(66, 153, 225, 0.35) !important;
@@ -6204,6 +6214,26 @@ label.spare-file-pick input[type=file] { display: none; }
     opacity: 1;
     cursor: pointer;
 }
+.spare-req-work-scroll.is-req-locked .spare-req-rcvd-qty-input:not(:disabled) {
+    opacity: 1;
+    cursor: text;
+    background: #fff;
+    color: inherit;
+}
+.spare-req-work-scroll.is-req-locked #reqWorkReceivedOn:not(:disabled),
+.spare-req-work-scroll.is-req-locked #reqWorkReceivedPort:not(:disabled),
+.spare-req-work-scroll.is-req-locked #reqWorkShipComments:not(:disabled) {
+    opacity: 1;
+    cursor: text;
+    background: #fff;
+    color: inherit;
+}
+.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkReceivedOn:not([readonly])) .tvc-date-picker-btn:not(:disabled),
+.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkReceivedOn:not(:disabled)) .tvc-date-picker-btn:not(:disabled) {
+    opacity: 1;
+    cursor: pointer;
+    pointer-events: auto;
+}
 .spare-req-work-title { margin: 0; font-size: 15px; color: var(--navy); font-weight: 700; }
 .spare-req-work-no { color: var(--blue); }
 .spare-req-work-lines { font-size: 12px; font-weight: 500; margin-left: 6px; }
@@ -7289,6 +7319,11 @@ label.spare-file-pick input[type=file] { display: none; }
 .req-preview-items td.rpv-req {
     font-weight: 700;
     color: #003366;
+}
+.req-preview-items td.qty-mismatch {
+    background: #fff8e6;
+    color: #9a6700;
+    font-weight: 700;
 }
 .req-preview-items .rpv-no,
 .req-preview-items th.rpv-no {

@@ -180,7 +180,8 @@ const TVC_MaintenancePlan = (function () {
     }
 
     function groupKeyOf(dept, label) {
-        return `${dept || ''}|${String(label || '').trim()}`;
+        const g = String(label ?? '').replace(/\s+/g, ' ').trim();
+        return `${dept || ''}|${g}`;
     }
 
     /** Original Plan GROUP Tree — 신규 그룹 추가 (작업 없이 트리에만 표시) */
