@@ -302,6 +302,14 @@ const TVC_RBAC = (function () {
         return String(user.department || '').trim().toUpperCase() === d;
     }
 
+    /** Defect Phase 3 — Submitted/Approved Ship's Comments · DC (co / ce / captain, any dept) */
+    function canModifyDefectShipPhase3(user) {
+        if (!user || !isShipAccount(user)) return false;
+        const uname = String(user.username || '').toLowerCase();
+        if (uname === 'co' || uname === 'ce' || uname === 'captain') return true;
+        return isApprover(user);
+    }
+
     /** HQ 공무감독: Confirmed → Approved */
     function canApproveHqReport(user) {
         if (!isHqAccount(user)) return false;
@@ -618,7 +626,7 @@ const TVC_RBAC = (function () {
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
         normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,
-        getAccessibleDepartments, canAccessDepartment, canConfirmDepartment, canApproveDepartment, canApproveHqReport,
+        getAccessibleDepartments, canAccessDepartment, canConfirmDepartment, canModifyDefectShipPhase3, canApproveDepartment, canApproveHqReport,
         isHqAuthoredRecord, canHqDirectApprove,
     };
 })();

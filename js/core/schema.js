@@ -868,26 +868,42 @@ const TVC_DefectCase = (function () {
         return row && row.status === Status.SUBMITTED_TO_COMPANY && !row.phase2_locked;
     }
 
-    /** Phase 2 완료 후 선박이 결함 해소를 확인·보고 */
+    /** Phase 1 — Reported → Confirmed → Submitted (export to Company/HQ) */
+    function isPhase1Exported(row) {
+        if (!row) return false;
+        if (row.submitted_at) return true;
+        if (row.phase1_locked) return true;
+        if ((row.confirmed_at || row.confirmed_by) && row.sync_status === 'SYNCED') return true;
+        const st = listWorkflowStatus(row);
+        if (st === 'Submitted' || st === 'Approved') return true;
+        return row.status === Status.SUBMITTED_TO_COMPANY
+            || row.status === Status.COMPANY_REVIEWED
+            || row.status === Status.WORK_IN_PROGRESS
+            || row.status === Status.AWAITING_COMPLETION
+            || row.status === Status.CLOSED;
+    }
+
+    /** Phase 3 — Ship DC (Defect Cleared); editable after Phase 1 export, even before HQ Approve */
     function isPhase3Editable(row) {
         if (!row || row.phase3_locked) return false;
-        if (!(row.approved_at || row.approved_by)) return false;
-        return row.status === Status.COMPANY_REVIEWED
-            || row.status === Status.WORK_IN_PROGRESS
-            || row.status === Status.SUBMITTED_TO_COMPANY;
+        if (row.status === Status.CLOSED) return false;
+        return isPhase1Exported(row);
     }
 
-    /** HQ Approve 후 선박 — Verified by Ship / Working hours 등 */
+    /** Phase 3 complete — DEFECT CLEARED saved (case closed on ship side) */
+    function isPhase3DcComplete(row) {
+        return !!(row && row.defect_cleared && row.phase3_locked);
+    }
+
+    /** HQ Approve 후 선박 — Verified by Ship / DEFECT CLEARED (alias) */
     function isShipVerificationEditable(row) {
-        if (!row || row.phase3_locked) return false;
-        if (!(row.approved_at || row.approved_by)) return false;
-        return row.status !== Status.CLOSED;
+        return isPhase3Editable(row);
     }
 
-    /** 선박 Phase 3 제출 후 HQ D.P. 종결 */
+    /** Phase 4 — HQ Company inspection comments (after ship DC) */
     function isPhase4Editable(row) {
-        if (!row || row.phase4_locked) return false;
-        return row.status === Status.AWAITING_COMPLETION;
+        if (!row || !isPhase3DcComplete(row)) return false;
+        return true;
     }
 
     function canStartWork(row) {
@@ -998,6 +1014,7 @@ const TVC_DefectCase = (function () {
     return {
         SCHEMA_VERSION, Status, PHASE1_FIELDS, PHASE2_FIELDS, PHASE3_FIELDS, PHASE4_FIELDS,
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
+        isPhase1Exported, isPhase3DcComplete,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, validateHqDefectReplyExport,
         isHqReplyExported, belongsToDepartment,
         listWorkflowStatus, listWorkflowTone, canModifyListWorkflow, canDeleteListWorkflow, isShipVerificationEditable,

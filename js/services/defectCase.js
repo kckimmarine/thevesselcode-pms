@@ -37,6 +37,19 @@ const TVC_DefectCaseService = (function () {
         return row;
     }
 
+    /** DEFECT CLEARED + Save — close Phase 3 (DC) and prepare Work Plan schedule apply */
+    function finalizeDefectCleared(row, user) {
+        if (!row?.defect_cleared) return false;
+        row.ship_verified_by = row.ship_verified_by || TVC_RBAC.getRankLabel(user);
+        row.ship_verified_date = String(row.ship_verified_date || now().slice(0, 10)).slice(0, 10);
+        if (!row.phase3_locked) {
+            row.phase3_locked = true;
+            row.completed_at = row.completed_at || now();
+            row.status = TVC_DefectCase.Status.CLOSED;
+        }
+        return true;
+    }
+
     const DEFECT_SCHEDULE_ROW_FIELDS = [
         'action_taken', 'pms_job_code', 'job_code', 'maintenance_job_id', 'job_items',
         'work_date', 'last_maintenance_date', 'report_date',
@@ -218,15 +231,13 @@ const TVC_DefectCaseService = (function () {
             throw Object.assign(new Error('Phase 3 is locked.'), { code: 'LOCKED' });
         }
         if (!TVC_DefectCase.isPhase3Editable(row)) {
-            throw Object.assign(new Error('Complete Phase 2 before reporting clearance.'), { code: 'INVALID_STATUS' });
+            throw Object.assign(new Error('Available after Phase 1 is exported to Company.'), { code: 'INVALID_STATUS' });
         }
         Object.assign(row, phase3, {
             ship_verified_by: phase3.ship_verified_by || TVC_RBAC.getRankLabel(user),
             ship_verified_date: phase3.ship_verified_date || now().slice(0, 10),
-            status: TVC_DefectCase.Status.AWAITING_COMPLETION,
-            phase3_locked: true,
-            completed_at: now(),
         });
+        if (row.defect_cleared) finalizeDefectCleared(row, user);
         const v = TVC_DefectCase.validatePhase3(row);
         if (!v.ok) {
             throw Object.assign(new Error(`Required: ${v.missing.join(', ')}`), { code: 'VALIDATION', missing: v.missing });
@@ -245,40 +256,35 @@ const TVC_DefectCaseService = (function () {
         return row;
     }
 
-    async function saveHqPhase4(user, id, phase4) {
+    async function saveHqPhase4(user, id, payload) {
         if (!TVC_RBAC.isHqAccount(user)) {
             throw Object.assign(new Error('HQ only.'), { code: 'FORBIDDEN' });
         }
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
         if (!TVC_DefectCase.isPhase4Editable(row)) {
-            if (row.phase4_locked) throw Object.assign(new Error('Case already closed.'), { code: 'LOCKED' });
-            throw Object.assign(new Error('Awaiting ship Phase 3 completion report.'), { code: 'INVALID_STATUS' });
+            throw Object.assign(new Error('Ship must report DEFECT CLEARED (Phase 3) before HQ inspection comments.'), { code: 'INVALID_STATUS' });
         }
-        const sat = phase4.dp_closed_satisfactory;
-        const satisfactory = sat === true || sat === 'true'
-            ? true
-            : sat === false || sat === 'false'
-                ? false
-                : null;
-        Object.assign(row, phase4, {
-            dp_closed_satisfactory: satisfactory,
-            dp_closed_by: phase4.dp_closed_by || TVC_RBAC.getRankLabel(user),
-            dp_closed_date: phase4.dp_closed_date || now().slice(0, 10),
-            status: TVC_DefectCase.Status.CLOSED,
-            phase4_locked: true,
-            hq_synced: true,
-            closed_at: now(),
+        if (payload.company_comment !== undefined) row.company_comment = payload.company_comment;
+        if (payload.company_attachments !== undefined) row.company_attachments = payload.company_attachments;
+        const inspKeys = ['preventive_measures', 'dp_closed_reply', 'dp_closed_by', 'dp_closed_date'];
+        inspKeys.forEach(k => {
+            if (payload[k] !== undefined) row[k] = payload[k];
         });
-        const v = TVC_DefectCase.validatePhase4(row);
-        if (!v.ok) {
-            throw Object.assign(new Error(`Required: ${v.missing.join(', ')}`), { code: 'VALIDATION', missing: v.missing });
+        if (payload.dp_closed_satisfactory !== undefined) {
+            const sat = payload.dp_closed_satisfactory;
+            row.dp_closed_satisfactory = sat === true || sat === 'true'
+                ? true
+                : sat === false || sat === 'false'
+                    ? false
+                    : null;
         }
+        row.hq_synced = true;
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
-            log: `🏁 [Defect/Phase4] ${row.case_no} — ${row.dp_closed_satisfactory ? 'Satisfactory' : 'Unsatisfactory'}`,
+            log: `📝 [Defect/Phase4] ${row.case_no} — Company inspection comments saved`,
             sync_status: 'LOCAL',
         });
         return row;
@@ -382,7 +388,7 @@ const TVC_DefectCaseService = (function () {
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
         if (!TVC_DefectCase.isShipVerificationEditable(row)) {
-            throw Object.assign(new Error('Available after Company approval.'), { code: 'INVALID_STATUS' });
+            throw Object.assign(new Error('Available after Phase 1 is exported to Company.'), { code: 'INVALID_STATUS' });
         }
         const keys = [
             'ship_verified_after_clear', 'ship_verified_date', 'working_hours', 'working_member',
@@ -392,23 +398,19 @@ const TVC_DefectCaseService = (function () {
             if (payload[k] !== undefined) row[k] = payload[k];
         });
         if (row.shore_support) row.shore_technician = true;
-        const cleared = !!row.defect_cleared && String(row.ship_verified_after_clear || '').trim();
-        if (cleared && !row.phase3_locked) {
-            row.ship_verified_by = row.ship_verified_by || TVC_RBAC.getRankLabel(user);
-            row.ship_verified_date = row.ship_verified_date || now().slice(0, 10);
-            row.status = TVC_DefectCase.Status.AWAITING_COMPLETION;
-            row.phase3_locked = true;
-            row.completed_at = now();
-        }
+        if (row.defect_cleared) finalizeDefectCleared(row, user);
         mergeDefectScheduleFields(row, payload);
-        if (await persistDefectWithJobSchedule(row, `✔ [Defect/Ship Verify] ${row.case_no}`)) {
+        const logTag = row.defect_cleared && row.phase3_locked
+            ? `✔ [Defect/Phase3-DC] ${row.case_no} — Cleared (closed)`
+            : `✏️ [Defect/Ship Verify] ${row.case_no}`;
+        if (await persistDefectWithJobSchedule(row, logTag)) {
             return row;
         }
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
-            log: `✏️ [Defect/Ship Verify] ${row.case_no}`,
+            log: logTag,
             sync_status: 'LOCAL',
         });
         return row;
@@ -442,8 +444,8 @@ const TVC_DefectCaseService = (function () {
             throw Object.assign(new Error('Modify permission denied.'), { code: 'FORBIDDEN' });
         }
         if (st === 'Submitted' || st === 'Approved') {
-            if (!TVC_RBAC.canConfirmDepartment(user, row.department)) {
-                throw Object.assign(new Error('Captain / Chief Engineer only.'), { code: 'FORBIDDEN' });
+            if (!TVC_RBAC.canModifyDefectShipPhase3(user)) {
+                throw Object.assign(new Error('Captain / Chief Engineer (co, ce) only.'), { code: 'FORBIDDEN' });
             }
         } else if (!TVC_RBAC.canModifyDeleteListReport(user, row.department, st)) {
             throw Object.assign(new Error('Modify permission denied.'), { code: 'FORBIDDEN' });
@@ -456,15 +458,19 @@ const TVC_DefectCaseService = (function () {
             if (payload[k] !== undefined) row[k] = payload[k];
         });
         if (row.shore_support) row.shore_technician = true;
+        if (row.defect_cleared) finalizeDefectCleared(row, user);
         mergeDefectScheduleFields(row, payload);
-        if (await persistDefectWithJobSchedule(row, `✏️ [Defect/Ship Comments] ${row.case_no}`)) {
+        const logTag = row.defect_cleared && row.phase3_locked
+            ? `✔ [Defect/Phase3-DC] ${row.case_no} — Cleared (closed)`
+            : `✏️ [Defect/Ship Comments] ${row.case_no}`;
+        if (await persistDefectWithJobSchedule(row, logTag)) {
             return row;
         }
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
-            log: `✏️ [Defect/Ship Comments] ${row.case_no}`,
+            log: logTag,
             sync_status: 'LOCAL',
         });
         return row;

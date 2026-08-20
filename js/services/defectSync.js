@@ -440,8 +440,10 @@ const TVC_DefectSync = (function () {
     async function exportCompletionZip(user, caseId) {
         const row = await TVC_DefectCaseService.get(caseId);
         if (!row) throw new Error('Defect case not found.');
-        if (row.status !== TVC_DefectCase.Status.AWAITING_COMPLETION) {
-            throw new Error('Submit Phase 3 (completion) before export.');
+        const completionReady = row.status === TVC_DefectCase.Status.AWAITING_COMPLETION
+            || (row.status === TVC_DefectCase.Status.CLOSED && row.defect_cleared && row.phase3_locked);
+        if (!completionReady) {
+            throw new Error('Complete Phase 3 (DEFECT CLEARED) before export.');
         }
         const payload = await buildCompletionPayload(user, row);
         const vesselId = payload.export_meta.vessel_id;

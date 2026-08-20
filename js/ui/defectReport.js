@@ -1174,9 +1174,21 @@ const TVC_DefectReport = (function () {
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
-    /** HQ — HQ reply export 전까지 Modify (Approved 포함) */
+    /** HQ — ship DC (Phase 3) complete — Company inspection comments */
+    function canModifyDfHqFinalRow(row) {
+        if (!row || !getState().user || !isHq()) return false;
+        return TVC_DefectCase.isPhase4Editable(row);
+    }
+
+    function canEditDfCompanyFinalComment(row, forceView) {
+        if (forceView || !isHq() || !row) return false;
+        return TVC_DefectCase.isPhase4Editable(row);
+    }
+
+    /** HQ — HQ reply export 전까지 Modify (Approved 포함); Phase 4 inspection after ship DC */
     function canModifyDfHqRow(row) {
         if (!row || !getState().user || !isHq()) return false;
+        if (TVC_DefectCase.isPhase4Editable(row)) return true;
         if (row.status === TVC_DefectCase.Status.CLOSED) return false;
         if (TVC_DefectCase.isHqReplyExported(row)) return false;
         const shipSubmitted = !!(row.confirmed_at || row.confirmed_by || row.phase1_locked || row.submitted_at
@@ -1203,15 +1215,16 @@ const TVC_DefectReport = (function () {
         return TVC_RBAC.getRankLabel(user) || 'Superintendent';
     }
 
-    /** Submitted / Approved — Ship's Comments 등 선박 확인 섹션만 Modify */
+    /** Submitted / Approved — Ship's Comments · Phase 3 (co / ce / captain) */
     function canModifyDfShipCommentsOnly(row) {
         if (!row || !getState().user || isHq()) return false;
-        if (row.status === TVC_DefectCase.Status.CLOSED) return false;
+        if (row.status === TVC_DefectCase.Status.CLOSED && row.phase3_locked) return false;
         const st = TVC_DefectCase.listWorkflowStatus(row);
         if (!['Reported', 'Confirmed', 'Submitted', 'Approved'].includes(st)) return false;
         if (TVC_DefectCase.isPhase1Editable(row)) return false;
         if (st === 'Submitted' || st === 'Approved') {
-            return TVC_RBAC.canConfirmDepartment(getState().user, row.department);
+            if (!TVC_DefectCase.isPhase1Exported(row)) return false;
+            return TVC_RBAC.canModifyDefectShipPhase3(getState().user);
         }
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
@@ -1219,12 +1232,14 @@ const TVC_DefectReport = (function () {
     function dfModifyDisabledTitle(row) {
         if (!row || canOpenDfModifyRow(row)) return '';
         if (isHq()) {
+            if (TVC_DefectCase.isPhase4Editable(row)) return '';
             if (TVC_DefectCase.isHqReplyExported(row)) return 'HQ reply exported — modify not available';
             return 'Modify not available';
         }
         const st = TVC_DefectCase.listWorkflowStatus(row);
-        if (st === 'Submitted') return 'Submitted — modify not available';
-        if (st === 'Approved') return 'Approved — modify not available';
+        if (st === 'Submitted' || st === 'Approved') {
+            return 'Captain / Chief Engineer (co, ce) only';
+        }
         return 'Modify not available';
     }
 
@@ -1232,25 +1247,28 @@ const TVC_DefectReport = (function () {
         if (!row || !getState().user) return false;
         if (!isHq()) {
             const st = TVC_DefectCase.listWorkflowStatus(row);
-            if (st === 'Submitted') return false;
-            if (st === 'Approved') {
-                return TVC_DefectCase.isShipVerificationEditable(row);
+            if (st === 'Submitted' || st === 'Approved') {
+                return canModifyDfShipCommentsOnly(row);
             }
-        } else if (TVC_DefectCase.isHqReplyExported(row)) {
-            return false;
+        } else {
+            if (canModifyDfHqFinalRow(row)) return true;
+            if (TVC_DefectCase.isHqReplyExported(row)) return false;
         }
-        return canModifyDfListRow(row) || canModifyDfShipCommentsOnly(row) || canModifyDfHqRow(row);
+        return canModifyDfListRow(row) || canModifyDfShipCommentsOnly(row) || canModifyDfHqRow(row)
+            || canModifyDfHqFinalRow(row);
     }
 
     function canEditDfShipCommentsSection(row, forceView) {
         if (forceView || isHq() || !row || !getState().user) return false;
-        if (row.status === TVC_DefectCase.Status.CLOSED) return false;
-        if (TVC_DefectCase.isShipVerificationEditable(row)) return true;
+        if (row.status === TVC_DefectCase.Status.CLOSED && row.phase3_locked) return false;
         const st = TVC_DefectCase.listWorkflowStatus(row);
-        if (!['Draft', 'Reported', 'Confirmed', 'Submitted', 'Approved'].includes(st)) return false;
         if (st === 'Submitted' || st === 'Approved') {
-            return TVC_RBAC.canConfirmDepartment(getState().user, row.department);
+            return TVC_DefectCase.isPhase1Exported(row)
+                && TVC_RBAC.canModifyDefectShipPhase3(getState().user);
         }
+        if (TVC_DefectCase.isPhase3Editable(row)
+            && TVC_RBAC.canModifyDefectShipPhase3(getState().user)) return true;
+        if (!['Draft', 'Reported', 'Confirmed'].includes(st)) return false;
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
@@ -1533,7 +1551,8 @@ const TVC_DefectReport = (function () {
 
     function resolveDfOpenMode(row) {
         if (isHq() && row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'edit';
-        if (isHq() && row.status === TVC_DefectCase.Status.AWAITING_COMPLETION) return 'edit';
+        if (isHq() && TVC_DefectCase.isPhase4Editable(row)) return 'edit';
+        if (!isHq() && TVC_DefectCase.isPhase3Editable(row)) return 'edit';
         if (!isHq() && (row.status === TVC_DefectCase.Status.COMPANY_REVIEWED
             || row.status === TVC_DefectCase.Status.WORK_IN_PROGRESS)) return 'phase3';
         return 'edit';
@@ -1956,17 +1975,19 @@ const TVC_DefectReport = (function () {
     function renderPhase3() { return ''; }
 
     function renderPhase4(row, readonly) {
-        // HQ Defect Report — vessel-style UI; Phase 4 close-out is not shown in this modal.
-        if (isHq()) return '';
-        const show = row.phase3_locked || row.phase4_locked
+        const show = TVC_DefectCase.isPhase3DcComplete(row)
+            || row.phase4_locked
             || row.status === TVC_DefectCase.Status.AWAITING_COMPLETION
             || row.status === TVC_DefectCase.Status.CLOSED;
         if (!show) return '';
         const p4ro = readonly || !TVC_DefectCase.isPhase4Editable(row);
-        const showHQ = row.phase3_locked || row.status === TVC_DefectCase.Status.AWAITING_COMPLETION || row.status === TVC_DefectCase.Status.CLOSED;
-        if (!showHQ) return '';
+        const hq = isHq();
+        const title = hq
+            ? 'Phase 4 — Company inspection comments (HQ)'
+            : 'Phase 4 — Company inspection record';
         return `<section class="df-phase df-phase-hq df-phase-close">
-            <h3 class="df-phase-title">Phase 4 — Closed out reply from Company D.P.</h3>
+            <h3 class="df-phase-title">${title}</h3>
+            ${hq && TVC_DefectCase.isPhase4Editable(row) ? '<p class="spare-sync-note muted">Ship DC (Phase 3) complete — optional inspection notes. Case is already closed on ship side.</p>' : ''}
             <div class="df-grid">
                 ${fieldInput('preventive_measures', 'Preventive measures (Verified by Team Leader MTT)', row.preventive_measures, { span: 2, textarea: true, rows: 3, readonly: p4ro })}
                 ${fieldInput('dp_closed_satisfactory', 'Closed out — D.P. reply', row.dp_closed_satisfactory, { radioGroup: 'dp_sat', readonly: p4ro })}
@@ -2097,7 +2118,7 @@ const TVC_DefectReport = (function () {
         const canEditShoreSupport = canEditShipInitial || canEditShipComments;
         const canEditShipAttach = canEditShipInitial || canEditShipComments;
         const canEditP4 = !forceView && hq && TVC_DefectCase.isPhase4Editable(row);
-        const canEditCompanyFinal = !forceView && hq && (canEditP4 || canEditCompanyReply);
+        const canEditCompanyFinal = canEditDfCompanyFinalComment(row, forceView);
         const canHqApproveOnly = !forceView && hq && approval.canApproveNow;
         const canSave = !forceView && (
             canEditP1 || canEditCompanyReply || canEditShipVerify || canEditShoreSupport || canEditP4 || canEditCompanyFinal || canHqApproveOnly
@@ -2345,14 +2366,9 @@ const TVC_DefectReport = (function () {
             return;
         }
         row = await TVC_DefectCaseService.get(id) || row;
+        if (isHq() && TVC_DefectCase.isPhase4Editable(row)) return saveHqFinalModal();
         if (isHq() && canSaveDfHqInitialReply(row)) return saveHqReply();
-        if (isHq() && TVC_DefectCase.isPhase4Editable(row)) return saveHqPhase4();
-        if (isHq() && canModifyDfHqRow(row)) {
-            await refresh();
-            await reopenDefectCaseAfterSave(id);
-            await TVC_Dialog.alert('Saved.');
-            return;
-        }
+        if (isHq() && canModifyDfHqRow(row)) return saveHqReply();
         if (!isHq() && canModifyDfShipCommentsOnly(row)) return saveShipCommentsFieldsModal();
         if (!isHq() && TVC_DefectCase.isShipVerificationEditable(row)) return saveShipVerificationModal();
         if (!isHq() && TVC_DefectCase.isPhase3Editable(row)) return saveShipPhase3();
@@ -2374,7 +2390,10 @@ const TVC_DefectReport = (function () {
             if (saved) syncDfDraftFromRow(saved);
             await refresh();
             await reopenDefectCaseAfterSave(id);
-            await TVC_Dialog.alert('Ship\'s Comments saved.');
+            const dcMsg = saved?.defect_cleared && saved?.phase3_locked
+                ? '\n\nWork Plan LAST DONE / NEXT DATE updated for linked job(s).'
+                : '';
+            await TVC_Dialog.alert(`Ship\'s Comments saved.${dcMsg}`);
         } catch (e) {
             await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
@@ -2519,6 +2538,36 @@ const TVC_DefectReport = (function () {
             if (andExport) await TVC_DefectSync.exportCloseZip(s.user, id);
         } catch (e) {
             await TVC_Dialog.alert(e.message || e.code || 'Phase 4 close failed');
+        }
+    }
+
+    async function saveHqFinalModal(andExport) {
+        const s = getState();
+        const id = s._defectCaseId;
+        if (!id) return;
+        try {
+            const form = captureForm();
+            await TVC_DefectCaseService.saveHqPhase4(s.user, id, {
+                company_comment: form.company_comment,
+                company_attachments: form.company_attachments,
+                preventive_measures: form.preventive_measures,
+                dp_closed_satisfactory: form.dp_closed_satisfactory,
+                dp_closed_reply: form.dp_closed_reply,
+                dp_closed_by: form.dp_closed_by,
+                dp_closed_date: form.dp_closed_date,
+            });
+            await TVC_Dialog.alert('Phase 4 — Company inspection comments saved.');
+            s._dfSavedToList = true;
+            const saved = await TVC_DefectCaseService.get(id);
+            if (saved) {
+                upsertDefectCaseInState(saved);
+                syncDfDraftFromRow(saved);
+            }
+            await refresh();
+            await reopenDefectCaseAfterSave(id);
+            if (andExport) await TVC_DefectSync.exportCloseZip(s.user, id);
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
     }
 
@@ -2807,7 +2856,7 @@ const TVC_DefectReport = (function () {
 
     return {
         init, renderInbox, renderTab, openCase, openCaseFromList, openCaseFromNav, openNewFromJob, openNewBlank,
-        saveDraft, saveModal, submitCase, saveHqReply, saveShipPhase3, saveHqPhase4, startWork,
+        saveDraft, saveModal, submitCase, saveHqReply, saveShipPhase3, saveHqPhase4, saveHqFinalModal, startWork,
         printCase, printDefectModal, previewDefectModal, dfReportConfirmByToggle, dfApprovedByToggle, closeModal, closeDefectModal, requestCloseModal, confirmCancelNew, captureForm, uploadAttachment, removeAttachment,
         toggleDfGroupPick, toggleDfJobPick, toggleDfJobRowPick, pickDfGroup, pickDfJob, pickDfJobForRow,
         clearDfJob, clearDfJobRow, addDfJobRow, removeDfJobRow, dfGroupPickSearch, dfJobPickSearch, dfJobRowPickSearch,

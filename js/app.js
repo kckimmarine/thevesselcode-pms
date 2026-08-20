@@ -2912,14 +2912,12 @@ const TVC_App = (function () {
         if (isMasterHubMode()) {
             if (!TVC_HubRelay.canHubLegExport(row)) return false;
             if (st === 'Submitted') return true;
-            if (row.defect_cleared && String(row.ship_verified_date || '').trim()
-                && (row.approved_at || st === 'Approved')) return true;
+            if (row.defect_cleared && String(row.ship_verified_date || '').trim()) return true;
             return false;
         }
         if (!TVC_HubRelay.canStationLegExport(row)) return false;
         if (st === 'Confirmed') return true;
-        if (row.defect_cleared && String(row.ship_verified_date || '').trim()
-            && (row.approved_at || st === 'Approved')) return true;
+        if (row.defect_cleared && String(row.ship_verified_date || '').trim()) return true;
         return false;
     }
 
@@ -4600,12 +4598,13 @@ const TVC_App = (function () {
             return;
         }
         const clearedReady = !!caseRow.defect_cleared
-            && !!String(caseRow.ship_verified_date || '').trim()
-            && !!(caseRow.approved_at || caseRow.approved_by);
-        if (clearedReady || caseRow.status === TVC_DefectCase.Status.AWAITING_COMPLETION) {
-            if (caseRow.status !== TVC_DefectCase.Status.AWAITING_COMPLETION) {
+            && !!String(caseRow.ship_verified_date || '').trim();
+        if (clearedReady || caseRow.status === TVC_DefectCase.Status.CLOSED
+            || caseRow.status === TVC_DefectCase.Status.AWAITING_COMPLETION) {
+            if (caseRow.status !== TVC_DefectCase.Status.CLOSED
+                && caseRow.status !== TVC_DefectCase.Status.AWAITING_COMPLETION) {
                 const row = await TVC_DefectCaseService.get(caseRow.id) || caseRow;
-                row.status = TVC_DefectCase.Status.AWAITING_COMPLETION;
+                row.status = TVC_DefectCase.Status.CLOSED;
                 if (!row.phase3_locked) row.phase3_locked = true;
                 row.completed_at = row.completed_at || new Date().toISOString();
                 row.sync_status = row.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (row.sync_status || 'LOCAL');
@@ -4656,9 +4655,9 @@ const TVC_App = (function () {
         const completionRows = [];
         for (const c of scoped) {
             const clearedReady = !!c.defect_cleared
-                && !!String(c.ship_verified_date || '').trim()
-                && !!(c.approved_at || c.approved_by);
-            if (clearedReady || c.status === TVC_DefectCase.Status.AWAITING_COMPLETION) {
+                && !!String(c.ship_verified_date || '').trim();
+            if (clearedReady || c.status === TVC_DefectCase.Status.CLOSED
+                || c.status === TVC_DefectCase.Status.AWAITING_COMPLETION) {
                 completionRows.push(c);
             } else {
                 urgentRows.push(c);
