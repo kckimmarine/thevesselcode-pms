@@ -261,8 +261,9 @@ async function main() {
         assert('RH gate open after M/P confirm', pending.length === 0 && allWorkHistoryConfirmed(entries));
 
         assert('app excludes Defect from RH gate', appSrc.includes('!isHistDefectEntry(e) && !isMonthlyRhGateEntryReady(e)'));
-        assert('menu export gate requires plan lock', appSrc.includes("await TVC_Dialog.alert('Update Work Plan must be completed first.');")
-            && appSrc.includes('return;'));
+        assert('CE monthly export still writes a file when no pending confirmed',
+            appSrc.includes('stationPendingConfirmedReportCount(d) === 0')
+            && appSrc.includes('Export current Monthly snapshot.'));
     });
 
     await scenario('2) Running Hours — 500 prev / 700 expected / total auto-sum', async () => {
@@ -331,7 +332,7 @@ async function main() {
         assert('Work Plan NEXT DATE updated for all 101 H jobs', changed.length === 101, `count=${changed.length}`);
         assert('each updated job has run_hours_expected=700', changed.every(j => j.run_hours_expected === 700));
 
-        assert('Monthly export blocked until plan locked', appSrc.includes('!isOriginalPlanUpdateLocked(dept)'));
+        assert('Plan lock still switches station monthly to full snapshot', appSrc.includes('isOriginalPlanUpdateLocked(d)'));
         assert('Update Work Plan requires RH committed', appSrc.includes('Complete Running Hours Update first.'));
     });
 

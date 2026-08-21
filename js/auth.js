@@ -2,7 +2,7 @@
 const TVC_Auth = (function () {
     const SESSION_KEY = 'tvc_session_v2';
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 8;
+    const USERS_SEED_VERSION = 9;
 
     const DEFAULT_USERS = [
         // Deck part
@@ -13,7 +13,7 @@ const TVC_Auth = (function () {
         { id: 'user-engineer', username: 'engineer', display_name: 'Kim 3/E (Engineer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'ENGINE', vessel_id: 'INCHEON CHEMI' },
         { id: 'user-chief', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'INCHEON CHEMI' },
         // Head office
-        { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent (본사)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null },
+        { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent (본사)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'DAEMYUNG' },
         // THE VESSEL CODE — Admin Mode (app updates only)
         { id: 'user-tvc', username: 'tvc', display_name: 'TVC Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null },
     ];
@@ -106,9 +106,10 @@ const TVC_Auth = (function () {
             ...session,
             role,
             account_type: user.account_type,
-            department: user.account_type === 'HQ' ? null : user.department,
+            department: (user.account_type === 'HQ' || user.account_type === 'ADMIN') ? null : user.department,
             display_name: user.display_name,
             vessel_id: user.vessel_id,
+            company_id: user.company_id || null,
             station,
             login_mode: session.login_mode || null,
         };
@@ -155,7 +156,8 @@ const TVC_Auth = (function () {
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,
                 account_type: user.account_type, role: sessionRole,
-                department: null, vessel_id: user.vessel_id, station: null, login_mode: null,
+                department: null, vessel_id: user.vessel_id, company_id: user.company_id || null,
+                station: null, login_mode: null,
             };
             sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
             return { ok: true, user: session };

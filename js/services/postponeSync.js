@@ -136,9 +136,6 @@ const TVC_PostponeSync = (function () {
         if (row.work_type !== 'POSTPONE') throw new Error('Not a postpone report.');
         const jobId = row.job_items?.[0]?.maintenance_job_id;
         const job = jobId ? await TVC_DB.get('maintenance_jobs', jobId) : null;
-        if (!postponeRequiresCompanyExport(row, job)) {
-            throw new Error('Only critical postpone reports require company export.');
-        }
         return { row, job };
     }
 
@@ -210,6 +207,10 @@ const TVC_PostponeSync = (function () {
 
     async function exportHqReplyZip(user, reportId) {
         const { row, job } = await loadReportContext(reportId);
+        const hubRelay = typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
+        if (!TVC_RBAC.isHqAccount(user) && !hubRelay) {
+            throw new Error('HQ reply export is available on HQ or Master Hub only.');
+        }
         if (!TVC_RBAC.isApprovedStatus(row.status, row.is_locked)) {
             throw new Error('HQ must approve the postpone report before reply export.');
         }

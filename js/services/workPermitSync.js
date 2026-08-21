@@ -219,6 +219,9 @@ const TVC_WorkPermitSync = (function () {
             }
             row.last_synced_at = ts;
             row.last_export_filename = filename;
+            if (direction === 'WORK_PERMIT_REPLY_HQ_TO_SHIP') {
+                row.hq_reply_exported_at = ts;
+            }
             await TVC_DB.put('work_permits', row);
         }
         await TVC_DB.put('audit_logs', {

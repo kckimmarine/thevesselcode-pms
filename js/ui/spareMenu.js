@@ -876,6 +876,15 @@ const TVC_SpareMenu = (function () {
         return secCode ? `Sheet ${secCode}` : '';
     }
 
+    function equipmentStore(st) {
+        return st?.currentTab === 'actual' ? 'pms' : 'spare';
+    }
+
+    function equipmentDefRows(st, store) {
+        const use = store || equipmentStore(st);
+        return use === 'pms' ? (st.groups || []) : (st.spareGroups || []);
+    }
+
     /** SPARE 아이템에 지정된 Equipment (SORT-1). 지정 시 Maker~Serial은 그룹이 아닌 장비 헤더를 따른다. */
     function equipmentFromSpare(s) {
         const c = s ? canon(s) : null;
@@ -887,36 +896,36 @@ const TVC_SpareMenu = (function () {
         return '';
     }
 
-    function equipmentNamesForGroup(st, groupLabel) {
+    function equipmentFromJob(j) {
+        return String(j?.equipment || '').trim();
+    }
+
+    function matchGroupLabel(st, lab, rowLabel, rowDept) {
+        if (st.department && rowDept && rowDept !== st.department) return false;
+        if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(rowLabel);
+        return normalizeGroupLabel(String(rowLabel || '')) === normalizeGroupLabel(lab);
+    }
+
+    function equipmentNamesForGroup(st, groupLabel, store) {
         const lab = String(groupLabel || '').trim();
         if (!lab) return [];
-        const inDept = (gr) => (!st.department || !gr.department || gr.department === st.department);
-        const matchLabel = (gr) => {
-            if (!inDept(gr)) return false;
-            if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(gr.label);
-            return normalizeGroupLabel(gr.label) === normalizeGroupLabel(lab);
-        };
-        const fromGroups = (st.groups || [])
-            .filter(gr => matchLabel(gr) && String(gr.item_sort1 || '').trim())
+        const use = store || equipmentStore(st);
+        const fromDefs = equipmentDefRows(st, use)
+            .filter(gr => matchGroupLabel(st, lab, gr.label, gr.department) && String(gr.item_sort1 || '').trim())
             .map(gr => String(gr.item_sort1).trim());
-        const fromJobs = (st.jobs || [])
-            .filter(j => {
-                if (st.department && j.department && j.department !== st.department) return false;
-                if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(j.group);
-                return normalizeGroupLabel(String(j.group || '')) === normalizeGroupLabel(lab);
-            })
-            .map(j => String(j.item_sort1 || '').trim())
-            .filter(Boolean);
+        if (use === 'pms') {
+            const fromJobs = (st.jobs || [])
+                .filter(j => matchGroupLabel(st, lab, j.group, j.department))
+                .map(equipmentFromJob)
+                .filter(Boolean);
+            return [...new Set([...fromDefs, ...fromJobs])].sort((a, b) => a.localeCompare(b));
+        }
         const fromSpares = (st.spares || [])
             .map(canon)
-            .filter(s => {
-                const g = spareGroupLabel(s);
-                if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(g);
-                return normalizeGroupLabel(g) === normalizeGroupLabel(lab);
-            })
+            .filter(s => matchGroupLabel(st, lab, spareGroupLabel(s), s.category || s.department))
             .map(s => equipmentFromSpare(s))
             .filter(Boolean);
-        return [...new Set([...fromGroups, ...fromJobs, ...fromSpares])].sort((a, b) => a.localeCompare(b));
+        return [...new Set([...fromDefs, ...fromSpares])].sort((a, b) => a.localeCompare(b));
     }
 
     function equipmentDatalistHtml(st, groupLabel, listId) {
@@ -925,17 +934,14 @@ const TVC_SpareMenu = (function () {
         return `<datalist id="${listId}">${names.map(n => `<option value="${escAttr(n)}">`).join('')}</datalist>`;
     }
 
-    function findEquipmentGroupDef(st, groupLabel, equipmentName) {
+    function findEquipmentGroupDef(st, groupLabel, equipmentName, store) {
         const lab = String(groupLabel || '').trim();
         const item = String(equipmentName || '').trim();
         if (!lab || !item) return null;
-        const inDept = (gr) => (!st.department || !gr.department || gr.department === st.department);
-        const matchLabel = (gr) => {
-            if (!inDept(gr)) return false;
-            if (isGeneratorEngineGroupLabel(lab)) return isGeneratorEngineGroupLabel(gr.label);
-            return normalizeGroupLabel(gr.label) === normalizeGroupLabel(lab);
-        };
-        return (st.groups || []).find(gr => matchLabel(gr) && String(gr.item_sort1 || '').trim() === item) || null;
+        return equipmentDefRows(st, store).find(gr =>
+            matchGroupLabel(st, lab, gr.label, gr.department)
+            && String(gr.item_sort1 || '').trim() === item
+        ) || null;
     }
 
     function equipmentNoFromRow(gr) {
@@ -944,13 +950,14 @@ const TVC_SpareMenu = (function () {
         return Number.isFinite(n) && n > 0 ? Math.min(99, n) : 0;
     }
 
-    function equipmentNoForName(st, groupLabel, equipmentName) {
+    function equipmentNoForName(st, groupLabel, equipmentName, store) {
         const item = String(equipmentName || '').trim();
         if (!item) return 0;
-        const def = findEquipmentGroupDef(st, groupLabel, item);
+        const use = store || equipmentStore(st);
+        const def = findEquipmentGroupDef(st, groupLabel, item, use);
         const fromDef = equipmentNoFromRow(def);
         if (fromDef) return fromDef;
-        if (typeof TVC_SpareCode !== 'undefined') {
+        if (use === 'spare' && typeof TVC_SpareCode !== 'undefined') {
             const sp = (st.spares || []).map(canon).find(s => {
                 const g = spareGroupLabel(s);
                 return equipmentFromSpare(s) === item
@@ -967,7 +974,7 @@ const TVC_SpareMenu = (function () {
         if (s.equipmentNo > 0) return s.equipmentNo;
         const eqName = equipmentFromSpare(s);
         if (eqName) {
-            const fromName = equipmentNoForName(st, groupLabel || spareGroupLabel(s), eqName);
+            const fromName = equipmentNoForName(st, groupLabel || spareGroupLabel(s), eqName, 'spare');
             if (fromName) return fromName;
         }
         if (typeof TVC_SpareCode !== 'undefined') {
@@ -998,12 +1005,24 @@ const TVC_SpareMenu = (function () {
         });
     }
 
+    function jobsForEquipment(st, groupLabel, equipmentName) {
+        const lab = String(groupLabel || '').trim();
+        const item = String(equipmentName || '').trim();
+        if (!lab || !item) return [];
+        return (st.jobs || []).filter(j =>
+            matchGroupLabel(st, lab, j.group, j.department) && equipmentFromJob(j) === item
+        );
+    }
+
     function equipmentDefsForGroup(st, groupLabel) {
-        const headerStore = st?.currentTab === 'actual' ? 'pms' : 'spare';
-        return equipmentNamesForGroup(st, groupLabel).map(name => {
+        const headerStore = equipmentStore(st);
+        return equipmentNamesForGroup(st, groupLabel, headerStore).map(name => {
             const def = groupDefHeader(st, groupLabel, name, headerStore);
-            const row = findEquipmentGroupDef(st, groupLabel, name);
-            const equipmentNo = equipmentNoFromRow(row) || equipmentNoForName(st, groupLabel, name);
+            const row = findEquipmentGroupDef(st, groupLabel, name, headerStore);
+            const equipmentNo = equipmentNoFromRow(row) || equipmentNoForName(st, groupLabel, name, headerStore);
+            const itemCount = headerStore === 'pms'
+                ? jobsForEquipment(st, groupLabel, name).length
+                : sparesForEquipment(st, groupLabel, name).length;
             return {
                 id: row?.id || '',
                 name,
@@ -1012,7 +1031,7 @@ const TVC_SpareMenu = (function () {
                 modelType: def?.modelType || headerFieldText(row?.model_type) || '',
                 capacity: def?.capacity || headerFieldText(row?.capacity) || '',
                 serialNo: def?.serialNo || headerFieldText(row?.serial_no) || '',
-                spareCount: sparesForEquipment(st, groupLabel, name).length,
+                spareCount: itemCount,
                 hasHeader: !!(def?.edited || row?.header_edited),
             };
         }).sort((a, b) => (a.equipmentNo || 999) - (b.equipmentNo || 999) || a.name.localeCompare(b.name));
@@ -1148,7 +1167,7 @@ const TVC_SpareMenu = (function () {
         if (!pmsGroupNo) pmsGroupNo = groupLabelFromCode(st, s);
         const equipment = equipmentFromSpare(s);
         if (equipment) {
-            const equipDef = groupDefHeader(st, pmsGroupNo === '—' ? '' : pmsGroupNo, equipment);
+            const equipDef = groupDefHeader(st, pmsGroupNo === '—' ? '' : pmsGroupNo, equipment, 'spare');
             return {
                 pmsGroupNo: pmsGroupNo === '—' ? '' : pmsGroupNo,
                 equipment,
@@ -1162,7 +1181,7 @@ const TVC_SpareMenu = (function () {
             };
         }
         // 그룹 Modify로 저장한 그룹 헤더 메타를 최우선으로 반영(아이템 클릭 시에도 일치)
-        const def = groupDefHeader(st, pmsGroupNo === '—' ? '' : pmsGroupNo);
+        const def = groupDefHeader(st, pmsGroupNo === '—' ? '' : pmsGroupNo, undefined, 'spare');
         const base = {
             pmsGroupNo: pmsGroupNo === '—' ? '' : pmsGroupNo,
             equipment: '',
@@ -1282,13 +1301,28 @@ const TVC_SpareMenu = (function () {
         }
     }
 
+    function upsertSpareGroupInState(st, row) {
+        if (!row?.id) return;
+        const groups = st.spareGroups || [];
+        const gi = groups.findIndex(gr => gr.id === row.id);
+        if (gi >= 0) groups[gi] = row;
+        else groups.push(row);
+        st.spareGroups = groups;
+    }
+
+    function upsertEquipmentRowInState(st, row, store) {
+        if ((store || equipmentStore(st)) === 'pms') upsertPmsGroupInState(st, row);
+        else upsertSpareGroupInState(st, row);
+    }
+
     function findMaintenanceGroupDef(defs, lab, dept) {
         const norm = normalizeGroupLabel;
-        return (defs || []).find(gr => {
+        const matches = (defs || []).filter(gr => {
             if (norm(gr.label) !== norm(lab)) return false;
-            if (!dept) return true;
-            return !gr.department || gr.department === dept;
-        }) || null;
+            if (dept && gr.department && gr.department !== dept) return false;
+            return true;
+        });
+        return matches.find(gr => !String(gr.item_sort1 || '').trim()) || null;
     }
 
     async function upsertGroupCriticalEquipment(st, yesNo, groupKeyOverride) {
@@ -1324,6 +1358,8 @@ const TVC_SpareMenu = (function () {
                 ...defBase,
                 label: lab,
                 department: dept || defBase.department || '',
+                item_sort1: null,
+                equipment_no: null,
                 is_critical_equipment: yesNo,
                 header_edited: !!defBase.header_edited || yesNo !== null,
                 updated_at: new Date().toISOString(),
@@ -1341,8 +1377,11 @@ const TVC_SpareMenu = (function () {
         if (!lab) return false;
         const inDept = (gr) => (!st.department || !gr.department || gr.department === st.department);
         const target = normalizeGroupLabel(lab);
-        const def = (st.groups || []).find(gr => inDept(gr) && normalizeGroupLabel(gr.label) === target);
-        return def?.is_critical_equipment === true;
+        return (st.groups || []).some(gr =>
+            inDept(gr)
+            && normalizeGroupLabel(gr.label) === target
+            && gr.is_critical_equipment === true
+        );
     }
 
     function groupHasCriticalJob(st, groupLabel, deptScope) {
@@ -1493,6 +1532,7 @@ const TVC_SpareMenu = (function () {
         return resolveSpareHeaderFromGroup(st, {
             groupKey: opts.groupKey,
             headerStore: opts.headerStore || 'spare',
+            equipment: opts.equipment || '',
         });
     }
 
@@ -1557,6 +1597,7 @@ const TVC_SpareMenu = (function () {
                 focusedId: focusOverride,
                 groupKey: headerGroupKey,
                 headerStore: opts.headerStore || 'spare',
+                equipment: opts.equipment || '',
             });
         const hasContent = opts.forceIdle ? false : spareHeaderHasContent(st, focusOverride, headerGroupKey);
         const showCriticalEquipment = !!opts.showCriticalEquipment;
@@ -1720,6 +1761,8 @@ const TVC_SpareMenu = (function () {
             const draft = window.TVC_App.getOrigJobInlineEquipmentDraft?.();
             if (draft) return renderPlanJobEquipmentHeaderEditHtml(st, draft);
         }
+        const job = st.selectedJobId && st.idx?.jobById.get(st.selectedJobId);
+        const equipment = String(job?.equipment || '').trim();
         return renderSpareGroupHeaderHtml(st, {
             pmsLabel: 'PMS Group No.',
             ariaLabel: 'PMS Group information',
@@ -1727,6 +1770,7 @@ const TVC_SpareMenu = (function () {
             suppressIdleHint: true,
             headerStore: 'pms',
             groupKey: planGroupKey(st),
+            equipment,
         });
     }
 
@@ -6840,6 +6884,15 @@ const TVC_SpareMenu = (function () {
             e.stopPropagation();
             reqListSelectRow(id);
         });
+        root.addEventListener('dblclick', (e) => {
+            const tr = e.target.closest('#reqWorkHistPanel tr[data-req-id]');
+            if (!tr || e.target.closest('.spare-req-list-chk')) return;
+            const id = tr.dataset.reqId;
+            if (!id) return;
+            e.preventDefault();
+            e.stopPropagation();
+            reqListOpenRow(id);
+        });
     }
 
     function bindSpareReqListModalClicks() {
@@ -6854,6 +6907,15 @@ const TVC_SpareMenu = (function () {
             e.preventDefault();
             e.stopPropagation();
             reqListSelectRow(id);
+        });
+        modal.addEventListener('dblclick', (e) => {
+            const tr = e.target.closest('#spareReqListBody tr[data-req-id]');
+            if (!tr || e.target.closest('.spare-req-list-chk')) return;
+            const id = tr.dataset.reqId;
+            if (!id) return;
+            e.preventDefault();
+            e.stopPropagation();
+            reqListOpenRow(id);
         });
     }
 
@@ -6881,6 +6943,20 @@ const TVC_SpareMenu = (function () {
         } catch (e) {
             console.error('[reqListSelectRow]', e);
             await TVC_Dialog.alert(e?.message || 'Failed to load requisition.');
+        }
+    }
+
+    async function reqListOpenRow(id) {
+        const m = modState(getState());
+        if (isRequisitionListWindow(m)) {
+            await reqListSelectRow(id);
+        } else {
+            const req = await TVC_Inventory.getRequisition(id);
+            await reqListPickRow(id, req?.req_no || '');
+        }
+        if (_reqWorkHistOpen) {
+            setReqWorkHistOpen(false);
+            if (typeof TVC_ListFilters !== 'undefined') TVC_ListFilters.closePopover();
         }
     }
 
@@ -7083,8 +7159,8 @@ const TVC_SpareMenu = (function () {
             const checked = reqListIsRowChecked(m, r.id);
             const sel = m.selectedReqId === r.id;
             const rowClick = mode === 'pick'
-                ? `onclick="TVC_SpareMenu.reqListPickRow('${rid}', '${no}')"`
-                : `onclick="TVC_SpareMenu.reqListSelectRow('${rid}')"`;
+                ? `onclick="TVC_SpareMenu.reqListPickRow('${rid}', '${no}')" ondblclick="event.preventDefault(); TVC_SpareMenu.reqListOpenRow('${rid}')"`
+                : `onclick="TVC_SpareMenu.reqListSelectRow('${rid}')" ondblclick="event.preventDefault(); TVC_SpareMenu.reqListOpenRow('${rid}')"`;
             const toggleFn = mode === 'pick' ? 'reqListPickToggleRow' : 'reqListToggleRow';
             const port = String(r.deliver_port || '').trim();
             const reported = reqListReportedDate(r);
@@ -7096,7 +7172,7 @@ const TVC_SpareMenu = (function () {
             const spareGroup = reqListSpareGroupNo(r, st);
             const canSelect = !_reqListXferExportKind || reqListCanXferExport(r);
             const chkDisabled = canSelect ? '' : ` disabled title="${escAttr(reqListXferExportSelectDisabledTitle(r))}"`;
-            return `<tr class="spare-req-list-row${sel ? ' sr-req-sel' : ''}${canSelect ? '' : ' menu-xfer-defect-row-disabled'}" data-req-id="${rid}" ${rowClick} style="cursor:pointer">
+            return `<tr class="spare-req-list-row${sel ? ' sr-req-sel' : ''}${canSelect ? '' : ' menu-xfer-defect-row-disabled'}" data-req-id="${rid}" ${rowClick} style="cursor:pointer" title="Double-click to open">
                 <td class="spare-req-list-chk" onclick="event.stopPropagation()">
                     <input type="checkbox" aria-label="Select requisition ${no}"
                         ${checked ? 'checked' : ''}${chkDisabled} onchange="TVC_SpareMenu.${toggleFn}('${rid}', this.checked)">
@@ -7922,8 +7998,8 @@ const TVC_SpareMenu = (function () {
                 <button type="button" class="modal-x" onclick="TVC_SpareMenu.toggleConsumeLogHistList()" title="Close">×</button></div>`;
         }
         const hintText = listMode
-            ? 'Click a row to load consumption log.'
-            : 'Click a row to fill File No.';
+            ? 'Click a row to load · Double-click to open and close this list.'
+            : 'Click a row to fill File No. · Double-click to apply and close.';
         panel.innerHTML = `${headHtml}
             ${renderConsumeLogFiltersHtml(m)}
             <div class="spare-req-list-panel-wrap spare-req-hist-panel-wrap">
@@ -8308,7 +8384,9 @@ const TVC_SpareMenu = (function () {
                 : String(jobItems[0]?.sort2 || log.sort2 || '').trim();
             const reported = log.made_on || log.consumed_date || '';
             return `<tr class="spare-consume-log-row${sel ? ' sr-req-sel' : ''}" data-consume-log-id="${lid}"
-                onclick="TVC_SpareMenu.consumeLogSelectRow('${lid}')">
+                onclick="TVC_SpareMenu.consumeLogSelectRow('${lid}')"
+                ondblclick="event.preventDefault(); TVC_SpareMenu.consumeLogOpenRow('${lid}')"
+                style="cursor:pointer" title="Double-click to open">
                 <td class="spare-consume-log-chk" onclick="event.stopPropagation()">
                     <input type="checkbox" class="spare-row-chk"${checked ? ' checked' : ''} aria-label="Select consumption log"
                         onclick="event.stopPropagation()"
@@ -8417,6 +8495,8 @@ const TVC_SpareMenu = (function () {
         if (isConsumedLogWindow(m)) {
             await loadConsumeLogIntoListWindow(id, { preserveHistPopover: true });
         } else {
+            const log = await TVC_Inventory.getConsumeLog(id);
+            consumeSetFileNoFromLog(log);
             await refreshConsumeLogListUi();
         }
         const scroll = document.getElementById('consumeLogHistListScroll')
@@ -8428,6 +8508,11 @@ const TVC_SpareMenu = (function () {
             try { scroll.focus({ preventScroll: true }); } catch (_) { /* ignore */ }
         }
         requestAnimationFrame(consumeLogHistScrollSelectedIntoView);
+    }
+
+    async function consumeLogOpenRow(id) {
+        await consumeLogSelectRow(id);
+        if (_consumeLogHistOpen) setConsumeLogHistOpen(false);
     }
 
     async function consumeLogToggleRow(id, checked) {
@@ -10179,7 +10264,7 @@ const TVC_SpareMenu = (function () {
         const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
         let header;
         if (equipment) {
-            const equipDef = groupDefHeader(st, groupLabel, equipment);
+            const equipDef = groupDefHeader(st, groupLabel, equipment, equipmentStore(st));
             header = {
                 pmsGroupNo: groupLabel,
                 equipment,
@@ -10402,16 +10487,17 @@ const TVC_SpareMenu = (function () {
         const norm = normalizeGroupLabel;
         try {
             if (equipment) {
+                const store = equipmentStore(st);
                 await saveJobEquipmentHeader(spareInventoryUser(st), {
                     department: dept,
                     group: newLabel,
                     item_sort1: equipment,
-                    equipment_no: equipmentNoForName(st, newLabel, equipment),
+                    equipment_no: equipmentNoForName(st, newLabel, equipment, store),
                     maker: header.maker,
                     modelType: header.modelType,
                     capacity: header.capacity,
                     serialNo: header.serialNo,
-                });
+                }, store);
                 m.groupHeaderEdit = false;
                 m.groupHeaderDraft = null;
                 m.groupHeaderEditKey = null;
@@ -10712,7 +10798,7 @@ const TVC_SpareMenu = (function () {
                     modelType: header.modelType,
                     capacity: header.capacity,
                     serialNo: header.serialNo,
-                });
+                }, 'spare');
             } else {
                 await saveGroupHeaderMeta(st, header, draft);
             }
@@ -14025,8 +14111,8 @@ const TVC_SpareMenu = (function () {
                 <button type="button" class="modal-x" onclick="TVC_SpareMenu.toggleReqWorkHistList()" title="Close">×</button></div>`;
         }
         const hintText = listMode
-            ? 'Click a row to load requisition.'
-            : 'Click a row to fill Requisition No.';
+            ? 'Click a row to load · Double-click to open and close this list.'
+            : 'Click a row to fill Requisition No. · Double-click to apply and close.';
         panel.innerHTML = `${headHtml}
             ${renderReqListFiltersHtml(m, { prefix: 'reqHist' })}
             <div class="spare-req-list-panel-wrap spare-req-hist-panel-wrap">
@@ -17045,9 +17131,10 @@ const TVC_SpareMenu = (function () {
         return (st._wrUsedParts || []).some(p => Number(p.qty_used) > 0);
     }
 
-    /** Existing Work/Defect report edit — default Page 2 list to Selected Items when parts exist. */
+    /** Existing Work/Defect/Permit edit — default Page 2 list to Selected Items when parts exist. */
     function wrSpareEditShowSelectedByDefault(st) {
-        if (!st._wrReportId && !st._defectCaseId) return false;
+        if (!st._wrReportId && !st._defectCaseId && !st._workPermitId) return false;
+        if (st._workPermitId === 'wp-draft-empty') return false;
         syncWrLineMap();
         return wrSpareCheckedCount(st) > 0;
     }
@@ -17205,9 +17292,11 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         const isPreview = wrSparePreviewMode(st, ro);
         m.wrSpareReadonly = !!ro;
-        if (isPreview) m.wrSpareShowSelectedOnly = true;
-        else if (m.wrSparePostSaveFilter) m.wrSpareShowSelectedOnly = true;
-        else if (!ro) m.wrSpareShowSelectedOnly = wrSpareEditShowSelectedByDefault(st);
+        if (isPreview || m.wrSparePostSaveFilter || wrSpareEditShowSelectedByDefault(st)) {
+            m.wrSpareShowSelectedOnly = true;
+        } else if (!ro) {
+            m.wrSpareShowSelectedOnly = false;
+        }
         const allCanon = (st.spares || []).map(canon);
         rebuildWrSpareCachedList(st);
         const selBtn = wrSpareSelectedBtnMeta(st);
@@ -17226,7 +17315,7 @@ const TVC_SpareMenu = (function () {
       <div class="wr-spare-toolbar-actions">
       <button type="button" id="wrSpareSelectedBtn" class="btn btn-sm spare-req-selected-btn${selectedBtnCls}"
         onclick="TVC_SpareMenu.wrSpareToggleSelectedOnly()" aria-pressed="${selBtn.active ? 'true' : 'false'}"
-        title="${esc(selBtn.title)}"${selBtn.disabled || ro ? ' disabled' : ''}>${esc(selBtn.label)}</button>
+        title="${esc(selBtn.title)}"${selBtn.disabled ? ' disabled' : ''}>${esc(selBtn.label)}</button>
       </div>
     </div>
     <div class="filter-bar spare-list-search-bar">
@@ -17379,7 +17468,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!btn) return;
         btn.textContent = meta.label;
         btn.title = meta.title;
-        btn.disabled = meta.disabled || modState(st).wrSpareReadonly;
+        btn.disabled = meta.disabled;
         btn.classList.toggle('plan-selected-filter-active', meta.active);
         btn.classList.toggle('is-active', meta.active);
         btn.setAttribute('aria-pressed', meta.active ? 'true' : 'false');
@@ -17503,7 +17592,6 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     function wrSpareToggleSelectedOnly() {
         const st = getState();
         const m = modState(st);
-        if (m.wrSpareReadonly) return;
         if (m.wrSpareShowSelectedOnly && spareListSearchQuery(st)) {
             clearConsumeSearch(st);
             refreshWrSpareListUi();
@@ -17705,8 +17793,11 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         } else if (m.wrSparePostSaveFilter) {
             m.wrSpareShowSelectedOnly = true;
             m.wrSparePostSaveFilter = false;
+        } else if (wrSpareEditShowSelectedByDefault(st)) {
+            m.wrSpareShowSelectedOnly = true;
+            if (!ro) m.wrSpareTreeOpen = false;
         } else if (!ro) {
-            m.wrSpareShowSelectedOnly = wrSpareEditShowSelectedByDefault(st);
+            m.wrSpareShowSelectedOnly = false;
             m.wrSpareTreeOpen = false;
         }
         syncWrLineMap();
@@ -21210,14 +21301,14 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             return { pmsGroupNo: '', maker: '', modelType: '', capacity: '', serialNo: '' };
         }
         const gk = `${job.department || ''}|${String(job.group || '').trim()}`;
-        return resolveGroupHeaderByKey(st, gk, job.group || '', undefined, job.item_sort1 || '');
+        return resolveGroupHeaderByKey(st, gk, job.group || '', undefined, job.equipment || job.item_sort1 || '');
     }
 
     function resolveGroupHeaderByKey(st, groupKey, groupLabel, _restoreKey, itemSort1) {
         const label = groupLabel
             ? safeTreeLabel(groupLabel)
             : (groupKey ? safeTreeLabel(String(groupKey).split('|').slice(1).join('|')) : '');
-        const itemDef = label ? groupDefHeader(st, label, itemSort1) : null;
+        const itemDef = label ? groupDefHeader(st, label, itemSort1, 'pms') : null;
         if (itemDef?.edited) {
             return {
                 pmsGroupNo: label || '',
@@ -21227,7 +21318,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 serialNo: itemDef.serialNo || '',
             };
         }
-        const h = resolveSpareHeaderFromGroup(st, { groupKey, groupLabel: label });
+        const h = resolveSpareHeaderFromGroup(st, { groupKey, groupLabel: label, headerStore: 'pms' });
         return {
             pmsGroupNo: label || h.pmsGroupNo || '',
             maker: h.maker || '',
@@ -21249,13 +21340,17 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const body = document.getElementById('spareEquipmentListBody');
         if (!body) return;
         if (!groupLabel) {
-            body.innerHTML = '<p class="muted">Select a group in SPARE GROUP Tree.</p>';
+            const treeName = equipmentStore(st) === 'pms' ? 'PMS GROUP Tree' : 'SPARE GROUP Tree';
+            body.innerHTML = `<p class="muted">Select a group in ${treeName}.</p>`;
             return;
         }
+        const store = equipmentStore(st);
         const defs = equipmentDefsForGroup(st, groupLabel);
         const editing = m.equipmentListEditKey;
         const draft = m.equipmentListDraft || {};
         const cell = (text) => esc(String(text || '').trim() || '—');
+        const countCol = store === 'pms' ? 'Jobs' : 'Spares';
+        const title = store === 'pms' ? 'PMS Equipment List' : 'SPARE Equipment List';
         let rows = '';
         defs.forEach(d => {
             const isEdit = editing === d.name;
@@ -21310,13 +21405,13 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             rows = '<tr><td colspan="8" class="empty-row muted">No Equipment registered. Click Add Equipment below.</td></tr>';
         }
         body.innerHTML = `
-            <h3 class="spare-sync-title">Equipment List</h3>
-            <p class="spare-equipment-list-sub">${esc(safeTreeLabel(groupLabel))}</p>
-            <p class="spare-sync-hint muted">EQ No. is the middle segment of Code (GG-<b>EE</b>-III). Example: MAIN BEARING = 01 → codes 01-01-001, 01-01-002 … Leave Maker~Serial blank to use group default.</p>
+            <h3 class="spare-sync-title">${title}</h3>
+            <p class="spare-equipment-list-sub">${esc(safeTreeLabel(groupLabel))} · ${store === 'pms' ? 'PMS GROUP' : 'SPARE GROUP'}</p>
+            <p class="spare-sync-hint muted">EQ No. is the middle segment of Code (GG-<b>EE</b>-III). PMS and SPARE keep separate Equipment lists per group. Leave Maker~Serial blank to use group default.</p>
             <div class="spare-equipment-list-wrap sheet-scroll-original">
                 <table class="data-table spare-equipment-list-table">
                     <thead><tr>
-                        <th>EQ No.</th><th>Equipment</th><th>Maker</th><th>Model / Type</th><th>Capacity</th><th>Serial No.</th><th>Spares</th><th></th>
+                        <th>EQ No.</th><th>Equipment</th><th>Maker</th><th>Model / Type</th><th>Capacity</th><th>Serial No.</th><th>${countCol}</th><th></th>
                     </tr></thead>
                     <tbody>${rows}</tbody>
                 </table>
@@ -21434,29 +21529,50 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             return;
         }
         const dept = st.department || groupSelectedNode(st)?.department || '';
+        const store = equipmentStore(st);
+        const storeName = store === 'pms' ? 'maintenance_groups' : 'spare_groups';
         try {
             if (oldName && oldName !== name && oldName !== '__new__') {
-                const spares = sparesForEquipment(st, groupLabel, oldName);
-                if (spares.length) {
-                    const rows = spares.map(s => TVC_SpareSchema.toRow({
-                        ...canon(s),
-                        equipment: name,
-                        equipmentNo,
-                    }));
-                    if (typeof TVC_DB?.bulkPut === 'function') await TVC_DB.bulkPut('spare_parts', rows);
-                    else {
-                        const u = spareInventoryUser(st);
-                        for (const r of rows) await TVC_Inventory.saveSpare(u, r);
+                if (store === 'spare') {
+                    const spares = sparesForEquipment(st, groupLabel, oldName);
+                    if (spares.length) {
+                        const rows = spares.map(s => TVC_SpareSchema.toRow({
+                            ...canon(s),
+                            equipment: name,
+                            equipmentNo,
+                        }));
+                        if (typeof TVC_DB?.bulkPut === 'function') await TVC_DB.bulkPut('spare_parts', rows);
+                        else {
+                            const u = spareInventoryUser(st);
+                            for (const r of rows) await TVC_Inventory.saveSpare(u, r);
+                        }
+                    }
+                } else {
+                    const jobs = jobsForEquipment(st, groupLabel, oldName);
+                    if (jobs.length) {
+                        const nextJobs = jobs.map(j => ({
+                            ...j,
+                            equipment: name,
+                            equipment_no: equipmentNo,
+                            updated_at: new Date().toISOString(),
+                            sync_status: 'LOCAL',
+                        }));
+                        if (typeof TVC_DB?.bulkPut === 'function') await TVC_DB.bulkPut('maintenance_jobs', nextJobs);
+                        st.jobs = (st.jobs || []).map(j => {
+                            const hit = nextJobs.find(n => n.id === j.id);
+                            return hit || j;
+                        });
                     }
                 }
-                const oldDef = findEquipmentGroupDef(st, groupLabel, oldName);
+                const oldDef = findEquipmentGroupDef(st, groupLabel, oldName, store);
                 if (oldDef?.id) {
-                    await TVC_DB.del('maintenance_groups', oldDef.id);
-                    st.groups = (st.groups || []).filter(gr => gr.id !== oldDef.id);
+                    await TVC_DB.del(storeName, oldDef.id);
+                    if (store === 'pms') st.groups = (st.groups || []).filter(gr => gr.id !== oldDef.id);
+                    else st.spareGroups = (st.spareGroups || []).filter(gr => gr.id !== oldDef.id);
                 }
             }
             const hasHeader = !!(maker || modelType || capacity || serialNo);
-            const headerPayload = {
+            await saveJobEquipmentHeader(spareInventoryUser(st), {
                 department: dept,
                 group: groupLabel,
                 item_sort1: name,
@@ -21465,38 +21581,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 modelType,
                 capacity,
                 serialNo,
-            };
-            if (hasHeader) {
-                await saveJobEquipmentHeader(spareInventoryUser(st), headerPayload);
-            } else {
-                const existing = findEquipmentGroupDef(st, groupLabel, name);
-                const row = existing || {
-                    id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-                    department: dept,
-                    label: groupLabel,
-                    sort_order: equipmentNo,
-                    created_at: new Date().toISOString(),
-                };
-                const saved = {
-                    ...row,
-                    label: groupLabel,
-                    item_sort1: name,
-                    equipment_no: equipmentNo,
-                    maker: maker || '',
-                    model_type: modelType || '',
-                    capacity: capacity || '',
-                    serial_no: serialNo || '',
-                    header_edited: false,
-                    updated_at: new Date().toISOString(),
-                    sync_status: 'LOCAL',
-                };
-                await TVC_DB.put('maintenance_groups', saved);
-                const groups = st.groups || [];
-                const gi = groups.findIndex(gr => gr.id === saved.id);
-                if (gi >= 0) groups[gi] = saved;
-                else groups.push(saved);
-                st.groups = groups;
-            }
+                header_edited: hasHeader,
+            }, store);
             m.equipmentListEditKey = null;
             m.equipmentListDraft = null;
             renderEquipmentListModal();
@@ -21516,16 +21602,22 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const groupLabel = equipmentListGroupLabel(st);
         const item = String(name || '').trim();
         if (!groupLabel || !item) return;
-        const spares = sparesForEquipment(st, groupLabel, item);
-        const msg = spares.length
-            ? `Delete Equipment “${item}”?\n\n${spares.length} spare item(s) will lose this Equipment tag (group default header will apply).`
-            : `Delete Equipment “${item}”?`;
+        const store = equipmentStore(st);
+        const storeName = store === 'pms' ? 'maintenance_groups' : 'spare_groups';
+        const spares = store === 'spare' ? sparesForEquipment(st, groupLabel, item) : [];
+        const jobs = store === 'pms' ? jobsForEquipment(st, groupLabel, item) : [];
+        const linked = store === 'pms' ? jobs.length : spares.length;
+        const kind = store === 'pms' ? 'job(s)' : 'spare item(s)';
+        const msg = linked
+            ? `Delete ${store === 'pms' ? 'PMS' : 'SPARE'} Equipment “${item}”?\n\n${linked} ${kind} will lose this Equipment tag (group default header will apply).`
+            : `Delete ${store === 'pms' ? 'PMS' : 'SPARE'} Equipment “${item}”?`;
         if (!await TVC_Dialog.confirm({ message: msg })) return;
         try {
-            const def = findEquipmentGroupDef(st, groupLabel, item);
+            const def = findEquipmentGroupDef(st, groupLabel, item, store);
             if (def?.id) {
-                await TVC_DB.del('maintenance_groups', def.id);
-                st.groups = (st.groups || []).filter(gr => gr.id !== def.id);
+                await TVC_DB.del(storeName, def.id);
+                if (store === 'pms') st.groups = (st.groups || []).filter(gr => gr.id !== def.id);
+                else st.spareGroups = (st.spareGroups || []).filter(gr => gr.id !== def.id);
             }
             if (spares.length) {
                 const rows = spares.map(s => TVC_SpareSchema.toRow({ ...canon(s), equipment: '', equipmentNo: 0 }));
@@ -21534,6 +21626,20 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                     const u = spareInventoryUser(st);
                     for (const r of rows) await TVC_Inventory.saveSpare(u, r);
                 }
+            }
+            if (jobs.length) {
+                const nextJobs = jobs.map(j => ({
+                    ...j,
+                    equipment: '',
+                    equipment_no: 0,
+                    updated_at: new Date().toISOString(),
+                    sync_status: 'LOCAL',
+                }));
+                if (typeof TVC_DB?.bulkPut === 'function') await TVC_DB.bulkPut('maintenance_jobs', nextJobs);
+                st.jobs = (st.jobs || []).map(j => {
+                    const hit = nextJobs.find(n => n.id === j.id);
+                    return hit || j;
+                });
             }
             const m = modState(st);
             if (m.equipmentListEditKey === item) {
@@ -21547,19 +21653,22 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
     }
 
-    async function saveJobEquipmentHeader(user, { department, group, item_sort1, equipment_no, maker, modelType, capacity, serialNo }) {
+    async function saveJobEquipmentHeader(user, { department, group, item_sort1, equipment_no, maker, modelType, capacity, serialNo, header_edited }, store) {
         if (!window.TVC_DB) return;
+        const use = store || equipmentStore(getState());
+        const storeName = use === 'pms' ? 'maintenance_groups' : 'spare_groups';
+        const idPrefix = use === 'pms' ? 'grp-' : 'sgrp-';
         const dept = department || user?.department || '';
         const label = String(group || '').trim();
         if (!label) return;
         const item = String(item_sort1 || '').trim();
         const eqNo = parseInt(String(equipment_no ?? '').replace(/\D/g, ''), 10);
-        const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
+        const defs = await TVC_DB.getAll(storeName).catch(() => []);
         const existing = (defs || []).find(gr => gr.department === dept
             && normalizeGroupLabel(gr.label) === normalizeGroupLabel(label)
             && String(gr.item_sort1 || '').trim() === item);
         const defBase = existing || {
-            id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+            id: idPrefix + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
             department: dept,
             label,
             sort_order: Number.isFinite(eqNo) && eqNo > 0 ? eqNo : 0,
@@ -21575,17 +21684,12 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             maker: maker || '',
             capacity: capacity || '',
             serial_no: serialNo || '',
-            header_edited: true,
+            header_edited: header_edited !== undefined ? !!header_edited : true,
             updated_at: new Date().toISOString(),
             sync_status: 'LOCAL',
         };
-        await TVC_DB.put('maintenance_groups', row);
-        const st = getState();
-        const groups = st.groups || [];
-        const gi = groups.findIndex(gr => gr.id === row.id);
-        if (gi >= 0) groups[gi] = row;
-        else groups.push(row);
-        st.groups = groups;
+        await TVC_DB.put(storeName, row);
+        upsertEquipmentRowInState(getState(), row, use);
     }
 
     function getPlanGroupPickNodes(st) {
@@ -21664,7 +21768,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         openReqListModal, closeReqListModal, reqListNew, reqListModify, reqListDelete,
         reqListPreview, reqListDetailReport, reqListReportConfirm, reqListReportApprove, reqListExportToMaster, reqListDocPreview, reqListPrint, reqListExportExcel,
         openCloseOsModal, closeCloseOsModal, saveCloseOsWaive,
-        reqListSelectRow, reqListToggleRow, reqListToggleAll, reqListPickRow, reqListPickToggleRow,
+        reqListSelectRow, reqListOpenRow, reqListToggleRow, reqListToggleAll, reqListPickRow, reqListPickToggleRow,
         reqListSetPeriod, reqListClearPeriod, reqListSetSearch, reqListClearSearch, reqListSetPhase,
         getReqListFilters, setReqListFilters,
         openReqSheetModal, closeReqSheetModal, saveReqSheetModal,
@@ -21684,7 +21788,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         consumeLogNew, consumeLogModify, consumePreviewModify, consumePreviewOpenWorkReport, cleanupConsumeWorkReportOverlay,
         consumeLogDelete, consumeLogPreview, consumeLogDetailReport, consumeLogReportConfirm, consumeLogReportApprove, consumeLogDocPreview, consumeLogPrint,
         consumeLogPrintPreview, consumeLogWindowDocPreview, consumeLogOpenList,
-        consumeLogSelectRow, consumeLogToggleRow, consumeLogToggleAll,
+        consumeLogSelectRow, consumeLogOpenRow, consumeLogToggleRow, consumeLogToggleAll,
         consumeLogSetPeriod, consumeLogClearPeriod, consumeLogSetSearch, consumeLogClearSearch,
         getConsumeLogListFilters, setConsumeLogListFilters,
         toggleConsumeLogHistList, consumeLogEnterListEdit, consumeLogCancelEdit, loadConsumeLogIntoListWindow,

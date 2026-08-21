@@ -1906,7 +1906,7 @@ const TVC_DefectReport = (function () {
             ? `<input class="wr-ro" value="${esc(dfVal(row, 'file_no', ''))}" readonly tabindex="-1">`
             : `<div class="wr-file-no-row">
                         <input data-df="file_no" class="${roCls.trim()}" value="${esc(dfVal(row, 'file_no', ''))}"${roAttr}>
-                        <button type="button" id="dfFileNoPickBtn" class="btn btn-sm wr-file-no-pick-btn" onclick="TVC_App.openFileNoPickModal('df')"${canEditShipInitial ? '' : ' disabled'} title="Browse Work History for File No. reference">Select File No.</button>
+                        <button type="button" id="dfFileNoPickBtn" class="btn btn-sm wr-file-no-pick-btn" onclick="TVC_App.openFileNoPickModal('df')"${canEditShipInitial ? '' : ' disabled'} title="Browse Report History">Check History</button>
                     </div>`;
         const fileNoPanel = forPrint
             ? ''
@@ -2182,6 +2182,7 @@ const TVC_DefectReport = (function () {
 
         return `<div class="df-modal-inner">
             <div class="wr-titlebar">${titleText}</div>
+            ${typeof TVC_App?.renderReportKindTabsHtml === 'function' ? TVC_App.renderReportKindTabsHtml('defect') : ''}
             ${pageTabsBar}
             <div class="wr-page tone-defect">
                 ${headHtml}
@@ -2249,6 +2250,7 @@ const TVC_DefectReport = (function () {
         }
         s._defectCaseId = id;
         s._defectMode = mode === 'view' ? 'view' : (mode || 'edit');
+        s._reportKindLocked = s._defectMode === 'view' ? 'defect' : null;
         _dfListSelId = id;
         if (opts.keepDraft && s._dfDraft) {
             /* saved reopen — draft already synced from DB */
@@ -2282,6 +2284,7 @@ const TVC_DefectReport = (function () {
         }
         restoreDefectModalScroll(scroll);
         TVC_PWA?.initDateInputFormat?.(body);
+        if (s._defectMode !== 'view') captureDfMakeReportDirtySnap();
     }
 
     function openCaseFromList(id) {
@@ -2291,7 +2294,7 @@ const TVC_DefectReport = (function () {
     async function openNewFromJob(jobId, opts = {}) {
         const s = getState();
         s._dfNavSource = null;
-        TVC_App.switchTab?.('actual');
+        if (!opts.fromMakeReport) TVC_App.switchTab?.('actual');
         TVC_App.snapshotPlanBatchSelection?.();
         const job = s.jobs?.find(j => j.id === jobId);
         if (!job) {
@@ -2327,7 +2330,7 @@ const TVC_DefectReport = (function () {
         await refresh();
         s._dfNewSession = true;
         s._dfSavedToList = false;
-        openCase(row.id, 'edit');
+        openCase(row.id, 'edit', { swapHide: opts.swapHide, swapOpts: opts.swapOpts });
     }
 
     async function openNewBlank() {
@@ -2765,6 +2768,55 @@ const TVC_DefectReport = (function () {
         return !!(s._dfNewSession && !s._dfSavedToList && s._defectCaseId && !s._dfNavSource);
     }
 
+    function collectDfEditableFields() {
+        const fields = {};
+        const host = document.getElementById('defectReportBody');
+        if (!host) return fields;
+        host.querySelectorAll('[data-df]').forEach(el => {
+            const key = el.dataset.df;
+            if (!key || el.readOnly || el.disabled) return;
+            if (el.type === 'radio') {
+                if (el.checked) fields[key] = String(el.value || '');
+                return;
+            }
+            if (el.type === 'checkbox') fields[key] = !!el.checked;
+            else fields[key] = String(el.value || '').trim();
+        });
+        return Object.fromEntries(Object.keys(fields).sort().map(k => [k, fields[k]]));
+    }
+
+    function dfMakeReportDirtySnapshot() {
+        captureDfFormFields();
+        captureDfJobItems();
+        captureDfUsedParts();
+        const s = getState();
+        const draft = s._dfDraft || {};
+        return JSON.stringify({
+            fields: collectDfEditableFields(),
+            group: String(draft.pms_group_key || ''),
+            jobs: (draft.job_items || []).map(i => [
+                String(i.job_code || '').trim(),
+                String(i.job_detail || '').trim(),
+            ]),
+            parts: (s._dfUsedParts || [])
+                .filter(p => Number(p.qty_used) > 0)
+                .map(p => [String(p.spare_part_id || ''), Number(p.qty_used) || 0]),
+            shipAtt: (draft.ship_attachments || []).length,
+            companyAtt: (draft.company_attachments || []).length,
+        });
+    }
+
+    function captureDfMakeReportDirtySnap() {
+        getState()._dfMakeReportSnap = dfMakeReportDirtySnapshot();
+    }
+
+    function hasUnsavedMakeReportInput() {
+        const s = getState();
+        if (s._defectMode === 'view') return false;
+        if (!s._dfMakeReportSnap) return false;
+        return dfMakeReportDirtySnapshot() !== s._dfMakeReportSnap;
+    }
+
     function isDraftDefectSession() {
         const s = getState();
         return !!(s._dfNewSession && !s._dfSavedToList && !s._dfNavSource);
@@ -2868,6 +2920,7 @@ const TVC_DefectReport = (function () {
         navDefectModal, modifyDefectModal, cancelDefectModalEdit, deleteDefectModal, setDefectReportPage,
         captureDfFormFields, applyFileNoFromPicker,
         buildDefectReportPage2PrintHtmlFromCase,
+        hasUnsavedMakeReportInput,
     };
 })();
 

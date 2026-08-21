@@ -183,6 +183,14 @@ const TVC_Transaction = (function () {
         return def?.is_critical_equipment === true;
     }
 
+    async function resolvePostponeCompanyApproval(api, job, payload) {
+        const critical = await jobRequiresCompanyPostponeApproval(api, job);
+        if (critical) return true;
+        if (payload?.requiresCompanyApproval === true) return true;
+        if (payload?.requiresCompanyApproval === false) return false;
+        return false;
+    }
+
     function reportRequiresCompanyPostponeApproval(report, job) {
         if (!report || report.work_type !== 'POSTPONE') return false;
         if (report.requires_company_approval === true) return true;
@@ -284,7 +292,7 @@ const TVC_Transaction = (function () {
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
             await stampHqLocalReport(report, user);
             if (report.work_type === 'POSTPONE') {
-                report.requires_company_approval = await jobRequiresCompanyPostponeApproval(api, job);
+                report.requires_company_approval = await resolvePostponeCompanyApproval(api, job, payload);
             }
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             stampPostponeOriginalDue(report);
@@ -348,6 +356,17 @@ const TVC_Transaction = (function () {
             };
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
             await stampHqLocalReport(report, user);
+            if (report.work_type === 'POSTPONE') {
+                let anyCritical = false;
+                for (const item of jobItems) {
+                    const j = await api.get('maintenance_jobs', item.maintenance_job_id);
+                    if (j && await jobRequiresCompanyPostponeApproval(api, j)) {
+                        anyCritical = true;
+                        break;
+                    }
+                }
+                report.requires_company_approval = anyCritical || payload.requiresCompanyApproval === true;
+            }
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             stampPostponeOriginalDue(report);
             await api.put('daily_work_reports', report);
@@ -403,7 +422,7 @@ const TVC_Transaction = (function () {
             if (report.work_type === 'POSTPONE' && report.job_items?.[0]) {
                 const modJob = await api.get('maintenance_jobs', report.job_items[0].maintenance_job_id);
                 if (modJob) {
-                    report.requires_company_approval = await jobRequiresCompanyPostponeApproval(api, modJob);
+                    report.requires_company_approval = await resolvePostponeCompanyApproval(api, modJob, payload);
                 }
             }
             report.status = TVC_WorkReport.aggregateStatus(report.job_items);

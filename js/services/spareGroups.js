@@ -21,7 +21,7 @@ const TVC_SpareGroups = (function () {
         return !row?.vessel_id || row.vessel_id === vesselId;
     }
 
-    /** One-time seed: spare_groups from spare_parts labels (+ optional header copy from PMS for migration). */
+    /** One-time seed: spare_groups from spare_parts labels only. Does not copy PMS Equipment (item_sort1). */
     async function ensureSeeded({ vesselId, spares, maintenanceGroups } = {}) {
         const existing = await TVC_DB.getAll('spare_groups').catch(() => []);
         const scoped = existing.filter(g => belongs(g, vesselId));
@@ -40,25 +40,19 @@ const TVC_SpareGroups = (function () {
             if (seen.has(key)) continue;
             seen.add(key);
 
-            const pmsDef = (maintenanceGroups || []).find(g =>
-                g.department === dept
-                && normalizeLabel(g.label) === normalizeLabel(label)
-                && !String(g.item_sort1 || '').trim());
-
             toPut.push({
                 id: `sgrp-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
                 vessel_id: vesselId || s.vessel_id || null,
                 department: dept,
                 label,
                 sort_order: 0,
-                machinery_name: pmsDef?.machinery_name || '',
-                model_type: pmsDef?.model_type || '',
-                maker: pmsDef?.maker || '',
-                capacity: pmsDef?.capacity || '',
-                serial_no: pmsDef?.serial_no || '',
-                dwg_no: pmsDef?.dwg_no || '',
-                is_critical_equipment: pmsDef?.is_critical_equipment,
-                header_edited: !!pmsDef?.header_edited,
+                machinery_name: '',
+                model_type: '',
+                maker: '',
+                capacity: '',
+                serial_no: '',
+                dwg_no: '',
+                header_edited: false,
                 created_at: now,
                 updated_at: now,
                 sync_status: 'LOCAL',

@@ -11,7 +11,7 @@ const TVC_AppUpdate = (function () {
     }
 
     function currentAppVersion() {
-        return '1.0.3';
+        return '1.0.4';
     }
 
     async function resolveAppVersion() {
@@ -60,7 +60,7 @@ const TVC_AppUpdate = (function () {
     }
 
     function appUpdateZipFilename(appVersion, opts = {}) {
-        const ver = String(appVersion || '').trim() || '1.0.3';
+        const ver = String(appVersion || '').trim() || '1.0.4';
         const companyId = String(opts.companyId || '').trim();
         if (companyId) return `TVC-PMS App Update v${ver} - ${companyId.replace(/[^\w.-]+/g, '_')}.zip`;
         return `TVC-PMS App Update v${ver}.zip`;
@@ -125,7 +125,7 @@ const TVC_AppUpdate = (function () {
         if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
 
         const appVersion = String(opts.appVersion || '').trim();
-        if (!appVersion) throw new Error('App version is required (e.g. 1.0.3).');
+        if (!appVersion) throw new Error('App version is required (e.g. 1.0.4).');
         const notes = String(opts.notes || '').trim();
         const selectedSkus = Array.isArray(opts.skus) && opts.skus.length
             ? opts.skus

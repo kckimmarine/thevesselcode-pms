@@ -4,7 +4,7 @@ const TVC_ListFilters = (function () {
         ENGINE: ['C/E', '1/E', '2/E', '3/E'],
         DECK: ['Captain', 'C/O', '2/O(A)', '2/O(B)', '3/O'],
     };
-    const TYPE_LABELS = { all: 'All', m: 'M', p: 'P', d: 'D', c: 'C' };
+    const TYPE_LABELS = { all: 'All', w: 'W', m: 'M', p: 'P', d: 'D', c: 'C' };
     let _openTab = null;
     let _groupSearch = '';
 
@@ -62,7 +62,7 @@ const TVC_ListFilters = (function () {
             return n;
         }
         if (tab === 'history') {
-            let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0) + (postponeAwaitingActive(f) ? 1 : 0);
+            let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0) + (postponeAwaitingActive(f) ? 1 : 0) + (f.awaitingShipConfirm ? 1 : 0);
             return n;
         }
         if (tab === 'consumeLog') {
@@ -116,6 +116,17 @@ const TVC_ListFilters = (function () {
 
     function resolveHistEntryGroupKey(entry, ctx) {
         if (!entry) return null;
+        if (entry.source === 'permit') {
+            const row = entry.permit;
+            const direct = String(row?.pms_group_key || '').trim();
+            if (direct) return direct;
+            const jobId = row?.maintenance_job_id || (row?.job_items || [])[0]?.maintenance_job_id;
+            if (jobId && ctx?.idx?.jobById?.get(jobId)) {
+                const job = ctx.idx.jobById.get(jobId);
+                return `${job.department || ''}|${String(job.group || '').trim()}`;
+            }
+            return null;
+        }
         if (entry.source === 'defect') return resolveDefectGroupKey(entry.defect, ctx);
         const item = entry.item;
         const idx = ctx?.idx;
@@ -141,6 +152,7 @@ const TVC_ListFilters = (function () {
     }
 
     function histEntryType(entry) {
+        if (entry?.source === 'permit') return 'w';
         if (entry?.source === 'defect') return 'd';
         if (entry?.report?.work_type === 'POSTPONE') return 'p';
         return 'm';
@@ -186,6 +198,7 @@ const TVC_ListFilters = (function () {
         if (postponeAwaitingActive(f)) {
             if (entry?.source !== 'report' || !TVC_App?.reportMatchesPostponeAwaitingApproval?.(entry.report)) return false;
         }
+        if (f.awaitingShipConfirm && !TVC_App?.histEntryAwaitingShipConfirm?.(entry)) return false;
         if (!matchGroupKeys(resolveHistEntryGroupKey(entry, ctx), f.groupKeys)) return false;
         return true;
     }
@@ -254,20 +267,34 @@ const TVC_ListFilters = (function () {
 
     function positionPopover(btn, pop) {
         if (!btn || !pop) return;
-        const rect = btn.getBoundingClientRect();
         const margin = 4;
-        pop.style.left = `${Math.max(8, rect.left)}px`;
-        pop.style.top = `${rect.bottom + margin}px`;
+        const pad = 8;
+        const rect = btn.getBoundingClientRect();
+        pop.style.left = `${Math.max(pad, rect.left)}px`;
         pop.style.right = 'auto';
+        pop.style.bottom = 'auto';
+
+        const spaceBelow = window.innerHeight - rect.bottom - margin - pad;
+        const spaceAbove = rect.top - margin - pad;
+        const openBelow = spaceBelow >= 220 || spaceBelow >= spaceAbove;
+        const maxH = Math.max(180, openBelow ? spaceBelow : spaceAbove);
+        pop.style.maxHeight = `${maxH}px`;
+        if (openBelow) {
+            pop.style.top = `${rect.bottom + margin}px`;
+        } else {
+            pop.style.top = `${Math.max(pad, rect.top - margin - maxH)}px`;
+        }
+
         requestAnimationFrame(() => {
             const pr = pop.getBoundingClientRect();
-            if (pr.bottom > window.innerHeight - 8) {
-                const top = rect.top - pr.height - margin;
-                if (top >= 8) pop.style.top = `${top}px`;
+            if (pr.right > window.innerWidth - pad) {
+                pop.style.left = `${Math.max(pad, window.innerWidth - pr.width - pad)}px`;
             }
-            if (pr.right > window.innerWidth - 8) {
-                pop.style.left = `${Math.max(8, window.innerWidth - pr.width - 8)}px`;
+            if (pr.top < pad) {
+                pop.style.top = `${pad}px`;
             }
+            const top = parseFloat(pop.style.top) || pad;
+            pop.style.maxHeight = `${Math.max(180, window.innerHeight - top - pad)}px`;
         });
     }
 
@@ -280,6 +307,17 @@ const TVC_ListFilters = (function () {
 
     function popCloseBtnHtml() {
         return `<button type="button" class="modal-x list-filter-pop-close" data-filter-close title="Close" aria-label="Close">×</button>`;
+    }
+
+    function popActionsHtml() {
+        return `<div class="list-filter-actions">
+            <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
+            <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
+        </div>`;
+    }
+
+    function popShell(bodyHtml) {
+        return `${popCloseBtnHtml()}<div class="list-filter-pop-body">${bodyHtml}</div>${popActionsHtml()}`;
     }
 
     function renderPopover(tab) {
@@ -313,8 +351,7 @@ const TVC_ListFilters = (function () {
                 ).join('');
                 return title + checks;
             }).join('');
-            pop.innerHTML = `
-                ${popCloseBtnHtml()}
+            pop.innerHTML = popShell(`
                 <div class="list-filter-section">
                     ${single ? '<div class="list-filter-section-title">P.I.C</div>' : ''}
                     ${picChecks}
@@ -323,49 +360,34 @@ const TVC_ListFilters = (function () {
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Critical Equipment</div>
                     <label class="list-filter-check"><input type="checkbox" id="actFilterCriticalOnly"${f.criticalOnly ? ' checked' : ''}> Critical Equipment only</label>
-                </div>
-                <div class="list-filter-actions">
-                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
-                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
-                </div>`;
+                </div>`);
         } else if (tab === 'consumeLog') {
             const types = ['all', 'm', 'd', 'c'];
             const curType = f.type || 'all';
-            pop.innerHTML = `
-                ${popCloseBtnHtml()}
+            pop.innerHTML = popShell(`
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Report type</div>
                     <div class="list-filter-type-seg">
                         ${types.map(t => `<button type="button" class="list-filter-type-btn${curType === t ? ' active' : ''}" data-hist-type="${t}">${TYPE_LABELS[t]}</button>`).join('')}
                     </div>
                 </div>
-                ${renderGroupPanel(f, tab)}
-                <div class="list-filter-actions">
-                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
-                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
-                </div>`;
+                ${renderGroupPanel(f, tab)}`);
         } else if (tab === 'workPermit') {
             const statuses = ['all', 'reported', 'confirmed', 'approved'];
             const WP_STATUS_LABELS = { all: 'All', reported: 'Reported', confirmed: 'Confirmed', approved: 'Approved' };
             const curStatus = f.status || 'all';
-            pop.innerHTML = `
-                ${popCloseBtnHtml()}
+            pop.innerHTML = popShell(`
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Status</div>
                     <div class="list-filter-type-seg">
                         ${statuses.map(t => `<button type="button" class="list-filter-type-btn${curStatus === t ? ' active' : ''}" data-wp-status="${t}">${WP_STATUS_LABELS[t]}</button>`).join('')}
                     </div>
                 </div>
-                ${renderGroupPanel(f, tab)}
-                <div class="list-filter-actions">
-                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
-                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
-                </div>`;
+                ${renderGroupPanel(f, tab)}`);
         } else if (tab === 'reqList') {
             const types = ['all', 'routine', 'urgent', 'dock'];
             const curType = f.type || 'all';
-            pop.innerHTML = `
-                ${popCloseBtnHtml()}
+            pop.innerHTML = popShell(`
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Report type</div>
                     <div class="list-filter-type-seg">
@@ -376,16 +398,11 @@ const TVC_ListFilters = (function () {
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Status</div>
                     <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="reqListFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open <span class="muted">(not Received, or Received with O/S &gt; 0)</span></label>
-                </div>
-                <div class="list-filter-actions">
-                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
-                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
-                </div>`;
+                </div>`);
         } else {
-            const types = ['all', 'm', 'p', 'd'];
+            const types = ['all', 'w', 'm', 'p', 'd'];
             const histType = effectiveHistType(f);
-            pop.innerHTML = `
-                ${popCloseBtnHtml()}
+            pop.innerHTML = popShell(`
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Report type</div>
                     <div class="list-filter-type-seg">
@@ -400,11 +417,7 @@ const TVC_ListFilters = (function () {
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Postpone Report</div>
                     <label class="list-filter-check list-filter-postpone-awaiting"><input type="checkbox" id="histFilterPostponeAwaiting"${postponeAwaitingActive(f) ? ' checked' : ''}> Awaiting company approval <span class="muted">(Confirmed · Submitted · not Approved)</span></label>
-                </div>
-                <div class="list-filter-actions">
-                    <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
-                    <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
-                </div>`;
+                </div>`);
         }
 
         pop.querySelector('[data-filter-close]')?.addEventListener('click', (ev) => {
@@ -566,7 +579,7 @@ const TVC_ListFilters = (function () {
             let type = typeBtn?.dataset.histType || 'all';
             if (openOnly) type = 'd';
             else if (postponeAwaitingApproval) type = 'p';
-            TVC_App.setListFilters('history', { groupKeys, type, openOnly, postponeAwaitingApproval });
+            TVC_App.setListFilters('history', { groupKeys, type, openOnly, postponeAwaitingApproval, awaitingShipConfirm: false });
         }
         closePopover();
     }
@@ -627,6 +640,7 @@ const TVC_ListFilters = (function () {
             if (tab === 'history' && f.openOnly) parts.push('Open only');
             if (tab === 'reqList' && f.openOnly) parts.push('Open');
             if (tab === 'history' && postponeAwaitingActive(f)) parts.push('Awaiting company approval');
+            if (tab === 'history' && f.awaitingShipConfirm) parts.push('Awaiting confirm');
             if (f.groupKeys?.length) parts.push(`Group: ${f.groupKeys.length} selected`);
         }
         return parts;

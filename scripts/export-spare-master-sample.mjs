@@ -168,7 +168,7 @@ async function main() {
         `Vessel: ${vesselId}  ·  SPARE Master — Group Headers`,
         'PMS: 03/04/05 Generator Engine separate · SPARE: consolidated as 03 GENERATOR ENGINE.',
     ], 9);
-    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Critical Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Parts (ref)'].forEach((h, i) => {
+    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Parts (ref)', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
         wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
     });
     styleHeaderRow(wsG.getRow(HDR_ROW), NAVY);
@@ -178,12 +178,12 @@ async function main() {
         r.getCell(1).value = gr.department;
         r.getCell(2).value = gr.no;
         r.getCell(3).value = gr.name;
-        r.getCell(4).value = meta.is_critical_equipment === true ? 'Yes' : meta.is_critical_equipment === false ? 'No' : '';
-        r.getCell(5).value = meta.maker || meta.machinery_name || '';
-        r.getCell(6).value = meta.model_type || '';
-        r.getCell(7).value = meta.capacity || '';
-        r.getCell(8).value = meta.serial_no || '';
-        r.getCell(9).value = gr.count;
+        r.getCell(4).value = meta.maker || meta.machinery_name || '';
+        r.getCell(5).value = meta.model_type || '';
+        r.getCell(6).value = meta.capacity || '';
+        r.getCell(7).value = meta.serial_no || '';
+        r.getCell(8).value = gr.count;
+        r.getCell(9).value = meta.is_critical_equipment === true ? 'Yes' : meta.is_critical_equipment === false ? 'No' : '';
     });
 
     const wsE = wb.addWorksheet('Equipment Headers', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
@@ -191,7 +191,7 @@ async function main() {
         `Vessel: ${vesselId}  ·  Optional item_sort1 overrides (sparse)`,
         'Add rows only where group header is not enough.',
     ], 9);
-    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'ITEM (SORT-1)', 'Critical Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.'].forEach((h, i) => {
+    ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
         wsE.getRow(HDR_ROW).getCell(i + 1).value = h;
     });
     styleHeaderRow(wsE.getRow(HDR_ROW), GREEN);
@@ -201,15 +201,17 @@ async function main() {
             ? { no: SPARE_GEN_ENGINE_NO, name: SPARE_GEN_ENGINE_NAME }
             : splitGroupLabel(g.label);
         const r = wsE.getRow(DATA_START + eqRow++);
+        const eqNo = parseInt(String(g.equipment_no ?? g.sort_order ?? ''), 10);
         r.getCell(1).value = g.department;
         r.getCell(2).value = sg.no;
         r.getCell(3).value = sg.name;
-        r.getCell(4).value = norm(g.item_sort1);
-        r.getCell(5).value = g.is_critical_equipment === true ? 'Yes' : g.is_critical_equipment === false ? 'No' : '';
+        r.getCell(4).value = Number.isFinite(eqNo) && eqNo > 0 ? String(eqNo).padStart(2, '0') : '';
+        r.getCell(5).value = norm(g.item_sort1);
         r.getCell(6).value = g.maker || g.machinery_name || '';
         r.getCell(7).value = g.model_type || '';
         r.getCell(8).value = g.capacity || '';
         r.getCell(9).value = g.serial_no || '';
+        r.getCell(10).value = g.is_critical_equipment === true ? 'Yes' : g.is_critical_equipment === false ? 'No' : '';
     });
 
     const exportSpares = spares.slice(0, 500);

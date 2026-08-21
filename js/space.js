@@ -116,7 +116,7 @@ const TVC_Space = (function () {
     /** Login gate — loginMode: MASTER | DECK | ENGINE */
     function validateLogin(user, loginMode) {
         if (!user) return { ok: false, error: '계정을 확인할 수 없습니다.' };
-        if (user.account_type === 'HQ') {
+        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
             return { ok: false, error: 'HQ 계정은 Department 선택 없이 로그인하세요.' };
         }
 
@@ -137,7 +137,7 @@ const TVC_Space = (function () {
     /** Client-side endpoint middleware */
     function canEndpoint(user, endpoint) {
         if (!user) return false;
-        if (user.account_type === 'HQ') return true;
+        if (TVC_RBAC.isHqAccount(user)) return true;
         const station = getStation(user);
         if (!station) return false;
         const allowed = STATION_ENDPOINTS[station];
@@ -158,7 +158,7 @@ const TVC_Space = (function () {
 
     /** Map RBAC actions → station endpoints */
     function assertAction(user, action) {
-        if (!user || user.account_type === 'HQ') return;
+        if (!user || TVC_RBAC.isHqAccount(user)) return;
         const station = getStation(user);
         if (!station) return;
 
@@ -213,7 +213,7 @@ const TVC_Space = (function () {
     }
 
     function isDeckVesselMode(user) {
-        if (!user || user.account_type === 'HQ') return false;
+        if (!user || TVC_RBAC.isHqAccount(user)) return false;
         if (isCaptainHub(user)) return false;
         const station = getStation(user);
         if (station === Station.CCR) return true;
@@ -221,7 +221,7 @@ const TVC_Space = (function () {
     }
 
     function isEngineVesselMode(user) {
-        if (!user || user.account_type === 'HQ') return false;
+        if (!user || TVC_RBAC.isHqAccount(user)) return false;
         if (isCaptainHub(user) || isDeckVesselMode(user)) return false;
         const station = getStation(user);
         if (station === Station.ECR) return true;
@@ -254,7 +254,7 @@ const TVC_Space = (function () {
     function getUiFeatures(user) {
         const base = { ...TVC_RBAC.getUiFeatures(user) };
         if (!user) return base;
-        if (TVC_RBAC.isAdminAccount?.(user) || user.account_type === 'ADMIN') {
+        if (TVC_RBAC.isAdminAccount?.(user)) {
             base.showDataXfer = true;
             base.showAppUpdateAdmin = true;
             base.showOnlineSync = false;
@@ -266,7 +266,7 @@ const TVC_Space = (function () {
             base.showCaptainDashboard = false;
             return base;
         }
-        if (user.account_type === 'HQ') {
+        if (TVC_RBAC.isHqAccount(user)) {
             base.showRunningHours = true;
             base.canEditRunningHours = true;
             base.showSpareTab = true;
@@ -340,7 +340,7 @@ const TVC_Space = (function () {
 
     function getModeBadge(user) {
         if (!user) return '—';
-        if (TVC_RBAC.isAdminAccount?.(user) || user.account_type === 'ADMIN') return 'Admin Mode';
+        if (TVC_RBAC.isAdminAccount?.(user)) return 'Admin Mode';
         if (TVC_RBAC.isHqAccount(user)) return 'HQ Mode';
         if (isCaptainHub(user)) return 'Vessel Mode - Master';
         const station = getStation(user);

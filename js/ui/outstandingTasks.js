@@ -51,17 +51,17 @@ const TVC_OutstandingTasks = (function () {
         return TVC_DefectCase.listWorkflowStatus(dc) === 'Submitted';
     }
 
-    function isDefectOutstanding(dc, state) {
+    function isDefectOutstanding(dc) {
         if (!dc || dc.visible_in_list === false) return false;
-        if (state?.user && TVC_RBAC.isHqAccount(state.user)) {
-            return dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY;
-        }
-        return isDefectSubmittedExport(dc);
+        if (dc.status === TVC_DefectCase.Status.CLOSED) return false;
+        if (dc.defect_cleared) return false;
+        const st = TVC_DefectCase.listWorkflowStatus(dc);
+        return st === 'Reported' || st === 'Confirmed' || st === 'Submitted' || st === 'Approved';
     }
 
     function defectRows(state) {
         return (state.defectCases || []).filter(dc => {
-            if (!isDefectOutstanding(dc, state)) return false;
+            if (!isDefectOutstanding(dc)) return false;
             if (state.department && !TVC_DefectCase.belongsToDepartment(dc, state.department)) return false;
             return true;
         });
@@ -185,8 +185,8 @@ const TVC_OutstandingTasks = (function () {
         const code = dc.pms_job_code || dc.job_code || dc.case_no || '—';
         const title = dc.job_detail || dc.outline_maintenance_request || dc.job_name || dc.machinery_name || '';
         const dt = (dc.report_date || dc.work_date || dc.submitted_at || '').slice(0, 10);
-        const isHq = state?.user && TVC_RBAC.isHqAccount(state.user);
-        const meta = isHq ? `HQ Review · ${dt || '—'}` : `Submitted · ${dt || '—'}`;
+        const st = TVC_DefectCase.listWorkflowStatus(dc);
+        const meta = `${st} · ${dt || '—'}`;
         return `<button type="button" class="ot-card" onclick="TVC_OutstandingTasks.openItem('defect')">
             <span class="ot-card-title">${esc(code)}</span>
             <span class="ot-card-sub">${esc(title)}</span>
@@ -287,7 +287,7 @@ const TVC_OutstandingTasks = (function () {
                 count: defect.length,
                 items: defect,
                 renderItem: dc => defectItemHtml(dc, state),
-                navigate: () => ctx.menuNavigate('history'),
+                navigate: () => ctx.menuNavigate('history', { historyFilter: { type: 'd' } }),
             },
             lowStock: {
                 key: 'lowStock',

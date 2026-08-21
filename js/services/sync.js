@@ -232,12 +232,9 @@ const TVC_Sync = (function () {
         return rows;
     }
 
-    /** Monthly Report — 부서 전체 스냅샷 (sync_status 무관, Master→HQ 재전송용) */
-    async function collectMonthlySnapshot(dept, opts = {}) {
-        if (opts.hubRelayPending) {
-            return collectDeptRows(dept, { pendingOnly: false, hubRelayPending: true });
-        }
-        return collectDeptRows(dept, { pendingOnly: false });
+    /** Monthly Report — 부서 전체 스냅샷 (sync_status / hub relay 무관) */
+    async function collectMonthlySnapshot(dept) {
+        return collectDeptRows(dept, { pendingOnly: false, hubRelayPending: false });
     }
 
     async function collectDeptRows(dept, opts = {}) {
@@ -264,24 +261,8 @@ const TVC_Sync = (function () {
         };
         const deptByCode = new Map(jobs.map(j => [j.job_code, j.department]));
 
-        function isCriticalPostponeReport(row) {
-            if (!row || row.work_type !== 'POSTPONE') return false;
-            if (row.requires_company_approval === true) return true;
-            if (row.requires_company_approval === false) return false;
-            const jobId = row.job_items?.[0]?.maintenance_job_id || row.maintenance_job_id;
-            const code = row.job_code || row.job_items?.[0]?.job_code;
-            const job = jobId ? jobs.find(j => j.id === jobId) : (code ? jobs.find(j => j.job_code === code) : null);
-            if (!job) return false;
-            const sort = String(job.sort || '').trim().toUpperCase();
-            if (sort.startsWith('C.') || sort.includes('CRITICAL')) return true;
-            return String(job.item_sort1 || '').toUpperCase().includes('CRITICAL');
-        }
-
         let pJobs = pending(jobs);
         let pReports = pending(reports);
-        if (pendingOnly) {
-            pReports = pReports.filter(r => !isCriticalPostponeReport(r));
-        }
         let pComponents = pending(components);
         let pReqs = pending(requisitions);
         let pGroups = pending(groups);
@@ -312,7 +293,13 @@ const TVC_Sync = (function () {
     }
 
     async function exportZip(user, direction, dept, opts = {}) {
-        const action = direction === 'HQ_TO_SHIP' ? TVC_RBAC.Action.EXPORT_HQ_FEEDBACK : TVC_RBAC.Action.EXPORT_SHIP_SYNC;
+        const hubRelayHqReply = direction === 'HQ_TO_SHIP'
+            && typeof TVC_Space !== 'undefined'
+            && TVC_Space.isCaptainHub(user)
+            && !TVC_RBAC.isHqAccount(user);
+        const action = (direction === 'HQ_TO_SHIP' && !hubRelayHqReply)
+            ? TVC_RBAC.Action.EXPORT_HQ_FEEDBACK
+            : TVC_RBAC.Action.EXPORT_SHIP_SYNC;
         TVC_RBAC.assert(user, action);
         if (direction === 'STATION_TO_HUB' && typeof TVC_Space !== 'undefined') {
             TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.STATION_EXPORT);
@@ -328,7 +315,7 @@ const TVC_Sync = (function () {
             && direction === 'SHIP_TO_HQ';
 
         const delta = opts.monthlyExport
-            ? await collectMonthlySnapshot(dept, { hubRelayPending })
+            ? await collectMonthlySnapshot(dept)
             : await collectDelta(dept, { reportIds: opts.reportIds, hubRelayPending });
         const recordCount = Object.values(delta).reduce((sum, rows) => sum + (rows?.length || 0), 0);
         if (!opts.monthlyExport && recordCount === 0) {

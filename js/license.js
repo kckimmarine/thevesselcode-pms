@@ -85,13 +85,17 @@ const TVC_License = (function () {
         const adminOnly = !!st.allowAdmin && !st.allowHq && !(st.loginModes || []).length;
 
         if (isAdmin) {
-            if (!st.allowAdmin) {
+            if (!st.allowAdmin && !st.allowHq) {
                 return {
                     ok: false,
                     error: `This installation (${st.skuLabel || st.sku}) is not Admin Mode. Use HQ or Vessel login.`,
                 };
             }
-            return { ok: true };
+            if (st.allowHq || st.allowAdmin) return { ok: true };
+            return {
+                ok: false,
+                error: `This installation (${st.skuLabel || st.sku}) is not Admin Mode. Use HQ or Vessel login.`,
+            };
         }
         if (adminOnly) {
             return {
@@ -103,7 +107,7 @@ const TVC_License = (function () {
             if (!isHq) {
                 return {
                     ok: false,
-                    error: `This installation (${st.skuLabel || st.sku}) is for Daemyung HQ only. Use the Superintendent (hq) account.`,
+                    error: `This installation (${st.skuLabel || st.sku}) is for company HQ. Use Superintendent (hq) or TVC Admin (tvc).`,
                 };
             }
             return { ok: true };

@@ -1,8 +1,11 @@
 /* PMS Master Excel — Export / Import (Group · Equipment · Jobs)
- * Format: INCHEON CHEMI_PMS_MASTER_SAMPLE.xlsx (V.1 aligned)
+ * Department-scoped schema is identical across Engine · Master · HQ (ENGINE file)
+ * and Deck · Master · HQ (DECK file). Do not add SKU-specific columns.
  */
 const TVC_PmsMasterExcel = (function () {
-    const IMPORT_BUILD_ID = '20260821-deck-engine-isolate';
+    const IMPORT_BUILD_ID = '20260821-crit-equip';
+    /** Import 중 daily_work_reports 1회 스캔 캐시 (job마다 getAll 금지) */
+    let _importWrIndex = null;
     const NAVY = 'FF1A365D';
     const GREEN = 'FF217346';
     const HDR_FONT = { bold: true, color: { argb: 'FFFFFFFF' } };
@@ -13,8 +16,8 @@ const TVC_PmsMasterExcel = (function () {
     const TEMPLATE_ROWS = 3;
     /** Import 필수 입력 열 (1-based) */
     const REQ_GROUP_COLS = [1, 2, 3, 8];
-    const REQ_EQUIP_COLS = [1, 2, 3, 4];
-    const REQ_JOB_COLS = [1, 2, 3, 4, 7, 8, 9];
+    const REQ_EQUIP_COLS = [1, 2, 3, 4, 5];
+    const REQ_JOB_COLS = [1, 2, 3, 6, 9, 10, 11];
     const META_ROWS = 4;
     const HDR_ROW = 5;
     const DATA_START = 6;
@@ -55,7 +58,12 @@ const TVC_PmsMasterExcel = (function () {
 
     function sameVessel(row, vesselId) {
         if (typeof TVC_MasterVesselScope !== 'undefined') {
-            return TVC_MasterVesselScope.belongs(row, vesselId);
+            const vid = TVC_MasterVesselScope.normId(vesselId);
+            if (!vid) return false;
+            const rowVid = TVC_MasterVesselScope.normId(row?.vessel_id);
+            // 미태깅 legacy 행은 현재 선박 Import 대상으로 포함 (갱신 시 vessel_id stamp)
+            if (!rowVid) return true;
+            return rowVid === vid;
         }
         return !row?.vessel_id || row.vessel_id === vesselId;
     }
@@ -126,17 +134,21 @@ const TVC_PmsMasterExcel = (function () {
         return { pruned, renamed };
     }
 
-    /** Remove group-level defs (no item_sort1) with no jobs referencing them. */
-    async function pruneEmptyGroupDefs(allJobs, vesselId) {
+    /** Remove group-level defs (no item_sort1) with no jobs referencing them.
+     *  keepGroupKeys: Import Group Headers에 남은 빈 그룹은 유지 (예: 38. E7 job 전부 삭제) */
+    async function pruneEmptyGroupDefs(allJobs, vesselId, keepGroupKeys = null) {
         const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         const used = new Set(
-            (allJobs || []).map(j => `${j.department}|${norm(j.group)}`)
+            (allJobs || [])
+                .filter(j => !isDetachedJobCode(j.job_code))
+                .map(j => `${j.department}|${norm(j.group)}`)
         );
         let pruned = 0;
         for (const g of defs) {
             if (vesselId && !sameVessel(g, vesselId)) continue;
             if (norm(g.item_sort1)) continue;
             const key = `${g.department}|${norm(g.label)}`;
+            if (keepGroupKeys && keepGroupKeys.has(key)) continue;
             if (!used.has(key) && g.id) {
                 await TVC_DB.del('maintenance_groups', g.id);
                 pruned++;
@@ -164,9 +176,36 @@ const TVC_PmsMasterExcel = (function () {
         return null;
     }
 
-    function criticalDisplay(v) {
-        if (v === true) return '⚠';
+    function criticalExportValue(v) {
+        if (v === true) return 'Yes';
+        if (v === false) return 'No';
         return '';
+    }
+
+    function criticalColIndex(h, colFn) {
+        if (colFn) {
+            const fromFn = colFn('CRITICAL EQUIPMENT') || colFn('⚠') || colFn('CRITICAL');
+            if (fromFn) return fromFn;
+        }
+        return h['CRITICAL EQUIPMENT'] || h['⚠'] || h['CRITICAL'] || 0;
+    }
+
+    function parseCriticalFromRow(row, h, colFn) {
+        const idx = criticalColIndex(h, colFn);
+        if (!idx) return null;
+        return parseCriticalCell(row.getCell(idx).value);
+    }
+
+    function groupDefsCriticalValue(groups, department, no, name) {
+        const rows = (groups || []).filter(g => {
+            if (String(g.department || '').toUpperCase() !== String(department || '').toUpperCase()) return false;
+            const sg = splitGroupLabel(g.label);
+            return padGroupNo(sg.no) === padGroupNo(no) && norm(sg.name).toUpperCase() === norm(name).toUpperCase();
+        });
+        if (rows.some(g => g.is_critical_equipment === true)) return true;
+        const header = rows.find(g => !norm(g.item_sort1));
+        if (header?.is_critical_equipment === false) return false;
+        return null;
     }
 
     function calcNextDate(job, fromDateStr) {
@@ -293,8 +332,93 @@ const TVC_PmsMasterExcel = (function () {
         return norm(v);
     }
 
+    function parseEquipNoCell(v) {
+        const n = parseInt(String(v ?? '').replace(/\D/g, ''), 10);
+        if (!Number.isFinite(n) || n < 0) return 0;
+        return Math.min(99, n);
+    }
+
+    /** JOB CODE — GG-EE-III (01-00-001). Legacy 01-001 → EE=00 */
+    function parsePmsJobCode(code) {
+        if (typeof TVC_SpareCode !== 'undefined' && TVC_SpareCode.parse) {
+            return TVC_SpareCode.parse(code);
+        }
+        const s = String(code || '').trim();
+        let m = s.match(/^(\d{2})-(\d{2})-(\d{3})$/);
+        if (m) return { groupNo: m[1], equipNo: parseInt(m[2], 10), itemNo: parseInt(m[3], 10), valid: true, standard: true };
+        m = s.match(/^(\d{1,2})-(\d{1,3})-(\d{1,3})$/);
+        if (m) {
+            return {
+                groupNo: padGroupNo(m[1]),
+                equipNo: parseInt(m[2], 10) || 0,
+                itemNo: parseInt(m[3], 10) || 0,
+                valid: true,
+                standard: false,
+            };
+        }
+        m = s.match(/^(\d{1,2})-(\d{1,3})$/);
+        if (m) {
+            return {
+                groupNo: padGroupNo(m[1]),
+                equipNo: 0,
+                itemNo: parseInt(m[2], 10) || 0,
+                valid: true,
+                standard: false,
+                legacy: true,
+            };
+        }
+        return { groupNo: '', equipNo: 0, itemNo: 0, valid: false };
+    }
+
+    function formatPmsJobCode(groupNo, equipNo, itemNo) {
+        const g = padGroupNo(groupNo);
+        if (!g) return '';
+        const ee = String(Math.min(99, Math.max(0, parseInt(equipNo, 10) || 0))).padStart(2, '0');
+        const iii = String(Math.min(999, Math.max(1, parseInt(itemNo, 10) || 1))).padStart(3, '0');
+        return `${g}-${ee}-${iii}`;
+    }
+
+    function canonicalPmsJobCode(code, groupNo, equipNo) {
+        const p = parsePmsJobCode(code);
+        if (!p.valid) return String(code || '').trim();
+        const g = groupNo || p.groupNo;
+        const e = (equipNo != null && equipNo !== '') ? parseEquipNoCell(equipNo) : p.equipNo;
+        return formatPmsJobCode(g, e, p.itemNo);
+    }
+
+    function jobCodeAliases(code) {
+        const raw = String(code || '').trim();
+        const p = parsePmsJobCode(raw);
+        if (!p.valid) return raw ? [raw] : [];
+        const std = formatPmsJobCode(p.groupNo, p.equipNo, p.itemNo);
+        const aliases = [raw, std];
+        if (p.equipNo === 0) aliases.push(`${p.groupNo}-${String(p.itemNo).padStart(3, '0')}`);
+        return [...new Set(aliases.filter(Boolean))];
+    }
+
+    function jobCodesEqual(a, b) {
+        if (!a || !b) return false;
+        if (a === b) return true;
+        const setA = new Set(jobCodeAliases(a));
+        return jobCodeAliases(b).some(x => setA.has(x));
+    }
+
     function jobCodePatternOk(code) {
-        return /^\d{1,2}-\d{1,3}(-\d{1,3})?$/.test(String(code || '').trim());
+        return parsePmsJobCode(code).valid;
+    }
+
+    function resolveJobEquipNo(job, groups) {
+        const n = parseEquipNoCell(job?.equipment_no);
+        if (n > 0) return n;
+        const eqName = norm(job?.equipment);
+        if (!eqName || !groups?.length) return 0;
+        const g = resolveGroup(job.department, job.group);
+        const hit = groups.find(gr =>
+            String(gr.department || '').toUpperCase() === String(job.department || '').toUpperCase()
+            && splitGroupLabel(gr.label).no === g.no
+            && norm(gr.item_sort1) === eqName
+        );
+        return parseEquipNoCell(hit?.equipment_no);
     }
 
     function styleHeaderRow(row, fillArgb, requiredCols = []) {
@@ -424,7 +548,8 @@ const TVC_PmsMasterExcel = (function () {
             list.sort((a, b) => String(a.job_code || '').localeCompare(String(b.job_code || ''), undefined, { numeric: true }));
             const g = splitGroupLabel(list[0].group);
             list.forEach((j, i) => {
-                deckOut.push({ ...j, job_code: `${g.no}-${String(i + 1).padStart(3, '0')}` });
+                const eqNo = parseEquipNoCell(j.equipment_no);
+                deckOut.push({ ...j, job_code: formatPmsJobCode(g.no, eqNo, i + 1) });
             });
         }
         return [...engine, ...deckOut].sort((a, b) => {
@@ -449,10 +574,38 @@ const TVC_PmsMasterExcel = (function () {
                 const groupNo = parseInt(row.groupNo, 10);
                 if (!Number.isFinite(prefix) || !Number.isFinite(groupNo) || prefix === groupNo) return;
                 row._legacyJobCode = row.job_code;
-                row.job_code = `${row.groupNo}-${String(i + 1).padStart(3, '0')}`;
+                row.job_code = formatPmsJobCode(row.groupNo, row.equipment_no || 0, i + 1);
             });
         }
         return jobRows;
+    }
+
+    function applyJobEquipmentFromHeaders(jobRows, equipRows) {
+        const byName = new Map();
+        const byNo = new Map();
+        for (const e of equipRows || []) {
+            byName.set(`${e.department}|${e.groupNo}|${norm(e.item_sort1).toUpperCase()}`, e.equipment_no || 0);
+            if (e.equipment_no > 0) {
+                byNo.set(`${e.department}|${e.groupNo}|${e.equipment_no}`, e.item_sort1);
+            }
+        }
+        for (const row of jobRows || []) {
+            if (!row.equipment_no && row.equipment) {
+                const n = byName.get(`${row.department}|${row.groupNo}|${norm(row.equipment).toUpperCase()}`);
+                if (n > 0) row.equipment_no = n;
+            }
+            if (row.equipment_no && !norm(row.equipment)) {
+                const name = byNo.get(`${row.department}|${row.groupNo}|${row.equipment_no}`);
+                if (name) row.equipment = name;
+            }
+            if (jobCodePatternOk(row.job_code)) {
+                const next = canonicalPmsJobCode(row.job_code, row.groupNo, row.equipment_no || 0);
+                if (next !== row.job_code) {
+                    if (!row._legacyJobCode) row._legacyJobCode = row.job_code;
+                    row.job_code = next;
+                }
+            }
+        }
     }
 
     function jobShowsCritical(j) {
@@ -526,10 +679,11 @@ const TVC_PmsMasterExcel = (function () {
         const wsG = wb.addWorksheet('Group Headers', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsG, [
             `Vessel: ${vesselId}  ·  PMS Master — ${department} — Group Headers`,
+            'Format shared: Engine · Master · HQ (this DEPARTMENT). Deck uses a separate DECK file.',
             'Live DB snapshot — PMS GROUP Tree (maintenance_groups + maintenance_jobs) for this department only.',
-            '신규 Group/Job 추가: Jobs 시트에 반드시 행 추가 (Group Headers만으로는 job 생성 안 됨). Jobs (ref) 열 숫자와 Jobs 시트 행 수를 일치시키세요.',
+            'CRITICAL EQUIPMENT = Yes / No. Group에 Yes면 해당 그룹 job이 Critical로 집계됩니다.',
         ]);
-        ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Jobs (ref)'].forEach((h, i) => {
+        ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Jobs (ref)', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
             wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
         });
         styleHeaderRow(wsG.getRow(HDR_ROW), NAVY, REQ_GROUP_COLS);
@@ -544,15 +698,17 @@ const TVC_PmsMasterExcel = (function () {
             r.getCell(6).value = meta.capacity || '';
             r.getCell(7).value = meta.serial_no || '';
             r.getCell(8).value = gr.count;
+            r.getCell(9).value = criticalExportValue(groupDefsCriticalValue(groups, gr.department, gr.no, gr.name));
         });
-        [1, 2, 3, 4, 5, 6, 7, 8].forEach(i => { wsG.getColumn(i).width = i === 3 ? 28 : 14; });
+        [1, 2, 3, 4, 5, 6, 7, 8, 9].forEach(i => { wsG.getColumn(i).width = i === 3 ? 28 : i === 9 ? 18 : 14; });
 
         const wsE = wb.addWorksheet('Equipment Headers', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsE, [
-            `Vessel: ${vesselId}  ·  Optional item_sort1 overrides (sparse)`,
-            'Add rows only where GROUP header is not enough (e.g. CYL. OIL LUBRICATOR, individual motors).',
+            `Vessel: ${vesselId}  ·  Equipment blocks (GG-EE-III 중 EE)`,
+            'EQ NO = EE (01–99, 필수). Jobs 시트 EQ NO · Equipment와 같아야 해당 Equipment로 분류됩니다.',
+            'CRITICAL EQUIPMENT = Yes / No (Equipment별).',
         ]);
-        ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'ITEM (SORT-1)', 'Maker', 'Model/Type', 'Capacity', 'Serial No.'].forEach((h, i) => {
+        ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
             wsE.getRow(HDR_ROW).getCell(i + 1).value = h;
         });
         styleHeaderRow(wsE.getRow(HDR_ROW), GREEN, REQ_EQUIP_COLS);
@@ -560,40 +716,59 @@ const TVC_PmsMasterExcel = (function () {
         (groups || []).filter(g => norm(g.item_sort1)).forEach(g => {
             const sg = splitGroupLabel(g.label);
             const r = wsE.getRow(DATA_START + eqRow++);
+            const eqNo = parseEquipNoCell(g.equipment_no);
             r.getCell(1).value = g.department;
             r.getCell(2).value = sg.no;
             r.getCell(3).value = sg.name;
-            r.getCell(4).value = norm(g.item_sort1);
-            r.getCell(5).value = g.maker || g.machinery_name || '';
-            r.getCell(6).value = g.model_type || '';
-            r.getCell(7).value = g.capacity || '';
-            r.getCell(8).value = g.serial_no || '';
+            r.getCell(4).value = eqNo > 0 ? String(eqNo).padStart(2, '0') : '';
+            r.getCell(5).value = norm(g.item_sort1);
+            r.getCell(6).value = g.maker || g.machinery_name || '';
+            r.getCell(7).value = g.model_type || '';
+            r.getCell(8).value = g.capacity || '';
+            r.getCell(9).value = g.serial_no || '';
+            r.getCell(10).value = criticalExportValue(g.is_critical_equipment);
         });
+        wsE.getColumn(4).width = 10;
+        wsE.getColumn(5).width = 22;
+        wsE.getColumn(10).width = 18;
 
         const wsJ = wb.addWorksheet('Jobs', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsJ, [
             `Vessel: ${vesselId}  ·  ${department} — ${exportJobs.length} jobs`,
-            'Match jobs by DEPARTMENT + JOB CODE on import. Rows removed from this sheet are dropped (Work Report linked jobs are kept with temp code).',
-            '신규 job: Jobs 시트에 DEPARTMENT · GROUP NO · GROUP NAME · JOB CODE(예: 27-002) · JOB DETAIL · PERIOD · UNIT 입력. 노란색 셀 = Import 필수.',
-        ], 2);
-        const jHeaders = ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'JOB CODE', 'SORT-1', 'SORT-2', 'JOB DETAIL', 'PERIOD', 'UNIT', 'P.I.C', 'LAST DONE'];
+            'JOB CODE = GG-EE-III (예: 01-00-001). EE 미지정 = 00. Match by DEPARTMENT + JOB CODE. 시트에서 뺀 행은 삭제(Work Report 연결은 임시 CODE).',
+            'EQ NO / Equipment: Equipment Headers와 동일하게 입력. 노란색 셀 = Import 필수.',
+            'CRITICAL EQUIPMENT = Yes / No (Job별). 비우면 Group / Equipment 설정을 따릅니다.',
+        ]);
+        const jHeaders = ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'JOB CODE', 'SORT-1', 'SORT-2', 'JOB DETAIL', 'PERIOD', 'UNIT', 'P.I.C', 'LAST DONE', 'CRITICAL EQUIPMENT'];
         jHeaders.forEach((h, i) => { wsJ.getRow(HDR_ROW).getCell(i + 1).value = h; });
         styleHeaderRow(wsJ.getRow(HDR_ROW), NAVY, REQ_JOB_COLS);
+        wsJ.getColumn(4).width = 10;
+        wsJ.getColumn(5).width = 22;
+        wsJ.getColumn(6).width = 14;
+        wsJ.getColumn(14).width = 18;
 
         exportJobs.forEach((j, idx) => {
             const g = resolveGroup(j.department, j.group);
+            const eqNo = resolveJobEquipNo(j, groups);
+            const parsed = parsePmsJobCode(j.job_code);
+            const jobCode = parsed.valid
+                ? formatPmsJobCode(parsed.groupNo || g.no, eqNo, parsed.itemNo)
+                : formatPmsJobCode(g.no, eqNo, idx + 1);
             const r = wsJ.getRow(DATA_START + idx);
             r.getCell(1).value = j.department || '';
             r.getCell(2).value = g.no;
             r.getCell(3).value = g.name;
-            r.getCell(4).value = String(j.job_code || '');
-            r.getCell(5).value = norm(j.item_sort1);
-            r.getCell(6).value = norm(j.item_sort2);
-            r.getCell(7).value = j.job_detail || '';
-            r.getCell(8).value = j.period != null ? String(j.period) : '';
-            r.getCell(9).value = (j.unit || 'M').toUpperCase();
-            r.getCell(10).value = j.pic || '';
-            if (j.last_done) r.getCell(11).value = String(j.last_done);
+            r.getCell(4).value = eqNo > 0 ? String(eqNo).padStart(2, '0') : '';
+            r.getCell(5).value = norm(j.equipment);
+            r.getCell(6).value = jobCode;
+            r.getCell(7).value = norm(j.item_sort1);
+            r.getCell(8).value = norm(j.item_sort2);
+            r.getCell(9).value = j.job_detail || '';
+            r.getCell(10).value = j.period != null ? String(j.period) : '';
+            r.getCell(11).value = (j.unit || 'M').toUpperCase();
+            r.getCell(12).value = j.pic || '';
+            if (j.last_done) r.getCell(13).value = String(j.last_done);
+            r.getCell(14).value = criticalExportValue(j.is_critical_equipment);
         });
 
         applyRequiredDataFill(wsG, REQ_GROUP_COLS, groupRows.length);
@@ -662,7 +837,7 @@ const TVC_PmsMasterExcel = (function () {
                 groupName: name,
                 label: buildGroupLabel(no, name),
                 jobsRef: Number.isFinite(jobsRef) ? jobsRef : null,
-                critical: h['CRITICAL EQUIPMENT'] ? parseCriticalCell(row.getCell(h['CRITICAL EQUIPMENT']).value) : null,
+                critical: parseCriticalFromRow(row, h),
                 maker: cellStr(row, h.MAKER),
                 model_type: cellStr(row, h['MODEL/TYPE'] || h.MODEL),
                 capacity: cellStr(row, h.CAPACITY),
@@ -680,15 +855,21 @@ const TVC_PmsMasterExcel = (function () {
             const dept = cellStr(row, h.DEPARTMENT);
             const no = padGroupNo(cellStr(row, h['GROUP NO']));
             const name = cellStr(row, h['GROUP NAME']);
-            const item = cellStr(row, h['ITEM (SORT-1)'] || h['SORT-1']);
+            const item = cellStr(row, h.EQUIPMENT || h['ITEM (SORT-1)'] || h['SORT-1']);
+            const eqNoRaw = cellStr(row, h['EQ NO'] || h.EQNO || h['EQ. NO']);
             if (!dept || !no || !name || !item) return;
+            const equipment_no = parseEquipNoCell(eqNoRaw);
+            if (!(equipment_no >= 1 && equipment_no <= 99)) {
+                throw new Error(`Equipment Headers row ${n}: EQ NO is required (01–99) for “${item}”.`);
+            }
             rows.push({
                 department: dept.toUpperCase(),
                 groupNo: no,
                 groupName: name,
                 label: buildGroupLabel(no, name),
+                equipment_no,
                 item_sort1: item,
-                critical: h['CRITICAL EQUIPMENT'] ? parseCriticalCell(row.getCell(h['CRITICAL EQUIPMENT']).value) : null,
+                critical: parseCriticalFromRow(row, h),
                 maker: cellStr(row, h.MAKER),
                 model_type: cellStr(row, h['MODEL/TYPE']),
                 capacity: cellStr(row, h.CAPACITY),
@@ -726,8 +907,10 @@ const TVC_PmsMasterExcel = (function () {
                 groupNo: no,
                 groupName: name,
                 group: buildGroupLabel(no, name),
-                critical: (col('⚠') || col('CRITICAL')) ? parseCriticalCell(row.getCell(col('⚠') || col('CRITICAL')).value) : null,
+                critical: parseCriticalFromRow(row, h, col),
                 job_code: jobCode,
+                equipment_no: parseEquipNoCell(cellStr(row, col('EQ NO') || col('EQNO') || col('EQ. NO'))),
+                equipment: cellStr(row, col('EQUIPMENT')),
                 item_sort1: cellStr(row, col('SORT-1')),
                 item_sort2: cellStr(row, col('SORT-2')),
                 job_detail: cellStr(row, col('JOB DETAIL')),
@@ -747,8 +930,8 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     function groupNoFromJobCode(code) {
-        const p = String(code || '').trim().split('-')[0];
-        return padGroupNo(p);
+        const p = parsePmsJobCode(code);
+        return p.groupNo || padGroupNo(String(code || '').trim().split('-')[0]);
     }
 
     function canonicalMetaKey(vesselId, department) {
@@ -853,7 +1036,7 @@ const TVC_PmsMasterExcel = (function () {
             const gNo = groupNoFromJob(job);
             if (!gNo || !canonicalByNo.has(gNo)) continue;
             if (norm(job.group) === canonicalByNo.get(gNo)) continue;
-            if (jobRows.some(row => importRowMatchesJob(row, job))) continue;
+            if (jobRows.some(row => importRowMatchesJobForOrphan(row, job))) continue;
             const action = await evictUnimportedJob(job);
             if (action === 'removed') removed++;
             else if (action === 'detached') detached++;
@@ -1075,7 +1258,7 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     /** Group Headers ↔ Jobs 시트 정합성 — job 누락 시 Import 중단 또는 경고 */
-    function validateImportAlignment(groupRows, jobRows, skippedJobRows, department) {
+    function validateImportAlignment(groupRows, jobRows, skippedJobRows, department, equipRows = []) {
         const dept = normDept(department);
         const issues = [];
         const warnings = [];
@@ -1083,7 +1266,7 @@ const TVC_PmsMasterExcel = (function () {
         if (badCodes.length) {
             const sample = badCodes.slice(0, 3).map(r => `row ${r._excelRow || '?'}: "${r.job_code}"`).join(', ');
             issues.push(
-                `Jobs 시트 JOB CODE 형식 오류 (${badCodes.length}건) — "27-002" 형식(그룹번호-순번)으로 입력하고, 셀 서식을 텍스트로 지정하세요. 예: ${sample}`
+                `Jobs 시트 JOB CODE 형식 오류 (${badCodes.length}건) — "01-00-001" 형식(GG-EE-III)으로 입력하세요. EE 미지정은 00. 예: ${sample}`
             );
         }
         if (skippedJobRows.length) {
@@ -1124,34 +1307,63 @@ const TVC_PmsMasterExcel = (function () {
                 }
             }
         }
+        const equipNames = new Set(
+            (equipRows || [])
+                .filter(e => e.department === dept)
+                .map(e => `${e.groupNo}|${norm(e.item_sort1).toUpperCase()}`)
+        );
+        const unknownEquip = [];
+        for (const r of jobRows) {
+            const eq = norm(r.equipment);
+            if (!eq) continue;
+            if (!equipNames.has(`${r.groupNo}|${eq.toUpperCase()}`)) {
+                unknownEquip.push(`row ${r._excelRow || '?'} (${r.job_code}): "${eq}"`);
+            }
+        }
+        if (unknownEquip.length) {
+            warnings.push(
+                `Jobs Equipment 이름이 Equipment Headers에 없음 (${unknownEquip.length}건). 예: ${unknownEquip.slice(0, 3).join(', ')}`
+            );
+        }
         if (issues.length) {
             throw new Error(`PMS Master Import 검증 실패 (${dept}):\n\n${issues.join('\n\n')}`);
         }
         return warnings;
     }
 
-    async function jobHasFinalizedHistory(jobId) {
-        const reports = await TVC_DB.getAll('daily_work_reports');
+    async function loadImportWorkReportIndex() {
+        if (_importWrIndex) return _importWrIndex;
+        const any = new Set();
+        const finalized = new Set();
+        const reports = await TVC_DB.getAll('daily_work_reports').catch(() => []);
         for (const rep of reports) {
             TVC_WorkReport.fromLegacy(rep);
             for (const item of rep.job_items || []) {
-                if (item.maintenance_job_id !== jobId) continue;
+                const jid = item.maintenance_job_id;
+                if (!jid) continue;
+                any.add(jid);
                 const st = TVC_RBAC.normalizeReportStatus(item.status, rep.is_locked);
-                if (st === 'CONFIRMED' || st === 'APPROVED') return true;
+                if (st === 'CONFIRMED' || st === 'APPROVED') finalized.add(jid);
             }
         }
-        return false;
+        _importWrIndex = { any, finalized };
+        return _importWrIndex;
+    }
+
+    function clearImportWorkReportIndex() {
+        _importWrIndex = null;
+    }
+
+    async function jobHasFinalizedHistory(jobId) {
+        if (!jobId) return false;
+        const idx = await loadImportWorkReportIndex();
+        return idx.finalized.has(jobId);
     }
 
     async function jobHasAnyWorkReport(jobId) {
-        const reports = await TVC_DB.getAll('daily_work_reports');
-        for (const rep of reports) {
-            TVC_WorkReport.fromLegacy(rep);
-            for (const item of rep.job_items || []) {
-                if (item.maintenance_job_id === jobId) return true;
-            }
-        }
-        return false;
+        if (!jobId) return false;
+        const idx = await loadImportWorkReportIndex();
+        return idx.any.has(jobId);
     }
 
     function tempJobCode(jobId) {
@@ -1163,20 +1375,36 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     function refreshJobMaps(jobs) {
-        return {
-            byId: new Map(jobs.map(j => [j.id, j])),
-            byDeptCode: new Map(jobs.map(j => [`${j.department}|${j.job_code}`, j])),
-        };
+        const byId = new Map(jobs.map(j => [j.id, j]));
+        const byDeptCode = new Map();
+        for (const j of jobs) {
+            for (const alias of jobCodeAliases(j.job_code)) {
+                const k = `${j.department}|${alias}`;
+                if (!byDeptCode.has(k)) byDeptCode.set(k, j);
+            }
+        }
+        return { byId, byDeptCode };
     }
 
     function importRowMatchesJob(row, job) {
         if (row.job_id && row.job_id === job.id) return true;
         if (row.department !== job.department) return false;
-        if (row.job_code === job.job_code) return true;
-        if (row.job_code && row.job_code === job.detached_from_code) return true;
-        if (row._legacyJobCode && row._legacyJobCode === job.job_code) return true;
-        if (row._legacyJobCode && row._legacyJobCode === job.detached_from_code) return true;
+        if (jobCodesEqual(row.job_code, job.job_code)) return true;
+        if (row.job_code && jobCodesEqual(row.job_code, job.detached_from_code)) return true;
+        if (row._legacyJobCode && jobCodesEqual(row._legacyJobCode, job.job_code)) return true;
+        if (row._legacyJobCode && jobCodesEqual(row._legacyJobCode, job.detached_from_code)) return true;
         if (norm(row.group) === norm(job.group) && norm(row.job_detail) === norm(job.job_detail)) return true;
+        return false;
+    }
+
+    /** Orphan 삭제용 — CODE/ID만 매칭. group+detail 유사매칭은 01-121 등 삭제를 막으므로 사용 금지 */
+    function importRowMatchesJobForOrphan(row, job) {
+        if (row.job_id && row.job_id === job.id) return true;
+        if (row.department !== job.department) return false;
+        if (jobCodesEqual(row.job_code, job.job_code)) return true;
+        if (row.job_code && jobCodesEqual(row.job_code, job.detached_from_code)) return true;
+        if (row._legacyJobCode && jobCodesEqual(row._legacyJobCode, job.job_code)) return true;
+        if (row._legacyJobCode && jobCodesEqual(row._legacyJobCode, job.detached_from_code)) return true;
         return false;
     }
 
@@ -1316,7 +1544,7 @@ const TVC_PmsMasterExcel = (function () {
             if (vesselId && !sameVessel(job, vesselId)) continue;
             if (!importDepts.has(job.department)) continue;
             if (importIds.has(job.id)) continue;
-            if (jobRows.some(row => importRowMatchesJob(row, job))) continue;
+            if (jobRows.some(row => importRowMatchesJobForOrphan(row, job))) continue;
 
             const action = await evictUnimportedJob(job);
             if (action === 'removed') removed++;
@@ -1523,6 +1751,88 @@ const TVC_PmsMasterExcel = (function () {
         };
     }
 
+    async function bulkReplaceJobCodes(codeMap, department) {
+        if (!codeMap?.size) return 0;
+        const sameDept = (rowDept) => !department || String(rowDept || '').toUpperCase() === String(department).toUpperCase();
+        let n = 0;
+        const reports = await TVC_DB.getAll('daily_work_reports').catch(() => []);
+        for (const raw of reports) {
+            const rep = { ...raw };
+            TVC_WorkReport.fromLegacy(rep);
+            let changed = false;
+            if (codeMap.has(rep.job_code) && sameDept(rep.department)) {
+                rep.job_code = codeMap.get(rep.job_code);
+                changed = true;
+            }
+            if (Array.isArray(rep.job_codes)) {
+                const next = rep.job_codes.map(c => (codeMap.has(c) && sameDept(rep.department)) ? codeMap.get(c) : c);
+                if (next.some((c, i) => c !== rep.job_codes[i])) {
+                    rep.job_codes = next;
+                    changed = true;
+                }
+            }
+            for (const item of rep.job_items || []) {
+                if (codeMap.has(item.job_code)) {
+                    item.job_code = codeMap.get(item.job_code);
+                    changed = true;
+                }
+            }
+            if (changed) {
+                await TVC_DB.put('daily_work_reports', rep);
+                n++;
+            }
+        }
+        const defects = await TVC_DB.getAll('defect_cases').catch(() => []);
+        for (const dc of defects) {
+            let changed = false;
+            if (codeMap.has(dc.pms_job_code)) { dc.pms_job_code = codeMap.get(dc.pms_job_code); changed = true; }
+            if (codeMap.has(dc.job_code)) { dc.job_code = codeMap.get(dc.job_code); changed = true; }
+            if (changed) await TVC_DB.put('defect_cases', dc);
+        }
+        const boms = await TVC_DB.getAll('job_bom').catch(() => []);
+        for (const b of boms) {
+            if (!codeMap.has(b.job_code)) continue;
+            if (department && b.department && String(b.department).toUpperCase() !== String(department).toUpperCase()) continue;
+            b.job_code = codeMap.get(b.job_code);
+            await TVC_DB.put('job_bom', b);
+        }
+        return n;
+    }
+
+    /** Live DB — 01-001 → 01-00-001 (EE 미지정=00). Equipment 지정 시 해당 EQ NO 사용. */
+    async function applyPmsJobCodeNormalization(jobs, groups) {
+        const pool = jobs || [];
+        const codeMap = new Map();
+        const changed = [];
+        for (const job of pool) {
+            if (isDetachedJobCode(job.job_code)) continue;
+            const p = parsePmsJobCode(job.job_code);
+            if (!p.valid) continue;
+            const eqNo = parseEquipNoCell(job.equipment_no) || resolveJobEquipNo(job, groups) || p.equipNo || 0;
+            const next = formatPmsJobCode(p.groupNo, eqNo, p.itemNo);
+            let dirty = false;
+            if (next !== job.job_code) {
+                codeMap.set(job.job_code, next);
+                job.job_code = next;
+                dirty = true;
+            }
+            if (eqNo && parseEquipNoCell(job.equipment_no) !== eqNo) {
+                job.equipment_no = eqNo;
+                dirty = true;
+            }
+            if (dirty) {
+                job.updated_at = new Date().toISOString();
+                changed.push(job);
+            }
+        }
+        if (changed.length) await TVC_DB.bulkPut('maintenance_jobs', changed);
+        if (codeMap.size) await bulkReplaceJobCodes(codeMap, null);
+        if (changed.length) {
+            console.info(`[TVC] PMS JOB CODE GG-EE-III: ${changed.length} jobs, ${codeMap.size} codes`);
+        }
+        return { updated: changed.length, renamed: codeMap.size };
+    }
+
     function groupDefId(vesselId, dept, label, itemSort1) {
         const v = String(vesselId || '').replace(/[^\w.-]+/g, '_').slice(0, 40);
         const base = `${v}|${dept}|${norm(label)}|${norm(itemSort1 || '')}`;
@@ -1534,12 +1844,23 @@ const TVC_PmsMasterExcel = (function () {
         const label = row.label;
         const dept = row.department;
         const item = norm(itemSort1 || '');
+        const gNo = row.groupNo || splitGroupLabel(label).no;
+
+        // 그룹 헤더(item 없음): 동일 GROUP NO의 UI 빈 그룹(AAAA 등)을 Excel 이름으로 교체
         let hit = defs.find(g =>
             sameVessel(g, vesselId)
             && g.department === dept
             && norm(g.label) === norm(label)
             && norm(g.item_sort1 || '') === item
         );
+        if (!hit && !item && gNo) {
+            hit = defs.find(g =>
+                sameVessel(g, vesselId)
+                && g.department === dept
+                && !norm(g.item_sort1 || '')
+                && splitGroupLabel(g.label).no === gNo
+            );
+        }
         const id = hit?.id || groupDefId(vesselId, dept, label, item);
         const next = {
             ...(hit || {}),
@@ -1548,6 +1869,7 @@ const TVC_PmsMasterExcel = (function () {
             department: dept,
             label,
             item_sort1: item || null,
+            equipment_no: item ? (row.equipment_no != null ? row.equipment_no : hit?.equipment_no) : null,
             machinery_name: row.maker || hit?.machinery_name || '',
             maker: row.maker || hit?.maker || '',
             model_type: row.model_type || hit?.model_type || '',
@@ -1559,6 +1881,26 @@ const TVC_PmsMasterExcel = (function () {
             sync_status: hit?.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (hit?.sync_status || 'LOCAL'),
         };
         await TVC_DB.put('maintenance_groups', next);
+
+        // 같은 GROUP NO의 다른 이름 빈 그룹 def 제거 (32.AAAA vs 32.E1)
+        if (!item && gNo) {
+            for (const g of defs) {
+                if (g.id === next.id) continue;
+                if (!sameVessel(g, vesselId) || g.department !== dept) continue;
+                if (norm(g.item_sort1 || '')) continue;
+                if (splitGroupLabel(g.label).no !== gNo) continue;
+                if (norm(g.label) === norm(label)) continue;
+                if (g.id) await TVC_DB.del('maintenance_groups', g.id);
+            }
+        }
+    }
+
+    function getWorksheetCI(wb, name) {
+        if (!wb) return null;
+        const exact = wb.getWorksheet(name);
+        if (exact) return exact;
+        const target = String(name || '').trim().toLowerCase();
+        return (wb.worksheets || []).find(ws => String(ws.name || '').trim().toLowerCase() === target) || null;
     }
 
     function rebuildComponentTree(jobs, vesselId) {
@@ -1584,10 +1926,10 @@ const TVC_PmsMasterExcel = (function () {
         }
         for (const job of jobs) {
             const dept = job.department;
-            const parts = [dept, job.group, job.sort, job.item_sort1, job.item_sort2].map(p => norm(p)).filter(Boolean);
+            const parts = [dept, job.group, job.sort, job.equipment, job.item_sort1, job.item_sort2].map(p => norm(p)).filter(Boolean);
             let parent = null;
             const pathAcc = [];
-            const types = ['DEPARTMENT', 'GROUP', 'SORT', 'ITEM_L1', 'ITEM_L2'];
+            const types = ['DEPARTMENT', 'GROUP', 'SORT', 'EQUIPMENT', 'ITEM_L1', 'ITEM_L2'];
             for (let i = 0; i < parts.length; i++) {
                 pathAcc.push(parts[i]);
                 parent = ensure(pathAcc, types[Math.min(i, types.length - 1)], parts[i], parent);
@@ -1610,13 +1952,156 @@ const TVC_PmsMasterExcel = (function () {
         }
     }
 
+    /** Import 직후 Group Headers Jobs(ref) vs DB 실제 건수 검증 + 요약 */
+    async function verifyImportGroupJobCounts(groupRows, vesselId, department) {
+        const warnings = [];
+        const summary = [];
+        const jobs = (await TVC_DB.getAll('maintenance_jobs')).filter(j =>
+            sameVessel(j, vesselId) && j.department === department && !isDetachedJobCode(j.job_code)
+        );
+        const byNo = new Map();
+        const samples = new Map();
+        for (const j of jobs) {
+            const gNo = groupNoFromJob(j);
+            if (!gNo) continue;
+            byNo.set(gNo, (byNo.get(gNo) || 0) + 1);
+            if (!samples.has(gNo)) samples.set(gNo, j.job_code);
+        }
+        for (const g of groupRows || []) {
+            if (g.department !== department) continue;
+            const expect = g.jobsRef;
+            if (expect == null || expect <= 0) continue;
+            const count = byNo.get(g.groupNo) || 0;
+            summary.push(`${g.label}: DB ${count}건 (Excel ref ${expect})${count ? ` · 예: ${samples.get(g.groupNo)}` : ''}`);
+            if (count === 0) {
+                warnings.push(
+                    `⚠ DB 반영 실패: Group "${g.label}" Excel Jobs(ref)=${expect} 인데 Import 후 job 0건`
+                );
+            } else if (count < expect) {
+                warnings.push(`Group "${g.label}": Excel ref=${expect}, DB=${count}건`);
+            }
+        }
+        return { warnings, summary };
+    }
+
+    function buildExcelJobRecord(row, vesselId, importStamp, existing) {
+        const period = Number(row.period) || 1;
+        const unit = (row.unit || 'M').toUpperCase();
+        const base = existing ? { ...existing } : {
+            id: (typeof crypto !== 'undefined' && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+            is_locked: false,
+            plan_status: 'PLANNED',
+            schedule_basis: null,
+            sync_status: 'LOCAL',
+            sort: '',
+        };
+        base.vessel_id = vesselId;
+        base.department = row.department;
+        base.group = row.group;
+        base.job_code = row.job_code;
+        base.equipment = row.equipment || '';
+        base.equipment_no = row.equipment_no || 0;
+        base.item_sort1 = row.item_sort1 || '';
+        base.item_sort2 = row.item_sort2 || '';
+        base.job_detail = row.job_detail || '';
+        base.period = period;
+        base.unit = unit;
+        base.pic = row.pic || '';
+        if (row.critical != null) base.is_critical_equipment = row.critical;
+        if (row.last_done) base.last_done = row.last_done;
+        if (row.next_date) {
+            base.next_date = row.next_date;
+            if (!base.original_next_date) base.original_next_date = row.next_date;
+        }
+        base.master_import_at = importStamp;
+        base.updated_at = importStamp;
+        if (existing) {
+            base.sync_status = existing.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (existing.sync_status || 'LOCAL');
+        }
+        return base;
+    }
+
+    /**
+     * Import 최종 보장 — Excel jobRows를 bulkPut으로 DB에 강제 반영 후 재조회 검증.
+     */
+    async function ensureImportJobsPersisted(jobRows, vesselId, department, importStamp) {
+        let repaired = 0;
+        let created = 0;
+        const all = await TVC_DB.getAll('maintenance_jobs');
+        const scoped = all.filter(j => sameVessel(j, vesselId) && j.department === department);
+        const byCode = new Map();
+        for (const j of scoped) {
+            if (!j.job_code || isDetachedJobCode(j.job_code)) continue;
+            byCode.set(j.job_code, j);
+        }
+
+        const toPut = [];
+        for (const row of jobRows) {
+            if (!row.job_code || row.department !== department) continue;
+            const prev = byCode.get(row.job_code);
+            if (!prev) {
+                const job = buildExcelJobRecord(row, vesselId, importStamp, null);
+                job._ensure_created = true;
+                toPut.push(job);
+                byCode.set(job.job_code, job);
+                created++;
+                continue;
+            }
+            const needGroup = row.group && norm(prev.group) !== norm(row.group);
+            const needVessel = !prev.vessel_id;
+            const needEquip = norm(prev.equipment || '') !== norm(row.equipment || '')
+                || parseEquipNoCell(prev.equipment_no) !== parseEquipNoCell(row.equipment_no);
+            const needCode = canonicalPmsJobCode(prev.job_code, row.groupNo, row.equipment_no || 0) !== prev.job_code;
+            const needCrit = row.critical != null && prev.is_critical_equipment !== row.critical;
+            if (needGroup || needVessel || needEquip || needCode || needCrit) {
+                const job = buildExcelJobRecord(row, vesselId, importStamp, prev);
+                toPut.push(job);
+                byCode.set(job.job_code, job);
+                repaired++;
+            }
+        }
+
+        if (toPut.length) {
+            if (typeof TVC_DB.bulkPut === 'function') {
+                await TVC_DB.bulkPut('maintenance_jobs', toPut);
+            } else {
+                for (const job of toPut) await TVC_DB.put('maintenance_jobs', job);
+            }
+        }
+
+        // bulkPut 후에도 누락이면 개별 put으로 재시도
+        const after = await TVC_DB.getAll('maintenance_jobs');
+        const afterCodes = new Set(
+            after
+                .filter(j => sameVessel(j, vesselId) && j.department === department && !isDetachedJobCode(j.job_code))
+                .map(j => j.job_code)
+        );
+        const stillMissing = [];
+        for (const row of jobRows) {
+            if (!row.job_code || row.department !== department) continue;
+            if (afterCodes.has(row.job_code)) continue;
+            const job = buildExcelJobRecord(row, vesselId, importStamp, null);
+            job._ensure_retry = true;
+            await TVC_DB.put('maintenance_jobs', job);
+            afterCodes.add(job.job_code);
+            created++;
+            stillMissing.push(row.job_code);
+        }
+
+        return { repaired, created, retried: stillMissing.length, missingCodes: stillMissing.slice(0, 20) };
+    }
+
     async function importFromWorkbook(wb, user, opts = {}) {
         TVC_RBAC.assertModifyOriginalPlan(user);
+        clearImportWorkReportIndex();
+        try {
         const department = normDept(opts.department);
         const vesselId = await resolveImportVesselId(user, opts);
-        const wsG = wb.getWorksheet('Group Headers');
-        const wsE = wb.getWorksheet('Equipment Headers');
-        const wsJ = wb.getWorksheet('Jobs');
+        const wsG = getWorksheetCI(wb, 'Group Headers');
+        const wsE = getWorksheetCI(wb, 'Equipment Headers');
+        const wsJ = getWorksheetCI(wb, 'Jobs');
         if (!wsJ) throw new Error('Jobs 시트를 찾을 수 없습니다.');
 
         const groupRows = rowsForDepartment(wsG ? parseGroupRows(wsG, department) : [], department);
@@ -1625,15 +2110,17 @@ const TVC_PmsMasterExcel = (function () {
         const skippedJobRows = parsedJobs._skipped || [];
         const jobRows = rowsForDepartment(normalizeImportJobRows(parsedJobs), department);
         if (!jobRows.length) throw new Error(`Jobs 시트에 ${department} 데이터가 없습니다.`);
+        applyJobEquipmentFromHeaders(jobRows, equipRows);
         applyCanonicalImportGroups(groupRows, jobRows, department);
         let allExisting = await TVC_DB.getAll('maintenance_jobs');
         const sanitizeWarnings = sanitizeImportJobRows(jobRows, vesselId, allExisting);
-        const importWarnings = validateImportAlignment(groupRows, jobRows, skippedJobRows, department);
+        const importWarnings = validateImportAlignment(groupRows, jobRows, skippedJobRows, department, equipRows);
         importWarnings.push(...sanitizeWarnings);
 
-        for (const g of groupRows) await upsertGroupDef(g, null, vesselId);
-        for (const e of equipRows) await upsertGroupDef(e, e.item_sort1, vesselId);
+        // Work Report 인덱스 1회 로드 — job마다 getAll 금지 (701×전체스캔으로 Import가 끊기던 원인)
+        await loadImportWorkReportIndex();
 
+        // Jobs 먼저 반영 — 그룹만 남고 job 0건인 부분 Import 방지
         const orphanStats = await removeOrphanJobs(jobRows, vesselId);
         const supersededStats = await removeSupersededGroupJobs(groupRows, jobRows, vesselId, department);
         orphanStats.removed += supersededStats.removed;
@@ -1651,120 +2138,139 @@ const TVC_PmsMasterExcel = (function () {
         let updated = 0;
         let renamed = 0;
         const codeReuseNotes = [];
+        const rowErrors = [];
         const importStamp = new Date().toISOString();
         const groupDetailCounts = buildImportGroupDetailCounts(jobRows);
         const touchedJobIds = new Set();
 
         for (const row of jobRows) {
-            if (row.job_id && byId.has(row.job_id) === false) {
-                const foreign = allExisting.find(j => j.id === row.job_id && !sameVessel(j, vesselId));
-                if (foreign) row.job_id = null;
-            }
-            let job = findImportJobMatch(row, byId, byDeptCode, existingJobs, groupDetailCounts);
-
-            const period = Number(row.period) || 1;
-            const unit = (row.unit || 'M').toUpperCase();
-            const { lastDone, nextDate, runHourMeta } = resolveImportSchedule(row, period, unit, importWarnings);
-
-            if (!job) {
-                const dup = existingJobs.filter(j => j.department === row.department && j.job_code === row.job_code);
-                if (dup.length) throw new Error(`JOB CODE 중복: ${row.department} ${row.job_code}`);
-
-                const newId = row.job_id && !byId.has(row.job_id)
-                    ? row.job_id
-                    : (typeof crypto !== 'undefined' && crypto.randomUUID
-                        ? crypto.randomUUID()
-                        : 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
-                job = {
-                    id: newId,
-                    vessel_id: vesselId,
-                    department: row.department,
-                    group: row.group,
-                    job_code: row.job_code,
-                    sort: '',
-                    item_sort1: row.item_sort1,
-                    item_sort2: row.item_sort2,
-                    job_detail: row.job_detail,
-                    period,
-                    unit,
-                    pic: row.pic,
-                    next_date: nextDate,
-                    last_done: lastDone,
-                    original_next_date: nextDate,
-                    is_critical_equipment: row.critical,
-                    is_locked: false,
-                    plan_status: 'PLANNED',
-                    schedule_basis: null,
-                    sync_status: 'LOCAL',
-                    master_import_at: importStamp,
-                    updated_at: importStamp,
-                };
-                applyImportScheduleToJob(job, lastDone, nextDate, false, runHourMeta);
-                created++;
-            } else {
-                const oldCode = job.job_code;
-                const oldGroup = job.group;
-                const protectedSched = await jobHasFinalizedHistory(job.id);
-
-                job.vessel_id = vesselId;
-                job.department = row.department;
-                job.group = row.group;
-                job.item_sort1 = row.item_sort1;
-                job.item_sort2 = row.item_sort2;
-                job.job_detail = row.job_detail;
-                job.period = period;
-                job.unit = unit;
-                job.pic = row.pic;
-                if (row.critical != null) job.is_critical_equipment = row.critical;
-
-                applyImportScheduleToJob(job, lastDone, nextDate, protectedSched, runHourMeta);
-
-                if (oldCode !== row.job_code) {
-                    await cascadeJobCodeRename(oldCode, row.job_code, job.id, { department: job.department });
-                    job.job_code = row.job_code;
-                    delete job.detached_from_code;
-                    renamed++;
-                } else if (row._legacyJobCode && row._legacyJobCode !== row.job_code && oldCode === row._legacyJobCode) {
-                    await cascadeJobCodeRename(row._legacyJobCode, row.job_code, job.id, { department: job.department });
-                    job.job_code = row.job_code;
-                    delete job.detached_from_code;
-                    renamed++;
-                } else if (isDetachedJobCode(job.job_code) && jobCodePatternOk(row.job_code)) {
-                    await cascadeJobCodeRename(job.job_code, row.job_code, job.id, { department: job.department });
-                    job.job_code = row.job_code;
-                    delete job.detached_from_code;
-                    renamed++;
+            try {
+                if (row.job_id && byId.has(row.job_id) === false) {
+                    const foreign = allExisting.find(j => j.id === row.job_id && !sameVessel(j, vesselId));
+                    if (foreign) row.job_id = null;
                 }
-                job.sync_status = job.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (job.sync_status || 'LOCAL');
-                job.master_import_at = importStamp;
-                job.updated_at = importStamp;
-                updated++;
-                if (norm(oldGroup) !== norm(row.group) && codeReuseNotes.length < 5) {
-                    codeReuseNotes.push(`${row.job_code}: "${oldGroup}" → "${row.group}"`);
+                let job = findImportJobMatch(row, byId, byDeptCode, existingJobs, groupDetailCounts);
+
+                const period = Number(row.period) || 1;
+                const unit = (row.unit || 'M').toUpperCase();
+                const { lastDone, nextDate, runHourMeta } = resolveImportSchedule(row, period, unit, importWarnings);
+
+                if (!job) {
+                    const dup = existingJobs.filter(j => j.department === row.department && j.job_code === row.job_code);
+                    if (dup.length) job = dup[0];
                 }
+
+                if (!job) {
+                    const newId = row.job_id && !byId.has(row.job_id)
+                        ? row.job_id
+                        : (typeof crypto !== 'undefined' && crypto.randomUUID
+                            ? crypto.randomUUID()
+                            : 'job-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8));
+                    job = {
+                        id: newId,
+                        vessel_id: vesselId,
+                        department: row.department,
+                        group: row.group,
+                        job_code: row.job_code,
+                        sort: '',
+                        equipment: row.equipment || '',
+                        equipment_no: row.equipment_no || 0,
+                        item_sort1: row.item_sort1,
+                        item_sort2: row.item_sort2,
+                        job_detail: row.job_detail,
+                        period,
+                        unit,
+                        pic: row.pic,
+                        next_date: nextDate,
+                        last_done: lastDone,
+                        original_next_date: nextDate,
+                        is_critical_equipment: row.critical,
+                        is_locked: false,
+                        plan_status: 'PLANNED',
+                        schedule_basis: null,
+                        sync_status: 'LOCAL',
+                        master_import_at: importStamp,
+                        updated_at: importStamp,
+                    };
+                    applyImportScheduleToJob(job, lastDone, nextDate, false, runHourMeta);
+                    created++;
+                } else {
+                    const oldCode = job.job_code;
+                    const oldGroup = job.group;
+                    const protectedSched = await jobHasFinalizedHistory(job.id);
+
+                    job.vessel_id = vesselId;
+                    job.department = row.department;
+                    job.group = row.group;
+                    job.equipment = row.equipment || '';
+                    job.equipment_no = row.equipment_no || 0;
+                    job.item_sort1 = row.item_sort1;
+                    job.item_sort2 = row.item_sort2;
+                    job.job_detail = row.job_detail;
+                    job.period = period;
+                    job.unit = unit;
+                    job.pic = row.pic;
+                    if (row.critical != null) job.is_critical_equipment = row.critical;
+
+                    applyImportScheduleToJob(job, lastDone, nextDate, protectedSched, runHourMeta);
+
+                    if (oldCode !== row.job_code) {
+                        await cascadeJobCodeRename(oldCode, row.job_code, job.id, { department: job.department });
+                        job.job_code = row.job_code;
+                        delete job.detached_from_code;
+                        renamed++;
+                    } else if (row._legacyJobCode && row._legacyJobCode !== row.job_code && oldCode === row._legacyJobCode) {
+                        await cascadeJobCodeRename(row._legacyJobCode, row.job_code, job.id, { department: job.department });
+                        job.job_code = row.job_code;
+                        delete job.detached_from_code;
+                        renamed++;
+                    } else if (isDetachedJobCode(job.job_code) && jobCodePatternOk(row.job_code)) {
+                        await cascadeJobCodeRename(job.job_code, row.job_code, job.id, { department: job.department });
+                        job.job_code = row.job_code;
+                        delete job.detached_from_code;
+                        renamed++;
+                    }
+                    job.sync_status = job.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (job.sync_status || 'LOCAL');
+                    job.master_import_at = importStamp;
+                    job.updated_at = importStamp;
+                    updated++;
+                    if (norm(oldGroup) !== norm(row.group) && codeReuseNotes.length < 5) {
+                        codeReuseNotes.push(`${row.job_code}: "${oldGroup}" → "${row.group}"`);
+                    }
+                }
+                await TVC_DB.put('maintenance_jobs', job);
+                touchedJobIds.add(job.id);
+                byId.set(job.id, job);
+                byDeptCode.set(`${job.department}|${job.job_code}`, job);
+                const idx = existingJobs.findIndex(j => j.id === job.id);
+                if (idx >= 0) existingJobs[idx] = job;
+                else existingJobs.push(job);
+            } catch (rowErr) {
+                rowErrors.push(`Jobs row ${row._excelRow || '?'} (${row.job_code}): ${rowErr.message || rowErr}`);
             }
-            await TVC_DB.put('maintenance_jobs', job);
-            touchedJobIds.add(job.id);
-            byId.set(job.id, job);
-            byDeptCode.set(`${job.department}|${job.job_code}`, job);
-            const idx = existingJobs.findIndex(j => j.id === job.id);
-            if (idx >= 0) existingJobs[idx] = job;
-            else existingJobs.push(job);
         }
+        if (rowErrors.length) importWarnings.push(...rowErrors.slice(0, 8));
 
         await dedupeImportJobCodeStubs(vesselId, department, touchedJobIds);
         await removeStaleJobCodeStubs(jobRows, vesselId, department, touchedJobIds);
         await reconcileJobsToCanonicalGroups(groupRows, vesselId, department, touchedJobIds);
         const rehomedJobs = await rehomeAllJobsByGroupNumber(groupRows, vesselId, department);
 
-        const vesselJobs = (await TVC_DB.getAll('maintenance_jobs')).filter(j => sameVessel(j, vesselId));
         await pruneSupersededGroupDefs(groupRows, vesselId, department);
         const groupRepair = await repairDuplicateGroupNumbers(vesselId, {
             department,
             canonicalByNo: canonicalGroupDisplayMap(groupRows, department),
         });
         await purgeLegacyDeckGroupDefs(vesselId);
-        await pruneEmptyGroupDefs(vesselJobs, vesselId);
+
+        // 수리·rehome 이후 반드시 재조회 — 이전 스냅샷 put이 canonical group을 되돌리지 않도록
+        let vesselJobs = (await TVC_DB.getAll('maintenance_jobs')).filter(j => sameVessel(j, vesselId));
+        const keepGroupKeys = new Set(
+            (groupRows || []).map(g => `${g.department}|${norm(g.label)}`)
+        );
+        await pruneEmptyGroupDefs(vesselJobs, vesselId, keepGroupKeys);
+        vesselJobs = (await TVC_DB.getAll('maintenance_jobs')).filter(j => sameVessel(j, vesselId));
+
         if (typeof TVC_MasterVesselScope !== 'undefined') {
             await TVC_MasterVesselScope.clearVesselStore('ship_components', vesselId);
         }
@@ -1773,6 +2279,44 @@ const TVC_PmsMasterExcel = (function () {
         for (const job of vesselJobs) {
             await TVC_DB.put('maintenance_jobs', job);
         }
+
+        // 최종 보장: Excel Jobs 행 bulkPut + 누락 개별 재시도
+        let ensureStats = await ensureImportJobsPersisted(jobRows, vesselId, department, importStamp);
+        created += ensureStats.created;
+        let verify = await verifyImportGroupJobCounts(groupRows, vesselId, department);
+        if (verify.warnings.length) {
+            const retry = await ensureImportJobsPersisted(jobRows, vesselId, department, importStamp);
+            ensureStats = {
+                repaired: ensureStats.repaired + retry.repaired,
+                created: ensureStats.created + retry.created,
+                retried: (ensureStats.retried || 0) + (retry.retried || 0),
+                missingCodes: retry.missingCodes || ensureStats.missingCodes,
+            };
+            created += retry.created;
+            verify = await verifyImportGroupJobCounts(groupRows, vesselId, department);
+        }
+
+        const tailCodes = jobRows
+            .filter(r => {
+                const n = parseInt(r.groupNo || groupNoFromJobCode(r.job_code), 10);
+                return Number.isFinite(n) && n >= 29 && n <= 43;
+            })
+            .map(r => r.job_code);
+
+        if (verify.warnings.length) {
+            throw new Error(
+                `PMS Master Import — Jobs 미반영 그룹이 있습니다.\n\n`
+                + `${verify.warnings.slice(0, 8).join('\n')}\n\n`
+                + `파싱된 Jobs: ${jobRows.length}행 · 신규 ${created} · 수정 ${updated}\n`
+                + `29~43 파싱 CODE: ${tailCodes.slice(0, 20).join(', ') || '(없음)'}\n`
+                + (rowErrors.length ? `행 오류 ${rowErrors.length}건:\n${rowErrors.slice(0, 5).join('\n')}\n\n` : '')
+                + `Engine: ${IMPORT_BUILD_ID}`
+            );
+        }
+
+        // Jobs 검증 통과 후에만 Group Headers 반영 (빈 그룹만 남는 현상 방지)
+        for (const g of groupRows) await upsertGroupDef(g, null, vesselId);
+        for (const e of equipRows) await upsertGroupDef(e, e.item_sort1, vesselId);
 
         const orphanNote = orphanStats.removed || orphanStats.detached
             ? ` · 제외 ${orphanStats.removed} · Work Report 격리 ${orphanStats.detached}`
@@ -1791,6 +2335,9 @@ const TVC_PmsMasterExcel = (function () {
             detached: orphanStats.detached,
             rehomedJobs,
             groupRepair,
+            ensureRepaired: ensureStats.repaired,
+            ensureCreated: ensureStats.created,
+            rowErrors: rowErrors.length,
             groups: groupRows.length,
             equipment: equipRows.length,
             jobs: jobRows.length,
@@ -1799,7 +2346,13 @@ const TVC_PmsMasterExcel = (function () {
             skippedJobRows: skippedJobRows.length,
             warnings: importWarnings,
             importBuild: IMPORT_BUILD_ID,
+            groupVerify: verify.warnings,
+            groupSummary: verify.summary,
+            tailJobCodes: tailCodes,
         };
+        } finally {
+            clearImportWorkReportIndex();
+        }
     }
 
     async function importFromFile(file, user, opts = {}) {
@@ -1814,7 +2367,9 @@ const TVC_PmsMasterExcel = (function () {
         exportToFile, exportToWorkbook, importFromFile, importFromWorkbook,
         buildGroupLabel, splitGroupLabel, resolveGroup, renumberJobsForExport,
         isLegacyDeckGroupLabel, usesLegacyDeckGroupNumber, pruneEmptyGroupDefs, findImportJobMatch, importRowMatchesJob,
-        applyDeckCatalogNormalization, deckJobUsesLegacyCatalog,
+        applyDeckCatalogNormalization, applyPmsJobCodeNormalization, deckJobUsesLegacyCatalog,
+        formatPmsJobCode, parsePmsJobCode,
+        parseCriticalFromRow, parseCriticalCell, criticalExportValue, groupDefsCriticalValue,
         repairDuplicateGroupNumbers, rehomeAllJobsByGroupNumber,
         saveCanonicalGroupMap, loadCanonicalGroupMap,
         IMPORT_BUILD_ID,

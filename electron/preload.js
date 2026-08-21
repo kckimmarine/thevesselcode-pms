@@ -14,7 +14,10 @@ contextBridge.exposeInMainWorld('tvcElectron', {
     setExportFolder: (folder) => ipcRenderer.invoke('tvc:set-export-folder', folder),
     pickExportFolder: () => ipcRenderer.invoke('tvc:pick-export-folder'),
     openExportFolder: () => ipcRenderer.invoke('tvc:open-export-folder'),
-    saveExportFile: (bytes, filename) => ipcRenderer.invoke('tvc:save-export-file', { bytes, filename }),
+    saveExportFile: (bytes, filename) => ipcRenderer.invoke('tvc:save-export-file', {
+        bytes: bytes instanceof Uint8Array ? bytes : Uint8Array.from(bytes || []),
+        filename,
+    }),
     saveAdminRegistry: (bundle) => ipcRenderer.invoke('tvc:save-admin-registry', bundle),
     getLicenseSigningStatus: () => ipcRenderer.invoke('tvc:get-license-signing-status'),
     pickLicensePrivateKey: () => ipcRenderer.invoke('tvc:pick-license-private-key'),

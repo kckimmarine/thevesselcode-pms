@@ -81,7 +81,7 @@ const TVC_MaintenancePlan = (function () {
             throw Object.assign(new Error('VESSEL_FORBIDDEN'), { code: 'FORBIDDEN' });
         }
 
-        const fields = ['group', 'job_code', 'sort', 'item_sort1', 'item_sort2', 'job_detail',
+        const fields = ['group', 'job_code', 'sort', 'equipment', 'equipment_no', 'item_sort1', 'item_sort2', 'job_detail',
             'period', 'unit', 'pic', 'next_date', 'last_done', 'is_critical_equipment'];
         const p = normalizePatch(patch);
         const prevJobCode = job.job_code;
@@ -130,6 +130,8 @@ const TVC_MaintenancePlan = (function () {
             group: p.group || 'UNGROUPED',
             job_code: jobCode,
             sort: p.sort || '',
+            equipment: p.equipment || '',
+            equipment_no: p.equipment_no || 0,
             item_sort1: p.item_sort1 || '',
             item_sort2: p.item_sort2 || '',
             job_detail: p.job_detail || '',

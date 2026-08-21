@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260821-detach-relink">
+    <link rel="stylesheet" href="css/app.css?v=20260821-req-list-footer">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260810-spare-hist-width2">
 </head>
 <body>
@@ -73,14 +73,15 @@
                     <li><b>Master</b> · captain</li>
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / co</li>
-                    <li><b>HQ</b> · hq (Department not required)</li>
-                    <li><b>Admin</b> · tvc (Department not required · Admin Mode SKU)</li>
+                    <li><b>HQ</b> · hq (해당 선사 선박만 · Department 불필요)</li>
+                    <li><b>HQ</b> · tvc (HQ Mode SKU · 선사 전체 조회)</li>
+                    <li><b>Admin</b> · tvc (Admin Mode SKU · Department 불필요)</li>
                 </ul>
             </div>
         </div>
     </main>
 
-    <footer class="login-footer"><span id="loginAppVersion">v1.0.3</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
+    <footer class="login-footer"><span id="loginAppVersion">v1.0.4</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
 </div>
 
 <div id="appShell" class="hidden">
@@ -131,7 +132,7 @@
     <nav id="tabBar" class="tab-bar" role="tablist">
         <button class="tab-btn active" data-tab="menu" onclick="TVC_App.switchTab('menu')">📑 Menu</button>
         <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 Work Plan</button>
-        <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Work History</button>
+        <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Report History</button>
         <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
         <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">⚙ Settings</button>
     </nav>
@@ -142,25 +143,27 @@
             <div id="captainViewDashboard" class="captain-view-dashboard hidden"></div>
             <div class="cmaxs-body" id="cmaxsMenuBody">
                 <div class="hq-left-col hidden" id="hqLeftCol">
-                    <aside id="fleetListPanel" class="fleet-list-panel">
-                        <div class="fleet-list-head">🚢 Ship List</div>
-                        <div class="fleet-list-toolbar">
-                            <button class="fleet-view-btn active" data-fview="all" onclick="TVC_App.setFleetView('all')">View: All</button>
-                            <button class="fleet-view-btn" data-fview="selected" onclick="TVC_App.setFleetView('selected')">Selected</button>
-                        </div>
+                    <aside id="fleetListPanel" class="fleet-list-panel" data-admin-layout="1">
                         <div class="fleet-search-bar">
                             <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…" oninput="TVC_App.setFleetSearch(this.value)">
                         </div>
+                        <div class="admin-company-field">
+                            <span class="admin-company-label">Company</span>
+                            <select class="admin-company-select" id="adminCompanySelect" onchange="TVC_App.setFleetCompanyFilter(this.value)"></select>
+                        </div>
+                        <div class="fleet-list-head">🚢 Ship List</div>
                         <div class="fleet-table-wrap">
-                            <table class="fleet-table">
+                            <table class="fleet-table fleet-table--with-company">
                                 <colgroup>
                                     <col class="fleet-col-no">
+                                    <col class="fleet-col-company">
                                     <col class="fleet-col-name">
                                     <col class="fleet-col-imo">
                                     <col class="fleet-col-delivery">
+                                    <col class="fleet-col-appver">
                                 </colgroup>
                                 <thead><tr>
-                                    <th>No</th><th>Ship's Name</th><th>IMO No</th><th>Delivery</th>
+                                    <th>No</th><th>Company ID</th><th>Ship's Name</th><th>IMO No</th><th>Delivery</th><th>App (M/E/D)</th>
                                 </tr></thead>
                                 <tbody id="fleetTableBody"></tbody>
                             </table>
@@ -260,9 +263,9 @@
             </div>
         </section>
 
-        <!-- TAB: Work History -->
+        <!-- TAB: Report History -->
         <section id="tab-history" class="tab-pane hidden">
-            <div class="sheet-head"><h2>📜 Work History</h2><span class="sheet-sub">Select a row · double-click or Detail Report · check (ㅁ) for Report Approval</span></div>
+            <div class="sheet-head"><h2>📜 Report History</h2><span class="sheet-sub">Select a row · double-click or Detail Report · check (ㅁ) for Report Approval</span></div>
             <div class="list-tab-frame">
             <div class="hist-toolbar-stack">
                 <div class="hist-toolbar hist-toolbar-actions filter-bar">
@@ -654,11 +657,11 @@
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/rbac.js?v=20260820-df-co-ce"></script>
-<script src="js/core/schema.js?v=20260821-canonical-meta"></script>
+<script src="js/core/schema.js?v=20260821-wp-hq-comment"></script>
 <script src="js/core/db.js?v=20260806-req-sort"></script>
-<script src="js/core/indexes.js?v=20260821-deck-engine-isolate"></script>
-<script src="js/core/spareIndexes.js"></script>
-<script src="js/services/spareGroups.js"></script>
+<script src="js/core/indexes.js?v=20260821-hide-detached"></script>
+<script src="js/core/spareIndexes.js?v=20260821-spare-group-src"></script>
+<script src="js/services/spareGroups.js?v=20260821-eq-pms-spare-split"></script>
 <script src="js/pms.js?v=20260721-stock-ledger"></script>
 <script src="js/ui/viewportScale.js?v=20260723-readability"></script>
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
@@ -670,7 +673,7 @@
 <script src="js/core/filename.js?v=20260812-defect-hq-batch"></script>
 <script src="js/services/spareSync.js?v=20260806-req-excel"></script>
 <script src="js/services/spareMeta.js"></script>
-<script src="js/ui/spareMenu.js?v=20260820-rcvd-cal"></script>
+<script src="js/ui/spareMenu.js?v=20260821-wp-selected-parts"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -679,20 +682,20 @@
 <script src="js/core/pbkdf2-fallback.js"></script>
 <script src="js/space.js?v=20260813-admin-mode"></script>
 <script src="js/license.js?v=20260813-admin-mode"></script>
-<script src="js/services/fileExport.js?v=20260804-settings"></script>
+<script src="js/services/fileExport.js?v=20260821-monthly-xfer"></script>
 <script src="js/auth.js?v=20260813-admin-mode"></script>
 <script src="js/services/transaction.js?v=20260810-plan-status-latest"></script>
-<script src="js/services/maintenancePlan.js?v=20260813-vessel-master"></script>
-<script src="js/services/pmsMasterExcel.js?v=20260821-deck-engine-isolate"></script>
+<script src="js/services/maintenancePlan.js?v=20260821-pms-ggeeiii"></script>
+<script src="js/services/pmsMasterExcel.js?v=20260821-master-schema"></script>
 <script src="js/services/spareCode.js"></script>
-<script src="js/services/spareMasterExcel.js?v=20260813-vessel-master"></script>
+<script src="js/services/spareMasterExcel.js?v=20260821-master-schema"></script>
 <script src="js/services/defectCase.js?v=20260820-df-co-ce"></script>
-<script src="js/services/workPermitCase.js?v=20260810-wp-comments"></script>
+<script src="js/services/workPermitCase.js?v=20260821-wp-hq-comment"></script>
 <script src="js/services/hubRelay.js?v=20260820-hub-relay"></script>
-<script src="js/services/workPermitSync.js?v=20260820-hub-relay"></script>
+<script src="js/services/workPermitSync.js?v=20260821-wp-hq-comment"></script>
 <script src="js/services/defectSync.js?v=20260820-df-export"></script>
-<script src="js/services/postponeSync.js?v=20260820-hub-relay"></script>
-<script src="js/services/sync.js?v=20260820-hub-relay"></script>
+<script src="js/services/postponeSync.js?v=20260821-postpone-xfer"></script>
+<script src="js/services/sync.js?v=20260821-postpone-xfer"></script>
 <script src="js/services/masterBackup.js?v=20260813-vessel-master"></script>
 <script src="js/services/vesselProfileSync.js?v=20260813-vessel-profile"></script>
 <script src="js/services/appUpdate.js?v=20260820-company-scope"></script>
@@ -709,12 +712,12 @@
 <script src="js/services/masterVesselScope.js?v=20260813-vessel-master"></script>
 <script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
-<script src="js/ui/listFilters.js?v=20260811-list-search-clear"></script>
-<script src="js/ui/defectReport.js?v=20260820-df-co-ce"></script>
-<script src="js/ui/workPermit.js?v=20260811-wrspare-cos-dot"></script>
+<script src="js/ui/listFilters.js?v=20260821-daily-tasks-4"></script>
+<script src="js/ui/defectReport.js?v=20260821-check-hist"></script>
+<script src="js/ui/workPermit.js?v=20260821-wp-hq-comment"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
-<script src="js/ui/outstandingTasks.js?v=20260804-pms-scope"></script>
-<script src="js/app.js?v=20260821-deck-engine-isolate"></script>
+<script src="js/ui/outstandingTasks.js?v=20260821-postpone-ot"></script>
+<script src="js/app.js?v=20260821-postpone-ot"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

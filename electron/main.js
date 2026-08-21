@@ -638,15 +638,25 @@ function registerSettingsIpc() {
     });
 
     ipcMain.handle('tvc:save-export-file', (_evt, payload) => {
-        const filename = String(payload?.filename || '').trim();
-        if (!filename) return { ok: false, error: 'Missing filename.' };
-        const safeName = path.basename(filename);
-        const folder = resolveExportFolder(readSettings());
-        fs.mkdirSync(folder, { recursive: true });
-        const bytes = Buffer.from(payload?.bytes || []);
-        const fullPath = path.join(folder, safeName);
-        fs.writeFileSync(fullPath, bytes);
-        return { ok: true, path: fullPath, folder };
+        try {
+            const filename = String(payload?.filename || '').trim();
+            if (!filename) return { ok: false, error: 'Missing filename.' };
+            const safeName = path.basename(filename);
+            const folder = resolveExportFolder(readSettings());
+            fs.mkdirSync(folder, { recursive: true });
+            const raw = payload?.bytes;
+            let bytes;
+            if (Buffer.isBuffer(raw)) bytes = raw;
+            else if (ArrayBuffer.isView(raw)) bytes = Buffer.from(raw.buffer, raw.byteOffset, raw.byteLength);
+            else if (raw instanceof ArrayBuffer) bytes = Buffer.from(raw);
+            else bytes = Buffer.from(Array.isArray(raw) ? raw : []);
+            if (!bytes.length) return { ok: false, error: 'Export file is empty.' };
+            const fullPath = path.join(folder, safeName);
+            fs.writeFileSync(fullPath, bytes);
+            return { ok: true, path: fullPath, folder };
+        } catch (e) {
+            return { ok: false, error: e.message || String(e) };
+        }
     });
 }
 

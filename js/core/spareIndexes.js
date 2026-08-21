@@ -26,6 +26,7 @@ const TVC_SpareIndexes = (function () {
         const seen = new Set();
 
         (spareGroupDefs || []).forEach(g => {
+            if (String(g.item_sort1 || '').trim()) return;
             const label = String(g.label || '').trim();
             if (!label) return;
             const dept = g.department || 'ENGINE';

@@ -1,10 +1,21 @@
 /* SPARE Master Excel — Export / Import (Group · Equipment · Spare Parts)
  * Filename: {vessel}_spare_master_{deck|engine}_{YYYYMMDD}_{seq}.xlsx
+ * Group/Equipment header columns match PMS Master (Jobs/Parts ref name differs).
+ * Schema is identical across Engine · Master · HQ (ENGINE) and Deck · Master · HQ (DECK).
  */
 const TVC_SpareMasterExcel = (function () {
     const NAVY = 'FF1A365D';
     const GREEN = 'FF217346';
     const HDR_FONT = { bold: true, color: { argb: 'FFFFFFFF' } };
+    const CELL_ALIGN = { vertical: 'top', horizontal: 'left', wrapText: false };
+    const TEXT_FMT = '@';
+    const REQUIRED_FILL = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+    const REQUIRED_HDR_FONT = { bold: true, color: { argb: 'FF1A365D' } };
+    const TEMPLATE_ROWS = 3;
+    /** Import 필수 입력 열 (1-based) */
+    const REQ_GROUP_COLS = [1, 2, 3];
+    const REQ_EQUIP_COLS = [1, 2, 3, 4, 5];
+    const REQ_SPARE_COLS = [1, 2, 3, 6, 10];
     const HDR_ROW = 5;
     const DATA_START = 6;
 
@@ -102,6 +113,42 @@ const TVC_SpareMasterExcel = (function () {
 
     const PMS = () => (typeof TVC_PmsMasterExcel !== 'undefined' ? TVC_PmsMasterExcel : null);
 
+    function criticalExportValue(v) {
+        const pms = PMS();
+        if (pms?.criticalExportValue) return pms.criticalExportValue(v);
+        if (v === true) return 'Yes';
+        if (v === false) return 'No';
+        return '';
+    }
+
+    function parseCriticalFromRow(row, h, colFn) {
+        const pms = PMS();
+        if (pms?.parseCriticalFromRow) return pms.parseCriticalFromRow(row, h, colFn);
+        const idx = (colFn && (colFn('CRITICAL EQUIPMENT') || colFn('⚠') || colFn('CRITICAL')))
+            || (h && (h['CRITICAL EQUIPMENT'] || h['⚠'] || h['CRITICAL']))
+            || 0;
+        if (!idx) return null;
+        const s = norm(row.getCell(idx).value).toLowerCase();
+        if (!s) return null;
+        if (s === '⚠' || s === 'y' || s === 'yes' || s === '1' || s === 'true') return true;
+        if (s === 'n' || s === 'no' || s === '0' || s === 'false') return false;
+        return null;
+    }
+
+    function groupDefsCriticalValue(groups, department, no, name) {
+        const pms = PMS();
+        if (pms?.groupDefsCriticalValue) return pms.groupDefsCriticalValue(groups, department, no, name);
+        const rows = (groups || []).filter(g => {
+            if (String(g.department || '').toUpperCase() !== String(department || '').toUpperCase()) return false;
+            const sg = splitGroupLabel(g.label);
+            return padGroupNo(sg.no) === padGroupNo(no) && norm(sg.name).toUpperCase() === norm(name).toUpperCase();
+        });
+        if (rows.some(g => g.is_critical_equipment === true)) return true;
+        const header = rows.find(g => !norm(g.item_sort1));
+        if (header?.is_critical_equipment === false) return false;
+        return null;
+    }
+
     function norm(s) {
         return String(s ?? '').replace(/\s+/g, ' ').trim();
     }
@@ -155,22 +202,79 @@ const TVC_SpareMasterExcel = (function () {
         return Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0;
     }
 
-    function styleHeaderRow(row, fillArgb) {
-        row.eachCell(cell => {
-            cell.font = HDR_FONT;
-            cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillArgb } };
-            cell.alignment = { vertical: 'middle', wrapText: true };
+    function styleHeaderRow(row, fillArgb, requiredCols = []) {
+        const reqSet = new Set(requiredCols);
+        row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+            if (reqSet.has(colNumber)) {
+                cell.font = REQUIRED_HDR_FONT;
+                cell.fill = REQUIRED_FILL;
+            } else {
+                cell.font = HDR_FONT;
+                cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fillArgb } };
+            }
+            cell.numFmt = TEXT_FMT;
+            cell.alignment = { ...CELL_ALIGN };
         });
         row.height = 22;
     }
 
-    function addMetaRows(ws, lines, colSpan = 12) {
+    function markRequiredCell(cell) {
+        cell.fill = REQUIRED_FILL;
+    }
+
+    function applyRequiredDataFill(ws, cols, dataRowCount) {
+        if (!cols.length || dataRowCount <= 0) return;
+        for (let i = 0; i < dataRowCount; i++) {
+            const row = ws.getRow(DATA_START + i);
+            for (const col of cols) markRequiredCell(row.getCell(col));
+        }
+    }
+
+    function appendRequiredTemplateRows(ws, cols, count = TEMPLATE_ROWS) {
+        if (!cols.length || count <= 0) return;
+        const base = Math.max(ws.rowCount, DATA_START - 1);
+        for (let i = 0; i < count; i++) {
+            const row = ws.getRow(base + 1 + i);
+            for (const col of cols) {
+                const cell = row.getCell(col);
+                markRequiredCell(cell);
+                cell.numFmt = TEXT_FMT;
+                cell.alignment = { ...CELL_ALIGN };
+            }
+        }
+    }
+
+    function addMetaRows(ws, lines, startCol = 1) {
         lines.forEach((text, i) => {
-            const r = ws.getRow(i + 1);
-            r.getCell(1).value = text;
-            r.getCell(1).font = { italic: true, color: { argb: 'FF4A5568' }, size: 10 };
-            ws.mergeCells(i + 1, 1, i + 1, colSpan);
+            const cell = ws.getRow(i + 1).getCell(startCol);
+            cell.value = String(text);
+            cell.numFmt = TEXT_FMT;
+            cell.alignment = { ...CELL_ALIGN };
+            cell.font = { italic: true, color: { argb: 'FF4A5568' }, size: 10 };
         });
+    }
+
+    /** 시트 내 모든 사용 셀 — 텍스트 서식 · 위쪽 · 왼쪽 정렬 */
+    function applySheetTextStyle(ws) {
+        const maxCol = Math.max(ws.columnCount || 1, 1);
+        ws.eachRow({ includeEmpty: true }, row => {
+            for (let c = 1; c <= maxCol; c++) {
+                const cell = row.getCell(c);
+                const v = cell.value;
+                if (v instanceof Date) {
+                    cell.value = v.toISOString().slice(0, 10);
+                } else if (v != null && typeof v === 'object') {
+                    if (v.richText) cell.value = v.richText.map(t => t.text).join('');
+                    else if (v.result != null && v.formula == null) cell.value = String(v.result);
+                    else if (v.text != null) cell.value = String(v.text);
+                } else if (v != null && typeof v !== 'string') {
+                    cell.value = String(v);
+                }
+                cell.numFmt = TEXT_FMT;
+                cell.alignment = { ...CELL_ALIGN };
+            }
+        });
+        for (let c = 1; c <= maxCol; c++) ws.getColumn(c).numFmt = TEXT_FMT;
     }
 
     async function downloadBlob(buf, filename) {
@@ -428,12 +532,14 @@ const TVC_SpareMasterExcel = (function () {
         const wsG = wb.addWorksheet('Group Headers', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         addMetaRows(wsG, [
             `Vessel: ${vesselId}  ·  SPARE Master — ${department} — Group Headers`,
+            'Format shared: Engine · Master · HQ (this DEPARTMENT). Deck uses a separate DECK file.',
             'Live DB snapshot — SPARE GROUP Tree (spare_groups) for this department only. Re-export after UI changes.',
+            'CRITICAL EQUIPMENT = Yes / No. Group에 Yes면 해당 그룹이 Critical로 표시됩니다.',
         ]);
-        ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Parts (ref)'].forEach((h, i) => {
+        ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Parts (ref)', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
             wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
         });
-        styleHeaderRow(wsG.getRow(HDR_ROW), NAVY);
+        styleHeaderRow(wsG.getRow(HDR_ROW), NAVY, REQ_GROUP_COLS);
         groupRows.forEach((gr, idx) => {
             const r = wsG.getRow(DATA_START + idx);
             const meta = pickSpareGroupMeta(groupMeta, spareGroups, gr.department, gr.no, gr.name);
@@ -444,19 +550,21 @@ const TVC_SpareMasterExcel = (function () {
             r.getCell(5).value = meta.model_type || '';
             r.getCell(6).value = meta.capacity || '';
             r.getCell(7).value = meta.serial_no || '';
-            r.getCell(8).value = gr.count;
+            r.getCell(8).value = String(gr.count ?? 0);
+            r.getCell(9).value = criticalExportValue(groupDefsCriticalValue(spareGroups, gr.department, gr.no, gr.name));
         });
-        [1, 2, 3, 4, 5, 6, 7, 8].forEach(i => { wsG.getColumn(i).width = i === 3 ? 28 : 14; });
+        [1, 2, 3, 4, 5, 6, 7, 8, 9].forEach(i => { wsG.getColumn(i).width = i === 3 ? 28 : i === 9 ? 18 : 14; });
 
         const wsE = wb.addWorksheet('Equipment Headers', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         addMetaRows(wsE, [
-            `Vessel: ${vesselId}  ·  Optional Equipment blocks (GG-EE-III middle segment)`,
-            'EQ No. = EE in Code (01-01-001). Equipment name + Maker/Serial per block.',
+            `Vessel: ${vesselId}  ·  Equipment blocks (GG-EE-III middle segment)`,
+            'EQ No. = EE in Code (01–99, 필수). 노란색 셀 = Import 필수.',
+            'CRITICAL EQUIPMENT = Yes / No (Equipment별).',
         ]);
-        ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.'].forEach((h, i) => {
+        ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
             wsE.getRow(HDR_ROW).getCell(i + 1).value = h;
         });
-        styleHeaderRow(wsE.getRow(HDR_ROW), GREEN);
+        styleHeaderRow(wsE.getRow(HDR_ROW), GREEN, REQ_EQUIP_COLS);
         let eqRow = 0;
         (spareGroups || []).filter(g => norm(g.item_sort1) && String(g.department || '').toUpperCase() === department).forEach(g => {
             const sg = isSpareGenEngineGroup(g.label)
@@ -467,13 +575,17 @@ const TVC_SpareMasterExcel = (function () {
             r.getCell(1).value = g.department;
             r.getCell(2).value = sg.no;
             r.getCell(3).value = sg.name;
-            r.getCell(4).value = Number.isFinite(eqNo) && eqNo > 0 ? eqNo : '';
+            r.getCell(4).value = Number.isFinite(eqNo) && eqNo > 0 ? String(eqNo).padStart(2, '0') : '';
             r.getCell(5).value = norm(g.item_sort1);
             r.getCell(6).value = g.maker || g.machinery_name || '';
             r.getCell(7).value = g.model_type || '';
             r.getCell(8).value = g.capacity || '';
             r.getCell(9).value = g.serial_no || '';
+            r.getCell(10).value = criticalExportValue(g.is_critical_equipment);
         });
+        wsE.getColumn(4).width = 10;
+        wsE.getColumn(5).width = 22;
+        wsE.getColumn(10).width = 18;
 
         const wsP = wb.addWorksheet('Spare Parts', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         const simplifyCodes = opts.simplifyCodes !== false;
@@ -481,14 +593,14 @@ const TVC_SpareMasterExcel = (function () {
         const codeMap = simplifyCodes !== false ? simplifiedExportCodes(exportSpares, groupNodes, spareGroups) : null;
         addMetaRows(wsP, [
             `Vessel: ${vesselId}  ·  ${department} — ${exportSpares.length} spare parts`,
+            'Format shared: Engine · Master · HQ (this DEPARTMENT). Deck uses a separate DECK file.',
             setupExport
-                ? 'Setup template: SPARE_ID cleared · ROB/Work zeroed · Code = GG-EE-III (e.g. 01-01-001; EE=00 if no Equipment).'
-                : 'Code = GG-EE-III (Group-Equipment-Item). SPARE_ID hidden. Generator Engine → GROUP 03 · GENERATOR ENGINE.',
-        ], 15);
-        const pHeaders = ['SPARE_ID', 'DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'Code', 'Class', 'Dwg No.', 'Part No.', 'Items', 'Unit', 'Work', 'Std', 'Rob'];
+                ? 'Setup template: ROB/Work zeroed · Code = GG-EE-III (e.g. 01-01-001; EE=00 if no Equipment). Match by DEPARTMENT + Code.'
+                : 'Code = GG-EE-III (Group-Equipment-Item). Match by DEPARTMENT + Code. Generator Engine → GROUP 03 · GENERATOR ENGINE.',
+        ]);
+        const pHeaders = ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'Code', 'Class', 'Dwg No.', 'Part No.', 'Items', 'Unit', 'Work', 'Std', 'Rob'];
         pHeaders.forEach((h, i) => { wsP.getRow(HDR_ROW).getCell(i + 1).value = h; });
-        styleHeaderRow(wsP.getRow(HDR_ROW), NAVY);
-        wsP.getColumn(1).hidden = true;
+        styleHeaderRow(wsP.getRow(HDR_ROW), NAVY, REQ_SPARE_COLS);
 
         exportSpares.forEach((s, idx) => {
             const dept = spareDepartment(s, groupNodes);
@@ -504,23 +616,31 @@ const TVC_SpareMasterExcel = (function () {
             if (!eqNo && typeof TVC_SpareCode !== 'undefined') eqNo = TVC_SpareCode.resolveEquipNo(c);
             const r = wsP.getRow(DATA_START + idx);
             const code = codeMap?.get(s.id) || spareNumbering(s);
-            r.getCell(1).value = setupExport ? '' : (s.id || '');
-            r.getCell(2).value = dept;
-            r.getCell(3).value = g.no;
-            r.getCell(4).value = g.name;
-            r.getCell(5).value = eqNo > 0 ? eqNo : (eqName ? '' : 0);
-            r.getCell(6).value = eqName;
-            r.getCell(7).value = code;
-            r.getCell(8).value = TVC_SpareSchema.normalizePartClass(s.partClass) || '';
-            r.getCell(9).value = s.drawingPartNo || '';
-            r.getCell(10).value = s.makerPartNo || '';
-            r.getCell(11).value = s.name || '';
-            r.getCell(12).value = (s.unit || 'EA').toUpperCase();
-            r.getCell(13).value = setupExport ? 0 : TVC_SpareSchema.intStock(s.workingQty);
-            r.getCell(14).value = TVC_SpareSchema.intStock(s.standardStock ?? s.minStock);
-            r.getCell(15).value = setupExport ? 0 : TVC_SpareSchema.intStock(s.currentStock);
+            r.getCell(1).value = dept;
+            r.getCell(2).value = g.no;
+            r.getCell(3).value = g.name;
+            r.getCell(4).value = eqNo > 0 ? String(eqNo).padStart(2, '0') : (eqName ? '' : '00');
+            r.getCell(5).value = eqName;
+            r.getCell(6).value = code;
+            r.getCell(7).value = TVC_SpareSchema.normalizePartClass(s.partClass) || '';
+            r.getCell(8).value = s.drawingPartNo || '';
+            r.getCell(9).value = s.makerPartNo || '';
+            r.getCell(10).value = s.name || '';
+            r.getCell(11).value = (s.unit || 'EA').toUpperCase();
+            r.getCell(12).value = String(setupExport ? 0 : TVC_SpareSchema.intStock(s.workingQty));
+            r.getCell(13).value = String(TVC_SpareSchema.intStock(s.standardStock ?? s.minStock));
+            r.getCell(14).value = String(setupExport ? 0 : TVC_SpareSchema.intStock(s.currentStock));
         });
-        pHeaders.forEach((_, i) => { wsP.getColumn(i + 1).width = [0, 12, 10, 28, 8, 22, 14, 8, 14, 16, 32, 8, 8, 8, 8][i] || 12; });
+        pHeaders.forEach((_, i) => { wsP.getColumn(i + 1).width = [12, 10, 28, 8, 22, 14, 8, 14, 16, 32, 8, 8, 8, 8][i] || 12; });
+
+        applyRequiredDataFill(wsG, REQ_GROUP_COLS, groupRows.length);
+        appendRequiredTemplateRows(wsG, REQ_GROUP_COLS);
+        applyRequiredDataFill(wsE, REQ_EQUIP_COLS, eqRow);
+        appendRequiredTemplateRows(wsE, REQ_EQUIP_COLS);
+        applyRequiredDataFill(wsP, REQ_SPARE_COLS, exportSpares.length);
+        appendRequiredTemplateRows(wsP, REQ_SPARE_COLS);
+
+        [wsG, wsE, wsP].forEach(applySheetTextStyle);
 
         return wb;
     }
@@ -578,6 +698,7 @@ const TVC_SpareMasterExcel = (function () {
                 groupNo: no,
                 groupName: name,
                 label: buildGroupLabel(no, name),
+                critical: parseCriticalFromRow(row, h),
                 maker: cellStr(row, h.MAKER),
                 model_type: cellStr(row, h['MODEL/TYPE'] || h.MODEL),
                 capacity: cellStr(row, h.CAPACITY),
@@ -599,13 +720,17 @@ const TVC_SpareMasterExcel = (function () {
             const eqNoRaw = cellStr(row, h['EQ NO'] || h['EQ NO.'] || h['EQNO']);
             if (!dept || !no || !name || !item) return;
             const eqNo = parseInt(String(eqNoRaw || '').replace(/\D/g, ''), 10);
+            if (!Number.isFinite(eqNo) || eqNo < 1 || eqNo > 99) {
+                throw new Error(`Equipment Headers row ${n}: EQ NO is required (01–99) for “${item}”.`);
+            }
             rows.push({
                 department: dept.toUpperCase(),
                 groupNo: no,
                 groupName: name,
                 label: buildGroupLabel(no, name),
                 item_sort1: item,
-                equipment_no: Number.isFinite(eqNo) && eqNo > 0 ? eqNo : null,
+                equipment_no: eqNo,
+                critical: parseCriticalFromRow(row, h),
                 maker: cellStr(row, h.MAKER),
                 model_type: cellStr(row, h['MODEL/TYPE']),
                 capacity: cellStr(row, h.CAPACITY),
@@ -686,6 +811,7 @@ const TVC_SpareMasterExcel = (function () {
             model_type: row.model_type || hit?.model_type || '',
             capacity: row.capacity || hit?.capacity || '',
             serial_no: row.serial_no || hit?.serial_no || '',
+            is_critical_equipment: row.critical != null ? row.critical : hit?.is_critical_equipment,
             header_edited: true,
             created_at: hit?.created_at || new Date().toISOString(),
             updated_at: new Date().toISOString(),
@@ -949,6 +1075,75 @@ const TVC_SpareMasterExcel = (function () {
         };
     }
 
+    /** Excel에 없는 현재 부서 Spare Parts 삭제 (PMS orphan job과 동일) */
+    async function removeOrphanSpareParts({ vesselId, department, keptIds, groupNodes }) {
+        const kept = keptIds || new Set();
+        const all = await TVC_DB.getAll('spare_parts').catch(() => []);
+        let removed = 0;
+        for (const s of all) {
+            if (!sameVessel(s, vesselId)) continue;
+            if (spareDepartment(s, groupNodes) !== department) continue;
+            if (kept.has(s.id)) continue;
+            await TVC_DB.del('spare_parts', s.id);
+            removed++;
+        }
+        return removed;
+    }
+
+    async function removeOrphanEquipmentDefs({ vesselId, department, equipRows }) {
+        const keep = new Set();
+        (equipRows || []).forEach(e => {
+            keep.add(`${String(e.department || '').toUpperCase()}|${norm(e.label)}|${norm(e.item_sort1)}`);
+            if (isSpareGenEngineMasterRow(e.groupNo, e.groupName)) {
+                keep.add(`GEN|${String(e.department || '').toUpperCase()}|${norm(e.item_sort1)}`);
+            }
+        });
+        const defs = await TVC_DB.getAll('spare_groups').catch(() => []);
+        let removed = 0;
+        for (const g of defs) {
+            if (!sameVessel(g, vesselId)) continue;
+            if (String(g.department || '').toUpperCase() !== department) continue;
+            const item = norm(g.item_sort1);
+            if (!item) continue;
+            const direct = `${String(g.department || '').toUpperCase()}|${norm(g.label)}|${item}`;
+            const genKey = isSpareGenEngineGroup(g.label) ? `GEN|${department}|${item}` : '';
+            if (keep.has(direct) || (genKey && keep.has(genKey))) continue;
+            if (g.id) {
+                await TVC_DB.del('spare_groups', g.id);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
+    async function pruneOrphanSpareGroups({ vesselId, department, groupRows, remainingSpares, groupNodes }) {
+        const keep = new Set();
+        (groupRows || []).forEach(g => {
+            keep.add(`${String(g.department || '').toUpperCase()}|${norm(g.label)}`);
+            if (isSpareGenEngineMasterRow(g.groupNo, g.groupName)) keep.add(`GEN|${department}`);
+        });
+        (remainingSpares || []).forEach(s => {
+            if (spareDepartment(s, groupNodes) !== department) return;
+            const lab = String(s.group || '').trim();
+            if (lab) keep.add(`${department}|${norm(lab)}`);
+        });
+        const defs = await TVC_DB.getAll('spare_groups').catch(() => []);
+        let removed = 0;
+        for (const g of defs) {
+            if (!sameVessel(g, vesselId)) continue;
+            if (String(g.department || '').toUpperCase() !== department) continue;
+            if (norm(g.item_sort1)) continue;
+            const key = `${department}|${norm(g.label)}`;
+            const genKeep = isSpareGenEngineGroup(g.label) && keep.has(`GEN|${department}`);
+            if (keep.has(key) || genKeep) continue;
+            if (g.id) {
+                await TVC_DB.del('spare_groups', g.id);
+                removed++;
+            }
+        }
+        return removed;
+    }
+
     async function importFromWorkbook(wb, user, opts = {}) {
         const canImport = TVC_RBAC.isHqAccount(user)
             ? TVC_RBAC.canModifyOriginalPlan(user)
@@ -968,7 +1163,6 @@ const TVC_SpareMasterExcel = (function () {
         const groupRows = rowsForDepartment(wsG ? parseGroupRows(wsG) : [], department);
         const equipRows = rowsForDepartment(wsE ? parseEquipmentRows(wsE) : [], department);
         const spareRows = rowsForDepartment(parseSpareRows(wsP), department);
-        if (!spareRows.length) throw new Error(`Spare Parts 시트에 ${department} 데이터가 없습니다.`);
 
         const loaded = await loadExportData(department, { vesselId }).catch(() => ({ groupNodes: [], spareGroups: [], groups: [] }));
         const spareGroupsAll = await TVC_DB.getAll('spare_groups').catch(() => []);
@@ -1022,6 +1216,7 @@ const TVC_SpareMasterExcel = (function () {
 
         let created = 0;
         let updated = 0;
+        const keptIds = new Set();
         const importBlockSeq = new Map();
 
         function resolveImportEquipNo(row) {
@@ -1125,12 +1320,27 @@ const TVC_SpareMasterExcel = (function () {
                 updated++;
             }
             await TVC_DB.put('spare_parts', spare);
+            keptIds.add(spare.id);
             byId.set(spare.id, spare);
             const codeKey = norm(spare.inventory_numbering || spare.part_no || '').toLowerCase();
             if (codeKey) byCode.set(codeKey, spare);
             const partKey = `${row.department}|${norm(row.group)}|${norm(spare.part_no).toLowerCase()}`;
             if (spare.part_no) byPart.set(partKey, spare);
         }
+
+        const removedParts = await removeOrphanSpareParts({
+            vesselId, department, keptIds, groupNodes: importCtx.groupNodes,
+        });
+        const removedEquipment = await removeOrphanEquipmentDefs({ vesselId, department, equipRows });
+        const remainingSpares = (await TVC_DB.getAll('spare_parts').catch(() => []))
+            .filter(s => sameVessel(s, vesselId) && spareDepartment(s, importCtx.groupNodes) === department);
+        const removedGroups = await pruneOrphanSpareGroups({
+            vesselId,
+            department,
+            groupRows,
+            remainingSpares,
+            groupNodes: importCtx.groupNodes,
+        });
 
         let renumbered = null;
         if (opts.simplifyCodes !== false && typeof TVC_SpareCode !== 'undefined') {
@@ -1156,7 +1366,7 @@ const TVC_SpareMasterExcel = (function () {
 
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
-            log: `📥 [SPARE Master Import] ${vesselId} parts +${created} ~${updated} — ${user.display_name}`,
+            log: `📥 [SPARE Master Import] ${vesselId} parts +${created} ~${updated} -${removedParts} — ${user.display_name}`,
             sync_status: 'LOCAL',
         });
 
@@ -1173,6 +1383,9 @@ const TVC_SpareMasterExcel = (function () {
 
         return {
             created, updated,
+            removed: removedParts,
+            removedEquipment,
+            removedGroups,
             groups: groupRows.length,
             equipment: equipRows.length,
             parts: spareRows.length,

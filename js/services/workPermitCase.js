@@ -169,7 +169,7 @@ const TVC_WorkPermitCaseService = (function () {
         }
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Permit not found.'), { code: 'NOT_FOUND' });
-        if (row.sync_status === 'SYNCED') {
+        if (TVC_WorkPermit.isHqReplyExported(row)) {
             throw Object.assign(new Error('Reply already exported — Company Comments cannot be changed.'), { code: 'LOCKED' });
         }
         row.company_comment = String(comment ?? '');

@@ -12,6 +12,8 @@ const TVC_WorkPermitReport = (function () {
     let _wpListCheckedIds = {};
     let _wpSelectedPermitId = null;
     const WP_PICK_Z = 10100;
+    const WP_NO_GROUP_KEY = '__NO_GROUP__';
+    const WP_NO_GROUP_LABEL = 'No PMS GROUP';
     let _wpGroupPickSearch = '';
     let _wpJobPickSearch = '';
     let _wpJobRowPickUnbind = null;
@@ -27,9 +29,16 @@ const TVC_WorkPermitReport = (function () {
         return s;
     }
 
-    function wpGroupKey(row) {
+    function wpIsNoGroup(row) {
         const key = wpVal(row, 'pms_group_key');
-        if (key) return key;
+        const label = wpVal(row, 'pms_group_no');
+        return key === WP_NO_GROUP_KEY || label === WP_NO_GROUP_LABEL || label === 'No selection';
+    }
+
+    function wpGroupKey(row) {
+        if (wpIsNoGroup(row)) return '';
+        const key = wpVal(row, 'pms_group_key');
+        if (key && key !== WP_NO_GROUP_KEY) return key;
         const jobId = wpVal(row, 'maintenance_job_id', row?.maintenance_job_id || '');
         const st = getState();
         const job = jobId ? (st.idx?.jobById?.get(jobId) || st.jobs?.find(j => j.id === jobId)) : null;
@@ -41,12 +50,8 @@ const TVC_WorkPermitReport = (function () {
         return node?.key || '';
     }
 
-    function criticalGroupNodes(st) {
-        const fn = TVC_App?.jobShowsCriticalEquipmentMark;
-        return (TVC_SpareMenu?.getPlanGroupPickNodes?.(st) || []).filter(n => {
-            const jobs = TVC_SpareMenu?.getJobsForGroupKey?.(st, n.key) || [];
-            return jobs.some(j => fn?.(j));
-        });
+    function permitGroupNodes(st) {
+        return TVC_SpareMenu?.getPlanGroupPickNodes?.(st) || [];
     }
 
     function wpPickMenuEl(wrap) {
@@ -93,16 +98,19 @@ const TVC_WorkPermitReport = (function () {
             if (!isWpJobRowPickOpen()) return;
             positionWpJobRowPickMenu(rowIdx);
         };
-        setTimeout(() => {
-            document.addEventListener('click', close);
-            window.addEventListener('scroll', onReposition, true);
-            window.addEventListener('resize', onReposition);
-        }, 0);
+        const token = { cancelled: false };
         _wpJobRowPickUnbind = () => {
+            token.cancelled = true;
             document.removeEventListener('click', close);
             window.removeEventListener('scroll', onReposition, true);
             window.removeEventListener('resize', onReposition);
         };
+        setTimeout(() => {
+            if (token.cancelled) return;
+            document.addEventListener('click', close);
+            window.addEventListener('scroll', onReposition, true);
+            window.addEventListener('resize', onReposition);
+        }, 0);
     }
 
     function closeWpJobRowPickMenu() {
@@ -255,15 +263,21 @@ const TVC_WorkPermitReport = (function () {
 
     function buildWpGroupPickList(row) {
         const st = getState();
-        const selKey = wpVal(row, 'pms_group_key') || wpGroupKey(row) || '';
+        const selKey = wpIsNoGroup(row) ? WP_NO_GROUP_KEY : (wpVal(row, 'pms_group_key') || wpGroupKey(row) || '');
         const q = (_wpGroupPickSearch || '').toLowerCase().trim();
         const matchNode = (n) => !q || wpTreeLabel(n.label).toLowerCase().includes(q)
             || String(n.department || '').toLowerCase().includes(q);
-        const nodes = criticalGroupNodes(st).filter(matchNode);
-        if (!nodes.length) {
-            return '<div class="spare-consume-pick-empty muted">No Critical Equipment groups found.</div>';
-        }
+        const matchNoSelection = !q || 'no pms group'.includes(q) || q.includes('no pms') || q.includes('no group');
         let html = '';
+        if (matchNoSelection) {
+            const sel = selKey === WP_NO_GROUP_KEY ? ' selected' : '';
+            html += `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-none${sel}"
+                onclick="TVC_WorkPermitReport.pickWpGroup('${escAttr(WP_NO_GROUP_KEY)}','${escAttr(WP_NO_GROUP_LABEL)}')">${esc(WP_NO_GROUP_LABEL)}</button>`;
+        }
+        const nodes = permitGroupNodes(st).filter(matchNode);
+        if (!nodes.length && !matchNoSelection) {
+            return '<div class="spare-consume-pick-empty muted">No PMS groups found.</div>';
+        }
         let curDept = '';
         nodes.forEach(n => {
             if (n.department !== curDept) {
@@ -274,7 +288,7 @@ const TVC_WorkPermitReport = (function () {
             html += `<button type="button" class="spare-consume-pick-item${sel}"
                 onclick="TVC_WorkPermitReport.pickWpGroup('${escAttr(n.key)}','${escAttr(n.label)}')">${esc(wpTreeLabel(n.label))}</button>`;
         });
-        return html;
+        return html || '<div class="spare-consume-pick-empty muted">No results</div>';
     }
 
     function buildWpJobPickList(row, rowIdx) {
@@ -283,10 +297,8 @@ const TVC_WorkPermitReport = (function () {
         if (!groupKey) {
             return '<div class="spare-consume-pick-empty muted">Select PMS Group No. first.</div>';
         }
-        const fn = TVC_App?.jobShowsCriticalEquipmentMark;
         const q = (_wpJobPickSearch || '').toLowerCase().trim();
         const jobs = (TVC_SpareMenu?.getJobsForGroupKey?.(st, groupKey) || [])
-            .filter(j => fn?.(j))
             .filter(j => {
                 if (!q) return true;
                 const hay = [j.job_code, j.item_sort1, j.item_sort2, j.job_detail].join(' ').toLowerCase();
@@ -301,7 +313,7 @@ const TVC_WorkPermitReport = (function () {
                 <span class="spare-consume-pick-job-sub muted">PMS Group only</span>
             </button>`;
         if (!jobs.length) {
-            return clearBtn + '<div class="spare-consume-pick-empty muted">No Critical Equipment jobs in this group.</div>';
+            return clearBtn + '<div class="spare-consume-pick-empty muted">No jobs in this group.</div>';
         }
         return clearBtn + jobs.map(j => {
             const sel = selectedCode === j.job_code ? ' selected' : '';
@@ -410,6 +422,15 @@ const TVC_WorkPermitReport = (function () {
         syncWpPrimaryJobFromItems(draft);
     }
 
+    function applyWpNoGroupHeader(draft) {
+        draft.pms_group_key = WP_NO_GROUP_KEY;
+        draft.pms_group_no = WP_NO_GROUP_LABEL;
+        draft.maker = '';
+        draft.model_type = '';
+        draft.capacity = '';
+        draft.serial_no = '';
+    }
+
     function pickWpGroup(groupKey, groupLabel) {
         captureWpFormFields();
         captureWpJobItems();
@@ -424,7 +445,8 @@ const TVC_WorkPermitReport = (function () {
             draft.job_detail = '';
             draft.job_items = [TVC_SpareMenu.newConsumeJobRow()];
         }
-        applyWpGroupHeader(getState(), draft, groupKey, groupLabel);
+        if (groupKey === WP_NO_GROUP_KEY) applyWpNoGroupHeader(draft);
+        else applyWpGroupHeader(getState(), draft, groupKey, groupLabel);
         closeWpPickMenu(document.getElementById('wpGroupPick'));
         refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
     }
@@ -435,7 +457,7 @@ const TVC_WorkPermitReport = (function () {
         const s = getState();
         const draft = ensureWpDraft(getModalRow() || {});
         const job = s.idx?.jobById?.get(jobId) || s.jobs?.find(j => j.id === jobId);
-        if (!job || !TVC_App?.jobShowsCriticalEquipmentMark?.(job)) return;
+        if (!job) return;
         applyWpJobPickToDraft(draft, job, _wpActiveJobRowIndex || 0);
         closeWpJobRowPickMenu();
         refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
@@ -488,7 +510,9 @@ const TVC_WorkPermitReport = (function () {
 
     function renderWpGroupPick(row, ro) {
         const label = wpVal(row, 'pms_group_no');
-        const text = label ? wpTreeLabel(label) : '— Select PMS Group —';
+        const text = wpIsNoGroup(row)
+            ? WP_NO_GROUP_LABEL
+            : (label ? wpTreeLabel(label) : '— Select PMS Group —');
         if (ro) {
             return `<input class="wr-ro" value="${esc(text)}" readonly tabindex="-1">`;
         }
@@ -502,7 +526,7 @@ const TVC_WorkPermitReport = (function () {
                     <input type="search" class="search-input" placeholder="Search GROUP…" value="${esc(_wpGroupPickSearch)}"
                         oninput="TVC_WorkPermitReport.wpGroupPickSearch(this.value)" onclick="event.stopPropagation()">
                 </div>
-                <div class="spare-consume-pick-head muted">PMS GROUP Tree (Critical Equipment)</div>
+                <div class="spare-consume-pick-head muted">PMS GROUP Tree</div>
                 <div class="spare-consume-pick-scroll" id="wpGroupPickList"></div>
             </div>
         </div>`;
@@ -600,6 +624,36 @@ const TVC_WorkPermitReport = (function () {
         return !!getState()._wpListMode;
     }
 
+    /** HQ — Company's Comments until HQ reply is exported (ship fields stay locked). */
+    function canOpenWpHqCommentEdit(row) {
+        if (!row || !isHq() || row.visible_in_list === false) return false;
+        if (row.id === 'wp-draft-empty') return false;
+        if (TVC_WorkPermit.isHqReplyExported(row)) return false;
+        const st = TVC_WorkPermit.listWorkflowStatus(row);
+        return st === 'Submitted' || st === 'Confirmed' || st === 'Approved';
+    }
+
+    function canOpenWpModify(row) {
+        if (!row) return false;
+        if (TVC_WorkPermit.canModifyListWorkflow(row)) return true;
+        return canOpenWpHqCommentEdit(row);
+    }
+
+    function wpCompanyCommentLocked(row) {
+        if (!row || !isHq()) return true;
+        if (TVC_WorkPermit.isHqReplyExported(row)) return true;
+        if (isWpListWindow()) return !getState()._wpListEditing;
+        return getState()._wpMode === 'view';
+    }
+
+    function syncWpCompanyCommentLock(row) {
+        const el = document.querySelector('#workPermitBody textarea[data-wp="company_comment"]');
+        if (!el) return;
+        const locked = wpCompanyCommentLocked(row || getModalRow());
+        el.readOnly = locked;
+        el.classList.toggle('wr-ro', locked);
+    }
+
     function wpToolbarBtn(label, onclick, disabled = false, cls = '') {
         const dis = disabled ? ' disabled' : '';
         const c = cls ? ` ${cls}` : '';
@@ -651,9 +705,8 @@ const TVC_WorkPermitReport = (function () {
         setWpToolbarBtnDisabled(head, 'wpListDelete', !canDelete);
     }
 
-    function criticalJobs() {
-        const fn = TVC_App?.jobShowsCriticalEquipmentMark;
-        return (getState().jobs || []).filter(j => fn?.(j));
+    function scopedJobs() {
+        return (getState().jobs || []).filter(Boolean);
     }
 
     function filteredPermits() {
@@ -1153,13 +1206,13 @@ const TVC_WorkPermitReport = (function () {
             if (type === 'number') return `<input type="number" data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
             return `<input data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
         };
-        const ta = (name, val, rows = 3, forceRo = false) => {
-            const fieldRo = ro || forceRo;
+        const ta = (name, val, rows = 3, forceRo) => {
+            const fieldRo = forceRo == null ? !!ro : !!forceRo;
             const roAttr = fieldRo ? ' readonly' : '';
             const roClsLocal = fieldRo ? ' wr-ro' : '';
             return `<textarea class="wr-maint-textarea${roClsLocal}" data-wp="${name}" rows="${rows}"${roAttr}>${esc(wpVal(row, name, val))}</textarea>`;
         };
-        const companyCommentRo = !isHq() || row.sync_status === 'SYNCED';
+        const companyCommentRo = forPrint || wpCompanyCommentLocked(row);
         const spareChk = `<label class="wr-maint-chk wp-est-spare-chk"><input type="checkbox" data-wp="checked_estimated_spare_parts"${wpVal(row, 'checked_estimated_spare_parts') ? ' checked' : ''}${ro ? ' disabled' : ''}> CHECKED ESTIMATED SPARE PARTS</label>`;
 
         const fileNoInner = forPrint
@@ -1173,7 +1226,7 @@ const TVC_WorkPermitReport = (function () {
             </div>`
             : `<div class="wr-file-no-row">
                 <input data-wp="file_no" class="${roCls.trim()}" value="${esc(wpVal(row, 'file_no', ''))}"${roAttr}>
-                <button type="button" id="wpFileNoPickBtn" class="btn btn-sm wr-file-no-pick-btn" onclick="TVC_App.openFileNoPickModal('wp')"${ro ? ' disabled' : ''} title="Browse Work History for File No. reference">Select File No.</button>
+                <button type="button" id="wpFileNoPickBtn" class="btn btn-sm wr-file-no-pick-btn" onclick="TVC_App.openFileNoPickModal('wp')"${ro ? ' disabled' : ''} title="Browse Report History">Check History</button>
             </div>`;
 
         const histPanel = forPrint
@@ -1221,27 +1274,60 @@ const TVC_WorkPermitReport = (function () {
 
     function renderEditModalBody(row, mode) {
         const forceView = mode === 'view';
+        const fromHistoryNav = getState()._wpNavSource === 'history';
         const wpPage = getState()._wpPage || '1';
-        const canEdit = !forceView && TVC_WorkPermit.canModifyListWorkflow(row);
-        const titleText = forceView ? 'Work Permit (View)' : 'Work Permit (Draft)';
+        const canModifyRow = TVC_WorkPermit.canModifyListWorkflow(row);
+        const hqCommentOnly = canOpenWpHqCommentEdit(row);
+        const canEdit = !forceView && (canModifyRow || hqCommentOnly);
+        const titleText = fromHistoryNav
+            ? 'Work Permit'
+            : (forceView ? 'Work Permit (View)' : 'Work Permit (Draft)');
         const pageTabs = renderWpPageTabsHtml(wpPage);
         const headHtml = wpPage === '2' ? renderWpApprovalHtml(row) : '';
         const body = wpPage === '2'
-            ? renderWpPage2Body(row, forceView || !canEdit)
-            : renderPage1(row, !canEdit);
-        const actionsHtml = canEdit
-            ? `<button type="button" class="btn btn-green" onclick="TVC_WorkPermitReport.saveModal()">Save</button>
-               <button type="button" class="btn" onclick="TVC_WorkPermitReport.requestCloseModal()">Cancel</button>`
-            : `<button type="button" class="btn" onclick="TVC_WorkPermitReport.closeModal()">Close</button>`;
+            ? renderWpPage2Body(row, forceView || !canModifyRow)
+            : renderPage1(row, forceView || !canModifyRow);
+        let actionsClass = 'modal-actions wr-actions df-modal-actions';
+        let actionsHtml;
+        if (fromHistoryNav) {
+            actionsClass += ' wr-actions-split df-modal-actions-split';
+            const navBtns = TVC_App?.histNavButtonsHtml
+                ? TVC_App.histNavButtonsHtml('TVC_WorkPermitReport.navWpHistory(-1)', 'TVC_WorkPermitReport.navWpHistory(1)')
+                : '';
+            const printBtn = `<button type="button" class="btn" onclick="TVC_WorkPermitReport.printWpModal()">Print</button>
+                <button type="button" class="btn" onclick="TVC_WorkPermitReport.previewWpModal()">Preview</button>`;
+            const closeBtn = `<button type="button" class="btn" onclick="TVC_WorkPermitReport.closeModal()">Close</button>`;
+            let centerBtns = '';
+            if (forceView) {
+                const modifyOk = canModifyRow || hqCommentOnly;
+                const modifyTitle = modifyOk ? '' : 'Modify not available';
+                centerBtns = `<button type="button" class="btn" onclick="TVC_WorkPermitReport.modifyWpFromHistory()"${modifyOk ? '' : ' disabled'}${modifyTitle ? ` title="${escAttr(modifyTitle)}"` : ''}>Modify</button>`;
+            } else if (canModifyRow || hqCommentOnly) {
+                centerBtns = `<button type="button" class="btn btn-green" onclick="TVC_WorkPermitReport.saveModal()">Save</button>
+                <button type="button" class="btn" onclick="TVC_WorkPermitReport.cancelWpHistoryEdit()">Cancel</button>`;
+            }
+            actionsHtml = `<div class="wr-modal-actions-left df-modal-actions-left">${navBtns}</div>
+                <div class="wr-modal-actions-center df-modal-actions-center">${centerBtns}</div>
+                <div class="wr-modal-actions-right df-modal-actions-right">${printBtn}${closeBtn}</div>`;
+        } else {
+            actionsHtml = canEdit
+                ? `<button type="button" class="btn btn-green" onclick="TVC_WorkPermitReport.saveModal()">Save</button>
+                   <button type="button" class="btn" onclick="TVC_WorkPermitReport.requestCloseModal()">Cancel</button>`
+                : `<button type="button" class="btn" onclick="TVC_WorkPermitReport.closeModal()">Close</button>`;
+        }
 
+        const kindTabs = typeof TVC_App?.renderReportKindTabsHtml === 'function'
+            ? TVC_App.renderReportKindTabsHtml('permit')
+            : '';
         return `<div class="df-modal-inner">
             <div class="wr-titlebar">${titleText}</div>
+            ${kindTabs}
             <div class="wr-pagetabs-bar">${pageTabs}</div>
             <div class="wr-page tone-defect wp-page">
                 ${headHtml}
                 ${body}
             </div>
-            <div class="modal-actions wr-actions df-modal-actions">${actionsHtml}</div>
+            <div class="${actionsClass}">${actionsHtml}</div>
         </div>`;
     }
 
@@ -1258,8 +1344,9 @@ const TVC_WorkPermitReport = (function () {
             ? renderWpPage2Body(row, listViewLocked || !TVC_WorkPermit.canModifyListWorkflow(row))
             : renderPage1(row, listViewLocked || !TVC_WorkPermit.canModifyListWorkflow(row));
 
+        const canModifyNow = hasDisplayed && canOpenWpModify(row);
         const headActions = `${wpToolbarBtn('New', 'TVC_WorkPermitReport.wpListNew()', listEditing, 'btn-green')}
-            ${wpToolbarBtn('Modify', 'TVC_WorkPermitReport.wpListEnterEdit()', !hasDisplayed || listEditing, '')}
+            ${wpToolbarBtn('Modify', 'TVC_WorkPermitReport.wpListEnterEdit()', !canModifyNow || listEditing, '')}
             ${wpToolbarBtn('Save', 'TVC_WorkPermitReport.saveModal()', listViewLocked, 'btn-green')}
             ${wpToolbarBtn('Cancel', 'TVC_WorkPermitReport.wpListCancelEdit()', listViewLocked, '')}
             <span class="orig-toolbar-sep" aria-hidden="true"></span>
@@ -1362,8 +1449,9 @@ const TVC_WorkPermitReport = (function () {
         const hasDisplayed = wpListHasDisplayedPermit();
         const listEditing = !!getState()._wpListEditing;
         const listViewLocked = wpListViewLocked();
+        const canModifyNow = hasDisplayed && canOpenWpModify(getModalRow());
         setWpToolbarBtnDisabled(head, 'wpListNew', listEditing);
-        setWpToolbarBtnDisabled(head, 'wpListEnterEdit', !hasDisplayed || listEditing);
+        setWpToolbarBtnDisabled(head, 'wpListEnterEdit', !canModifyNow || listEditing);
         setWpToolbarBtnDisabled(head, 'saveModal', listViewLocked);
         setWpToolbarBtnDisabled(head, 'wpListCancelEdit', listViewLocked);
         setWpToolbarBtnDisabled(head, 'wpListPrint', !hasDisplayed);
@@ -1446,6 +1534,7 @@ const TVC_WorkPermitReport = (function () {
         } else {
             await patchWpListFormBody({ ...opts, preserveScroll: true, preserveHist: opts.preserveHist !== false });
             restoreWpModalScroll(scroll);
+            syncWpCompanyCommentLock(row);
             return true;
         }
 
@@ -1460,6 +1549,7 @@ const TVC_WorkPermitReport = (function () {
         }
         restoreWpModalScroll(scroll);
         TVC_PWA?.initDateInputFormat?.(document.querySelector('#workPermitBody .df-modal-inner > .wr-page'));
+        syncWpCompanyCommentLock(row);
         return true;
     }
 
@@ -1888,21 +1978,34 @@ const TVC_WorkPermitReport = (function () {
         startWorkPermitListSession({ openSelectList: true });
     }
 
-    function openCase(id, mode = 'view') {
+    async function openCase(id, mode = 'view', opts = {}) {
         const s = getState();
         const row = (s.workPermits || []).find(r => r.id === id);
         if (!row) return;
         s._wpListMode = false;
+        if (opts.fromHistory) s._wpNavSource = 'history';
+        else if (!opts.keepNavSource) s._wpNavSource = null;
+        if (opts.fromHistory || mode === 'view') s._reportKindLocked = 'permit';
+        else s._reportKindLocked = null;
         s._workPermitId = id;
         s._wpDraft = null;
         s._wpDraftId = null;
         s._wpMode = mode;
-        s._wpPage = '1';
+        if (!opts.preservePage) s._wpPage = '1';
         s._wpUsedPartsCaseId = null;
         ensureWpUsedParts(row);
-        renderWorkPermitModal().then(() => {
+        await renderWorkPermitModal(opts.preserveScroll ? { preserveScroll: true } : {});
+        const wpNav = TVC_App?.isWorkProcedureHistNav?.();
+        if (opts.skipModalToggle) {
             document.getElementById('workPermitModal')?.classList.remove('hidden');
-        });
+            if (wpNav || opts.swapOpts?.overWorkProcedure) TVC_App.applyModalOverWorkProcedure?.('workPermitModal');
+        } else if (opts.swapHide && typeof TVC_App?.swapHistoryModals === 'function') {
+            TVC_App.swapHistoryModals('workPermitModal', opts.swapHide, opts.swapOpts || {});
+        } else {
+            document.getElementById('workPermitModal')?.classList.remove('hidden');
+            if (wpNav || opts.swapOpts?.overWorkProcedure) TVC_App.applyModalOverWorkProcedure?.('workPermitModal');
+        }
+        if (!isWpListWindow()) captureWpMakeReportDirtySnap();
     }
 
     async function wpListNew() {
@@ -1912,9 +2015,9 @@ const TVC_WorkPermitReport = (function () {
             await TVC_Dialog.alert('Select a vessel first.');
             return;
         }
-        const jobs = criticalJobs();
+        const jobs = scopedJobs();
         if (!jobs.length) {
-            await TVC_Dialog.alert('No Critical Equipment jobs in scope.');
+            await TVC_Dialog.alert('No jobs in scope.');
             return;
         }
         const job = jobs[0];
@@ -1945,8 +2048,10 @@ const TVC_WorkPermitReport = (function () {
         }
         if (s._wpListEditing) return;
         const row = getModalRow();
-        if (!TVC_WorkPermit.canModifyListWorkflow(row)) {
-            await TVC_Dialog.alert('This Work Permit cannot be modified.');
+        if (!canOpenWpModify(row)) {
+            await TVC_Dialog.alert(isHq() && TVC_WorkPermit.isHqReplyExported(row)
+                ? 'HQ reply already exported — Company Comments cannot be changed.'
+                : 'This Work Permit cannot be modified.');
             return;
         }
         s._wpListEditing = true;
@@ -2028,20 +2133,20 @@ const TVC_WorkPermitReport = (function () {
         await openNewFromJobInternal(null);
     }
 
-    async function openNewFromJobInternal(jobId) {
+    async function openNewFromJobInternal(jobId, opts = {}) {
         const s = getState();
         if (isHq() && !s.selectedVesselId) {
             await TVC_Dialog.alert('Select a vessel first.');
             return;
         }
-        const jobs = criticalJobs();
+        const jobs = scopedJobs();
         if (!jobs.length) {
-            await TVC_Dialog.alert('No Critical Equipment jobs in scope.');
+            await TVC_Dialog.alert('No jobs in scope.');
             return;
         }
-        const job = jobId ? s.jobs?.find(j => j.id === jobId) : jobs[0];
-        if (!job || !TVC_App.jobShowsCriticalEquipmentMark(job)) {
-            await TVC_Dialog.alert('Select a Critical Equipment job.');
+        const job = jobId ? (s.idx?.jobById?.get(jobId) || s.jobs?.find(j => j.id === jobId)) : jobs[0];
+        if (!job) {
+            await TVC_Dialog.alert('Select a job first.');
             return;
         }
         const row = await TVC_WorkPermitCaseService.createFromJob(s.user, job);
@@ -2051,11 +2156,11 @@ const TVC_WorkPermitReport = (function () {
         row.capacity = hdr.capacity || '';
         row.serial_no = hdr.serialNo || '';
         upsertPermitInState(row);
-        openCase(row.id, 'edit');
+        await openCase(row.id, 'edit', opts);
     }
 
-    async function openNewFromJob(jobId) {
-        await openNewFromJobInternal(jobId);
+    async function openNewFromJob(jobId, opts = {}) {
+        await openNewFromJobInternal(jobId, opts);
     }
 
     async function wpListConfirm() {
@@ -2222,6 +2327,8 @@ const TVC_WorkPermitReport = (function () {
                 if (isWpListWindow()) {
                     s._wpDraft = null;
                     s._wpDraftId = null;
+                    s._wpListEditing = false;
+                    s._wpMode = 'view';
                     if (wpListShellReady()) {
                         await softRefreshWpListWindow(saved, {
                             preserveScroll: true,
@@ -2232,6 +2339,7 @@ const TVC_WorkPermitReport = (function () {
                         await refreshWpListWindowUi();
                     }
                 } else {
+                    s._wpMode = 'view';
                     await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
                 }
                 await TVC_Dialog.alert("Company's Comments saved.");
@@ -2277,7 +2385,9 @@ const TVC_WorkPermitReport = (function () {
                 await TVC_Dialog.alert('Work Permit saved.');
             } else {
                 await refresh();
-                openCase(saved.id, 'view');
+                await openCase(saved.id, 'view', s._wpNavSource === 'history'
+                    ? { fromHistory: true, skipModalToggle: true, preservePage: true, keepNavSource: true }
+                    : {});
                 await TVC_Dialog.alert('Work Permit saved.');
             }
         } catch (e) {
@@ -2413,6 +2523,7 @@ const TVC_WorkPermitReport = (function () {
         document.getElementById('workPermitModal')?.classList.add('hidden');
         s._wpListMode = false;
         s._wpListEditing = false;
+        s._wpNavSource = null;
         s._workPermitId = null;
         s._wpDraft = null;
         s._wpDraftId = null;
@@ -2421,8 +2532,101 @@ const TVC_WorkPermitReport = (function () {
         s._wpPage = '1';
     }
 
+    function printWpModal() {
+        openWpPrint({ print: true });
+    }
+
+    function previewWpModal() {
+        openWpPrint({ print: false });
+    }
+
+    function navWpHistory(dir) {
+        TVC_App.navWorkHistoryEntry?.(dir);
+    }
+
+    async function modifyWpFromHistory() {
+        const row = getModalRow();
+        if (!row || !canOpenWpModify(row)) {
+            await TVC_Dialog.alert(isHq() && row && TVC_WorkPermit.isHqReplyExported(row)
+                ? 'HQ reply already exported — Company Comments cannot be changed.'
+                : 'This Work Permit cannot be modified.');
+            return;
+        }
+        const s = getState();
+        s._wpMode = 'edit';
+        s._wpNavSource = 'history';
+        s._reportKindLocked = 'permit';
+        await renderWorkPermitModal({ preserveScroll: true });
+        captureWpMakeReportDirtySnap();
+    }
+
+    async function cancelWpHistoryEdit() {
+        const s = getState();
+        const id = s._workPermitId;
+        if (!id) return requestCloseModal();
+        closeAllWpPicks();
+        if ((s._wpPage || '1') === '2') {
+            TVC_SpareMenu.persistWrSpareUsedParts?.();
+            captureWpUsedParts();
+            TVC_SpareMenu.teardownWrSparePage2();
+            wpSpareContextLeave();
+        }
+        s._wpDraft = null;
+        s._wpDraftId = null;
+        await openCase(id, 'view', {
+            fromHistory: true,
+            skipModalToggle: true,
+            preservePage: true,
+            keepNavSource: true,
+            preserveScroll: true,
+        });
+    }
+
     async function requestCloseModal() {
         await closeModal();
+    }
+
+    function collectWpEditableFields() {
+        const fields = {};
+        const host = document.getElementById('workPermitBody');
+        if (!host) return fields;
+        host.querySelectorAll('[data-wp]').forEach(el => {
+            const key = el.dataset.wp;
+            if (!key || el.readOnly || el.disabled) return;
+            if (el.type === 'checkbox') fields[key] = !!el.checked;
+            else fields[key] = String(el.value || '').trim();
+        });
+        return Object.fromEntries(Object.keys(fields).sort().map(k => [k, fields[k]]));
+    }
+
+    function wpMakeReportDirtySnapshot() {
+        const draft = captureWpFormFields() || {};
+        captureWpUsedParts();
+        const s = getState();
+        return JSON.stringify({
+            fields: collectWpEditableFields(),
+            group: String(draft.pms_group_key || ''),
+            jobs: (draft.job_items || []).map(i => [
+                String(i.job_code || '').trim(),
+                String(i.job_detail || '').trim(),
+            ]),
+            parts: (s._wpUsedParts || [])
+                .filter(p => Number(p.qty_used) > 0)
+                .map(p => [String(p.spare_part_id || ''), Number(p.qty_used) || 0]),
+            shipAtt: (draft.ship_attachments || []).length,
+            companyAtt: (draft.company_attachments || []).length,
+        });
+    }
+
+    function captureWpMakeReportDirtySnap() {
+        getState()._wpMakeReportSnap = wpMakeReportDirtySnapshot();
+    }
+
+    function hasUnsavedMakeReportInput() {
+        const s = getState();
+        if (isWpListWindow() || s._wpMode === 'view') return false;
+        if (!s._wpMakeReportSnap) return false;
+        return wpMakeReportDirtySnapshot() !== s._wpMakeReportSnap;
     }
 
     return {
@@ -2441,6 +2645,9 @@ const TVC_WorkPermitReport = (function () {
         wpConfirmByToggle, wpApprovedByToggle,
         applyFileNoFromPicker, refreshWorkPermitModal, captureWpFormFields,
         filteredPermits, listRows, isPermitConfirmable,
+        canOpenWpHqCommentEdit, canOpenWpModify,
+        hasUnsavedMakeReportInput,
+        navWpHistory, modifyWpFromHistory, cancelWpHistoryEdit, printWpModal, previewWpModal,
     };
 })();
 

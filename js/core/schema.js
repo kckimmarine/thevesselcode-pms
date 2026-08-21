@@ -1074,6 +1074,7 @@ const TVC_WorkPermit = (function () {
             confirmed_at: overrides.confirmed_at || '',
             approved_by: overrides.approved_by || '',
             approved_at: overrides.approved_at || '',
+            hq_reply_exported_at: overrides.hq_reply_exported_at || null,
             status: overrides.status || Status.DRAFT,
             visible_in_list: overrides.visible_in_list !== false,
             sync_status: 'LOCAL',
@@ -1087,6 +1088,12 @@ const TVC_WorkPermit = (function () {
         if (row.sync_status === 'SYNCED') return 'Submitted';
         if (row.confirmed_at || row.confirmed_by) return 'Confirmed';
         return 'Reported';
+    }
+
+    function isHqReplyExported(row) {
+        if (!row) return false;
+        if (row.hq_reply_exported_at) return true;
+        return !!(row.hq_synced && (row.approved_at || row.approved_by) && row.sync_status === 'SYNCED');
     }
 
     function canModifyListWorkflow(row) {
@@ -1111,7 +1118,7 @@ const TVC_WorkPermit = (function () {
     }
 
     return {
-        SCHEMA_VERSION, Status, blank, listWorkflowStatus,
+        SCHEMA_VERSION, Status, blank, listWorkflowStatus, isHqReplyExported,
         canModifyListWorkflow, canDeleteListWorkflow, belongsToDepartment,
     };
 })();

@@ -198,8 +198,10 @@ const TVC_RBAC = (function () {
     };
 
     function can(user, action) {
-        if (!user || !user.role) return false;
-        const perms = ROLE_PERMISSIONS[user.role];
+        if (!user) return false;
+        const role = hqActingRole(user);
+        if (!role) return false;
+        const perms = ROLE_PERMISSIONS[role];
         return perms ? perms.has(action) : false;
     }
 
@@ -213,14 +215,45 @@ const TVC_RBAC = (function () {
         }
     }
 
+    function currentSku() {
+        try {
+            return String(typeof TVC_License !== 'undefined' ? (TVC_License.statusSync()?.sku || '') : '').toUpperCase();
+        } catch (_) {
+            return '';
+        }
+    }
+
+    /** HQ_OFFICE install — tvc logs into HQ Mode (not Admin Mode). */
+    function isHqSku() {
+        return currentSku() === 'HQ_OFFICE';
+    }
+
     function isShipAccount(user) { return user?.account_type === AccountType.SHIP; }
-    function isHqAccount(user) { return user?.account_type === AccountType.HQ; }
-    function isAdminAccount(user) { return user?.account_type === AccountType.ADMIN; }
+    /** Company HQ account (superintendent) — Ship List scoped to that company. */
+    function isCompanyHqAccount(user) { return user?.account_type === AccountType.HQ; }
+    /** HQ Mode session: hq account, or tvc on HQ SKU. */
+    function isHqAccount(user) {
+        if (!user) return false;
+        if (user.account_type === AccountType.HQ) return true;
+        return user.account_type === AccountType.ADMIN && isHqSku();
+    }
+    /** Admin Mode session: tvc on Admin SKU / browser. False on HQ_OFFICE. */
+    function isAdminAccount(user) {
+        if (user?.account_type !== AccountType.ADMIN) return false;
+        return !isHqSku();
+    }
+    function hqActingRole(user) {
+        if (isHqAccount(user) && user.account_type === AccountType.ADMIN) return Role.HQ_SUPERVISOR;
+        return resolveUserRole(user) || user?.role || null;
+    }
 
     function isApprover(user) { return APPROVER_ROLES.has(user?.role); }
 
     function getUiFeatures(user) {
-        const base = { ...(ACCOUNT_UI_FEATURES[user.account_type] || {}) };
+        const type = isHqAccount(user) && user.account_type === AccountType.ADMIN
+            ? AccountType.HQ
+            : user.account_type;
+        const base = { ...(ACCOUNT_UI_FEATURES[type] || {}) };
         if (isApprover(user)) {
             base.showMaintenanceExecute = true;
             base.showApprovalQueue = true;
@@ -252,7 +285,7 @@ const TVC_RBAC = (function () {
     }
 
     function canTransitionReport(user, fromStatus, toStatus) {
-        const role = resolveUserRole(user) || user?.role;
+        const role = hqActingRole(user);
         const from = normalizeReportStatus(fromStatus);
         // Company Approve 목표값은 APPROVED 유지 (unlocked APPROVED → CONFIRMED 레거시 정규화 회피)
         const to = (toStatus === ReportStatus.APPROVED || toStatus === 'APPROVED')
@@ -622,7 +655,7 @@ const TVC_RBAC = (function () {
         AccountType, Role, Department, ReportStatus, Action,
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForWorkReport, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
-        isShipAccount, isHqAccount, isAdminAccount, isApprover,
+        isShipAccount, isHqAccount, isAdminAccount, isCompanyHqAccount, isHqSku, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
         normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,

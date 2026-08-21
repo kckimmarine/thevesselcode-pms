@@ -1,6 +1,6 @@
 {
   "name": "thevesselcode-pms",
-  "version": "1.0.3",
+  "version": "1.0.4",
   "description": "THE VESSEL CODE — Unified PMS + SPICS (Offline-First)",
   "main": "electron/main.js",
   "author": "THE VESSEL CODE",
@@ -39,6 +39,7 @@
     "test-vessel-engine-pms-workflow": "node scripts/test-vessel-engine-pms-workflow.mjs",
     "test-vessel-engine-monthly-report": "node scripts/test-vessel-engine-monthly-report.mjs",
     "test-vessel-engine-monthly-roundtrip": "node scripts/test-vessel-engine-monthly-roundtrip.mjs",
+    "test-xfer-status-roundtrip": "node scripts/test-xfer-status-roundtrip.mjs",
     "test-pms-group-equipment-headers": "node scripts/test-pms-group-equipment-headers.mjs"
   },
   "license": "ISC",

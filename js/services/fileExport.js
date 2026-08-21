@@ -26,7 +26,7 @@ const TVC_FileExport = (function () {
 
         if (window.tvcElectron?.saveExportFile) {
             const buf = new Uint8Array(await blob.arrayBuffer());
-            const result = await window.tvcElectron.saveExportFile(Array.from(buf), name);
+            const result = await window.tvcElectron.saveExportFile(buf, name);
             if (result?.ok) return result;
             throw new Error(result?.error || 'Export save failed.');
         }

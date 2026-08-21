@@ -10,10 +10,10 @@ const TVC_Fleet = (function () {
 
     /** 초기 Fleet — HQ 등록 선박 (company: DAEMYUNG) */
     const DEFAULT_FLEET = [
-        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '01', imo_no: '9297711', delivery: '2003-09-18' },
-        { id: 'QUARTERBACK J', name: 'QUARTERBACK J', code: '02', imo_no: '9264879', delivery: '2003-01-29' },
-        { id: 'GOLDSTAR SHINE', name: 'GOLDSTAR SHINE', code: '03', imo_no: '9279707', delivery: '2004-09-27' },
-        { id: 'VALIANT', name: 'VALIANT', code: '04', imo_no: '9274288', delivery: '2005-01-20' },
+        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '01', imo_no: '9297711', delivery: '2003-09-18', company_id: COMPANY_ID },
+        { id: 'QUARTERBACK J', name: 'QUARTERBACK J', code: '02', imo_no: '9264879', delivery: '2003-01-29', company_id: COMPANY_ID },
+        { id: 'GOLDSTAR SHINE', name: 'GOLDSTAR SHINE', code: '03', imo_no: '9279707', delivery: '2004-09-27', company_id: COMPANY_ID },
+        { id: 'VALIANT', name: 'VALIANT', code: '04', imo_no: '9274288', delivery: '2005-01-20', company_id: COMPANY_ID },
     ];
 
     /** 예전 테스트 Fleet — HQ 목록에서 제거 */
@@ -53,7 +53,7 @@ const TVC_Fleet = (function () {
         for (const def of DEFAULT_FLEET) {
             const prev = byId.get(def.id);
             // DEFAULT_FLEET 메타(name/imo/delivery/code)를 기준으로 맞춤
-            byId.set(def.id, { ...(prev || {}), ...def });
+            byId.set(def.id, { company_id: COMPANY_ID, ...(prev || {}), ...def });
         }
         return sortFleet([...byId.values()]);
     }
@@ -96,6 +96,56 @@ const TVC_Fleet = (function () {
     function getAll() {
         const raw = readFleetRaw();
         return normalizeFleet(raw?.length ? raw : [...DEFAULT_FLEET]);
+    }
+
+    function licenseCompanyId() {
+        try {
+            const st = typeof TVC_License !== 'undefined' ? TVC_License.statusSync() : null;
+            return String(st?.companyId || COMPANY_ID).trim() || COMPANY_ID;
+        } catch (_) {
+            return COMPANY_ID;
+        }
+    }
+
+    function licenseAllowedVesselIds() {
+        try {
+            const st = typeof TVC_License !== 'undefined' ? TVC_License.statusSync() : null;
+            const ids = st?.allowedVesselIds;
+            return Array.isArray(ids) ? ids.map(String).filter(Boolean) : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    function vesselCompanyId(vessel) {
+        return String(vessel?.company_id || COMPANY_ID).trim() || COMPANY_ID;
+    }
+
+    /** HQ superintendent — license company + allowedVesselIds only. Admin-on-HQ sees full fleet. */
+    function getVisible(user) {
+        const all = getAll();
+        const companyScoped = !!(user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isCompanyHqAccount?.(user));
+        if (!companyScoped) return all;
+        const companyId = String(user.company_id || licenseCompanyId()).trim() || COMPANY_ID;
+        const allowed = licenseAllowedVesselIds();
+        return all.filter(v => {
+            if (vesselCompanyId(v) !== companyId) return false;
+            if (allowed.length && !allowed.includes(v.id)) return false;
+            return true;
+        });
+    }
+
+    function listCompanyIds(user) {
+        const rows = getVisible(user);
+        const ids = [];
+        const seen = new Set();
+        for (const v of rows) {
+            const id = vesselCompanyId(v);
+            if (seen.has(id)) continue;
+            seen.add(id);
+            ids.push(id);
+        }
+        return ids;
     }
 
     function getSelectedId() {
@@ -142,12 +192,13 @@ const TVC_Fleet = (function () {
         if (!list.length) return getAll();
         for (const id of list) {
             const prev = getAll().find(v => v.id === id) || DEFAULT_FLEET.find(v => v.id === id);
-            upsert(prev ? { ...prev, id } : {
+            upsert(prev ? { ...prev, id, company_id: prev.company_id || licenseCompanyId() } : {
                 id,
                 name: id.replace(/_/g, ' '),
                 code: '—',
                 imo_no: '—',
                 delivery: '—',
+                company_id: licenseCompanyId(),
             });
         }
         return getAll();
@@ -167,14 +218,15 @@ const TVC_Fleet = (function () {
                 code: String(r.code || prev?.code || '—').trim() || '—',
                 imo_no: String(r.imo_no || prev?.imo_no || '—').trim() || '—',
                 delivery: String(r.delivery || prev?.delivery || '—').trim().slice(0, 10) || '—',
+                company_id: String(r.company_id || prev?.company_id || licenseCompanyId()).trim() || licenseCompanyId(),
             });
         }
         return getAll();
     }
 
     return {
-        ensureFleet, getAll, getSelected, getSelectedId, select, upsert, remove, resolveById,
-        syncFromAllowedVesselIds, syncFromRegistryVessels,
+        ensureFleet, getAll, getVisible, listCompanyIds, getSelected, getSelectedId, select, upsert, remove, resolveById,
+        syncFromAllowedVesselIds, syncFromRegistryVessels, vesselCompanyId, licenseCompanyId,
         COMPANY_ID, PILOT_VESSEL_ID, LEGACY_VESSEL_ID, DEFAULT_FLEET,
     };
 })();

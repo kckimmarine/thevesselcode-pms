@@ -1081,6 +1081,81 @@ async function main() {
         assert('DECK report follows deck rename', deckRep.job_items[0].job_code?.startsWith('03-'));
     });
 
+    await runScenario('CRITICAL EQUIPMENT round-trips Group Headers + Jobs (HQ → vessel)', async () => {
+        const db = createMockDb(seed);
+        const groups = await db.getAll('maintenance_groups');
+        const jobs = await db.getAll('maintenance_jobs');
+        const job = jobs.find(x => x.department === 'ENGINE' && x.job_code);
+        assert('ENGINE job exists', !!job, 'no ENGINE job in seed');
+        let header = groups.find(x =>
+            x.department === 'ENGINE'
+            && !String(x.item_sort1 || '').trim()
+            && String(x.label || '').replace(/\s+/g, ' ').trim() === String(job.group || '').replace(/\s+/g, ' ').trim()
+        );
+        if (!header) {
+            header = {
+                id: 'grp-crit-roundtrip',
+                department: 'ENGINE',
+                label: job.group,
+                sort_order: 0,
+            };
+        }
+        header = { ...header, is_critical_equipment: true };
+        job.is_critical_equipment = true;
+        await db.put('maintenance_groups', header);
+        await db.put('maintenance_jobs', job);
+
+        const wb = await exportEngineWorkbook(Pms, db);
+        const wsG = wb.getWorksheet('Group Headers');
+        const wsJ = wb.getWorksheet('Jobs');
+        const hdrG = {};
+        wsG.getRow(5).eachCell((c, i) => {
+            const v = String(c.value || '').trim().toUpperCase();
+            if (v) hdrG[v] = i;
+        });
+        const hdrJ = {};
+        wsJ.getRow(5).eachCell((c, i) => {
+            const v = String(c.value || '').trim().toUpperCase();
+            if (v) hdrJ[v] = i;
+        });
+        assert('Group Headers has CRITICAL EQUIPMENT column', !!hdrG['CRITICAL EQUIPMENT']);
+        assert('Jobs has CRITICAL EQUIPMENT column', !!hdrJ['CRITICAL EQUIPMENT']);
+
+        let groupYes = false;
+        wsG.eachRow((row, n) => {
+            if (n < 6) return;
+            const crit = String(row.getCell(hdrG['CRITICAL EQUIPMENT']).value || '').trim();
+            if (crit.toLowerCase() === 'yes') groupYes = true;
+        });
+        assert('Group Headers exports Yes', groupYes);
+
+        let jobYes = false;
+        wsJ.eachRow((row, n) => {
+            if (n < 6) return;
+            const code = String(row.getCell(hdrJ['JOB CODE']).value || '').trim();
+            const crit = String(row.getCell(hdrJ['CRITICAL EQUIPMENT']).value || '').trim();
+            if (code === job.job_code && crit.toLowerCase() === 'yes') jobYes = true;
+        });
+        assert('Jobs exports Yes for marked job', jobYes);
+
+        header.is_critical_equipment = null;
+        job.is_critical_equipment = null;
+        await db.put('maintenance_groups', header);
+        await db.put('maintenance_jobs', job);
+
+        await importWorkbookToDb(Pms, db, wb, CE_USER, 'ENGINE');
+        const afterGroups = await db.getAll('maintenance_groups');
+        const afterJobs = await db.getAll('maintenance_jobs');
+        const g2 = afterGroups.find(x =>
+            x.department === 'ENGINE'
+            && !String(x.item_sort1 || '').trim()
+            && String(x.label || '').replace(/\s+/g, ' ').trim() === String(header.label || '').replace(/\s+/g, ' ').trim()
+        );
+        const j2 = afterJobs.find(x => x.id === job.id) || afterJobs.find(x => x.job_code === job.job_code && x.department === 'ENGINE');
+        assert('Group critical imported', g2?.is_critical_equipment === true, `group=${g2?.is_critical_equipment}`);
+        assert('Job critical imported', j2?.is_critical_equipment === true, `job=${j2?.is_critical_equipment}`);
+    });
+
     console.log(`\n${pass} passed, ${fail} failed`);
     process.exit(fail ? 1 : 0);
 }
