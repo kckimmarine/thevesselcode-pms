@@ -15,8 +15,8 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260821-req-list-footer">
-    <link rel="stylesheet" href="css/responsive-scale.css?v=20260810-spare-hist-width2">
+    <link rel="stylesheet" href="css/app.css?v=20260822-hist-pms-like-spare">
+    <link rel="stylesheet" href="css/responsive-scale.css?v=20260822-hist-list-only">
 </head>
 <body>
 
@@ -131,9 +131,9 @@
     <!-- Persistent Tab Bar -->
     <nav id="tabBar" class="tab-bar" role="tablist">
         <button class="tab-btn active" data-tab="menu" onclick="TVC_App.switchTab('menu')">📑 Menu</button>
-        <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 Work Plan</button>
-        <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Report History</button>
+        <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 PMS</button>
         <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
+        <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Report History</button>
         <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">⚙ Settings</button>
     </nav>
 
@@ -181,12 +181,8 @@
         <!-- TAB: Work Plan -->
         <section id="tab-actual" class="tab-pane hidden">
             <div class="sheet-head">
-                <h2>📝 Work Plan</h2>
-                <span class="sheet-sub">Maintenance plan · filters · report input · Modify / Append / Delete</span>
-                <span id="actPlanCalcMsg" class="plan-calc-msg hidden"></span>
+                <h2>📝 PMS</h2>
                 <span style="flex:1"></span>
-                <button type="button" id="actUpdatePlanBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateOriginalPlanFromRunHours()" disabled title="Running Hours Update를 먼저 완료하세요.">↻ Update Plan</button>
-                <button type="button" id="actApprovePlanBtn" class="btn btn-sm btn-green hidden" onclick="TVC_App.approveWorkPlanFromHq()">✅ Approve Work Plan</button>
             </div>
             <div id="actPlanActionBar" class="plan-action-bar"></div>
             <div id="spicsAlertBanner" class="spics-alert-banner hidden" style="margin:0 20px 8px"></div>
@@ -265,12 +261,18 @@
 
         <!-- TAB: Report History -->
         <section id="tab-history" class="tab-pane hidden">
-            <div class="sheet-head"><h2>📜 Report History</h2><span class="sheet-sub">Select a row · double-click or Detail Report · check (ㅁ) for Report Approval</span></div>
-            <div class="list-tab-frame">
+            <div class="sheet-head"><h2>📜 Report History</h2></div>
+            <div id="histScopeTabs" class="hist-scope-tabs" role="tablist" aria-label="Report History scope">
+                <button type="button" class="hist-scope-tab active" data-hist-scope="pms" onclick="TVC_App.setHistoryScope('pms')">PMS</button>
+                <button type="button" class="hist-scope-tab" data-hist-scope="spare" data-feature="showSpareTab" onclick="TVC_App.setHistoryScope('spare')">SPARE</button>
+            </div>
+            <div id="histPmsPane" class="list-tab-frame">
+            <div class="spare-hist-req-host hist-pms-host">
+            <div class="spare-req-list-wrap spare-req-list-main-wrap spare-hist-req-wrap">
             <div class="hist-toolbar-stack">
                 <div class="hist-toolbar hist-toolbar-actions filter-bar">
                     <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Report</button>
-                    <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Report Confirm</button>
+                    <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Confirm</button>
                     <button type="button" id="histBtnHqApprove" class="btn btn-sm btn-green hidden" disabled onclick="TVC_App.histHqReportApproval()">Approve</button>
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" id="histBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_App.histModifyReport()">Modify</button>
@@ -287,7 +289,7 @@
                             <input type="date" id="histPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onReportPeriodChange()">
                             <span class="act-period-sep">~</span>
                             <input type="date" id="histPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onReportPeriodChange()">
-                            <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearReportPeriod()">Clear</button>
+                            <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearHistoryPeriodAndFilters()">Clear</button>
                         </div>
                         <div class="list-filter-wrap">
                             <button type="button" id="histListFilterBtn" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('history', event)">Filter</button>
@@ -302,12 +304,42 @@
                     </div>
                 </div>
             </div>
-            <p class="hist-legend">D: Defect Report · M: Maintenance · P: Postponed · ⚠: Critical Equipment · RR: Repair Request · SS: Conducted by Shore Support · DC: Defect Cleared · AT: Attachment · Spare Data: consumed spare line count</p>
-            <div class="sheet-table-wrap list-table-scroll-wrap">
-                <table class="sheet-table hist-table hist-table-history-list">
+            <p class="hist-legend">
+                <span class="hist-legend-item"><span class="hist-type-mark hist-legend-mark-w" aria-hidden="true">W</span> Work Permit</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item"><span class="hist-type-mark hist-legend-mark-m" aria-hidden="true">M</span> Maintenance</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item"><span class="hist-type-mark hist-legend-mark-d" aria-hidden="true">D</span> Defect Report</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item"><span class="hist-type-mark hist-legend-mark-p" aria-hidden="true">P</span> Postponed</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item"><span class="hist-type-mark hist-legend-mark-c" aria-hidden="true">C</span> Consumption</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item"><svg class="plan-crit-mark hist-legend-crit" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" focusable="false"><path fill="#e53e3e" stroke="#9b2c2c" stroke-width="1" stroke-linejoin="round" d="M8 2.4 13.8 13H2.2Z"/><path fill="none" stroke="#fff" stroke-width="1.45" stroke-linecap="round" d="M8 6.15v3.15"/><circle fill="#fff" cx="8" cy="11.15" r="0.85"/></svg> Critical Equipment</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item">RR: Repair Request</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item">SS: Conducted by Shore Support</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item">DC: Defect Cleared</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item">AT: Attachment</span>
+                <span class="hist-legend-dot" aria-hidden="true">·</span>
+                <span class="hist-legend-item">Spare Data: consumed spare</span>
+            </p>
+            <div class="spare-req-list-panel-wrap">
+              <div class="panel spare-req-list-panel">
+                <div class="spare-req-list-head-wrap" id="histPmsListHead">
+                  <table class="sheet-table hist-table hist-table-history-list">
+                    <colgroup>
+                      <col class="hist-col-chk"><col class="hist-col-type"><col class="hist-col-file"><col class="hist-col-crit">
+                      <col class="hist-col-code"><col class="hist-col-sort1"><col class="hist-col-sort2"><col class="hist-col-date">
+                      <col class="hist-col-status"><col class="hist-col-flag"><col class="hist-col-flag"><col class="hist-col-flag">
+                      <col class="hist-col-at"><col class="hist-col-at"><col class="hist-col-spare">
+                    </colgroup>
                     <thead><tr>
                         <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
-                        <th class="hist-type-h" title="D: Defect Report · M: Maintenance · P: Postponed">Type</th>
+                        <th class="hist-type-h" title="W: Work Permit · M: Maintenance · D: Defect Report · P: Postponed · C: Consumption">Type</th>
                         <th class="hist-file-h">File No</th>
                         <th class="hist-crit-h" title="Critical Equipment" aria-label="Critical Equipment">⚠</th>
                         <th class="hist-code-h">JOB CODE</th>
@@ -322,9 +354,26 @@
                         <th class="hist-at-h hist-at-company-h" title="Company's Attachment"><span class="hist-th-stack"><span>Company's</span><span>AT</span></span></th>
                         <th class="hist-spare-data-h"><span class="hist-th-stack"><span>Spare</span><span>Data</span></span></th>
                     </tr></thead>
+                  </table>
+                </div>
+                <div class="spare-req-list-scroll list-table-scroll-wrap" id="histPmsListScroll">
+                  <table class="sheet-table hist-table hist-table-history-list">
+                    <colgroup>
+                      <col class="hist-col-chk"><col class="hist-col-type"><col class="hist-col-file"><col class="hist-col-crit">
+                      <col class="hist-col-code"><col class="hist-col-sort1"><col class="hist-col-sort2"><col class="hist-col-date">
+                      <col class="hist-col-status"><col class="hist-col-flag"><col class="hist-col-flag"><col class="hist-col-flag">
+                      <col class="hist-col-at"><col class="hist-col-at"><col class="hist-col-spare">
+                    </colgroup>
                     <tbody id="historyBody"></tbody>
-                </table>
+                  </table>
+                </div>
+              </div>
             </div>
+            </div>
+            </div>
+            </div>
+            <div id="histSparePane" class="list-tab-frame hidden">
+                <div id="spareHistReqListHost" class="spare-hist-req-host"></div>
             </div>
         </section>
 
@@ -657,7 +706,7 @@
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/rbac.js?v=20260820-df-co-ce"></script>
-<script src="js/core/schema.js?v=20260821-wp-hq-comment"></script>
+<script src="js/core/schema.js?v=20260822-df-p3p4"></script>
 <script src="js/core/db.js?v=20260806-req-sort"></script>
 <script src="js/core/indexes.js?v=20260821-hide-detached"></script>
 <script src="js/core/spareIndexes.js?v=20260821-spare-group-src"></script>
@@ -673,18 +722,18 @@
 <script src="js/core/filename.js?v=20260812-defect-hq-batch"></script>
 <script src="js/services/spareSync.js?v=20260806-req-excel"></script>
 <script src="js/services/spareMeta.js"></script>
-<script src="js/ui/spareMenu.js?v=20260821-wp-selected-parts"></script>
+<script src="js/ui/spareMenu.js?v=20260822-hide-sheet-sub"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
 <script src="js/services/inventoryService.js?v=20260820-delivery-diff"></script>
-<script src="js/services/excel.js?v=20260807-quote-form-excel"></script>
+<script src="js/services/excel.js?v=20260822-quote-import-price"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
 <script src="js/space.js?v=20260813-admin-mode"></script>
 <script src="js/license.js?v=20260813-admin-mode"></script>
 <script src="js/services/fileExport.js?v=20260821-monthly-xfer"></script>
 <script src="js/auth.js?v=20260813-admin-mode"></script>
-<script src="js/services/transaction.js?v=20260810-plan-status-latest"></script>
+<script src="js/services/transaction.js?v=20260822-postpone-hq"></script>
 <script src="js/services/maintenancePlan.js?v=20260821-pms-ggeeiii"></script>
 <script src="js/services/pmsMasterExcel.js?v=20260821-master-schema"></script>
 <script src="js/services/spareCode.js"></script>
@@ -693,8 +742,8 @@
 <script src="js/services/workPermitCase.js?v=20260821-wp-hq-comment"></script>
 <script src="js/services/hubRelay.js?v=20260820-hub-relay"></script>
 <script src="js/services/workPermitSync.js?v=20260821-wp-hq-comment"></script>
-<script src="js/services/defectSync.js?v=20260820-df-export"></script>
-<script src="js/services/postponeSync.js?v=20260821-postpone-xfer"></script>
+<script src="js/services/defectSync.js?v=20260822-df-p3p4"></script>
+<script src="js/services/postponeSync.js?v=20260822-postpone-hq"></script>
 <script src="js/services/sync.js?v=20260821-postpone-xfer"></script>
 <script src="js/services/masterBackup.js?v=20260813-vessel-master"></script>
 <script src="js/services/vesselProfileSync.js?v=20260813-vessel-profile"></script>
@@ -712,12 +761,12 @@
 <script src="js/services/masterVesselScope.js?v=20260813-vessel-master"></script>
 <script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
-<script src="js/ui/listFilters.js?v=20260821-daily-tasks-4"></script>
+<script src="js/ui/listFilters.js?v=20260822-spare-hist-ui"></script>
 <script src="js/ui/defectReport.js?v=20260821-check-hist"></script>
 <script src="js/ui/workPermit.js?v=20260821-wp-hq-comment"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260821-postpone-ot"></script>
-<script src="js/app.js?v=20260821-postpone-ot"></script>
+<script src="js/app.js?v=20260822-case-report-xfer"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

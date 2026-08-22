@@ -140,13 +140,7 @@ const TVC_PostponeSync = (function () {
     }
 
     function postponeRequiresCompanyExport(row, job) {
-        if (!row || row.work_type !== 'POSTPONE') return false;
-        if (row.requires_company_approval === true) return true;
-        if (row.requires_company_approval === false) return false;
-        if (!job) return false;
-        const sort = String(job.sort || '').trim().toUpperCase();
-        if (sort.startsWith('C.') || sort.includes('CRITICAL')) return true;
-        return String(job.item_sort1 || '').toUpperCase().includes('CRITICAL');
+        return !!(row && row.work_type === 'POSTPONE');
     }
 
     async function exportRequestZip(user, reportId) {

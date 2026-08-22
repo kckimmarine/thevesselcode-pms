@@ -184,21 +184,12 @@ const TVC_Transaction = (function () {
     }
 
     async function resolvePostponeCompanyApproval(api, job, payload) {
-        const critical = await jobRequiresCompanyPostponeApproval(api, job);
-        if (critical) return true;
-        if (payload?.requiresCompanyApproval === true) return true;
-        if (payload?.requiresCompanyApproval === false) return false;
-        return false;
+        return true;
     }
 
     function reportRequiresCompanyPostponeApproval(report, job) {
         if (!report || report.work_type !== 'POSTPONE') return false;
-        if (report.requires_company_approval === true) return true;
-        if (report.requires_company_approval === false) return false;
-        if (!job) return false;
-        if (job.is_critical_equipment === true) return true;
-        if (job.is_critical_equipment === false) return false;
-        return false;
+        return true;
     }
 
     async function applyWorkReportJobSchedule(api, job, item, report, opts = {}) {
@@ -357,15 +348,7 @@ const TVC_Transaction = (function () {
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
             await stampHqLocalReport(report, user);
             if (report.work_type === 'POSTPONE') {
-                let anyCritical = false;
-                for (const item of jobItems) {
-                    const j = await api.get('maintenance_jobs', item.maintenance_job_id);
-                    if (j && await jobRequiresCompanyPostponeApproval(api, j)) {
-                        anyCritical = true;
-                        break;
-                    }
-                }
-                report.requires_company_approval = anyCritical || payload.requiresCompanyApproval === true;
+                report.requires_company_approval = true;
             }
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             stampPostponeOriginalDue(report);
@@ -710,8 +693,8 @@ const TVC_Transaction = (function () {
             const fromStatus = TVC_RBAC.isConfirmedStatus(report.status, report.is_locked) ? 'CONFIRMED' : 'REPORTED';
             TVC_RBAC.assertReportTransition(user, fromStatus, 'APPROVED');
 
-            const isCriticalPostpone = report.work_type === 'POSTPONE' && report.requires_company_approval;
-            if (isCriticalPostpone) {
+            const isPostpone = report.work_type === 'POSTPONE';
+            if (isPostpone) {
                 const approvedDate = String(
                     opts.approvedPostponeDate || report.approved_postpone_date || report.postpone_date || '',
                 ).slice(0, 10);
@@ -748,6 +731,45 @@ const TVC_Transaction = (function () {
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
                 log: `🏢 [APPROVED] ${report.job_code}${scheduleNote}${companyComment ? ': ' + companyComment : ''}`,
+                sync_status: 'LOCAL',
+            });
+            return report;
+        });
+    }
+
+    /** HQ: APPROVED → CONFIRMED (unlock) */
+    async function unapproveReport(user, reportId) {
+        TVC_RBAC.assert(user, TVC_RBAC.Action.CONFIRM_REPORT);
+        if (!TVC_RBAC.isHqAccount(user) || !TVC_RBAC.canApproveHqReport(user)) {
+            throw Object.assign(new Error('HQ unapprove only.'), { code: 'FORBIDDEN' });
+        }
+        return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
+            const report = await api.get('daily_work_reports', reportId);
+            if (!report) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
+            TVC_WorkReport.fromLegacy(report);
+            if (!TVC_RBAC.isApprovedStatus(report.status, report.is_locked)) {
+                throw Object.assign(new Error('NOT_APPROVED'), { code: 'INVALID' });
+            }
+            report.status = 'CONFIRMED';
+            report.approved_by = '';
+            report.approved_at = '';
+            report.is_locked = false;
+            report.job_items.forEach(item => {
+                if (TVC_RBAC.isApprovedStatus(item.status, true)) item.status = 'CONFIRMED';
+            });
+            markPending(report);
+            await api.put('daily_work_reports', report);
+            for (const item of report.job_items) {
+                const job = await api.get('maintenance_jobs', item.maintenance_job_id);
+                if (job) {
+                    job.is_locked = false;
+                    markPending(job);
+                    await api.put('maintenance_jobs', job);
+                }
+            }
+            await api.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `↩ [UNAPPROVED] ${report.job_code} — ${user.display_name || user.username}`,
                 sync_status: 'LOCAL',
             });
             return report;
@@ -920,7 +942,7 @@ const TVC_Transaction = (function () {
 
     return {
         submitReport, submitBatchReport, updateReport, deleteReport,
-        approveReport, executeMaintenance, confirmReport, unconfirmReport, calcNextDate, markPending,
+        approveReport, unapproveReport, executeMaintenance, confirmReport, unconfirmReport, calcNextDate, markPending,
         applyDefectJobSchedule, shouldApplyDefectJobSchedule, resolveDefectScheduleTargets,
         jobRequiresCompanyPostponeApproval, reportRequiresCompanyPostponeApproval,
         purgeAllWorkReports,

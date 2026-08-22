@@ -191,23 +191,48 @@ const TVC_Excel = (function () {
         return { map, headerRowNo };
     }
 
+    function excelPlainValue(v) {
+        if (v == null || v === '') return null;
+        if (typeof v === 'number' || typeof v === 'boolean') return v;
+        if (v instanceof Date) return v;
+        if (typeof v === 'string') return v;
+        if (typeof v === 'object') {
+            if (Array.isArray(v.richText)) return v.richText.map(t => t.text || '').join('');
+            if (v.text != null && v.text !== '') return v.text;
+            if (v.result != null && v.result !== '') return excelPlainValue(v.result);
+            if (v.hyperlink && v.text) return v.text;
+            return null;
+        }
+        return v;
+    }
+
     function parseNumCell(v) {
-        const n = parseFloat(String(v ?? '').replace(/[^0-9.\-]/g, ''));
+        const plain = excelPlainValue(v);
+        if (plain == null || plain === '') return null;
+        if (typeof plain === 'number') return Number.isFinite(plain) ? plain : null;
+        const n = parseFloat(String(plain).replace(/[^0-9.\-]/g, ''));
         return Number.isNaN(n) ? null : n;
     }
 
+    function parseCurrencyToken(v) {
+        const s = String(excelPlainValue(v) ?? '').trim().toUpperCase();
+        const m = s.match(/\b(KRW|USD|EUR|JPY|CNY|GBP|SGD|AUD)\b/);
+        return m ? m[1] : null;
+    }
+
     function rowCellVal(row, col) {
-        return col ? (row.getCell(col).value ?? '') : '';
+        return col ? (excelPlainValue(row.getCell(col).value) ?? '') : '';
     }
 
     function isBlankImportCell(v) {
-        const s = String(v ?? '').trim();
+        const s = String(excelPlainValue(v) ?? '').trim();
         return !s || s === '—' || s === '-' || s === '–';
     }
 
     function quotePrintVendorMeta(ws) {
+        const cellVal = (addr) => excelPlainValue(ws.getCell(addr).value);
         const cellStr = (addr) => {
-            const v = ws.getCell(addr).value;
+            const v = cellVal(addr);
             if (v == null || v === '') return null;
             if (v instanceof Date) return v.toISOString().slice(0, 10);
             return String(v).trim() || null;
@@ -216,12 +241,33 @@ const TVC_Excel = (function () {
             vendorName: cellStr('K11'),
             refNo: cellStr('K12'),
             quotedDate: cellStr('K13'),
-            totalAmount: ws.getCell('K14').value ?? ws.getCell('M14').value ?? null,
+            totalAmount: parseNumCell(cellVal('M14'))
+                ?? parseNumCell(cellVal('O26'))
+                ?? parseNumCell(cellVal('K14')),
             comments: cellStr('K15'),
             field16: cellStr('K16') || cellStr('I16'),
             field17: cellStr('K17') || cellStr('I17'),
-            currency: cellStr('M14') || cellStr('K14') || cellStr('M25') || cellStr('J14') || null,
+            currency: parseCurrencyToken(cellVal('K14'))
+                || parseCurrencyToken(cellVal('M26'))
+                || parseCurrencyToken(cellVal('N26'))
+                || parseCurrencyToken(cellVal('M14')),
         };
+    }
+
+    function parseQuoteRowPrice(row, map) {
+        const cols = [];
+        const add = (c) => {
+            const n = Number(c);
+            if (Number.isFinite(n) && n > 0 && !cols.includes(n)) cols.push(n);
+        };
+        add(map.price);
+        add(13);
+        add(14);
+        for (const col of cols) {
+            const n = parseNumCell(row.getCell(col).value);
+            if (n != null) return n;
+        }
+        return null;
     }
 
     /** Vendor quotation print form (SPARE PARTS REQUISITION + Price/Remark columns) */
@@ -239,10 +285,7 @@ const TVC_Excel = (function () {
             const drawing = cPart ? String(rowCellVal(row, cPart)).trim() : '';
             const partNo = !isBlankImportCell(code) ? code : (!isBlankImportCell(drawing) ? drawing : '');
             if (!partNo || partNo.toLowerCase().replace(/\.$/, '') === 'part no' || partNo === 'Code') return;
-            const price = parseNumCell(row.getCell(13).value)
-                ?? parseNumCell(row.getCell(14).value)
-                ?? parseNumCell(row.getCell(10).value)
-                ?? parseNumCell(rowCellVal(row, map.price));
+            const price = parseQuoteRowPrice(row, map);
             const remark17 = String(rowCellVal(row, 17) || '').trim();
             const remark18 = cRemark ? String(rowCellVal(row, cRemark) || '').trim() : '';
             const vendorComment = remark17 || remark18 || null;

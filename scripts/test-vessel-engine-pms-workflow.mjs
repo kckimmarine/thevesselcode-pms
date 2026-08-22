@@ -245,7 +245,7 @@ async function main() {
         menuNavigateSim(state, 'actual', { actualFilter: 'overdue' });
         assert('switches to actual tab', state.currentTab === 'actual');
         assert('applies overdue filter', state.actualFilter === 'overdue');
-        assert('menu defines Check Work Plan action', appSrc.includes("label: 'Check Work Plan'"));
+        assert('menu defines Check PMS action', appSrc.includes("label: 'Check PMS'"));
         assert('checkPlan routes to actual/overdue', appSrc.includes("case 'checkPlan': menuNavigate('actual', { actualFilter: 'overdue' })"));
     });
 

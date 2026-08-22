@@ -445,6 +445,14 @@ const TVC_DefectSync = (function () {
         if (!completionReady) {
             throw new Error('Complete Phase 3 (DEFECT CLEARED) before export.');
         }
+        const isHub = typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
+        if (isHub && !TVC_HubRelay.canHubLegExport(row) && !TVC_DefectCase.isPhase3CompletionHubPending(row)) {
+            throw new Error(`${row.case_no}: ${TVC_HubRelay.hubExportBlockedTitle()}.`);
+        }
+        TVC_DefectCase.clearHubStampForNewOutbound(row);
+        if (!isHub && typeof TVC_HubRelay !== 'undefined') {
+            TVC_HubRelay.stampStationExport(row);
+        }
         const payload = await buildCompletionPayload(user, row);
         const vesselId = payload.export_meta.vessel_id;
         const filename = await buildExportFilename(user, vesselId, row.department, { hqReply: false });
@@ -487,6 +495,17 @@ const TVC_DefectSync = (function () {
         if (row.status !== TVC_DefectCase.Status.CLOSED) {
             throw new Error('HQ Phase 4 must be completed before close export.');
         }
+        const isHub = typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
+        const isStation = typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user);
+        if (isStation) {
+            throw new Error('Station cannot export HQ close-out. Import the Master-forwarded close ZIP.');
+        }
+        if (isHub) {
+            if (!TVC_DefectCase.isPhase4CloseForwardPending(row)) {
+                throw new Error(`${row.case_no}: already forwarded to Station, or HQ close ZIP not imported yet.`);
+            }
+            TVC_DefectCase.stampPhase4CloseForwarded(row);
+        }
         const payload = await buildClosePayload(user, row);
         const exportDate = now().slice(0, 10).replace(/-/g, '');
         const html = buildPrintHtml(row, row.ship_name);
@@ -512,12 +531,33 @@ const TVC_DefectSync = (function () {
                 case_no: row.case_no,
                 record_count: 1,
                 status: 'SUCCESS',
-                space: 'HQ',
+                space: isHub ? 'SHIP' : 'HQ',
             });
         }
         return { payload, filename };
     }
 
+    async function applyDefectRelayAfterImport(payload, { isHq, isHub }) {
+        const direction = payload?.export_meta?.direction;
+        const rows = payload?.defect_cases || [];
+        if (!rows.length || !direction) return;
+        for (const incoming of rows) {
+            if (!incoming?.id) continue;
+            const row = await TVC_DB.get('defect_cases', incoming.id);
+            if (!row) continue;
+            if (isHub && direction === 'DEFECT_COMPLETION_TO_HQ') {
+                TVC_DefectCase.clearHubStampForNewOutbound(row);
+                row.sync_status = 'SYNCED';
+                await TVC_DB.put('defect_cases', row);
+            } else if (isHub && direction === 'DEFECT_CLOSE_HQ_TO_SHIP') {
+                TVC_DefectCase.markPhase4CloseForwardPending(row);
+                await TVC_DB.put('defect_cases', row);
+            } else if (!isHq && !isHub && direction === 'DEFECT_CLOSE_HQ_TO_SHIP') {
+                row.close_forward_pending = false;
+                await TVC_DB.put('defect_cases', row);
+            }
+        }
+    }
 
     async function importPackage(user, file) {
         const buf = await file.arrayBuffer();
@@ -551,6 +591,7 @@ const TVC_DefectSync = (function () {
         if (!lic.ok) throw new Error(lic.error || 'License does not allow this import.');
 
         await TVC_Sync.mergePayload(payload, null, isHq, importVesselId, { importAuthoritative: true });
+        await applyDefectRelayAfterImport(payload, { isHq, isHub });
 
         if (typeof TVC_Sync.recordSyncHistory !== 'undefined') {
             await TVC_Sync.recordSyncHistory({

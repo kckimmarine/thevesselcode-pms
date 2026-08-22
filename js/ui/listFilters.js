@@ -24,6 +24,8 @@ const TVC_ListFilters = (function () {
         if (tab === 'consumeLog') return 'consumeLogListFilterBtn';
         if (tab === 'workPermit') return 'wpListFilterBtn';
         if (tab === 'reqList') {
+            const histTabBtn = document.getElementById('spareHistReqListFilterBtn');
+            if (histTabBtn && histTabBtn.getClientRects().length > 0) return 'spareHistReqListFilterBtn';
             const histBtn = document.getElementById('reqHistListFilterBtn');
             if (histBtn && histBtn.getClientRects().length > 0) return 'reqHistListFilterBtn';
             return 'reqListFilterBtn';
@@ -55,6 +57,10 @@ const TVC_ListFilters = (function () {
         return !!f?.postponeAwaitingApproval;
     }
 
+    function isSpareHistReqFilter() {
+        return filterBtnId('reqList') === 'spareHistReqListFilterBtn';
+    }
+
     function activeCount(tab, state) {
         const f = filters(state, tab);
         if (tab === 'actual') {
@@ -62,7 +68,7 @@ const TVC_ListFilters = (function () {
             return n;
         }
         if (tab === 'history') {
-            let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0) + (postponeAwaitingActive(f) ? 1 : 0) + (f.awaitingShipConfirm ? 1 : 0);
+            let n = (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0) + (f.noClosedOut ? 1 : 0) + (postponeAwaitingActive(f) ? 1 : 0) + (f.awaitingShipConfirm ? 1 : 0);
             return n;
         }
         if (tab === 'consumeLog') {
@@ -128,6 +134,17 @@ const TVC_ListFilters = (function () {
             return null;
         }
         if (entry.source === 'defect') return resolveDefectGroupKey(entry.defect, ctx);
+        if (entry.source === 'consume') {
+            const log = entry.consume;
+            const direct = String(log?.spare_group_key || log?.pms_group_key || '').trim();
+            if (direct) return direct;
+            const jobCode = (log?.job_items || [])[0]?.job_code || log?.job_code;
+            if (jobCode && ctx?.jobs) {
+                const job = ctx.jobs.find(j => j.job_code === jobCode);
+                if (job) return `${job.department || ''}|${String(job.group || '').trim()}`;
+            }
+            return null;
+        }
         const item = entry.item;
         const idx = ctx?.idx;
         const jobs = ctx?.jobs || [];
@@ -151,9 +168,22 @@ const TVC_ListFilters = (function () {
         return true;
     }
 
+    function isHistEntryClosedOut(entry) {
+        if (!entry) return false;
+        if (entry.source === 'defect') return !isDefectOpen(entry.defect);
+        if (entry.source === 'permit' || entry.source === 'consume') return false;
+        const form = {
+            ...(entry.item?.form || {}),
+            ...(entry.report?.form || {}),
+            ...(entry.report?.report_form || {}),
+        };
+        return !!(form.defectCleared || form.allPendingCleared || entry.report?.defect_cleared);
+    }
+
     function histEntryType(entry) {
         if (entry?.source === 'permit') return 'w';
         if (entry?.source === 'defect') return 'd';
+        if (entry?.source === 'consume') return 'c';
         if (entry?.report?.work_type === 'POSTPONE') return 'p';
         return 'm';
     }
@@ -195,6 +225,7 @@ const TVC_ListFilters = (function () {
         const type = effectiveHistType(f);
         if (type !== 'all' && histEntryType(entry) !== type) return false;
         if (f.openOnly && entry?.source === 'defect' && !isDefectOpen(entry.defect)) return false;
+        if (f.noClosedOut && isHistEntryClosedOut(entry)) return false;
         if (postponeAwaitingActive(f)) {
             if (entry?.source !== 'report' || !TVC_App?.reportMatchesPostponeAwaitingApproval?.(entry.report)) return false;
         }
@@ -305,10 +336,6 @@ const TVC_ListFilters = (function () {
         _groupSearch = '';
     }
 
-    function popCloseBtnHtml() {
-        return `<button type="button" class="modal-x list-filter-pop-close" data-filter-close title="Close" aria-label="Close">×</button>`;
-    }
-
     function popActionsHtml() {
         return `<div class="list-filter-actions">
             <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
@@ -316,8 +343,9 @@ const TVC_ListFilters = (function () {
         </div>`;
     }
 
-    function popShell(bodyHtml) {
-        return `${popCloseBtnHtml()}<div class="list-filter-pop-body">${bodyHtml}</div>${popActionsHtml()}`;
+    function popShell(bodyHtml, opts = {}) {
+        const actions = opts.omitActions ? '' : popActionsHtml();
+        return `<div class="list-filter-pop-body">${bodyHtml}</div>${actions}`;
     }
 
     function renderPopover(tab) {
@@ -387,9 +415,10 @@ const TVC_ListFilters = (function () {
         } else if (tab === 'reqList') {
             const types = ['all', 'routine', 'urgent', 'dock'];
             const curType = f.type || 'all';
+            const spareHist = isSpareHistReqFilter();
             pop.innerHTML = popShell(`
                 <div class="list-filter-section">
-                    <div class="list-filter-section-title">Report type</div>
+                    <div class="list-filter-section-title">${spareHist ? 'Type' : 'Report type'}</div>
                     <div class="list-filter-type-seg">
                         ${types.map(t => `<button type="button" class="list-filter-type-btn${curType === t ? ' active' : ''}" data-hist-type="${t}">${REQ_TYPE_LABELS[t]}</button>`).join('')}
                     </div>
@@ -398,62 +427,42 @@ const TVC_ListFilters = (function () {
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Status</div>
                     <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="reqListFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open <span class="muted">(not Received, or Received with O/S &gt; 0)</span></label>
-                </div>`);
+                </div>`, { omitActions: spareHist });
         } else {
-            const types = ['all', 'w', 'm', 'p', 'd'];
-            const histType = effectiveHistType(f);
+            const types = ['all', 'w', 'm', 'p', 'd', 'c'];
+            const histType = f.type || 'all';
             pop.innerHTML = popShell(`
                 <div class="list-filter-section">
-                    <div class="list-filter-section-title">Report type</div>
+                    <div class="list-filter-section-title">Type</div>
                     <div class="list-filter-type-seg">
                         ${types.map(t => `<button type="button" class="list-filter-type-btn${histType === t ? ' active' : ''}" data-hist-type="${t}">${TYPE_LABELS[t]}</button>`).join('')}
                     </div>
                 </div>
                 ${renderGroupPanel(f, tab)}
                 <div class="list-filter-section">
-                    <div class="list-filter-section-title">Defect Report</div>
-                    <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="histFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open only <span class="muted">(DC unchecked)</span></label>
-                </div>
-                <div class="list-filter-section">
-                    <div class="list-filter-section-title">Postpone Report</div>
-                    <label class="list-filter-check list-filter-postpone-awaiting"><input type="checkbox" id="histFilterPostponeAwaiting"${postponeAwaitingActive(f) ? ' checked' : ''}> Awaiting company approval <span class="muted">(Confirmed · Submitted · not Approved)</span></label>
-                </div>`);
+                    <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="histFilterNoClosedOut"${f.noClosedOut ? ' checked' : ''}> No Closed-out</label>
+                </div>`, { omitActions: true });
         }
 
-        pop.querySelector('[data-filter-close]')?.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            closePopover();
-        });
         pop.querySelector('[data-filter-apply]')?.addEventListener('click', () => applyFromPopover(tab, pop));
         pop.querySelector('[data-filter-clear]')?.addEventListener('click', (ev) => {
             ev.stopPropagation();
             resetPopoverForm(tab, pop);
         });
-        pop.querySelectorAll('[data-hist-type]').forEach(btn => {
-            btn.addEventListener('click', () => {
+        pop.querySelectorAll('[data-hist-type]').forEach(typeBtn => {
+            typeBtn.addEventListener('click', () => {
                 pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
+                typeBtn.classList.add('active');
+                if (tab === 'history' || (tab === 'reqList' && isSpareHistReqFilter())) {
+                    applyFromPopover(tab, pop, { keepOpen: true });
+                }
             });
         });
-        pop.querySelectorAll('[data-wp-status]').forEach(btn => {
-            btn.addEventListener('click', () => {
+        pop.querySelectorAll('[data-wp-status]').forEach(statusBtn => {
+            statusBtn.addEventListener('click', () => {
                 pop.querySelectorAll('[data-wp-status]').forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
+                statusBtn.classList.add('active');
             });
-        });
-        pop.querySelector('#histFilterOpenOnly')?.addEventListener('change', (ev) => {
-            if (!ev.target.checked) return;
-            const postponeCb = pop.querySelector('#histFilterPostponeAwaiting');
-            if (postponeCb) postponeCb.checked = false;
-            pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
-            pop.querySelector('[data-hist-type="d"]')?.classList.add('active');
-        });
-        pop.querySelector('#histFilterPostponeAwaiting')?.addEventListener('change', (ev) => {
-            if (!ev.target.checked) return;
-            const openCb = pop.querySelector('#histFilterOpenOnly');
-            if (openCb) openCb.checked = false;
-            pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
-            pop.querySelector('[data-hist-type="p"]')?.classList.add('active');
         });
         const gs = pop.querySelector('.list-filter-group-search');
         if (gs) {
@@ -461,7 +470,12 @@ const TVC_ListFilters = (function () {
                 _groupSearch = gs.value;
                 TVC_App.updateSearchClearBtnForEl?.(gs);
                 const list = pop.querySelector('.list-filter-group-list');
-                if (list) list.innerHTML = renderGroupChecks(filteredGroupNodes(state), f.groupKeys);
+                if (list) {
+                    const liveKeys = tab === 'history'
+                        ? (TVC_App.getListFilterState?.()?.history?.groupKeys || f.groupKeys)
+                        : f.groupKeys;
+                    list.innerHTML = renderGroupChecks(filteredGroupNodes(state), liveKeys);
+                }
             });
             TVC_App.updateSearchClearBtnForEl?.(gs);
         }
@@ -486,7 +500,7 @@ const TVC_ListFilters = (function () {
     function clearGroupSearch(ev) {
         ev?.stopPropagation?.();
         _groupSearch = '';
-        const pop = document.getElementById('listFilterPopover');
+        const pop = getPopover();
         const gs = pop?.querySelector('.list-filter-group-search');
         if (gs) {
             gs.value = '';
@@ -549,7 +563,7 @@ const TVC_ListFilters = (function () {
         }
     }
 
-    function applyFromPopover(tab, pop) {
+    function applyFromPopover(tab, pop, opts = {}) {
         if (tab === 'actual') {
             const pics = [...pop.querySelectorAll('[data-pic]:checked')].map(el => el.dataset.pic);
             const unassigned = !!pop.querySelector('#actFilterUnassigned')?.checked;
@@ -573,15 +587,19 @@ const TVC_ListFilters = (function () {
             TVC_SpareMenu?.setReqListFilters?.({ groupKeys, type, openOnly });
         } else {
             const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
-            const openOnly = !!pop.querySelector('#histFilterOpenOnly')?.checked;
-            const postponeAwaitingApproval = !!pop.querySelector('#histFilterPostponeAwaiting')?.checked;
+            const noClosedOut = !!pop.querySelector('#histFilterNoClosedOut')?.checked;
             const typeBtn = pop.querySelector('[data-hist-type].active');
-            let type = typeBtn?.dataset.histType || 'all';
-            if (openOnly) type = 'd';
-            else if (postponeAwaitingApproval) type = 'p';
-            TVC_App.setListFilters('history', { groupKeys, type, openOnly, postponeAwaitingApproval, awaitingShipConfirm: false });
+            const type = typeBtn?.dataset.histType || 'all';
+            TVC_App.setListFilters('history', {
+                groupKeys,
+                type,
+                noClosedOut,
+                openOnly: false,
+                postponeAwaitingApproval: false,
+                awaitingShipConfirm: false,
+            });
         }
-        closePopover();
+        if (!opts.keepOpen) closePopover();
     }
 
     function isPopoverOpen(tab) {
@@ -622,6 +640,34 @@ const TVC_ListFilters = (function () {
             const pop = getPopover();
             if (btn && pop && !pop.classList.contains('hidden')) positionPopover(btn, pop);
         }, true);
+        document.addEventListener('pointerdown', (ev) => {
+            if (!_openTab) return;
+            const pop = getPopover();
+            if (!pop || pop.classList.contains('hidden')) return;
+            if (pop.contains(ev.target)) return;
+            const btnId = filterBtnId(_openTab);
+            const btn = btnId ? document.getElementById(btnId) : null;
+            if (btn && (btn === ev.target || btn.contains(ev.target))) return;
+            closePopover();
+        });
+        document.addEventListener('change', (ev) => {
+            const pop = getPopover();
+            if (!pop || pop.classList.contains('hidden') || !pop.contains(ev.target)) return;
+            if (_openTab === 'history' && ev.target.matches('[data-group-key], #histFilterNoClosedOut')) {
+                applyFromPopover('history', pop, { keepOpen: true });
+            }
+            if (_openTab === 'reqList' && isSpareHistReqFilter()
+                && ev.target.matches('[data-group-key], #reqListFilterOpenOnly')) {
+                applyFromPopover('reqList', pop, { keepOpen: true });
+            }
+        });
+    }
+
+    function refreshOpenPopover() {
+        if (!_openTab) return;
+        const pop = getPopover();
+        if (!pop || pop.classList.contains('hidden')) return;
+        renderPopover(_openTab);
     }
 
     function describeFilters(tab, state) {
@@ -638,6 +684,7 @@ const TVC_ListFilters = (function () {
                 parts.push(`Type: ${tab === 'reqList' ? (REQ_TYPE_LABELS[f.type] || f.type) : TYPE_LABELS[f.type]}`);
             }
             if (tab === 'history' && f.openOnly) parts.push('Open only');
+            if (tab === 'history' && f.noClosedOut) parts.push('No Closed-out');
             if (tab === 'reqList' && f.openOnly) parts.push('Open');
             if (tab === 'history' && postponeAwaitingActive(f)) parts.push('Awaiting company approval');
             if (tab === 'history' && f.awaitingShipConfirm) parts.push('Awaiting confirm');
@@ -654,6 +701,7 @@ const TVC_ListFilters = (function () {
         init,
         toggle,
         closePopover,
+        refreshOpenPopover,
         syncBtn,
         activeCount,
         hasActive,

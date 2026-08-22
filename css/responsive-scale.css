@@ -40,6 +40,8 @@ body {
 .plan-layout,
 .orig-layout,
 .actual-layout,
+.spare-layout,
+#spareMenuBody,
 .main-layout {
     flex: 1;
     min-height: 0;

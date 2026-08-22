@@ -832,6 +832,8 @@ const TVC_DefectCase = (function () {
             dp_closed_by: '',
             dp_closed_date: '',
             hq_reply_exported_at: null,
+            close_forward_pending: false,
+            close_forwarded_at: null,
             last_export_filename: '',
             reported_by: overrides.reported_by || '',
             hq_synced: false,
@@ -968,6 +970,49 @@ const TVC_DefectCase = (function () {
         return !!(row?.hq_reply_exported_at);
     }
 
+    function looksLikeCompletionExport(row) {
+        return /completion/i.test(String(row.last_export_filename || ''));
+    }
+
+    /** Phase 3 DC ZIP — Master Hub still needs to export to HQ */
+    function isPhase3CompletionHubPending(row) {
+        if (!isPhase3DcComplete(row)) return false;
+        if (looksLikeCompletionExport(row) && row.hub_sync_status === 'SYNCED') return false;
+        if (typeof TVC_HubRelay !== 'undefined') {
+            if (TVC_HubRelay.canHubLegExport(row)) return true;
+            return TVC_HubRelay.isStationSynced(row)
+                && TVC_HubRelay.isHubSynced(row)
+                && !looksLikeCompletionExport(row);
+        }
+        return row.sync_status === 'SYNCED' && row.hub_sync_status !== 'SYNCED';
+    }
+
+    /** Phase 4 close ZIP — Master Hub still needs to export to Station */
+    function isPhase4CloseForwardPending(row) {
+        return !!(row && row.status === Status.CLOSED && row.close_forward_pending && !row.close_forwarded_at);
+    }
+
+    function markPhase4CloseForwardPending(row) {
+        if (!row) return row;
+        row.close_forward_pending = true;
+        row.close_forwarded_at = null;
+        return row;
+    }
+
+    function stampPhase4CloseForwarded(row) {
+        if (!row) return row;
+        row.close_forward_pending = false;
+        row.close_forwarded_at = new Date().toISOString();
+        return row;
+    }
+
+    function clearHubStampForNewOutbound(row) {
+        if (!row) return row;
+        row.hub_sync_status = null;
+        row.hub_synced_at = null;
+        return row;
+    }
+
     function belongsToDepartment(row, dept) {
         if (!dept) return true;
         return !row.department || row.department === dept;
@@ -1021,7 +1066,9 @@ const TVC_DefectCase = (function () {
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
         isPhase1Exported, isPhase3DcComplete,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, validateHqDefectReplyExport,
-        isHqReplyExported, belongsToDepartment,
+        isHqReplyExported, isPhase3CompletionHubPending, isPhase4CloseForwardPending,
+        markPhase4CloseForwardPending, stampPhase4CloseForwarded, clearHubStampForNewOutbound,
+        belongsToDepartment,
         listWorkflowStatus, listWorkflowTone, canModifyListWorkflow, canDeleteListWorkflow, isShipVerificationEditable,
     };
 })();
@@ -1097,7 +1144,12 @@ const TVC_WorkPermit = (function () {
     }
 
     function canModifyListWorkflow(row) {
-        if (!row || row.approved_at || row.approved_by) return false;
+        if (!row) return false;
+        const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser() : null;
+        if (user && TVC_RBAC.isHqAccount(user) && (row.approved_at || row.approved_by)) {
+            return !isHqReplyExported(row);
+        }
+        if (row.approved_at || row.approved_by) return false;
         if (row.sync_status === 'SYNCED') return false;
         return true;
     }

@@ -1005,8 +1005,10 @@ const TVC_WorkPermitReport = (function () {
         const canUnconfirmNow = editMode && isConfirmed && !isApproved
             && !!user && TVC_RBAC.canConfirmDepartment(user, row.department);
         const canConfirmNow = canConfirmNew || canUnconfirmNow;
-        const canApproveNow = !isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
-            && (isConfirmed || TVC_RBAC.canHqDirectApprove(user, row));
+        const canUnapproveNow = isHq() && editMode && isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
+            && !TVC_WorkPermit.isHqReplyExported(row);
+        const canApproveNow = canUnapproveNow || (!isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
+            && (isConfirmed || TVC_RBAC.canHqDirectApprove(user, row)));
         return {
             isConfirmed, isApproved, canConfirmNow, canApproveNow,
             confirmedByVal: isConfirmed
@@ -1034,15 +1036,16 @@ const TVC_WorkPermitReport = (function () {
     function renderWpApprovalHtml(row, opts = {}) {
         const forPrint = !!opts.forPrint;
         const { isConfirmed, isApproved, canConfirmNow, canApproveNow, confirmedByVal, approvedByVal } = wpApprovalState(row);
-        const confirmDis = forPrint || !canConfirmNow ? ' disabled' : '';
-        const approveDis = forPrint || !canApproveNow ? ' disabled' : '';
+        const displayOnly = forPrint || !!opts.displayOnly || getState()._wpNavSource === 'history';
+        const confirmDis = displayOnly || !canConfirmNow ? ' disabled' : '';
+        const approveDis = displayOnly || !canApproveNow ? ' disabled' : '';
         return `<section class="wr-maint-card wr-maint-approval">
-            <div class="wr-maint-approval-item${!forPrint && canConfirmNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wpConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${forPrint ? '' : ' onchange="TVC_WorkPermitReport.wpConfirmByToggle()"'}> Confirmed by</label>
+            <div class="wr-maint-approval-item${!displayOnly && canConfirmNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="wpConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${displayOnly ? '' : ' onchange="TVC_WorkPermitReport.wpConfirmByToggle()"'}> Confirmed by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
             </div>
-            <div class="wr-maint-approval-item${!forPrint && canApproveNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${forPrint ? '' : ' onchange="TVC_WorkPermitReport.wpApprovedByToggle()"'}> Approved by</label>
+            <div class="wr-maint-approval-item${!displayOnly && canApproveNow ? ' is-active' : ''}">
+                <label class="wr-maint-chk"><input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${displayOnly ? '' : ' onchange="TVC_WorkPermitReport.wpApprovedByToggle()"'}> Approved by</label>
                 <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
             </div>
         </section>`;
@@ -1294,7 +1297,14 @@ const TVC_WorkPermitReport = (function () {
             const navBtns = TVC_App?.histNavButtonsHtml
                 ? TVC_App.histNavButtonsHtml('TVC_WorkPermitReport.navWpHistory(-1)', 'TVC_WorkPermitReport.navWpHistory(1)')
                 : '';
-            const printBtn = `<button type="button" class="btn" onclick="TVC_WorkPermitReport.printWpModal()">Print</button>
+            const appr = wpApprovalState(row);
+            const isHqUser = isHq();
+            const histActionLabel = isHqUser ? 'Approve' : 'Confirm';
+            const histActionOk = !forceView && (isHqUser
+                ? (appr.canApproveNow || appr.isApproved)
+                : (isPermitConfirmable(row) || (appr.isConfirmed && !appr.isApproved)));
+            const histActionBtn = `<button type="button" class="btn" onclick="TVC_WorkPermitReport.wpHistConfirmOrApprove()"${histActionOk ? '' : ' disabled'}>${histActionLabel}</button>`;
+            const printBtn = `${histActionBtn}<button type="button" class="btn" onclick="TVC_WorkPermitReport.printWpModal()">Print</button>
                 <button type="button" class="btn" onclick="TVC_WorkPermitReport.previewWpModal()">Preview</button>`;
             const closeBtn = `<button type="button" class="btn" onclick="TVC_WorkPermitReport.closeModal()">Close</button>`;
             let centerBtns = '';
@@ -2388,6 +2398,9 @@ const TVC_WorkPermitReport = (function () {
                 await openCase(saved.id, 'view', s._wpNavSource === 'history'
                     ? { fromHistory: true, skipModalToggle: true, preservePage: true, keepNavSource: true }
                     : {});
+                if (s.currentTab === 'history' && s._wpNavSource !== 'history') {
+                    TVC_App.switchTab?.('actual');
+                }
                 await TVC_Dialog.alert('Work Permit saved.');
             }
         } catch (e) {
@@ -2467,6 +2480,86 @@ const TVC_WorkPermitReport = (function () {
         }
     }
 
+    async function wpHistConfirmOrApprove() {
+        const s = getState();
+        if (s._wpMode === 'view' || s._wpNavSource !== 'history') return;
+        const row = getModalRow();
+        const user = s.user;
+        if (!row?.id || row.id === 'wp-draft-empty' || !user) return;
+        if (isHq()) {
+            if (!TVC_RBAC.canApproveHqReport(user)) {
+                await TVC_Dialog.alert('Approve is available in HQ mode only.');
+                return;
+            }
+            if (row.approved_at || row.approved_by) {
+                try {
+                    const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, { unapprove: true });
+                    upsertPermitInState(fresh);
+                    s._wpDraft = null;
+                    s._wpDraftId = null;
+                    await refresh();
+                    await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+                    await TVC_Dialog.alert(`${wpPermitLabel(row)} approval removed.`);
+                } catch (e) {
+                    await TVC_Dialog.alert(e.message || e.code || 'Unapprove failed');
+                }
+                return;
+            }
+            try {
+                captureWpFormFields();
+                const draft = ensureWpDraft(getModalRow() || {});
+                const needConfirm = !row.confirmed_at && !row.confirmed_by;
+                const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, {
+                    confirm: needConfirm,
+                    approve: true,
+                    company_comment: draft.company_comment,
+                });
+                upsertPermitInState(fresh);
+                s._wpDraft = null;
+                s._wpDraftId = null;
+                await refresh();
+                await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+                await TVC_Dialog.alert(`${wpPermitLabel(row)} approved.`);
+            } catch (e) {
+                await TVC_Dialog.alert(e.message || e.code || 'Approve failed');
+            }
+            return;
+        }
+        if (row.confirmed_at || row.confirmed_by) {
+            if (row.approved_at || row.approved_by) {
+                await TVC_Dialog.alert('Approved items cannot be unconfirmed.');
+                return;
+            }
+            try {
+                const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, { unconfirm: true });
+                upsertPermitInState(fresh);
+                s._wpDraft = null;
+                s._wpDraftId = null;
+                await refresh();
+                await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+                await TVC_Dialog.alert(`${wpPermitLabel(row)} unconfirmed.`);
+            } catch (e) {
+                await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
+            }
+            return;
+        }
+        if (!isPermitConfirmable(row)) {
+            await TVC_Dialog.alert('Only Reported items can be confirmed.');
+            return;
+        }
+        try {
+            const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, { confirm: true });
+            upsertPermitInState(fresh);
+            s._wpDraft = null;
+            s._wpDraftId = null;
+            await refresh();
+            await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+            await TVC_Dialog.alert(`${wpPermitLabel(row)} confirmed.`);
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || e.code || 'Confirm failed');
+        }
+    }
+
     async function wpApprovedByToggle() {
         const apCb = document.getElementById('wpApprovedBy');
         if (!apCb || apCb.disabled) return;
@@ -2477,6 +2570,23 @@ const TVC_WorkPermitReport = (function () {
         if (!user || !TVC_RBAC.isHqAccount(user)) return;
 
         if (!apCb.checked) {
+            const editMode = s._wpMode !== 'view' && !wpListViewLocked();
+            const isApproved = !!(row.approved_at || row.approved_by);
+            if (editMode && isApproved && !TVC_WorkPermit.isHqReplyExported(row) && TVC_RBAC.canApproveHqReport(user)) {
+                try {
+                    const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, { unapprove: true });
+                    upsertPermitInState(fresh);
+                    s._wpDraft = null;
+                    s._wpDraftId = null;
+                    await refresh();
+                    await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+                    await TVC_Dialog.alert(`${wpPermitLabel(row)} approval removed.`);
+                } catch (e) {
+                    apCb.checked = true;
+                    await TVC_Dialog.alert(e.message || e.code || 'Unapprove failed');
+                }
+                return;
+            }
             apCb.checked = true;
             return;
         }
@@ -2515,6 +2625,11 @@ const TVC_WorkPermitReport = (function () {
         const s = getState();
         if (isWpListWindow() && s._wpListEditing) {
             if (!await TVC_Dialog.confirm({ message: 'Close without saving?' })) return;
+        }
+        if (s._wpNavSource === 'history' || s._wpNavSource === 'list' || s._wpListMode) {
+            TVC_App.restorePlanBatchSelection?.();
+        } else {
+            TVC_App.clearPlanBatchSelection?.();
         }
         teardownWpSpareUi();
         closeAllWpPicks();
@@ -2642,7 +2757,7 @@ const TVC_WorkPermitReport = (function () {
         wpGroupPickSearch, wpJobRowPickSearch,
         openCase, openNewBlank, openNewFromJob,
         saveModal, closeModal, requestCloseModal, setWorkPermitPage,
-        wpConfirmByToggle, wpApprovedByToggle,
+        wpConfirmByToggle, wpApprovedByToggle, wpHistConfirmOrApprove,
         applyFileNoFromPicker, refreshWorkPermitModal, captureWpFormFields,
         filteredPermits, listRows, isPermitConfirmable,
         canOpenWpHqCommentEdit, canOpenWpModify,

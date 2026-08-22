@@ -115,7 +115,7 @@ const TVC_WorkPermitCaseService = (function () {
         return row;
     }
 
-    async function saveApprovalMeta(user, id, { confirm, approve, unconfirm, company_comment } = {}) {
+    async function saveApprovalMeta(user, id, { confirm, approve, unconfirm, unapprove, company_comment } = {}) {
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Permit not found.'), { code: 'NOT_FOUND' });
         const today = now().slice(0, 10);
@@ -154,6 +154,16 @@ const TVC_WorkPermitCaseService = (function () {
             }
             row.approved_by = TVC_RBAC.getReportedByLabel(user) || user.display_name || 'Company';
             row.approved_at = today;
+        }
+        if (unapprove && (row.approved_at || row.approved_by)) {
+            if (!TVC_RBAC.isHqAccount(user)) {
+                throw Object.assign(new Error('HQ unapprove only.'), { code: 'FORBIDDEN' });
+            }
+            if (TVC_WorkPermit.isHqReplyExported(row)) {
+                throw Object.assign(new Error('Exported permit cannot be unapproved.'), { code: 'LOCKED' });
+            }
+            row.approved_by = '';
+            row.approved_at = '';
         }
         if (company_comment !== undefined && TVC_RBAC.isHqAccount(user)) {
             row.company_comment = String(company_comment ?? '');
