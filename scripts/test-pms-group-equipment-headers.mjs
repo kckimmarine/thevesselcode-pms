@@ -193,6 +193,8 @@ async function main() {
         assert('item edit UI wired', spareSrc.includes('renderPlanJobEquipmentHeaderEditHtml'));
         assert('item save calls saveJobEquipmentHeader', appSrc.includes('saveJobEquipmentHeader(user'));
         assert('equipment inputs in plan header', appSrc.includes('oie_maker'));
+        assert('append pre-fills group header', appSrc.includes('resolveOrigJobHeaderDraft({ department: ctx.dept, group: ctx.group })'));
+        assert('append/modify save uses SORT-1', appSrc.includes('persistOrigJobEquipmentHeader'));
     });
 
     await scenario('4) PMS Master Equipment Headers — item_sort1 lookup', async () => {
@@ -205,7 +207,7 @@ async function main() {
         const hdr = resolveGroupHeaderByKey(st, '', '01. MAIN ENGINE', 'F.O PUMP');
         assert('imported equipment header maker', hdr.maker === 'EXCEL-MAKER');
         assert('imported equipment header model', hdr.modelType === 'EXCEL-MODEL');
-        assert('groupDefHeader accepts itemSort1', spareSrc.includes('function groupDefHeader(st, label, itemSort1)'));
+        assert('groupDefHeader accepts itemSort1', spareSrc.includes('function groupDefHeader(st, label, itemSort1, store, deptScope)'));
     });
 
     await scenario('5) Reports — saved snapshot vs live header (no reset on group change)', async () => {

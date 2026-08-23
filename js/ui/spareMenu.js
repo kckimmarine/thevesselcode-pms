@@ -1315,11 +1315,12 @@ const TVC_SpareMenu = (function () {
         else upsertSpareGroupInState(st, row);
     }
 
-    function findMaintenanceGroupDef(defs, lab, dept) {
+    function findMaintenanceGroupDef(defs, lab, dept, vesselId) {
         const norm = normalizeGroupLabel;
         const matches = (defs || []).filter(gr => {
             if (norm(gr.label) !== norm(lab)) return false;
             if (dept && gr.department && gr.department !== dept) return false;
+            if (vesselId && gr.vessel_id && gr.vessel_id !== vesselId) return false;
             return true;
         });
         return matches.find(gr => !String(gr.item_sort1 || '').trim()) || null;
@@ -1334,6 +1335,7 @@ const TVC_SpareMenu = (function () {
         const dept = node?.department || st.department || '';
         const label = groupKeyLabel(st, key) || node?.label || '';
         if (!label) return;
+        const { vesselId } = await vesselScope();
         const defs = await TVC_DB.getAll('maintenance_groups').catch(() => []);
         const norm = normalizeGroupLabel;
         let targetLabels;
@@ -1346,18 +1348,20 @@ const TVC_SpareMenu = (function () {
             targetLabels = [label];
         }
         for (const lab of [...new Set(targetLabels.filter(Boolean))]) {
-            const existing = findMaintenanceGroupDef(defs, lab, dept);
+            const existing = findMaintenanceGroupDef(defs, lab, dept, vesselId);
             const defBase = existing || {
                 id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
                 department: dept,
                 label: lab,
                 sort_order: 0,
+                vessel_id: vesselId || null,
                 created_at: new Date().toISOString(),
             };
             const row = {
                 ...defBase,
                 label: lab,
                 department: dept || defBase.department || '',
+                vessel_id: defBase.vessel_id || vesselId || null,
                 item_sort1: null,
                 equipment_no: null,
                 is_critical_equipment: yesNo,
@@ -1372,33 +1376,11 @@ const TVC_SpareMenu = (function () {
 
     function isGroupCriticalEquipmentYes(st, groupLabel) {
         const h = groupDefHeader(st, groupLabel, undefined, 'pms');
-        if (h?.criticalEquipment === 'Yes') return true;
-        const lab = String(groupLabel || '').trim();
-        if (!lab) return false;
-        const inDept = (gr) => (!st.department || !gr.department || gr.department === st.department);
-        const target = normalizeGroupLabel(lab);
-        return (st.groups || []).some(gr =>
-            inDept(gr)
-            && normalizeGroupLabel(gr.label) === target
-            && gr.is_critical_equipment === true
-        );
-    }
-
-    function groupHasCriticalJob(st, groupLabel, deptScope) {
-        const target = normalizeGroupLabel(groupLabel);
-        if (!target) return false;
-        return (st.jobs || []).some(j => {
-            if (deptScope && j.department && j.department !== deptScope) return false;
-            if (normalizeGroupLabel(j.group || '') !== target) return false;
-            return j.is_critical_equipment === true;
-        });
+        return h?.criticalEquipment === 'Yes';
     }
 
     function effectiveGroupCriticalEquipment(st, groupLabel, deptScope, headerStore) {
-        const defCrit = groupDefHeader(st, groupLabel, undefined, headerStore, deptScope)?.criticalEquipment || '';
-        if (defCrit === 'Yes') return 'Yes';
-        if (headerStore === 'pms' && groupHasCriticalJob(st, groupLabel, deptScope)) return 'Yes';
-        return defCrit;
+        return groupDefHeader(st, groupLabel, undefined, headerStore, deptScope)?.criticalEquipment || '';
     }
 
     async function savePlanCriticalEquipment(rawVal) {
@@ -1460,11 +1442,18 @@ const TVC_SpareMenu = (function () {
                     dwgNo: '',
                 };
             }
+            const groupHeader = resolveSpareHeaderFromGroup(st, {
+                ...opts,
+                equipment: '',
+                groupKey,
+                groupLabel: pmsGroupNo,
+                headerStore,
+            });
             return {
-                ...blank,
+                ...groupHeader,
                 pmsGroupNo,
                 equipment,
-                machineryName: equipment,
+                machineryName: groupHeader.machineryName || equipment,
             };
         }
 
@@ -1774,17 +1763,35 @@ const TVC_SpareMenu = (function () {
         });
     }
 
+    function renderPlanJobEquipmentInput(st, draft) {
+        const groupLabel = String(draft.pmsGroupNo || '').trim();
+        const val = String(draft.equipment || '').trim();
+        const listId = 'oieEquipmentList';
+        const dl = equipmentDatalistHtml(st, groupLabel, listId);
+        return `${dl}<input class="spare-gh-input" id="oie_equipment" list="${listId}" value="${escAttr(val)}" placeholder="— Select Equipment —" onchange="TVC_App.syncOrigJobInlineHeader()" oninput="TVC_App.syncOrigJobInlineHeader()">`;
+    }
+
     function renderPlanJobEquipmentHeaderEditHtml(st, draft) {
-        const sort1 = String(draft.itemSort1 || '').trim();
-        const hint = sort1
-            ? `Equipment header for SORT-1 “${sort1}” (PMS Master Equipment Headers)`
-            : 'Equipment header for this item (saved with job)';
+        const equipment = String(draft.equipment || '').trim();
+        const crit = String(draft.criticalEquipment || '').trim() || '—';
+        const critEmpty = crit === '—';
+        const hint = equipment
+            ? `Equipment “${equipment}” — Maker ~ Serial No. follow the selected Equipment.`
+            : 'Select Equipment to fill Maker ~ Serial No. Group Critical Equipment is display only.';
         return `<section class="spare-group-header is-editing is-job-equipment-editing" aria-label="Edit item equipment header">
             <div class="spare-group-header-card">
-                <div class="spare-gh-row spare-gh-row-primary">
-                    <div class="spare-gh-field spare-gh-field-wide">
+                <div class="spare-gh-row spare-gh-row-primary spare-gh-row-plan-split spare-gh-row-primary-split">
+                    <div class="spare-gh-field spare-gh-field-wide spare-gh-field-span2">
                         <span class="spare-gh-label">PMS Group No.</span>
                         <span class="spare-gh-value spare-gh-value-primary">${esc(String(draft.pmsGroupNo || '—'))}</span>
+                    </div>
+                    <div class="spare-gh-field spare-gh-field-wide">
+                        <span class="spare-gh-label">Equipment</span>
+                        ${renderPlanJobEquipmentInput(st, draft)}
+                    </div>
+                    <div class="spare-gh-field">
+                        <span class="spare-gh-label">Critical Equipment</span>
+                        <span class="spare-gh-value${critEmpty ? ' empty' : ''}" id="oie_group_critical">${esc(crit)}</span>
                     </div>
                 </div>
                 <div class="spare-gh-row spare-gh-row-quad">
@@ -6420,11 +6427,12 @@ const TVC_SpareMenu = (function () {
             : 'reqListFilterBtn';
         const pmsLayout = !!opts.pmsLayout;
         const periodClear = pmsLayout
-            ? ''
-            : `<button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.reqListClearPeriod()">Clear</button>`;
-        const toolbarClear = pmsLayout
             ? `<button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.reqListClearPeriodAndFilters()">Clear</button>`
-            : '';
+            : `<button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.reqListClearPeriod()">Clear</button>`;
+        const filterBtn = `<div class="list-filter-wrap">
+                        <button type="button" id="${btnId}" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('reqList', event)">Filter</button>
+                    </div>`;
+        const toolbarClear = '';
         const countHtml = opts.countId
             ? `<span class="count-label" id="${escAttr(opts.countId)}">${esc(opts.countLabel || '—')}</span>`
             : '';
@@ -6440,11 +6448,9 @@ const TVC_SpareMenu = (function () {
                         ${periodInput(prefix + 'PeriodFrom', m.reqListPeriodFrom)}
                         <span class="act-period-sep">~</span>
                         ${periodInput(prefix + 'PeriodTo', m.reqListPeriodTo)}
-                        ${periodClear}
+                        ${pmsLayout ? filterBtn : periodClear}
                     </div>
-                    <div class="list-filter-wrap">
-                        <button type="button" id="${btnId}" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('reqList', event)">Filter</button>
-                    </div>
+                    ${pmsLayout ? periodClear : filterBtn}
                     ${toolbarClear}
                     ${countHtml}
                 </div>
@@ -10544,7 +10550,7 @@ const TVC_SpareMenu = (function () {
     async function suggestRequisition(alerts) {
         if (!alerts || !alerts.length) return;
         const lines = alerts.map(a =>
-            `• ${a.partNo || '—'} — ${a.name || ''} (재고 ${a.stock} / Min ${a.minStock ?? a.standard})`
+            `• ${a.partNo || '—'} — ${a.name || ''} (Stock ${a.stock} / Min ${a.minStock ?? a.standard})`
         ).join('\n');
         const job = alerts[0]?.jobCode ? `\n\nJob: ${alerts[0].jobCode}` : '';
         if (!await TVC_Dialog.confirm({ message: `Stock is below Min Stock.\n\n${lines}${job}\n\nCreate a requisition in the SPARE tab?` })) return;
@@ -10679,15 +10685,21 @@ const TVC_SpareMenu = (function () {
         let header;
         if (equipment) {
             const equipDef = groupDefHeader(st, groupLabel, equipment, equipmentStore(st));
-            header = {
-                pmsGroupNo: groupLabel,
-                equipment,
-                machineryName: equipDef?.machineryName || equipment,
-                modelType: equipDef?.modelType || '',
-                capacity: equipDef?.capacity || '',
-                maker: equipDef?.maker || '',
-                serialNo: equipDef?.serialNo || '',
-            };
+            if (equipDef?.edited) {
+                header = {
+                    pmsGroupNo: groupLabel,
+                    equipment,
+                    machineryName: equipDef.machineryName || equipment,
+                    modelType: equipDef.modelType || '',
+                    capacity: equipDef.capacity || '',
+                    maker: equipDef.maker || '',
+                    serialNo: equipDef.serialNo || '',
+                };
+            } else {
+                header = resolveSpareHeaderFromGroup(st, { groupLabel });
+                header.equipment = equipment;
+                header.machineryName = header.machineryName || equipment;
+            }
         } else {
             header = resolveSpareHeaderFromGroup(st, { groupLabel });
         }
@@ -10937,7 +10949,7 @@ const TVC_SpareMenu = (function () {
                 const critVal = critRaw !== '' ? parseCriticalEquipmentValue(critRaw) : undefined;
                 let targetLabels = [newLabel];
                 for (const lab of [...new Set(targetLabels.filter(Boolean))]) {
-                    const existing = findMaintenanceGroupDef(defs, lab, dept);
+                    const existing = findMaintenanceGroupDef(defs, lab, dept, vesselId);
                     const defBase = existing || {
                         id: 'grp-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
                         department: dept,
@@ -11330,10 +11342,10 @@ const TVC_SpareMenu = (function () {
             await finishImport(st, res);
             if (!silent) {
                 await TVC_Dialog.alert(
-                    `ENGINE 재고 적재 완료 (loadSpareInventory)\n` +
+                    `ENGINE inventory loaded (loadSpareInventory)\n` +
                     `· ${res.stats?.spares || 0} parts\n` +
-                    `· Equipment ${res.equipment} nodes (MAIN ENGINE 등 부모)\n` +
-                    `· 신규 ${res.spareCreated} · 갱신 ${res.spareUpdated}`
+                    `· Equipment ${res.equipment} nodes (parent groups such as MAIN ENGINE)\n` +
+                    `· New ${res.spareCreated} · Updated ${res.spareUpdated}`
                 );
             }
             return res;
@@ -11366,9 +11378,9 @@ const TVC_SpareMenu = (function () {
     async function loadBundledXls() {
         if (TVC_Env.isFileProtocol()) {
             await TVC_Dialog.alert(
-                'file:// 모드에서는 자동 Import가 불가합니다.\n\n' +
-                '▶ "Select spare-inventory.xls" 버튼을 직접 클릭하세요\n' +
-                '▶ 권장: npm run serve → http://localhost:3000'
+                'Automatic Import is not available in file:// mode.\n\n' +
+                '▶ Click “Select spare-inventory.xls” directly\n' +
+                '▶ Recommended: npm run serve → http://localhost:3000'
             );
             return;
         }
@@ -11396,19 +11408,19 @@ const TVC_SpareMenu = (function () {
             }
             await finishImport(st, res);
             await TVC_Dialog.alert(
-                `ENGINE 재고 Import 완료\n` +
+                `ENGINE inventory import complete\n` +
                 `· ${res.stats?.spares || res.spares?.length || 0} parts\n` +
-                `· Equipment ${res.equipment} · 신규 ${res.spareCreated} · 갱신 ${res.spareUpdated}`
+                `· Equipment ${res.equipment} · New ${res.spareCreated} · Updated ${res.spareUpdated}`
             );
         } catch (e) {
             hideImportLoading();
             const msg = e.message || e.code || String(e);
             if (/fetch|Failed to fetch|404|NOT_FOUND/i.test(msg)) {
                 if (await TVC_Dialog.confirm({ message: 
-                    '재고 파일을 불러올 수 없습니다.\n\n' +
-                    '▶ npm run serve 로 http://localhost:3000 접속 후 재시도\n' +
-                    '▶ 또는 [확인] → spare inventory.xls 직접 선택\n\n' +
-                    'Select file 창을 열까요?'
+                    'Cannot load the inventory file.\n\n' +
+                    '▶ Run npm run serve and open http://localhost:3000, then retry\n' +
+                    '▶ Or OK → select spare inventory.xls manually\n\n' +
+                    'Open the file picker?'
                  })) {
                     triggerInventoryImport();
                 }
@@ -11470,9 +11482,9 @@ const TVC_SpareMenu = (function () {
             }
             await finishImport(st, res);
             await TVC_Dialog.alert(
-                `ENGINE 재고 Import 완료\n` +
+                `ENGINE inventory import complete\n` +
                 `· ${res.stats?.spares || res.spares?.length || 0} parts\n` +
-                `· Equipment ${res.equipment} · 신규 ${res.spareCreated} · 갱신 ${res.spareUpdated}`
+                `· Equipment ${res.equipment} · New ${res.spareCreated} · Updated ${res.spareUpdated}`
             );
         } catch (e) {
             await TVC_Dialog.alert('Import failed: ' + (e.message || e.code));
@@ -22835,20 +22847,24 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!label) return;
         const item = String(item_sort1 || '').trim();
         const eqNo = parseInt(String(equipment_no ?? '').replace(/\D/g, ''), 10);
+        const { vesselId } = await vesselScope().catch(() => ({ vesselId: null }));
         const defs = await TVC_DB.getAll(storeName).catch(() => []);
         const existing = (defs || []).find(gr => gr.department === dept
             && normalizeGroupLabel(gr.label) === normalizeGroupLabel(label)
-            && String(gr.item_sort1 || '').trim() === item);
+            && String(gr.item_sort1 || '').trim() === item
+            && (!vesselId || !gr.vessel_id || gr.vessel_id === vesselId));
         const defBase = existing || {
             id: idPrefix + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
             department: dept,
             label,
             sort_order: Number.isFinite(eqNo) && eqNo > 0 ? eqNo : 0,
+            vessel_id: vesselId || null,
             created_at: new Date().toISOString(),
         };
         const row = {
             ...defBase,
             label,
+            vessel_id: defBase.vessel_id || vesselId || null,
             item_sort1: item || null,
             equipment_no: Number.isFinite(eqNo) && eqNo > 0 ? eqNo : (equipmentNoFromRow(defBase) || null),
             machinery_name: defBase.machinery_name || '',
@@ -22920,7 +22936,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         page2JobPickSearch, buildPage2JobItemsFromJobs, newConsumeJobRow, jobRowFromMaintenanceJob,
         renderMaintJobRowsHeaderHtml,
         resolveGroupHeaderByKey, getPlanGroupPickNodes, getJobsForGroupKey, findJobByCode, safeTreeLabel,
-        isGroupCriticalEquipmentYes,
+        isGroupCriticalEquipmentYes, effectiveGroupCriticalEquipment,
+        equipmentNamesForGroup, equipmentNoForName,
         CRITICAL_GROUP_KEY,
         MERGED_GEN_ENGINE_KEY,
         MERGED_GEN_ENGINE_LABEL,

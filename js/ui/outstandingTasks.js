@@ -547,5 +547,5 @@ const TVC_OutstandingTasks = (function () {
         }
     }
 
-    return { init, render, toggle, viewAll, openItem, reset };
+    return { init, render, toggle, viewAll, openItem, reset, buildPmsMatrix };
 })();

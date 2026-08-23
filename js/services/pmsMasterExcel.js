@@ -285,7 +285,7 @@ const TVC_PmsMasterExcel = (function () {
                     runHourMeta = { expected, schedule_basis: 'RUN_HOUR' };
                 } else if (Array.isArray(warnings)) {
                     const label = String(group).trim() || importGroupKey(row.department, group);
-                    warnings.push(`Run-hour 그룹 "${label}": Estimated Run Hours Next month 미입력 — H 주기 NEXT DATE는 기본 공식으로 계산됩니다.`);
+                    warnings.push(`Run-hour group "${label}": Estimated Run Hours Next month is empty — H-period NEXT DATE uses the default formula.`);
                 }
             }
         }
@@ -634,7 +634,7 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     async function exportToWorkbook(opts = {}) {
-        if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
+        if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS is not loaded.');
         const department = normDept(opts.department);
         const loaded = opts.jobs ? opts : await loadExportData(department, opts);
         const { jobs, groups, vesselId } = loaded;
@@ -1266,20 +1266,20 @@ const TVC_PmsMasterExcel = (function () {
         if (badCodes.length) {
             const sample = badCodes.slice(0, 3).map(r => `row ${r._excelRow || '?'}: "${r.job_code}"`).join(', ');
             issues.push(
-                `Jobs 시트 JOB CODE 형식 오류 (${badCodes.length}건) — "01-00-001" 형식(GG-EE-III)으로 입력하세요. EE 미지정은 00. 예: ${sample}`
+                `Jobs sheet JOB CODE format error (${badCodes.length}) — use "01-00-001" (GG-EE-III). Use 00 if EE is not assigned. e.g. ${sample}`
             );
         }
         if (skippedJobRows.length) {
             const sample = skippedJobRows.slice(0, 4).map(s => s.row).join(', ');
             issues.push(
-                `Jobs 시트 ${skippedJobRows.length}행 스킵 — DEPARTMENT 또는 JOB CODE 누락 (행: ${sample}${skippedJobRows.length > 4 ? '…' : ''}).\n`
-                + '신규 job은 Group Headers만이 아니라 Jobs 시트에 반드시 행을 추가하세요.'
+                `Jobs sheet skipped ${skippedJobRows.length} row(s) — DEPARTMENT or JOB CODE missing (rows: ${sample}${skippedJobRows.length > 4 ? '…' : ''}).\n`
+                + 'Add new jobs on the Jobs sheet, not only on Group Headers.'
             );
         }
         const jobsByGroupNo = new Map();
         for (const r of jobRows) {
             if (!r.groupNo) {
-                issues.push(`Jobs row ${r._excelRow || '?'} (${r.job_code}): GROUP NO 누락`);
+                issues.push(`Jobs row ${r._excelRow || '?'} (${r.job_code}): GROUP NO missing`);
                 continue;
             }
             const k = `${r.department}|${padGroupNo(r.groupNo)}`;
@@ -1299,11 +1299,11 @@ const TVC_PmsMasterExcel = (function () {
                 const expect = g.jobsRef;
                 if (expect != null && expect > 0 && count === 0) {
                     issues.push(
-                        `Group "${g.label}": Group Headers Jobs (ref)=${expect} 이지만 Jobs 시트에 해당 job 행이 없습니다.\n`
-                        + '→ Jobs 시트에 DEPARTMENT · GROUP NO · GROUP NAME · JOB CODE · JOB DETAIL 행을 추가하세요.'
+                        `Group "${g.label}": Group Headers Jobs (ref)=${expect} but the Jobs sheet has no matching job rows.\n`
+                        + '→ Add DEPARTMENT · GROUP NO · GROUP NAME · JOB CODE · JOB DETAIL rows on the Jobs sheet.'
                     );
                 } else if (expect != null && expect > 0 && count > 0 && count < expect) {
-                    warnings.push(`Group "${g.label}": Jobs (ref)=${expect}, Jobs 시트 ${count}건 — ${expect - count}건 누락 가능`);
+                    warnings.push(`Group "${g.label}": Jobs (ref)=${expect}, Jobs sheet ${count} — ${expect - count} may be missing`);
                 }
             }
         }
@@ -1322,11 +1322,11 @@ const TVC_PmsMasterExcel = (function () {
         }
         if (unknownEquip.length) {
             warnings.push(
-                `Jobs Equipment 이름이 Equipment Headers에 없음 (${unknownEquip.length}건). 예: ${unknownEquip.slice(0, 3).join(', ')}`
+                `Jobs Equipment name not found in Equipment Headers (${unknownEquip.length}). e.g. ${unknownEquip.slice(0, 3).join(', ')}`
             );
         }
         if (issues.length) {
-            throw new Error(`PMS Master Import 검증 실패 (${dept}):\n\n${issues.join('\n\n')}`);
+            throw new Error(`PMS Master Import validation failed (${dept}):\n\n${issues.join('\n\n')}`);
         }
         return warnings;
     }
@@ -1972,13 +1972,13 @@ const TVC_PmsMasterExcel = (function () {
             const expect = g.jobsRef;
             if (expect == null || expect <= 0) continue;
             const count = byNo.get(g.groupNo) || 0;
-            summary.push(`${g.label}: DB ${count}건 (Excel ref ${expect})${count ? ` · 예: ${samples.get(g.groupNo)}` : ''}`);
+            summary.push(`${g.label}: DB ${count} (Excel ref ${expect})${count ? ` · e.g. ${samples.get(g.groupNo)}` : ''}`);
             if (count === 0) {
                 warnings.push(
-                    `⚠ DB 반영 실패: Group "${g.label}" Excel Jobs(ref)=${expect} 인데 Import 후 job 0건`
+                    `Import failed: Group "${g.label}" Excel Jobs(ref)=${expect} but 0 jobs after Import`
                 );
             } else if (count < expect) {
-                warnings.push(`Group "${g.label}": Excel ref=${expect}, DB=${count}건`);
+                warnings.push(`Group "${g.label}": Excel ref=${expect}, DB=${count}`);
             }
         }
         return { warnings, summary };
@@ -2102,14 +2102,14 @@ const TVC_PmsMasterExcel = (function () {
         const wsG = getWorksheetCI(wb, 'Group Headers');
         const wsE = getWorksheetCI(wb, 'Equipment Headers');
         const wsJ = getWorksheetCI(wb, 'Jobs');
-        if (!wsJ) throw new Error('Jobs 시트를 찾을 수 없습니다.');
+        if (!wsJ) throw new Error('Jobs sheet not found.');
 
         const groupRows = rowsForDepartment(wsG ? parseGroupRows(wsG, department) : [], department);
         const equipRows = rowsForDepartment(wsE ? parseEquipmentRows(wsE) : [], department);
         const parsedJobs = parseJobRows(wsJ, department);
         const skippedJobRows = parsedJobs._skipped || [];
         const jobRows = rowsForDepartment(normalizeImportJobRows(parsedJobs), department);
-        if (!jobRows.length) throw new Error(`Jobs 시트에 ${department} 데이터가 없습니다.`);
+        if (!jobRows.length) throw new Error(`Jobs sheet has no ${department} data.`);
         applyJobEquipmentFromHeaders(jobRows, equipRows);
         applyCanonicalImportGroups(groupRows, jobRows, department);
         let allExisting = await TVC_DB.getAll('maintenance_jobs');
@@ -2305,11 +2305,11 @@ const TVC_PmsMasterExcel = (function () {
 
         if (verify.warnings.length) {
             throw new Error(
-                `PMS Master Import — Jobs 미반영 그룹이 있습니다.\n\n`
+                `PMS Master Import — some groups have no jobs applied.\n\n`
                 + `${verify.warnings.slice(0, 8).join('\n')}\n\n`
-                + `파싱된 Jobs: ${jobRows.length}행 · 신규 ${created} · 수정 ${updated}\n`
-                + `29~43 파싱 CODE: ${tailCodes.slice(0, 20).join(', ') || '(없음)'}\n`
-                + (rowErrors.length ? `행 오류 ${rowErrors.length}건:\n${rowErrors.slice(0, 5).join('\n')}\n\n` : '')
+                + `Parsed jobs: ${jobRows.length} rows · new ${created} · updated ${updated}\n`
+                + `29~43 parsed CODE: ${tailCodes.slice(0, 20).join(', ') || '(none)'}\n`
+                + (rowErrors.length ? `Row errors ${rowErrors.length}:\n${rowErrors.slice(0, 5).join('\n')}\n\n` : '')
                 + `Engine: ${IMPORT_BUILD_ID}`
             );
         }
@@ -2356,8 +2356,8 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     async function importFromFile(file, user, opts = {}) {
-        if (!file) throw new Error('파일이 없습니다.');
-        if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
+        if (!file) throw new Error('No file selected.');
+        if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS is not loaded.');
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(await file.arrayBuffer());
         return importFromWorkbook(wb, user, opts);

@@ -44,10 +44,65 @@ const TVC_MasterBackup = (function () {
         return scope === SCOPE.SPARE ? 'SPARE Master Data' : 'PMS Master Data';
     }
 
-    function stamp() {
+    function lastEventMetaKeys(scope) {
+        return scope === SCOPE.SPARE
+            ? { backup: TVC_META_KEYS.SPARE_MASTER_BACKUP_LAST, restore: TVC_META_KEYS.SPARE_MASTER_RESTORE_LAST }
+            : { backup: TVC_META_KEYS.PMS_MASTER_BACKUP_LAST, restore: TVC_META_KEYS.PMS_MASTER_RESTORE_LAST };
+    }
+
+    async function recordLastEvent(scope, kind, extra = {}) {
+        const keys = lastEventMetaKeys(scope);
+        const key = kind === 'restore' ? keys.restore : keys.backup;
+        if (!key) return;
+        await TVC_DB.setMeta(key, {
+            at: new Date().toISOString(),
+            kind: kind === 'restore' ? 'restore' : 'backup',
+            ...extra,
+        });
+    }
+
+    function eventAt(entry) {
+        if (!entry) return '';
+        if (typeof entry === 'string') return entry;
+        return String(entry.at || entry.date || '');
+    }
+
+    async function getLastEvents(scope) {
+        const keys = lastEventMetaKeys(scope);
+        const backup = await TVC_DB.getMeta(keys.backup);
+        const restore = await TVC_DB.getMeta(keys.restore);
+        return {
+            backupAt: eventAt(backup),
+            restoreAt: eventAt(restore),
+            backup,
+            restore,
+        };
+    }
+
+    function localDateTag() {
         const d = new Date();
         const p = (n) => String(n).padStart(2, '0');
-        return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
+        return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}`;
+    }
+
+    function backupTypeToken(scope) {
+        return scope === SCOPE.SPARE ? 'spare_backup' : 'pms_backup';
+    }
+
+    async function buildBackupFilename(scope, vesselId, department) {
+        const dateTag = localDateTag();
+        if (typeof TVC_Filename !== 'undefined' && TVC_Filename.build) {
+            return TVC_Filename.build({
+                vesselId,
+                type: backupTypeToken(scope),
+                department,
+                ext: 'zip',
+                dateTag,
+            });
+        }
+        const vessel = String(vesselId || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'unknown';
+        const dept = String(department || '').toUpperCase() === 'DECK' ? 'deck' : 'engine';
+        return `${vessel}_${backupTypeToken(scope)}_${dept}_${dateTag}_001.zip`;
     }
 
     async function resolveVesselId(user, opts = {}) {
@@ -101,9 +156,9 @@ const TVC_MasterBackup = (function () {
 
     async function exportBackup(scope, user, opts = {}) {
         if (!scope || (scope !== SCOPE.PMS && scope !== SCOPE.SPARE)) {
-            throw new Error('Backup scope가 올바르지 않습니다. (pms / spare)');
+            throw new Error('Backup scope is invalid. (pms / spare)');
         }
-        if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
+        if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded.');
         const payload = await buildPayload(scope, user, opts);
         const zip = new JSZip();
         zip.file('tvc_master_backup.json', JSON.stringify(payload, null, 2));
@@ -116,9 +171,20 @@ const TVC_MasterBackup = (function () {
             'Restore: Menu/SPARE → Database Backup & Restore → Restore',
         ].join('\n'));
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        const tag = scope === SCOPE.SPARE ? 'SPARE_MASTER_BACKUP' : 'PMS_MASTER_BACKUP';
-        const filename = `${payload.vessel_id}_${tag}_${stamp()}.zip`;
+        const filename = await buildBackupFilename(scope, payload.vessel_id, opts.department || user?.department);
         await TVC_FileExport.save(blob, filename);
+        await recordLastEvent(scope, 'backup', { filename, vessel_id: payload.vessel_id });
+        if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
+            await TVC_Sync.recordSyncHistory({
+                type: 'EXPORT',
+                direction: scope === SCOPE.SPARE ? 'SPARE_MASTER_BACKUP' : 'PMS_MASTER_BACKUP',
+                department: opts.department || user?.department || null,
+                vessel_id: payload.vessel_id,
+                filename,
+                record_count: Object.values(payload.stores || {}).reduce((n, rows) => n + (rows?.length || 0), 0),
+                status: 'SUCCESS',
+            });
+        }
         const counts = Object.fromEntries(
             Object.entries(payload.stores).map(([k, rows]) => [k, (rows || []).length])
         );
@@ -126,17 +192,17 @@ const TVC_MasterBackup = (function () {
     }
 
     async function parseBackupFile(file) {
-        if (!file) throw new Error('파일이 없습니다.');
+        if (!file) throw new Error('No file selected.');
         const name = (file.name || '').toLowerCase();
         if (name.endsWith('.json')) {
             return JSON.parse(await file.text());
         }
-        if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
+        if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded.');
         const zip = await JSZip.loadAsync(await file.arrayBuffer());
         const jsonFile = zip.file('tvc_master_backup.json')
             || zip.file(/tvc_master_backup\.json$/i)[0]
             || zip.file(/\.json$/i)[0];
-        if (!jsonFile) throw new Error('백업 파일에서 tvc_master_backup.json을 찾지 못했습니다.');
+        if (!jsonFile) throw new Error('tvc_master_backup.json was not found in the backup file.');
         return JSON.parse(await jsonFile.async('string'));
     }
 
@@ -161,16 +227,15 @@ const TVC_MasterBackup = (function () {
 
     async function restoreBackup(scope, file, user, opts = {}) {
         if (!scope || (scope !== SCOPE.PMS && scope !== SCOPE.SPARE)) {
-            throw new Error('Restore scope가 올바르지 않습니다. (pms / spare)');
+            throw new Error('Restore scope is invalid. (pms / spare)');
         }
         const payload = await parseBackupFile(file);
         if (payload?.kind !== KIND) {
-            throw new Error('TVC Master Data 백업 파일이 아닙니다.');
+            throw new Error('This is not a TVC Master Data backup file.');
         }
         if (payload.scope && payload.scope !== scope) {
             throw new Error(
-                `This file is a ${scopeLabel(payload.scope)} 백업입니다. ` +
-                `${scopeLabel(scope)} backup and cannot be used for restore in the current scope.`
+                `This file is a ${scopeLabel(payload.scope)} backup and cannot restore ${scopeLabel(scope)}.`
             );
         }
         const expectedVessel = await resolveVesselId(user, opts);
@@ -198,6 +263,11 @@ const TVC_MasterBackup = (function () {
             TVC_PMS.writeStore(payload.run_hours);
         }
 
+        await recordLastEvent(scope, 'restore', {
+            filename: file?.name || '',
+            vessel_id: payload.vessel_id || expectedVessel,
+        });
+
         return {
             scope,
             vesselId: payload.vessel_id || expectedVessel,
@@ -213,5 +283,6 @@ const TVC_MasterBackup = (function () {
         exportBackup,
         restoreBackup,
         parseBackupFile,
+        getLastEvents,
     };
 })();

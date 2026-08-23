@@ -1,6 +1,10 @@
 /** Export filename — {vessel}_{type}_{scope}_{YYYYMMDD}_{seq}.{ext}
+ *  Case Report:         {vessel}_casereport_{engine|deck}_{YYYYMMDD}_{seq}.zip
+ *  Case Report HQ reply:{vessel}_casereport_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
  *  HQ Work Permit reply: {vessel}_workpermit_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
- *  HQ Defect reply:     {vessel}_defect_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip */
+ *  HQ Defect reply:     {vessel}_defect_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
+ *  PMS Backup:          {vessel}_pms_backup_{engine|deck}_{YYYYMMDD}_{seq}.zip
+ *  SPARE Backup:        {vessel}_spare_backup_{engine|deck}_{YYYYMMDD}_{seq}.zip */
 const TVC_Filename = (function () {
     const SPARE_TYPE = {
         REQUISITION: 'requisition',

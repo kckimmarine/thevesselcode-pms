@@ -472,6 +472,7 @@ const TVC_DefectSync = (function () {
         }
         row.last_synced_at = now();
         row.last_export_filename = filename;
+        row.completion_exported_at = now();
         await TVC_DB.put('defect_cases', row);
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
@@ -608,9 +609,53 @@ const TVC_DefectSync = (function () {
         return payload;
     }
 
+    async function stampCaseReportExport(user, caseIds, filename) {
+        const isHq = TVC_RBAC.isHqAccount(user);
+        const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user) && !isHq;
+        const ts = now();
+        for (const id of caseIds || []) {
+            try {
+                let row = await TVC_DefectCaseService.get(id);
+                if (!row) continue;
+                if (isHq) {
+                    if (row.status === TVC_DefectCase.Status.CLOSED && TVC_DefectCase.isHqReplyExported(row)) {
+                        row.sync_status = 'SYNCED';
+                    } else if (!TVC_DefectCase.isHqReplyExported(row)) {
+                        row.status = TVC_DefectCase.Status.COMPANY_REVIEWED;
+                        row.phase2_locked = true;
+                        row.hq_reply_exported_at = ts;
+                        row.reply_date = row.reply_date || ts.slice(0, 10);
+                        row.reply_by = row.reply_by || TVC_RBAC.getRankLabel(user);
+                    }
+                } else {
+                    const completionReady = row.status === TVC_DefectCase.Status.AWAITING_COMPLETION
+                        || (row.status === TVC_DefectCase.Status.CLOSED && row.defect_cleared && row.phase3_locked);
+                    if (isHub && TVC_DefectCase.isPhase4CloseForwardPending(row)) {
+                        TVC_DefectCase.stampPhase4CloseForwarded(row);
+                    } else if (completionReady) {
+                        if (typeof TVC_DefectCase.clearHubStampForNewOutbound === 'function') {
+                            TVC_DefectCase.clearHubStampForNewOutbound(row);
+                        }
+                        row.completion_exported_at = ts;
+                    } else if (!row.phase1_locked && TVC_DefectCase.listWorkflowStatus(row) === 'Confirmed') {
+                        const v = TVC_DefectCase.validatePhase1(row);
+                        if (v.ok) {
+                            row = await TVC_DefectCaseService.submitToCompany(user, id);
+                        }
+                    }
+                }
+                if (typeof TVC_HubRelay !== 'undefined') TVC_HubRelay.stampExport(user, row);
+                else row.sync_status = 'SYNCED';
+                row.last_synced_at = ts;
+                if (filename) row.last_export_filename = filename;
+                await TVC_DB.put('defect_cases', row);
+            } catch (_) { /* keep Case ZIP; skip a row that cannot be stamped */ }
+        }
+    }
+
     return {
         buildPrintHtml, openPrintWindow, exportUrgentZip, exportUrgentBatchZip, exportHqReplyZip, exportHqReplyBatchZip,
-        exportCompletionZip, exportCloseZip, importPackage,
+        exportCompletionZip, exportCloseZip, importPackage, stampCaseReportExport,
         buildUrgentPayload, buildHqReplyPayload, buildCompletionPayload, buildClosePayload,
         resolveExportScope, buildExportFilename,
     };

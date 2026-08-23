@@ -504,7 +504,7 @@ const TVC_SpareMasterExcel = (function () {
     }
 
     async function exportToWorkbook(opts = {}) {
-        if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
+        if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS is not loaded.');
         const department = normDept(opts.department);
         const data = opts.spares
             ? { ...opts, department, spareGroups: opts.spareGroups || opts.groups || [], groups: opts.spareGroups || opts.groups || [] }
@@ -1158,7 +1158,7 @@ const TVC_SpareMasterExcel = (function () {
         const wsG = wb.getWorksheet('Group Headers');
         const wsE = wb.getWorksheet('Equipment Headers');
         const wsP = wb.getWorksheet('Spare Parts');
-        if (!wsP) throw new Error('Spare Parts 시트를 찾을 수 없습니다.');
+        if (!wsP) throw new Error('Spare Parts sheet not found.');
 
         const groupRows = rowsForDepartment(wsG ? parseGroupRows(wsG) : [], department);
         const equipRows = rowsForDepartment(wsE ? parseEquipmentRows(wsE) : [], department);
@@ -1410,8 +1410,8 @@ const TVC_SpareMasterExcel = (function () {
     }
 
     async function importFromFile(file, user, opts = {}) {
-        if (!file) throw new Error('파일이 없습니다.');
-        if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS가 로드되지 않았습니다.');
+        if (!file) throw new Error('No file selected.');
+        if (typeof ExcelJS === 'undefined') throw new Error('ExcelJS is not loaded.');
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(await file.arrayBuffer());
         return importFromWorkbook(wb, user, opts);

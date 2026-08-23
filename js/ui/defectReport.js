@@ -1976,29 +1976,8 @@ const TVC_DefectReport = (function () {
 
     function renderPhase3() { return ''; }
 
-    function renderPhase4(row, readonly) {
-        const show = TVC_DefectCase.isPhase3DcComplete(row)
-            || row.phase4_locked
-            || row.status === TVC_DefectCase.Status.AWAITING_COMPLETION
-            || row.status === TVC_DefectCase.Status.CLOSED;
-        if (!show) return '';
-        const p4ro = readonly || !TVC_DefectCase.isPhase4Editable(row);
-        const hq = isHq();
-        const title = hq
-            ? 'Phase 4 — Company inspection comments (HQ)'
-            : 'Phase 4 — Company inspection record';
-        return `<section class="df-phase df-phase-hq df-phase-close">
-            <h3 class="df-phase-title">${title}</h3>
-            ${hq && TVC_DefectCase.isPhase4Editable(row) ? '<p class="spare-sync-note muted">Ship DC (Phase 3) complete — optional inspection notes. Case is already closed on ship side.</p>' : ''}
-            <div class="df-grid">
-                ${fieldInput('preventive_measures', 'Preventive measures (Verified by Team Leader MTT)', row.preventive_measures, { span: 2, textarea: true, rows: 3, readonly: p4ro })}
-                ${fieldInput('dp_closed_satisfactory', 'Closed out — D.P. reply', row.dp_closed_satisfactory, { radioGroup: 'dp_sat', readonly: p4ro })}
-                ${fieldInput('dp_closed_reply', 'Additional D.P. comment (optional)', row.dp_closed_reply || '', { span: 2, textarea: true, rows: 2, readonly: p4ro })}
-                ${fieldInput('dp_closed_by', 'Reply by', row.dp_closed_by, { readonly: p4ro })}
-                ${fieldInput('dp_closed_date', 'Reply Date', row.dp_closed_date, { type: 'date', readonly: p4ro })}
-            </div>
-            ${row.phase4_locked ? `<p class="df-phase-note">🏁 Case closed — ${row.dp_closed_satisfactory ? 'Satisfactory' : 'Unsatisfactory'}.</p>` : ''}
-        </section>`;
+    function renderPhase4() {
+        return '';
     }
 
     function getDefectModalRow() {

@@ -1,0 +1,44 @@
+{
+  "version": "1.0.4",
+  "label": "TVC-PMS v1.0.4 — PMS/SPARE Master Excel · Equipment catalog · History Filter",
+  "target_skus": ["HQ_OFFICE", "VESSEL_ENGINE", "VESSEL_DECK", "VESSEL_MASTER"],
+  "changelog": [
+    "창/바로가기/Setup 파일명: TVC-PMS {VESSEL_ID}_{Master|Engine|Deck} v1.0.4 / TVC-PMS {COMPANY_ID} v1.0.4",
+    "App Update ZIP: TVC-PMS App Update v1.0.4.zip (Data Import → App Update)",
+    "PMS JOB CODE = GG-EE-III (예: 01-00-001). EE 미지정 = 00",
+    "PMS Jobs — Equipment 열 추가 (SORT-1과 분리). Equipment Headers EQ NO 필수 (01–99)",
+    "PMS / SPARE Master Excel — 위·왼쪽 맞춤, 텍스트 서식, Import 필수 열 연한 노랑",
+    "PMS Master Import — Excel에 없는 Job 삭제 (DEPARTMENT + JOB CODE). Work Report 연결 Job은 격리",
+    "SPARE Equipment는 PMS와 별도 관리 (그룹 → Equipment 각각)",
+    "SPARE Spare Parts — SPARE_ID 열 제거. Import 매칭은 DEPARTMENT + Code",
+    "SPARE Equipment Headers EQ NO 필수. Excel에서 삭제한 Parts/Equipment/Group은 Import 시 UI/DB 반영",
+    "SPARE GROUP Tree — Group Headers(또는 Spare Parts) 기준. Equipment Headers만으로는 그룹 미표시",
+    "Work History Filter — Clear/Apply 하단 고정 (타입 변경 후에도 항상 보임)"
+  ],
+  "test_checklist": [
+    "로그인 footer · 창 제목 v1.0.4",
+    "PMS Master Export — JOB CODE GG-EE-III · Equipment · EQ NO 노랑 필수",
+    "PMS Master Import — Excel에서 뺀 Job 삭제 · 그룹만 남은 행은 유지",
+    "SPARE Master Export — SPARE_ID 없음 · 필수 열 노랑 · 텍스트 서식",
+    "SPARE Master Import — Excel에서 뺀 Parts/Group 삭제 · Equipment만 있는 그룹은 트리에 안 보임",
+    "Work History Filter — P 선택 후에도 Apply 버튼 보임",
+    "App Update: TVC-PMS App Update v1.0.4.zip → Import → Install update · data preserved"
+  ],
+  "handoff": {
+    "delivery": "Drive/OneDrive link recommended",
+    "install_steps": [
+      "Run the target SKU TVC app",
+      "Menu → Data Export & Import → Import → App Update",
+      "Select TVC-PMS App Update v1.0.4.zip → Install update",
+      "Restart after install → confirm footer v1.0.4",
+      "Verify existing Work History / Master data preserved"
+    ],
+    "warnings": [
+      "App Update replaces program only — IndexedDB / Master / History preserved",
+      "Seat license re-issue not required",
+      "New vessels: Path B Setup handoff · existing pool: Path A App Update ZIP",
+      "PMS Outstanding Code counting rules deferred for later discussion",
+      "Spare Requisition quote/eval UI (unit price, currency, delivery) still deferred"
+    ]
+  }
+}

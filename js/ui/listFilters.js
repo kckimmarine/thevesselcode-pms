@@ -8,6 +8,10 @@ const TVC_ListFilters = (function () {
     let _openTab = null;
     let _groupSearch = '';
 
+    function isXferTab(tab) {
+        return tab === 'caseXfer' || tab === 'monthlyXfer';
+    }
+
     function esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     }
@@ -30,6 +34,8 @@ const TVC_ListFilters = (function () {
             if (histBtn && histBtn.getClientRects().length > 0) return 'reqHistListFilterBtn';
             return 'reqListFilterBtn';
         }
+        if (tab === 'caseXfer') return 'menuXferCaseFilterBtn';
+        if (tab === 'monthlyXfer') return 'menuXferMonthlyFilterBtn';
         return null;
     }
 
@@ -49,6 +55,22 @@ const TVC_ListFilters = (function () {
         return typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.getReqListFilters
             ? TVC_SpareMenu.getReqListFilters()
             : { groupKeys: [], type: 'all' };
+    }
+
+    function caseXferFilterState() {
+        return typeof TVC_App !== 'undefined' && TVC_App.getMenuXferCaseFilters
+            ? TVC_App.getMenuXferCaseFilters()
+            : { groupKeys: [], type: 'all' };
+    }
+
+    function monthlyXferFilterState() {
+        return typeof TVC_App !== 'undefined' && TVC_App.getMenuXferMonthlyFilters
+            ? TVC_App.getMenuXferMonthlyFilters()
+            : { groupKeys: [], type: 'all' };
+    }
+
+    function xferFilterState(tab) {
+        return tab === 'monthlyXfer' ? monthlyXferFilterState() : caseXferFilterState();
     }
 
     const REQ_TYPE_LABELS = { all: 'All', routine: 'Routine', urgent: 'Urgent', dock: 'Dock' };
@@ -79,6 +101,9 @@ const TVC_ListFilters = (function () {
         }
         if (tab === 'reqList') {
             return (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0) + (f.openOnly ? 1 : 0);
+        }
+        if (isXferTab(tab)) {
+            return (f.groupKeys?.length || 0) + (f.type && f.type !== 'all' ? 1 : 0);
         }
         return 0;
     }
@@ -284,6 +309,10 @@ const TVC_ListFilters = (function () {
             n = activeCount('workPermit', { listFilters: { workPermit: wpListFilterState() } });
         } else if (tab === 'reqList') {
             n = activeCount('reqList', { listFilters: { reqList: reqListFilterState() } });
+        } else if (tab === 'caseXfer') {
+            n = activeCount('caseXfer', { listFilters: { caseXfer: caseXferFilterState() } });
+        } else if (tab === 'monthlyXfer') {
+            n = activeCount('monthlyXfer', { listFilters: { monthlyXfer: monthlyXferFilterState() } });
         } else {
             if (!TVC_App?.getListFilterState) return;
             n = activeCount(tab, { listFilters: TVC_App.getListFilterState() });
@@ -353,8 +382,8 @@ const TVC_ListFilters = (function () {
         const btnId = filterBtnId(tab);
         const btn = btnId ? document.getElementById(btnId) : null;
         if (!pop || !btn) return;
-        if (tab !== 'consumeLog' && tab !== 'workPermit' && tab !== 'reqList' && !TVC_App?.getListFilterState) return;
-        pop.classList.toggle('list-filter-pop-history', tab === 'history' || tab === 'consumeLog' || tab === 'workPermit' || tab === 'reqList');
+        if (tab !== 'consumeLog' && tab !== 'workPermit' && tab !== 'reqList' && !isXferTab(tab) && !TVC_App?.getListFilterState) return;
+        pop.classList.toggle('list-filter-pop-history', tab === 'history' || tab === 'consumeLog' || tab === 'workPermit' || tab === 'reqList' || isXferTab(tab));
         const state = {
             listFilters: TVC_App?.getListFilterState?.() || {},
             department: TVC_App?.getAppDepartment?.(),
@@ -365,7 +394,8 @@ const TVC_ListFilters = (function () {
         };
         const f = tab === 'consumeLog' ? consumeLogFilterState()
             : (tab === 'reqList' ? reqListFilterState()
-                : (tab === 'workPermit' ? wpListFilterState() : filters(state, tab)));
+                : (tab === 'workPermit' ? wpListFilterState()
+                    : (isXferTab(tab) ? xferFilterState(tab) : filters(state, tab))));
 
         if (tab === 'actual') {
             const sections = workPlanPicSections(state);
@@ -400,6 +430,17 @@ const TVC_ListFilters = (function () {
                     </div>
                 </div>
                 ${renderGroupPanel(f, tab)}`);
+        } else if (isXferTab(tab)) {
+            const types = ['all', 'w', 'm', 'd', 'p', 'c'];
+            const curType = f.type || 'all';
+            pop.innerHTML = popShell(`
+                <div class="list-filter-section">
+                    <div class="list-filter-section-title">Type</div>
+                    <div class="list-filter-type-seg">
+                        ${types.map(t => `<button type="button" class="list-filter-type-btn${curType === t ? ' active' : ''}" data-hist-type="${t}">${TYPE_LABELS[t]}</button>`).join('')}
+                    </div>
+                </div>
+                ${renderGroupPanel(f, tab)}`, { omitActions: true });
         } else if (tab === 'workPermit') {
             const statuses = ['all', 'reported', 'confirmed', 'approved'];
             const WP_STATUS_LABELS = { all: 'All', reported: 'Reported', confirmed: 'Confirmed', approved: 'Approved' };
@@ -453,7 +494,7 @@ const TVC_ListFilters = (function () {
             typeBtn.addEventListener('click', () => {
                 pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
                 typeBtn.classList.add('active');
-                if (tab === 'history' || (tab === 'reqList' && isSpareHistReqFilter())) {
+                if (tab === 'history' || isXferTab(tab) || (tab === 'reqList' && isSpareHistReqFilter())) {
                     applyFromPopover(tab, pop, { keepOpen: true });
                 }
             });
@@ -541,7 +582,7 @@ const TVC_ListFilters = (function () {
 
     function resetPopoverForm(tab, pop) {
         pop.querySelectorAll('input[type="checkbox"]').forEach(el => { el.checked = false; });
-        if (tab === 'history' || tab === 'consumeLog' || tab === 'workPermit' || tab === 'reqList') {
+        if (tab === 'history' || tab === 'consumeLog' || tab === 'workPermit' || tab === 'reqList' || isXferTab(tab)) {
             pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
             pop.querySelector('[data-hist-type="all"]')?.classList.add('active');
             pop.querySelectorAll('[data-wp-status]').forEach(b => b.classList.remove('active'));
@@ -585,6 +626,16 @@ const TVC_ListFilters = (function () {
             const type = typeBtn?.dataset.histType || 'all';
             const openOnly = !!pop.querySelector('#reqListFilterOpenOnly')?.checked;
             TVC_SpareMenu?.setReqListFilters?.({ groupKeys, type, openOnly });
+        } else if (tab === 'caseXfer') {
+            const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
+            const typeBtn = pop.querySelector('[data-hist-type].active');
+            const type = typeBtn?.dataset.histType || 'all';
+            TVC_App?.setMenuXferCaseFilters?.({ groupKeys, type });
+        } else if (tab === 'monthlyXfer') {
+            const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
+            const typeBtn = pop.querySelector('[data-hist-type].active');
+            const type = typeBtn?.dataset.histType || 'all';
+            TVC_App?.setMenuXferMonthlyFilters?.({ groupKeys, type });
         } else {
             const groupKeys = [...pop.querySelectorAll('[data-group-key]:checked')].map(el => el.dataset.groupKey);
             const noClosedOut = !!pop.querySelector('#histFilterNoClosedOut')?.checked;
@@ -660,6 +711,12 @@ const TVC_ListFilters = (function () {
                 && ev.target.matches('[data-group-key], #reqListFilterOpenOnly')) {
                 applyFromPopover('reqList', pop, { keepOpen: true });
             }
+            if (_openTab === 'caseXfer' && ev.target.matches('[data-group-key]')) {
+                applyFromPopover('caseXfer', pop, { keepOpen: true });
+            }
+            if (_openTab === 'monthlyXfer' && ev.target.matches('[data-group-key]')) {
+                applyFromPopover('monthlyXfer', pop, { keepOpen: true });
+            }
         });
     }
 
@@ -672,14 +729,15 @@ const TVC_ListFilters = (function () {
 
     function describeFilters(tab, state) {
         const f = tab === 'reqList' ? reqListFilterState()
-            : (tab === 'consumeLog' ? consumeLogFilterState() : filters(state, tab));
+            : (tab === 'consumeLog' ? consumeLogFilterState()
+                : (isXferTab(tab) ? xferFilterState(tab) : filters(state, tab)));
         const parts = [];
         if (tab === 'actual') {
             if (f.pics?.length) parts.push(`PIC: ${f.pics.join(', ')}`);
             if (f.unassigned) parts.push('PIC: Unassigned');
             if (f.criticalOnly) parts.push('Critical Equipment');
         }
-        if (tab === 'history' || tab === 'consumeLog' || tab === 'reqList') {
+        if (tab === 'history' || tab === 'consumeLog' || tab === 'reqList' || isXferTab(tab)) {
             if (f.type && f.type !== 'all') {
                 parts.push(`Type: ${tab === 'reqList' ? (REQ_TYPE_LABELS[f.type] || f.type) : TYPE_LABELS[f.type]}`);
             }

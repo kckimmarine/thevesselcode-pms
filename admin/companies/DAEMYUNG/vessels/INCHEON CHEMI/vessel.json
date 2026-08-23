@@ -10,14 +10,14 @@
   "notes": "",
   "deploy": {
     "app_version": {
-      "VESSEL_MASTER": "1.0.4",
-      "VESSEL_ENGINE": "1.0.4",
-      "VESSEL_DECK": "1.0.4"
+      "VESSEL_MASTER": "1.0.5",
+      "VESSEL_ENGINE": "1.0.5",
+      "VESSEL_DECK": "1.0.5"
     },
     "app_updated_at": {
-      "VESSEL_MASTER": "2026-08-21",
-      "VESSEL_ENGINE": "2026-08-21",
-      "VESSEL_DECK": "2026-08-21"
+      "VESSEL_MASTER": "2026-08-23",
+      "VESSEL_ENGINE": "2026-08-23",
+      "VESSEL_DECK": "2026-08-23"
     },
     "license_issued_at": "2026-08-19"
   }

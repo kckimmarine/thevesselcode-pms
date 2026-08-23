@@ -1,0 +1,46 @@
+{
+  "version": "1.0.5",
+  "label": "TVC-PMS v1.0.5 — Case Report transfer · Job header · English alerts",
+  "target_skus": ["HQ_OFFICE", "VESSEL_ENGINE", "VESSEL_DECK", "VESSEL_MASTER"],
+  "changelog": [
+    "창/바로가기/Setup 파일명: TVC-PMS {VESSEL_ID}_{Master|Engine|Deck} v1.0.5 / TVC-PMS {COMPANY_ID} v1.0.5",
+    "App Update ZIP: TVC-PMS App Update v1.0.5.zip (Data Import → App Update)",
+    "Case Report: W / M / D / P / C를 한 ZIP으로 Export · Import (유형 선택 없음)",
+    "Monthly Report는 Case Report와 분리 (월말 스냅샷). View Data History 탭: Case Report | Monthly Report",
+    "Report History 목록 헤더 고정 · 범례 W Work Permit · M Maintenance · D Defect · P Postpone · C Consumption",
+    "SPARE History에서 Requisition을 열어도 History 탭 유지",
+    "Group Critical은 그룹 헤더만 사용. Job Critical과 독립",
+    "Job Modify / Append: Equipment 선택 · 그룹 Critical 읽기 전용 · Maker~Serial 유지",
+    "PMS Master Import 결과: 전체 그룹을 01부터 표시. 긴 알림창은 본문만 스크롤",
+    "Database Backup & Restore: Last Backup / Last Restore · Yes/No · {vessel}_{pms|spare}_backup_{dept}_{YYYYMMDD}_{seq}.zip",
+    "알림창 영문 (Import complete, 권한, 저장/삭제, ZIP Import 오류)"
+  ],
+  "test_checklist": [
+    "로그인 footer · 창 제목 v1.0.5",
+    "Data Export: Case Report 한 유형으로 W/M/D/P/C Export · Import",
+    "View Data History 탭: Case Report | Monthly Report",
+    "Report History 범례 W·M·D·P·C · 헤더 고정 스크롤",
+    "SPARE History → Requisition Detail 후 History 탭 유지",
+    "Job Modify: Equipment 선택 시 Maker~Serial 채워짐 · 그룹 Critical 읽기 전용",
+    "Job Append 후 그룹 헤더(Maker~Serial)가 비워지지 않음",
+    "PMS Master Import 결과 창이 01부터 전체 그룹을 영문으로 표시",
+    "Database Backup & Restore: Last Backup / Last Restore · 영문 Yes/No",
+    "App Update: TVC-PMS App Update v1.0.5.zip → Import → Install update · data preserved"
+  ],
+  "handoff": {
+    "delivery": "Drive/OneDrive link recommended",
+    "install_steps": [
+      "Run the target SKU TVC app",
+      "Menu → Data Export & Import → Import → App Update",
+      "Select TVC-PMS App Update v1.0.5.zip → Install update",
+      "Restart after install → confirm footer v1.0.5",
+      "Verify existing Work History / Master data preserved"
+    ],
+    "warnings": [
+      "App Update replaces program only — IndexedDB / Master / History preserved",
+      "Seat license re-issue not required",
+      "New vessels: Path B Setup handoff · existing pool: Path A App Update ZIP",
+      "Spare Requisition quote/eval UI (unit price, currency, delivery) still deferred"
+    ]
+  }
+}

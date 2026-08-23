@@ -87,7 +87,7 @@ const TVC_Sync = (function () {
         if (!fileDept || fileDept === 'ALL') return;
         if (activeDept && activeDept !== fileDept) {
             throw new Error(
-                `부서 불일치: 현재 ${TVC_RBAC.getDeptLabel(activeDept)} ${roleLabel}, Import 파일은 ${TVC_RBAC.getDeptLabel(fileDept)} 부서 데이터입니다.\n\n파일: ${filename}\n\n올바른 부서(Department) 토글을 선택한 뒤 다시 Import하세요.`
+                `Department mismatch: current ${TVC_RBAC.getDeptLabel(activeDept)} ${roleLabel}, but the import file is ${TVC_RBAC.getDeptLabel(fileDept)} data.\n\nFile: ${filename}\n\nSelect the correct Department toggle and import again.`
             );
         }
     }
@@ -107,21 +107,21 @@ const TVC_Sync = (function () {
         if (direction === 'STATION_TO_HUB') {
             if (isEngineStation || isDeckStation) {
                 throw new Error(
-                    `Station export ZIP은 Master Mode 또는 HQ Mode${fileDept ? ` (${TVC_RBAC.getDeptLabel(fileDept)} 토글)` : ''}에서 Import하세요.\n\n${fileDept === 'ENGINE' ? 'Engine export는 Deck Mode에 반영되지 않습니다.' : fileDept === 'DECK' ? 'Deck export는 Engine Mode에 반영되지 않습니다.' : 'Engine/Deck export는 상대 부서 Mode에 반영되지 않습니다.'}`
+                    `Import Station export ZIP in Master Mode or HQ Mode${fileDept ? ` (${TVC_RBAC.getDeptLabel(fileDept)} toggle)` : ''}.\n\n${fileDept === 'ENGINE' ? 'Engine export is not applied in Deck Mode.' : fileDept === 'DECK' ? 'Deck export is not applied in Engine Mode.' : 'Engine/Deck export is not applied in the other department Mode.'}`
                 );
             }
             if (!isMaster && !isHq) {
-                throw new Error('Station export ZIP은 Master Mode 또는 HQ Mode에서 Import할 수 있습니다.');
+                throw new Error('Station export ZIP can be imported in Master Mode or HQ Mode.');
             }
             if ((isMaster || isHq) && !activeDept) {
-                throw new Error(`Import 전 ${fileDept ? TVC_RBAC.getDeptLabel(fileDept) : 'Deck 또는 Engine'} 부서 토글을 선택하세요.`);
+                throw new Error(`Select the ${fileDept ? TVC_RBAC.getDeptLabel(fileDept) : 'Deck or Engine'} department toggle before Import.`);
             }
-            assertDeptToggleMatch(activeDept, fileDept, filename, '토글이 선택되어 있으나');
+            assertDeptToggleMatch(activeDept, fileDept, filename, 'toggle is selected but');
             if (parsed && (parsed.scope === 'deck' || parsed.scope === 'engine') && activeDept) {
                 const expectedScope = TVC_Filename.scopeToken(activeDept, false);
                 if (parsed.scope !== expectedScope) {
                     throw new Error(
-                        `부서 불일치: 현재 ${importScopeLabel(expectedScope)} 토글이 선택되어 있으나, Import 파일은 ${importScopeLabel(parsed.scope)} 부서 데이터입니다.\n\n파일: ${filename}\n\n올바른 부서(Department) 토글을 선택한 뒤 다시 Import하세요.`
+                        `Department mismatch: the ${importScopeLabel(expectedScope)} toggle is selected, but the import file is ${importScopeLabel(parsed.scope)} data.\n\nFile: ${filename}\n\nSelect the correct Department toggle and import again.`
                     );
                 }
             }
@@ -133,28 +133,28 @@ const TVC_Sync = (function () {
 
         if (hqImportFromShip) {
             if (!activeDept) {
-                throw new Error('Import 전 Deck 또는 Engine 부서 토글을 선택하세요.');
+                throw new Error('Select the Deck or Engine department toggle before Import.');
             }
             if (parsed && (parsed.scope === 'deck' || parsed.scope === 'engine')) {
                 const expectedScope = TVC_Filename.scopeToken(activeDept, false);
                 if (parsed.scope !== expectedScope) {
                     throw new Error(
-                        `부서 불일치: 현재 ${importScopeLabel(expectedScope)} 토글이 선택되어 있으나, Import 파일은 ${importScopeLabel(parsed.scope)} 부서 데이터입니다.\n\n파일: ${filename}\n\n올바른 부서(Department) 토글을 선택한 뒤 다시 Import하세요.`
+                        `Department mismatch: the ${importScopeLabel(expectedScope)} toggle is selected, but the import file is ${importScopeLabel(parsed.scope)} data.\n\nFile: ${filename}\n\nSelect the correct Department toggle and import again.`
                     );
                 }
             }
-            assertDeptToggleMatch(activeDept, fileDept, filename, '토글이 선택되어 있으나');
+            assertDeptToggleMatch(activeDept, fileDept, filename, 'toggle is selected but');
         }
 
         if (shipImportFromHq) {
             if (isHq) {
-                throw new Error('HQ 회신 ZIP은 선박(Master / Engine / Deck Mode)에서 Import하세요.');
+                throw new Error('Import HQ reply ZIP on the vessel (Master / Engine / Deck Mode).');
             }
             if (fileDept === 'ENGINE' && isDeckStation) {
-                throw new Error('Engine 부서 HQ 회신은 Deck Mode에 반영되지 않습니다. Engine Mode 또는 Master Mode(Engine 토글)에서 Import하세요.');
+                throw new Error('Engine HQ reply is not applied in Deck Mode. Import in Engine Mode or Master Mode (Engine toggle).');
             }
             if (fileDept === 'DECK' && isEngineStation) {
-                throw new Error('Deck 부서 HQ 회신은 Engine Mode에 반영되지 않습니다. Deck Mode 또는 Master Mode(Deck 토글)에서 Import하세요.');
+                throw new Error('Deck HQ reply is not applied in Engine Mode. Import in Deck Mode or Master Mode (Deck toggle).');
             }
             if (parsed) {
                 if (parsed.isHqReply && parsed.department) {
@@ -162,17 +162,17 @@ const TVC_Sync = (function () {
                         const expectedScope = TVC_Filename.scopeToken(activeDept, false);
                         if (parsed.department !== expectedScope) {
                             throw new Error(
-                                `부서 불일치: 현재 ${TVC_RBAC.getDeptLabel(activeDept)} 부서이나, Import 파일은 ${importScopeLabel(parsed.department)} HQ 회신 데이터입니다.\n\n파일: ${filename}\n\n올바른 부서 PC/토글에서 Import하세요.`
+                                `Department mismatch: current department is ${TVC_RBAC.getDeptLabel(activeDept)}, but the import file is ${importScopeLabel(parsed.department)} HQ reply data.\n\nFile: ${filename}\n\nImport on the correct department PC/toggle.`
                             );
                         }
                     }
                 } else if (parsed.scope !== 'hq' && !parsed.isHqReply) {
                     throw new Error(
-                        `잘못된 HQ 회신 파일입니다 (scope: ${importScopeLabel(parsed.scope)}). HQ 회신 ZIP은 {engine|deck}_hq 형식이어야 합니다.\n\n파일: ${filename}`
+                        `Invalid HQ reply file (scope: ${importScopeLabel(parsed.scope)}). HQ reply ZIP must use {engine|deck}_hq format.\n\nFile: ${filename}`
                     );
                 }
             }
-            assertDeptToggleMatch(activeDept, fileDept, filename, '모드이나');
+            assertDeptToggleMatch(activeDept, fileDept, filename, 'mode but');
         }
 
         return { ok: true, activeDept, fileDept };
@@ -225,9 +225,17 @@ const TVC_Sync = (function () {
             pendingOnly: !opts.hubRelayPending,
             hubRelayPending: !!opts.hubRelayPending,
         });
-        if (opts.reportIds?.length) {
+        if (Array.isArray(opts.reportIds)) {
             const idSet = new Set(opts.reportIds);
             rows.daily_work_reports = (rows.daily_work_reports || []).filter(r => idSet.has(r.id));
+        }
+        if (opts.consumeLogIds?.length) {
+            const logs = await TVC_DB.getAll('consume_logs').catch(() => []);
+            const idSet = new Set(opts.consumeLogIds);
+            rows.consume_logs = (logs || []).filter(l => idSet.has(l.id));
+            if (dept) {
+                rows.consume_logs = rows.consume_logs.filter(l => !l.department || l.department === dept);
+            }
         }
         return rows;
     }
@@ -235,6 +243,72 @@ const TVC_Sync = (function () {
     /** Monthly Report — 부서 전체 스냅샷 (sync_status / hub relay 무관) */
     async function collectMonthlySnapshot(dept) {
         return collectDeptRows(dept, { pendingOnly: false, hubRelayPending: false });
+    }
+
+    function collectCaseReviewJobRefs(jobs, reports, defects, permits, logs) {
+        const byId = new Map(jobs.map(j => [j.id, j]));
+        const byCode = new Map(jobs.filter(j => j.job_code).map(j => [j.job_code, j]));
+        const picked = new Map();
+        const addJob = (id, code) => {
+            const job = (id && byId.get(id)) || (code && byCode.get(code));
+            if (job) picked.set(job.id, job);
+        };
+        (reports || []).forEach(r => {
+            TVC_WorkReport.fromLegacy?.(r);
+            (r.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code));
+            addJob(r.maintenance_job_id, r.job_code || r.pms_job_code);
+        });
+        (defects || []).forEach(d => {
+            addJob(d.maintenance_job_id, d.pms_job_code || d.job_code);
+            (d.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code));
+        });
+        (permits || []).forEach(p => {
+            addJob(p.maintenance_job_id, p.job_code || p.pms_job_code);
+            (p.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code));
+        });
+        (logs || []).forEach(l => {
+            addJob(null, l.job_code);
+            (l.job_items || l.lines || []).forEach(item => addJob(item.maintenance_job_id, item.job_code));
+        });
+        return [...picked.values()];
+    }
+
+    async function collectCaseReview(dept, ids = {}) {
+        const reportIds = new Set(ids.reportIds || []);
+        const defectIds = new Set(ids.defectIds || []);
+        const permitIds = new Set(ids.workPermitIds || []);
+        const consumeIds = new Set(ids.consumeLogIds || []);
+        const [jobs, reports, defects, permits, logs] = await Promise.all([
+            TVC_DB.getAll('maintenance_jobs'),
+            TVC_DB.getAll('daily_work_reports'),
+            TVC_DB.getAll('defect_cases').catch(() => []),
+            TVC_DB.getAll('work_permits').catch(() => []),
+            TVC_DB.getAll('consume_logs').catch(() => []),
+        ]);
+        const deptByCode = new Map(jobs.map(j => [j.job_code, j.department]));
+        const pReports = (reports || []).filter(r => reportIds.has(r.id)
+            && (!dept || TVC_WorkReport.belongsToDepartment(r, dept, deptByCode)));
+        const pDefects = (defects || []).filter(d => defectIds.has(d.id)
+            && (!dept || TVC_DefectCase.belongsToDepartment(d, dept)));
+        const pPermits = (permits || []).filter(p => permitIds.has(p.id)
+            && (!dept || TVC_WorkPermit.belongsToDepartment(p, dept)));
+        const pLogs = (logs || []).filter(l => consumeIds.has(l.id)
+            && (!dept || !l.department || l.department === dept));
+        return {
+            maintenance_jobs: collectCaseReviewJobRefs(jobs, pReports, pDefects, pPermits, pLogs),
+            daily_work_reports: pReports,
+            defect_cases: pDefects,
+            work_permits: pPermits,
+            consume_logs: pLogs,
+            spare_parts: [],
+            ship_components: [],
+            audit_logs: [],
+            requisitions: [],
+            job_bom: [],
+            universal_catalog: [],
+            maintenance_groups: [],
+            spare_groups: [],
+        };
     }
 
     async function collectDeptRows(dept, opts = {}) {
@@ -304,22 +378,35 @@ const TVC_Sync = (function () {
         if (direction === 'STATION_TO_HUB' && typeof TVC_Space !== 'undefined') {
             TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.STATION_EXPORT);
         }
-        if (!dept) throw new Error('부서(DECK/ENGINE)를 선택해야 합니다.');
+        if (!dept) throw new Error('Select a department (DECK / ENGINE).');
         const accessDept = typeof TVC_Space !== 'undefined' && user?.station
             ? TVC_Space.canAccessDepartment(user, dept)
             : TVC_RBAC.canAccessDepartment(user, dept);
-        if (!accessDept) throw new Error(`이 계정은 ${dept} 부서 데이터를보낼 권한이 없습니다.`);
+        if (!accessDept) throw new Error(`This account cannot export ${dept} department data.`);
 
         const hubRelayPending = typeof TVC_HubRelay !== 'undefined'
             && TVC_HubRelay.isHubRelayExport(user)
             && direction === 'SHIP_TO_HQ';
 
-        const delta = opts.monthlyExport
-            ? await collectMonthlySnapshot(dept)
-            : await collectDelta(dept, { reportIds: opts.reportIds, hubRelayPending });
+        const delta = opts.caseReview
+            ? await collectCaseReview(dept, opts.caseReview)
+            : opts.monthlyExport
+                ? await collectMonthlySnapshot(dept)
+                : await collectDelta(dept, {
+                    reportIds: opts.reportIds,
+                    consumeLogIds: opts.consumeLogIds,
+                    hubRelayPending,
+                });
+        if (opts.monthlyExport && Array.isArray(opts.reportIds)) {
+            const idSet = new Set(opts.reportIds);
+            delta.daily_work_reports = (delta.daily_work_reports || []).filter(r => idSet.has(r.id));
+        }
         const recordCount = Object.values(delta).reduce((sum, rows) => sum + (rows?.length || 0), 0);
-        if (!opts.monthlyExport && recordCount === 0) {
-            throw new Error('보낼 변경 데이터가 없습니다. Confirm된 Work Report가 있는지 확인하세요.');
+        if (!opts.monthlyExport && !opts.caseReview && recordCount === 0) {
+            throw new Error('No changes to export. Confirm Work Reports first.');
+        }
+        if (opts.caseReview && recordCount === 0) {
+            throw new Error('No Case Reports to export.');
         }
         const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user.vessel_id || 'UNKNOWN';
         const companyId = licensedCompanyId();
@@ -345,6 +432,8 @@ const TVC_Sync = (function () {
                 exported_by: user.username,
                 schema_version: 6,
                 ...(opts.monthlyExport ? { package_type: 'MONTHLY' } : {}),
+                ...(opts.monthlyExport && opts.outstanding ? { outstanding: opts.outstanding } : {}),
+                ...(opts.caseReview ? { package_type: 'CASE' } : {}),
             },
             ...delta,
             run_hours: runHours,
@@ -356,7 +445,9 @@ const TVC_Sync = (function () {
         const zip = new JSZip();
         zip.file('tvc_sync.json', JSON.stringify(payload, null, 2));
         zip.file('tvc_station_export.json', JSON.stringify(payload, null, 2));
-        zip.file('README.txt', `TVC-PMS Sync Package\nVessel: ${vesselId}\nDept: ${dept}\nDate: ${payload.export_meta.export_date}\nDirection: ${direction}`);
+        zip.file('README.txt', opts.caseReview
+            ? `TVC-PMS Case Report\nVessel: ${vesselId}\nDept: ${dept}\nDate: ${payload.export_meta.export_date}\nDirection: ${direction}\nIncludes W/M/D/P/C for Company period review.`
+            : `TVC-PMS Sync Package\nVessel: ${vesselId}\nDept: ${dept}\nDate: ${payload.export_meta.export_date}\nDirection: ${direction}`);
 
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         let filename;
@@ -372,13 +463,30 @@ const TVC_Sync = (function () {
                 ext: 'zip',
                 dateTag: exportDate,
             });
+        } else if (opts.caseReview && typeof TVC_Filename !== 'undefined') {
+            const scope = direction === 'HQ_TO_SHIP'
+                ? TVC_Filename.hqReplyScopeToken(dept)
+                : undefined;
+            filename = await TVC_Filename.build({
+                vesselId,
+                type: 'casereport',
+                department: dept,
+                scope,
+                ext: 'zip',
+                dateTag: exportDate,
+            });
+        } else if (opts.caseReview) {
+            const scope = direction === 'HQ_TO_SHIP'
+                ? `${String(dept || 'ENGINE').toLowerCase()}_hq`
+                : String(dept || 'ENGINE').toLowerCase();
+            filename = `${String(vesselId || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '')}_casereport_${scope}_${exportDate}_001.zip`;
         } else {
             const prefix = direction === 'STATION_TO_HUB' ? `${vesselId}_${stationId || dept}_STATION` : `${vesselId}_${dept}_PMS_EXPORT`;
             filename = `${prefix}_${exportDate}.zip`;
         }
         await TVC_FileExport.save(blob, filename);
 
-        await markExported(delta, user);
+        if (!opts.skipMarkExported) await markExported(delta, user);
         await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
@@ -395,7 +503,8 @@ const TVC_Sync = (function () {
             status: 'SUCCESS',
             space: spaceOf(user),
             station_id: stationId || null,
-            peer: opts.monthlyExport
+            package_type: opts.caseReview ? 'CASE' : (opts.monthlyExport ? 'MONTHLY' : undefined),
+            peer: opts.monthlyExport || opts.caseReview
                 ? 'Master/HQ'
                 : (direction === 'STATION_TO_HUB'
                     ? 'Master'
@@ -423,7 +532,7 @@ const TVC_Sync = (function () {
     }
 
     async function markExported(delta, user) {
-        const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups', 'spare_groups', 'defect_cases'];
+        const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups', 'spare_groups', 'defect_cases', 'work_permits', 'consume_logs'];
         for (const store of stores) {
             for (const row of delta[store] || []) {
                 if (typeof TVC_HubRelay !== 'undefined') {
@@ -464,19 +573,19 @@ const TVC_Sync = (function () {
 
         if (isHubMerge) {
             if (fileDirection && fileDirection !== 'STATION_TO_HUB' && fileDirection !== 'SHIP_TO_HQ') {
-                throw new Error('Captain Hub는 Station Export(STATION_TO_HUB) 패키지만 병합할 수 있습니다.');
+                throw new Error('Captain Hub can merge Station Export (STATION_TO_HUB) packages only.');
             }
         } else if (fileDirection === 'STATION_TO_HUB') {
             if (!isHq) {
-                throw new Error('Station export ZIP은 Master Mode 또는 HQ Mode에서 Import하세요.');
+                throw new Error('Import Station export ZIP in Master Mode or HQ Mode.');
             }
         }
 
-        if (!dept) throw new Error('Import할 부서(DECK/ENGINE)를 선택해야 합니다.');
+        if (!dept) throw new Error('Select a department to import (DECK / ENGINE).');
         const accessDept = typeof TVC_Space !== 'undefined' && user?.station && !isHubMerge
             ? TVC_Space.canAccessDepartment(user, dept)
             : TVC_RBAC.canAccessDepartment(user, dept);
-        if (!accessDept && !isHubMerge) throw new Error(`이 계정은 ${dept} 부서 데이터를 가져올 권한이 없습니다.`);
+        if (!accessDept && !isHubMerge) throw new Error(`This account cannot import ${dept} department data.`);
 
         const importVesselId = payload.export_meta?.vessel_id || null;
         const failImport = async (err) => {
@@ -557,6 +666,7 @@ const TVC_Sync = (function () {
             status,
             space: spaceOf(user),
             station_id: payload.export_meta?.station_id || null,
+            package_type: payload.export_meta?.package_type || undefined,
             peer: isHubMerge && importDir === 'STATION_TO_HUB'
                 ? (dept === 'ENGINE' ? 'Engine' : (dept === 'DECK' ? 'Deck' : 'Station'))
                 : (importDir === 'HQ_TO_SHIP' || importDir === 'SHIP_TO_HQ' ? (isHq ? null : 'Company') : null),
@@ -575,6 +685,7 @@ const TVC_Sync = (function () {
             if (kind === 'group') return !row.department || row.department === dept;
             if (kind === 'defect') return TVC_DefectCase.belongsToDepartment(row, dept);
             if (kind === 'work_permit') return TVC_WorkPermit.belongsToDepartment(row, dept);
+            if (kind === 'consume') return !row.department || row.department === dept;
             return true;
         };
         const stamp = (row, kind) => {
@@ -644,7 +755,34 @@ const TVC_Sync = (function () {
                 }
                 if (importAuthoritative || shouldApplyIncoming(existing, incoming)) {
                     preserveAuthorFields(existing, incoming);
+                    const keepShipDefect = (!isHq && kind === 'defect'
+                        && /HQ_TO_SHIP|DEFECT_REPLY|DEFECT_CLOSE/i.test(payload.export_meta?.direction || ''))
+                        ? {
+                            defect_cleared: existing.defect_cleared,
+                            phase3_locked: existing.phase3_locked,
+                            completed_at: existing.completed_at,
+                            ship_verified_after_clear: existing.ship_verified_after_clear,
+                            ship_verified_by: existing.ship_verified_by,
+                            ship_verified_date: existing.ship_verified_date,
+                            job_schedule_applied_at: existing.job_schedule_applied_at,
+                            completion_exported_at: existing.completion_exported_at,
+                            last_export_filename: existing.last_export_filename,
+                            working_hours: existing.working_hours,
+                            working_member: existing.working_member,
+                            shore_support: existing.shore_support,
+                            shore_technician: existing.shore_technician,
+                        }
+                        : null;
                     Object.assign(existing, incoming);
+                    if (keepShipDefect) {
+                        Object.keys(keepShipDefect).forEach(k => {
+                            if (keepShipDefect[k] !== undefined && keepShipDefect[k] !== null && keepShipDefect[k] !== '') {
+                                existing[k] = keepShipDefect[k];
+                            }
+                        });
+                        if (keepShipDefect.defect_cleared) existing.defect_cleared = true;
+                        if (keepShipDefect.phase3_locked) existing.phase3_locked = true;
+                    }
                     stampImported(existing, kind);
                     await TVC_DB.put(storeName, existing);
                 }
@@ -782,6 +920,7 @@ const TVC_Sync = (function () {
         await mergeStore('universal_catalog', payload.universal_catalog, 'catalog', 'universal_code');
         await mergeStore('defect_cases', payload.defect_cases, 'defect');
         await mergeStore('work_permits', payload.work_permits, 'work_permit');
+        await mergeStore('consume_logs', payload.consume_logs, 'consume');
 
         for (const c of payload.company_comments || []) {
             const reports = await TVC_DB.indexGetAll('daily_work_reports', 'by_job_code', c.job_code);
@@ -931,7 +1070,7 @@ const TVC_Sync = (function () {
     }
 
     return {
-        exportZip, exportCompanyZip, importZip, importPayload, collectDelta, collectMonthlySnapshot, mergePayload,
+        exportZip, exportCompanyZip, importZip, importPayload, collectDelta, collectMonthlySnapshot, collectCaseReview, mergePayload,
         getHistory, recordSyncHistory, validateImportVesselId, validateImportPackageScope, resolveFileDepartment,
         resolveActiveImportDepartment, resolveExpectedVesselId,
         assertLicenseForPackage, licensedCompanyId,

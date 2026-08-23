@@ -85,6 +85,11 @@ const TVC_Dialog = (function () {
             }
         }
         msgEl.textContent = o.message || '';
+        const box = modal.querySelector('.tvc-dialog-box');
+        const longMsg = String(o.message || '').split('\n').length >= 8;
+        box?.classList.toggle('is-long', longMsg);
+        msgEl.scrollTop = 0;
+        if (box) box.scrollTop = 0;
         if (extraEl && o.password) {
             extraEl.classList.remove('hidden');
             extraEl.innerHTML = `<input type="password" id="tvcDialogInput" class="tvc-dialog-input" placeholder="${esc(o.placeholder || 'Password')}" autocomplete="off">`;

@@ -28,7 +28,7 @@ const TVC_MaintenancePlan = (function () {
             return data?.vessel_id || user?.vessel_id || 'INCHEON CHEMI';
         }
         return TVC_MasterVesselScope.resolve(user, {
-            vesselId: data?.vessel_id,
+            vesselId: data?.vessel_id || data?.vesselId,
             selectedVesselId: data?.selectedVesselId,
         });
     }

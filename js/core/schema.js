@@ -131,6 +131,10 @@ const TVC_META_KEYS = {
     ORIGINAL_PLAN_LOCK: 'original_plan_lock_v1',
     PMS_MASTER_IMPORTED: 'pms_master_imported_at',
     MASTER_VESSEL_SCOPE: 'master_vessel_scope_v1',
+    PMS_MASTER_BACKUP_LAST: 'pms_master_backup_last',
+    PMS_MASTER_RESTORE_LAST: 'pms_master_restore_last',
+    SPARE_MASTER_BACKUP_LAST: 'spare_master_backup_last',
+    SPARE_MASTER_RESTORE_LAST: 'spare_master_restore_last',
 };
 
 function pmsMasterCanonicalMetaKey(vesselId, department) {
@@ -832,6 +836,7 @@ const TVC_DefectCase = (function () {
             dp_closed_by: '',
             dp_closed_date: '',
             hq_reply_exported_at: null,
+            completion_exported_at: null,
             close_forward_pending: false,
             close_forwarded_at: null,
             last_export_filename: '',
@@ -971,6 +976,7 @@ const TVC_DefectCase = (function () {
     }
 
     function looksLikeCompletionExport(row) {
+        if (row?.completion_exported_at) return true;
         return /completion/i.test(String(row.last_export_filename || ''));
     }
 
