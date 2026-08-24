@@ -26,7 +26,7 @@ function readAppVersion(app) {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
         if (pkg?.version) return String(pkg.version).trim();
     } catch (_) { /* ignore */ }
-    return '1.0.5';
+    return '1.0.6';
 }
 
 function versionSuffix(app, explicitVersion) {

@@ -81,14 +81,15 @@ const TVC_InventoryService = (function () {
 
             const row = await api.get('spare_parts', line.spare_part_id);
             if (!row) {
-                throw Object.assign(new Error(`부품을 찾을 수 없습니다: ${line.spare_part_id}`), { code: 'NOT_FOUND' });
+                throw Object.assign(new Error(`Part not found: ${line.spare_part_id}`), { code: 'NOT_FOUND' });
             }
 
             const onHand = Number(row.qty_on_hand) || 0;
             if (isConsumption && onHand < qty && !meta.forceOk) {
+                const partNo = row.part_no || line.part_no || line.spare_part_id;
                 throw Object.assign(
-                    new Error(`재고 부족: ${row.part_no} (보유 ${onHand}, 요청 ${qty})`),
-                    { code: 'STOCK', part: row.part_no }
+                    new Error(`Insufficient stock: ${partNo} (on hand ${onHand}, requested ${qty})`),
+                    { code: 'STOCK', part: partNo, onHand, requested: qty }
                 );
             }
 
@@ -170,7 +171,7 @@ const TVC_InventoryService = (function () {
         assertStockPermission(user, meta.tx_type, meta.skipRbac);
         const validLines = (lines || []).filter(l => l.spare_part_id && Number(l.qty) > 0);
         if (!validLines.length) {
-            throw Object.assign(new Error('적용할 부품/수량이 없습니다.'), { code: 'EMPTY' });
+            throw Object.assign(new Error('No parts or quantities to apply.'), { code: 'EMPTY' });
         }
         return TVC_DB.runTransaction(['spare_parts', 'inventory_history', 'audit_logs'], async (api) => {
             const res = await applyStockTxApi(api, user, validLines, meta);

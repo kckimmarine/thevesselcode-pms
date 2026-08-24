@@ -1,4 +1,4 @@
-/* Critical Postpone — Request Export (POSTPONE_REQUEST_TO_HQ) + HQ Reply (POSTPONE_REPLY_HQ_TO_SHIP) */
+/* Postpone — Request Export (POSTPONE_REQUEST_TO_HQ) + HQ Reply (POSTPONE_REPLY_HQ_TO_SHIP) */
 const TVC_PostponeSync = (function () {
     const SCHEMA_VERSION = '1.0';
     const now = () => new Date().toISOString();
@@ -21,7 +21,6 @@ const TVC_PostponeSync = (function () {
         const approved = TVC_RBAC.isApprovedStatus(row.status, row.is_locked);
         const confirmed = TVC_RBAC.isConfirmedStatus(row.status, row.is_locked);
         const postponeDate = esc(row.postpone_date || form.postponeDate || '—');
-        const approvedDate = esc(row.approved_postpone_date || '—');
         const originalDueDate = esc(
             TVC_WorkReport.postponeOriginalDueDate(row, job) || '—',
         );
@@ -42,8 +41,7 @@ const TVC_PostponeSync = (function () {
   <div><b>To:</b> Company (HQ)</div>
   <div><b>Report ID:</b> ${esc(row.id)}</div>
 </div>
-<h1>CRITICAL EQUIPMENT — POSTPONE REQUEST</h1>
-<div class="banner"><b>⚠ Critical Equipment</b> — Company approval required before schedule is finalized.</div>
+<h1>POSTPONE REQUEST</h1>
 <div class="meta">
   <div><b>Ship Name:</b> ${ship}</div>
   <div><b>Report Date:</b> ${esc(row.report_date || '—')}</div>
@@ -64,9 +62,9 @@ const TVC_PostponeSync = (function () {
 </div>
 
 <div class="phase">
-<h2>Phase 2 — Company Approval</h2>
+<h2>Phase 2 — Company Reply</h2>
 <table>
-  <tr><th>Approved Postpone Date</th><td colspan="3">${approved ? approvedDate : '<i>Awaiting company approval</i>'}</td></tr>
+  <tr><th>Postpone Date</th><td colspan="3">${postponeDate}</td></tr>
   <tr><th>Company Comment</th><td colspan="3">${approved ? esc(row.company_comment || '—') : '—'}</td></tr>
   <tr><th>Approved by / Date</th><td>${approved ? 'Company' : '—'}</td><td colspan="2">${approved ? esc(row.approved_at?.slice(0, 10) || '') : ''}</td></tr>
 </table>
@@ -208,9 +206,6 @@ const TVC_PostponeSync = (function () {
         if (!TVC_RBAC.isApprovedStatus(row.status, row.is_locked)) {
             throw new Error('HQ must approve the postpone report before reply export.');
         }
-        if (!row.approved_postpone_date) {
-            throw new Error('Approved Postpone Date is required before reply export.');
-        }
         const payload = await buildHqReplyPayload(user, row, job);
         const exportDate = now().slice(0, 10).replace(/-/g, '');
         const jobCode = reportJobCode(row).replace(/[^\w.-]+/g, '_');
@@ -226,6 +221,11 @@ const TVC_PostponeSync = (function () {
 
         row.sync_status = 'SYNCED';
         row.last_synced_at = now();
+        if (!TVC_RBAC.isHqAccount(user)
+            && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)
+            && !row.hq_reply_forwarded_at) {
+            row.hq_reply_forwarded_at = now();
+        }
         await TVC_DB.put('daily_work_reports', row);
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({

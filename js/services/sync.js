@@ -219,6 +219,34 @@ const TVC_Sync = (function () {
         return TVC_License.assertExportImport(vesselId, companyId || licensedCompanyId());
     }
 
+    function asIdSet(ids) {
+        const set = new Set();
+        (ids || []).forEach(id => {
+            if (id == null || id === '') return;
+            set.add(id);
+            set.add(String(id));
+        });
+        return set;
+    }
+
+    function idInSet(id, set) {
+        if (id == null || !set) return false;
+        return set.has(id) || set.has(String(id));
+    }
+
+    /** job_code → Set(department). Deck/Engine may share the same code. */
+    function buildJobDeptLookup(jobs) {
+        const map = new Map();
+        (jobs || []).forEach(j => {
+            const code = j?.job_code;
+            if (!code) return;
+            const d = String(j.department || '').trim().toUpperCase();
+            if (!map.has(code)) map.set(code, new Set());
+            if (d) map.get(code).add(d);
+        });
+        return map;
+    }
+
     /** dept 지정 시 해당 부서 데이터만 델타에 포함 (영구 분리) */
     async function collectDelta(dept, opts = {}) {
         const rows = await collectDeptRows(dept, {
@@ -226,13 +254,13 @@ const TVC_Sync = (function () {
             hubRelayPending: !!opts.hubRelayPending,
         });
         if (Array.isArray(opts.reportIds)) {
-            const idSet = new Set(opts.reportIds);
-            rows.daily_work_reports = (rows.daily_work_reports || []).filter(r => idSet.has(r.id));
+            const idSet = asIdSet(opts.reportIds);
+            rows.daily_work_reports = (rows.daily_work_reports || []).filter(r => idInSet(r.id, idSet));
         }
         if (opts.consumeLogIds?.length) {
             const logs = await TVC_DB.getAll('consume_logs').catch(() => []);
-            const idSet = new Set(opts.consumeLogIds);
-            rows.consume_logs = (logs || []).filter(l => idSet.has(l.id));
+            const idSet = asIdSet(opts.consumeLogIds);
+            rows.consume_logs = (logs || []).filter(l => idInSet(l.id, idSet));
             if (dept) {
                 rows.consume_logs = rows.consume_logs.filter(l => !l.department || l.department === dept);
             }
@@ -247,37 +275,49 @@ const TVC_Sync = (function () {
 
     function collectCaseReviewJobRefs(jobs, reports, defects, permits, logs) {
         const byId = new Map(jobs.map(j => [j.id, j]));
-        const byCode = new Map(jobs.filter(j => j.job_code).map(j => [j.job_code, j]));
+        const byCode = new Map();
+        const byCodeDept = new Map();
+        (jobs || []).forEach(j => {
+            if (!j?.job_code) return;
+            byCode.set(j.job_code, j);
+            byCodeDept.set(`${String(j.department || '').trim().toUpperCase()}|${j.job_code}`, j);
+        });
         const picked = new Map();
-        const addJob = (id, code) => {
-            const job = (id && byId.get(id)) || (code && byCode.get(code));
+        const addJob = (id, code, dept) => {
+            const d = String(dept || '').trim().toUpperCase();
+            const byIdHit = id ? byId.get(id) : null;
+            const job = (byIdHit && (!d || String(byIdHit.department || '').trim().toUpperCase() === d) && byIdHit)
+                || (code && d && byCodeDept.get(`${d}|${code}`))
+                || byIdHit
+                || (code && byCode.get(code));
             if (job) picked.set(job.id, job);
         };
         (reports || []).forEach(r => {
             TVC_WorkReport.fromLegacy?.(r);
-            (r.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code));
-            addJob(r.maintenance_job_id, r.job_code || r.pms_job_code);
+            const dept = r.department;
+            (r.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code, dept));
+            addJob(r.maintenance_job_id, r.job_code || r.pms_job_code, dept);
         });
         (defects || []).forEach(d => {
-            addJob(d.maintenance_job_id, d.pms_job_code || d.job_code);
-            (d.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code));
+            addJob(d.maintenance_job_id, d.pms_job_code || d.job_code, d.department);
+            (d.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code, d.department));
         });
         (permits || []).forEach(p => {
-            addJob(p.maintenance_job_id, p.job_code || p.pms_job_code);
-            (p.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code));
+            addJob(p.maintenance_job_id, p.job_code || p.pms_job_code, p.department);
+            (p.job_items || []).forEach(item => addJob(item.maintenance_job_id, item.job_code, p.department));
         });
         (logs || []).forEach(l => {
-            addJob(null, l.job_code);
-            (l.job_items || l.lines || []).forEach(item => addJob(item.maintenance_job_id, item.job_code));
+            addJob(null, l.job_code, l.department);
+            (l.job_items || l.lines || []).forEach(item => addJob(item.maintenance_job_id, item.job_code, l.department));
         });
         return [...picked.values()];
     }
 
     async function collectCaseReview(dept, ids = {}) {
-        const reportIds = new Set(ids.reportIds || []);
-        const defectIds = new Set(ids.defectIds || []);
-        const permitIds = new Set(ids.workPermitIds || []);
-        const consumeIds = new Set(ids.consumeLogIds || []);
+        const reportIds = asIdSet(ids.reportIds);
+        const defectIds = asIdSet(ids.defectIds);
+        const permitIds = asIdSet(ids.workPermitIds);
+        const consumeIds = asIdSet(ids.consumeLogIds);
         const [jobs, reports, defects, permits, logs] = await Promise.all([
             TVC_DB.getAll('maintenance_jobs'),
             TVC_DB.getAll('daily_work_reports'),
@@ -285,15 +325,24 @@ const TVC_Sync = (function () {
             TVC_DB.getAll('work_permits').catch(() => []),
             TVC_DB.getAll('consume_logs').catch(() => []),
         ]);
-        const deptByCode = new Map(jobs.map(j => [j.job_code, j.department]));
-        const pReports = (reports || []).filter(r => reportIds.has(r.id)
-            && (!dept || TVC_WorkReport.belongsToDepartment(r, dept, deptByCode)));
-        const pDefects = (defects || []).filter(d => defectIds.has(d.id)
+        const deptByCode = buildJobDeptLookup(jobs);
+        const wantDept = String(dept || '').trim().toUpperCase();
+        const pReports = (reports || []).filter(r => {
+            if (!idInSet(r.id, reportIds)) return false;
+            if (!dept) return true;
+            if (TVC_WorkReport.belongsToDepartment(r, dept, deptByCode)) return true;
+            // UI already scoped this id; keep when department is unset and job-code map missed.
+            return !String(r.department || '').trim();
+        });
+        pReports.forEach(r => {
+            if (wantDept && !String(r.department || '').trim()) r.department = wantDept;
+        });
+        const pDefects = (defects || []).filter(d => idInSet(d.id, defectIds)
             && (!dept || TVC_DefectCase.belongsToDepartment(d, dept)));
-        const pPermits = (permits || []).filter(p => permitIds.has(p.id)
+        const pPermits = (permits || []).filter(p => idInSet(p.id, permitIds)
             && (!dept || TVC_WorkPermit.belongsToDepartment(p, dept)));
-        const pLogs = (logs || []).filter(l => consumeIds.has(l.id)
-            && (!dept || !l.department || l.department === dept));
+        const pLogs = (logs || []).filter(l => idInSet(l.id, consumeIds)
+            && (!dept || !l.department || String(l.department).toUpperCase() === wantDept));
         return {
             maintenance_jobs: collectCaseReviewJobRefs(jobs, pReports, pDefects, pPermits, pLogs),
             daily_work_reports: pReports,
@@ -333,7 +382,7 @@ const TVC_Sync = (function () {
             }
             return pendingOnly ? rows.filter(r => r.sync_status !== 'SYNCED') : rows;
         };
-        const deptByCode = new Map(jobs.map(j => [j.job_code, j.department]));
+        const deptByCode = buildJobDeptLookup(jobs);
 
         let pJobs = pending(jobs);
         let pReports = pending(reports);
@@ -398,8 +447,8 @@ const TVC_Sync = (function () {
                     hubRelayPending,
                 });
         if (opts.monthlyExport && Array.isArray(opts.reportIds)) {
-            const idSet = new Set(opts.reportIds);
-            delta.daily_work_reports = (delta.daily_work_reports || []).filter(r => idSet.has(r.id));
+            const idSet = asIdSet(opts.reportIds);
+            delta.daily_work_reports = (delta.daily_work_reports || []).filter(r => idInSet(r.id, idSet));
         }
         const recordCount = Object.values(delta).reduce((sum, rows) => sum + (rows?.length || 0), 0);
         if (!opts.monthlyExport && !opts.caseReview && recordCount === 0) {
@@ -446,7 +495,7 @@ const TVC_Sync = (function () {
         zip.file('tvc_sync.json', JSON.stringify(payload, null, 2));
         zip.file('tvc_station_export.json', JSON.stringify(payload, null, 2));
         zip.file('README.txt', opts.caseReview
-            ? `TVC-PMS Case Report\nVessel: ${vesselId}\nDept: ${dept}\nDate: ${payload.export_meta.export_date}\nDirection: ${direction}\nIncludes W/M/D/P/C for Company period review.`
+            ? `TVC-PMS Case Report\nVessel: ${vesselId}\nDept: ${dept}\nDate: ${payload.export_meta.export_date}\nDirection: ${direction}\nIncludes W/M/D/P/C for ${hubRelayHqReply ? 'Station (HQ approval reply)' : 'Company period review'}.`
             : `TVC-PMS Sync Package\nVessel: ${vesselId}\nDept: ${dept}\nDate: ${payload.export_meta.export_date}\nDirection: ${direction}`);
 
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
@@ -486,7 +535,7 @@ const TVC_Sync = (function () {
         }
         await TVC_FileExport.save(blob, filename);
 
-        if (!opts.skipMarkExported) await markExported(delta, user);
+        if (!opts.skipMarkExported) await markExported(delta, user, direction);
         await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
@@ -505,7 +554,7 @@ const TVC_Sync = (function () {
             station_id: stationId || null,
             package_type: opts.caseReview ? 'CASE' : (opts.monthlyExport ? 'MONTHLY' : undefined),
             peer: opts.monthlyExport || opts.caseReview
-                ? 'Master/HQ'
+                ? (hubRelayHqReply ? 'Station' : 'Master/HQ')
                 : (direction === 'STATION_TO_HUB'
                     ? 'Master'
                     : (direction === 'SHIP_TO_HQ' || direction === 'HQ_TO_SHIP' ? 'Company' : null)),
@@ -531,7 +580,10 @@ const TVC_Sync = (function () {
         return rows.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, limit);
     }
 
-    async function markExported(delta, user) {
+    async function markExported(delta, user, direction) {
+        const hubStationForward = direction === 'HQ_TO_SHIP'
+            && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)
+            && !TVC_RBAC.isHqAccount(user);
         const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups', 'spare_groups', 'defect_cases', 'work_permits', 'consume_logs'];
         for (const store of stores) {
             for (const row of delta[store] || []) {
@@ -541,6 +593,25 @@ const TVC_Sync = (function () {
                     row.sync_status = 'SYNCED';
                 }
                 row.last_synced_at = now();
+                if (hubStationForward) {
+                    if (store === 'defect_cases'
+                        && typeof TVC_DefectCase?.isHqReplyStationForwardPending === 'function'
+                        && TVC_DefectCase.isHqReplyStationForwardPending(row)) {
+                        TVC_DefectCase.stampHqReplyStationForwarded(row);
+                    } else if (store === 'work_permits'
+                        && typeof TVC_WorkPermit?.isHqReplyStationForwardPending === 'function'
+                        && TVC_WorkPermit.isHqReplyStationForwardPending(row)) {
+                        TVC_WorkPermit.stampHqReplyStationForwarded(row);
+                    } else if (store === 'daily_work_reports') {
+                        TVC_WorkReport.fromLegacy?.(row);
+                        const wt = String(row.work_type || '').toUpperCase();
+                        const approved = !!(row.approved_at || row.approved_by)
+                            || (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isApprovedStatus?.(row.status, row.is_locked));
+                        if (wt === 'POSTPONE' && approved && !row.hq_reply_forwarded_at) {
+                            row.hq_reply_forwarded_at = now();
+                        }
+                    }
+                }
                 await TVC_DB.put(store, row);
             }
         }
@@ -676,7 +747,7 @@ const TVC_Sync = (function () {
 
     async function mergePayload(payload, dept, isHq, vesselId, opts = {}) {
         const importAuthoritative = !!opts.importAuthoritative;
-        const jobDeptByCode = new Map((payload.maintenance_jobs || []).map(j => [j.job_code, j.department]));
+        const jobDeptByCode = buildJobDeptLookup(payload.maintenance_jobs || []);
         const deptOk = (row, kind) => {
             if (!dept) return true;
             if (kind === 'job') return !row.department || row.department === dept;
@@ -705,17 +776,39 @@ const TVC_Sync = (function () {
                     row.approved_at = now().slice(0, 10);
                     row.approved_by = payload.export_meta?.exported_by || 'Company';
                 }
+                if (typeof TVC_DefectCase.applyHqReplyOnShip === 'function') {
+                    TVC_DefectCase.applyHqReplyOnShip(row);
+                }
+                const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub
+                    && typeof TVC_Auth !== 'undefined' && TVC_Space.isCaptainHub(TVC_Auth.getCurrentUser());
+                if (isHub && (row.approved_at || row.approved_by) && !row.hq_reply_forwarded_at) {
+                    row.hq_reply_forward_pending = true;
+                }
+            }
+            if (!isHq && kind === 'report' && (direction === 'HQ_TO_SHIP' || direction === 'POSTPONE_REPLY_HQ_TO_SHIP')) {
+                TVC_WorkReport.fromLegacy?.(row);
+                const wt = String(row.work_type || '').toUpperCase();
+                const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub
+                    && typeof TVC_Auth !== 'undefined' && TVC_Space.isCaptainHub(TVC_Auth.getCurrentUser());
+                if (isHub && wt === 'POSTPONE' && (row.approved_at || row.approved_by) && !row.hq_reply_forwarded_at) {
+                    row.hq_reply_forward_pending = true;
+                }
             }
             if (kind === 'work_permit') {
                 row.visible_in_list = row.visible_in_list !== false;
-                const metaDept = payload.export_meta?.department;
-                if ((!row.department || row.department === 'ALL') && metaDept && metaDept !== 'ALL') {
-                    row.department = metaDept;
+                const metaDeptWp = payload.export_meta?.department;
+                if ((!row.department || row.department === 'ALL') && metaDeptWp && metaDeptWp !== 'ALL') {
+                    row.department = metaDeptWp;
                 }
-                if (!isHq && direction === 'WORK_PERMIT_REPLY_HQ_TO_SHIP') {
-                    if (!row.approved_at && !row.approved_by) {
+                if (!isHq && (direction === 'WORK_PERMIT_REPLY_HQ_TO_SHIP' || direction === 'HQ_TO_SHIP')) {
+                    if (direction === 'WORK_PERMIT_REPLY_HQ_TO_SHIP' && !row.approved_at && !row.approved_by) {
                         row.approved_at = payload.export_meta?.export_date || now().slice(0, 10);
                         row.approved_by = payload.export_meta?.exported_by || 'Company';
+                    }
+                    const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub
+                        && typeof TVC_Auth !== 'undefined' && TVC_Space.isCaptainHub(TVC_Auth.getCurrentUser());
+                    if (isHub && (row.approved_at || row.approved_by) && !row.hq_reply_forwarded_at) {
+                        row.hq_reply_forward_pending = true;
                     }
                 }
             }
@@ -997,7 +1090,7 @@ const TVC_Sync = (function () {
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
 
-        await markExported(merged, user);
+        await markExported(merged, user, 'SHIP_TO_HQ');
         await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),

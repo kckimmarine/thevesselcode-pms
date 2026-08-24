@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 11, // v11: spare_groups (SPARE GROUP Tree — separate from maintenance_groups)
+    DB_VERSION: 12, // v12: vessel_documents (HQ Ship List — per-vessel attachments)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -29,6 +29,7 @@ const TVC_SCHEMA = {
         consume_logs: { keyPath: 'id' },                   // Consumed Parts 일지 (배치)
         defect_cases: { keyPath: 'id' },                   // Defect Report Case
         work_permits: { keyPath: 'id' },                   // Critical Equipment Work Permit
+        vessel_documents: { keyPath: 'id' },               // HQ vessel documents (attachments)
     },
     INDEXES: {
         users: [{ name: 'username', keyPath: 'username', unique: true }],
@@ -103,6 +104,10 @@ const TVC_SCHEMA = {
             { name: 'by_vessel', keyPath: 'vessel_id' },
             { name: 'by_permit_no', keyPath: 'permit_no' },
             { name: 'by_department', keyPath: 'department' },
+        ],
+        vessel_documents: [
+            { name: 'by_vessel', keyPath: 'vessel_id' },
+            { name: 'by_company', keyPath: 'company_id' },
         ],
     },
 };
@@ -576,7 +581,17 @@ const TVC_WorkReport = (function () {
     function fromLegacy(report) {
         if (!report) return report;
         if (Array.isArray(report.job_items) && report.job_items.length) {
-            report.job_codes = report.job_codes || report.job_items.map(i => i.job_code);
+            const fallbackCode = String(report.job_code || report.pms_job_code || '').trim();
+            report.job_items.forEach(item => {
+                if (item && !String(item.job_code || '').trim() && fallbackCode) item.job_code = fallbackCode;
+            });
+            const fromItems = report.job_items.map(i => String(i.job_code || '').trim()).filter(Boolean);
+            const existing = Array.isArray(report.job_codes)
+                ? report.job_codes.map(c => String(c || '').trim()).filter(Boolean)
+                : [];
+            report.job_codes = existing.length
+                ? existing
+                : (fromItems.length ? fromItems : (fallbackCode ? [fallbackCode] : []));
             report.is_batch = report.is_batch ?? report.job_codes.length > 1;
             return migrateReportMeta(report);
         }
@@ -600,7 +615,19 @@ const TVC_WorkReport = (function () {
     }
 
     function getJobCodes(report) {
-        return fromLegacy(report).job_codes || [];
+        const r = fromLegacy(report);
+        const codes = (r.job_codes || []).map(c => String(c || '').trim()).filter(Boolean);
+        if (codes.length) return codes;
+        const fallback = String(r.job_code || r.pms_job_code || '').trim();
+        return fallback ? [fallback] : [];
+    }
+
+    function mappedDepartmentsForCode(map, code) {
+        const v = map.get(code);
+        if (v == null || v === '') return [];
+        if (typeof v === 'string') return [v];
+        if (typeof v.forEach === 'function') return [...v];
+        return [v];
     }
 
     /** 부서 job_code 집합에 리포트(단일·Batch)가 속하는지 */
@@ -608,10 +635,30 @@ const TVC_WorkReport = (function () {
         return getJobCodes(report).some(c => codeSet.has(c));
     }
 
-    /** job_code → department 맵 기준 부서 소속 여부 (Export/Sync 필터) */
+    /**
+     * Export/Sync 부서 필터.
+     * Prefer report.department (same as Work History). Job-code lookup is a fallback
+     * and treats a code as in-dept when ANY job with that code belongs there —
+     * Deck and Engine may share the same job_code (e.g. 05-00-001).
+     */
     function belongsToDepartment(report, dept, jobCodeToDept) {
-        const map = jobCodeToDept instanceof Map ? jobCodeToDept : new Map(Object.entries(jobCodeToDept || {}));
-        return getJobCodes(report).some(c => (map.get(c) || null) === dept);
+        if (!dept) return true;
+        if (!report) return false;
+        const want = String(dept).trim().toUpperCase();
+        const own = String(report.department || '').trim().toUpperCase();
+        if (own) return own === want;
+
+        const map = (jobCodeToDept && typeof jobCodeToDept.get === 'function')
+            ? jobCodeToDept
+            : new Map(Object.entries(jobCodeToDept || {}));
+        const codes = new Set(getJobCodes(report));
+        [report.job_code, report.pms_job_code, ...(report.job_items || []).map(i => i?.job_code)]
+            .forEach(c => {
+                const s = String(c || '').trim();
+                if (s) codes.add(s);
+            });
+        return [...codes].some(c => mappedDepartmentsForCode(map, c)
+            .some(d => String(d || '').trim().toUpperCase() === want));
     }
 
     function aggregateStatus(jobItems) {
@@ -689,6 +736,57 @@ const TVC_WorkReport = (function () {
         return String(job?.next_date || '').slice(0, 10);
     }
 
+    const POSTPONE_MAX_EXTEND_MONTHS = 3;
+
+    function addCalendarMonths(iso, months) {
+        const s = String(iso || '').slice(0, 10);
+        const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) return '';
+        const year = Number(m[1]);
+        const monthIndex = Number(m[2]) - 1;
+        const day = Number(m[3]);
+        const dt = new Date(year, monthIndex + Number(months), 1);
+        const last = new Date(dt.getFullYear(), dt.getMonth() + 1, 0).getDate();
+        dt.setDate(Math.min(day, last));
+        const yy = dt.getFullYear();
+        const mm = String(dt.getMonth() + 1).padStart(2, '0');
+        const dd = String(dt.getDate()).padStart(2, '0');
+        return `${yy}-${mm}-${dd}`;
+    }
+
+    function postponeMaxDate(originalDueDate, months = POSTPONE_MAX_EXTEND_MONTHS) {
+        return addCalendarMonths(originalDueDate, months);
+    }
+
+    /** Postpone Date must be Original Due Date … Original Due Date + 3 months. */
+    function postponeDateWithinMax(originalDueDate, postponeDate, months = POSTPONE_MAX_EXTEND_MONTHS) {
+        const od = String(originalDueDate || '').slice(0, 10);
+        const pd = String(postponeDate || '').slice(0, 10);
+        if (!pd || !/^\d{4}-\d{2}-\d{2}$/.test(pd)) {
+            return { ok: false, code: 'REQUIRED', originalDueDate: od, maxDate: postponeMaxDate(od, months) };
+        }
+        if (!od || !/^\d{4}-\d{2}-\d{2}$/.test(od)) {
+            return { ok: true, originalDueDate: od, maxDate: '' };
+        }
+        const maxDate = postponeMaxDate(od, months);
+        if (pd < od) {
+            return { ok: false, code: 'BEFORE_DUE', originalDueDate: od, maxDate };
+        }
+        if (pd > maxDate) {
+            return { ok: false, code: 'OVER_MAX', originalDueDate: od, maxDate };
+        }
+        return { ok: true, originalDueDate: od, maxDate };
+    }
+
+    function postponeDateRangeMessage(check) {
+        if (!check || check.ok) return '';
+        if (check.code === 'REQUIRED') return 'Enter Postpone Date.';
+        if (check.code === 'BEFORE_DUE') {
+            return `Postpone Date cannot be earlier than Original Due Date (${check.originalDueDate}).`;
+        }
+        return `Postpone Date can be extended up to 3 months from Original Due Date (max ${check.maxDate}).`;
+    }
+
     return {
         ITEM_STATUSES,
         blankJobItem,
@@ -704,6 +802,10 @@ const TVC_WorkReport = (function () {
         compareJobCodes,
         primaryJobItem,
         postponeOriginalDueDate,
+        postponeMaxDate,
+        postponeDateWithinMax,
+        postponeDateRangeMessage,
+        POSTPONE_MAX_EXTEND_MONTHS,
     };
 })();
 
@@ -873,7 +975,9 @@ const TVC_DefectCase = (function () {
     }
 
     function isPhase1Editable(row) {
-        return row && !row.phase1_locked && (row.status === Status.DRAFT || row.status === Status.SUBMITTED_TO_COMPANY);
+        if (!row || row.phase1_locked) return false;
+        if (row.approved_at || row.approved_by) return false;
+        return row.status === Status.DRAFT || row.status === Status.SUBMITTED_TO_COMPANY;
     }
 
     function isPhase2Editable(row) {
@@ -1012,6 +1116,32 @@ const TVC_DefectCase = (function () {
         return row;
     }
 
+    /** HQ Approve 회신을 선박(Master / Station)이 받은 뒤 — Phase 1 잠그고 본선 DC 가능하게. */
+    function applyHqReplyOnShip(row) {
+        if (!row || !(row.approved_at || row.approved_by)) return row;
+        row.phase1_locked = true;
+        row.phase2_locked = true;
+        if (row.status === Status.DRAFT || row.status === Status.SUBMITTED_TO_COMPANY) {
+            row.status = Status.COMPANY_REVIEWED;
+        }
+        return row;
+    }
+    function isHqReplyStationForwardPending(row) {
+        if (!row) return false;
+        if (!(row.approved_at || row.approved_by)) return false;
+        if (row.hq_reply_forwarded_at) return false;
+        if (row.status === Status.CLOSED) return false;
+        if (row.close_forward_pending || row.close_forwarded_at) return false;
+        return true;
+    }
+
+    function stampHqReplyStationForwarded(row) {
+        if (!row) return row;
+        row.hq_reply_forward_pending = false;
+        row.hq_reply_forwarded_at = new Date().toISOString();
+        return row;
+    }
+
     function clearHubStampForNewOutbound(row) {
         if (!row) return row;
         row.hub_sync_status = null;
@@ -1072,7 +1202,8 @@ const TVC_DefectCase = (function () {
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
         isPhase1Exported, isPhase3DcComplete,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, validateHqDefectReplyExport,
-        isHqReplyExported, isPhase3CompletionHubPending, isPhase4CloseForwardPending,
+        isHqReplyExported, isHqReplyStationForwardPending, stampHqReplyStationForwarded, applyHqReplyOnShip,
+        isPhase3CompletionHubPending, isPhase4CloseForwardPending,
         markPhase4CloseForwardPending, stampPhase4CloseForwarded, clearHubStampForNewOutbound,
         belongsToDepartment,
         listWorkflowStatus, listWorkflowTone, canModifyListWorkflow, canDeleteListWorkflow, isShipVerificationEditable,
@@ -1120,6 +1251,8 @@ const TVC_WorkPermit = (function () {
             total_run_hrs: overrides.total_run_hrs ?? '0',
             outline_work_permit: overrides.outline_work_permit || '',
             company_comment: overrides.company_comment || '',
+            ship_attachments: Array.isArray(overrides.ship_attachments) ? overrides.ship_attachments.map(a => ({ ...a })) : [],
+            company_attachments: Array.isArray(overrides.company_attachments) ? overrides.company_attachments.map(a => ({ ...a })) : [],
             checked_estimated_spare_parts: overrides.checked_estimated_spare_parts === true,
             estimated_parts: Array.isArray(overrides.estimated_parts) ? overrides.estimated_parts : [],
             job_items: Array.isArray(overrides.job_items) ? overrides.job_items : [],
@@ -1149,6 +1282,18 @@ const TVC_WorkPermit = (function () {
         return !!(row.hq_synced && (row.approved_at || row.approved_by) && row.sync_status === 'SYNCED');
     }
 
+    function isHqReplyStationForwardPending(row) {
+        if (!row) return false;
+        if (listWorkflowStatus(row) !== 'Approved') return false;
+        return !row.hq_reply_forwarded_at;
+    }
+
+    function stampHqReplyStationForwarded(row) {
+        if (!row) return row;
+        row.hq_reply_forwarded_at = new Date().toISOString();
+        return row;
+    }
+
     function canModifyListWorkflow(row) {
         if (!row) return false;
         const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser() : null;
@@ -1162,6 +1307,7 @@ const TVC_WorkPermit = (function () {
 
     function canDeleteListWorkflow(row) {
         if (!row) return false;
+        if (listWorkflowStatus(row) === 'Submitted') return false;
         const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser() : null;
         if (user && TVC_RBAC.isHqAccount(user) && row.hq_synced
             && (row.approved_at || row.approved_by) && row.sync_status !== 'SYNCED') {
@@ -1177,6 +1323,7 @@ const TVC_WorkPermit = (function () {
 
     return {
         SCHEMA_VERSION, Status, blank, listWorkflowStatus, isHqReplyExported,
+        isHqReplyStationForwardPending, stampHqReplyStationForwarded,
         canModifyListWorkflow, canDeleteListWorkflow, belongsToDepartment,
     };
 })();

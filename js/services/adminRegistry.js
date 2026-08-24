@@ -71,12 +71,12 @@ const TVC_AdminRegistry = (function () {
     }
 
     function formatVesselAppVersions(deploy) {
-        const av = deploy?.app_version || {};
-        const m = av.VESSEL_MASTER || '—';
-        const e = av.VESSEL_ENGINE || '—';
-        const d = av.VESSEL_DECK || '—';
-        if (m === '—' && e === '—' && d === '—') return '—';
-        return `${m} / ${e} / ${d}`;
+        const av = deploy?.app_version;
+        if (!av) return '—';
+        if (typeof av === 'string') return av.trim() || '—';
+        const versions = VESSEL_SKUS.map(k => String(av[k] || '').trim()).filter(Boolean);
+        if (!versions.length) return '—';
+        return versions[0];
     }
 
     function formatVesselSetupVersion(deploy) {

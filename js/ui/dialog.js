@@ -1,6 +1,7 @@
 /** TVC-PMS — unified confirm / alert dialogs (English, in-app modal) */
 const TVC_Dialog = (function () {
     let pending = null;
+    let hideTimer = null;
 
     const KIND = {
         save: { confirmLabel: 'Save', cancelLabel: 'Cancel', confirmClass: 'btn-green' },
@@ -26,10 +27,26 @@ const TVC_Dialog = (function () {
         return document.getElementById('tvcDialogModal');
     }
 
+    function attachGhostClickBlocker() {
+        document.querySelector('[data-tvc-dialog-shield]')?.remove();
+        const blocker = document.createElement('div');
+        blocker.setAttribute('data-tvc-dialog-shield', '1');
+        blocker.setAttribute('aria-hidden', 'true');
+        blocker.style.cssText = 'position:fixed;inset:0;z-index:2147483646;background:transparent;';
+        document.body.appendChild(blocker);
+        const remove = () => blocker.remove();
+        setTimeout(remove, 400);
+    }
+
     function finish(value) {
         const fn = pending;
         pending = null;
+        if (hideTimer) {
+            clearTimeout(hideTimer);
+            hideTimer = null;
+        }
         modalEl()?.classList.add('hidden');
+        attachGhostClickBlocker();
         if (fn) fn(value);
     }
 
@@ -109,6 +126,10 @@ const TVC_Dialog = (function () {
 
         return new Promise(resolve => {
             pending = resolve;
+            if (hideTimer) {
+                clearTimeout(hideTimer);
+                hideTimer = null;
+            }
             modal.classList.remove('hidden');
             const confirmBtn = document.getElementById('tvcDialogConfirmBtn');
             const cancelBtn = document.getElementById('tvcDialogCancelBtn');
@@ -120,8 +141,16 @@ const TVC_Dialog = (function () {
                     confirmBtn?.click();
                 }
             }, { once: true });
-            confirmBtn?.addEventListener('click', () => finish(true), { once: true });
-            cancelBtn?.addEventListener('click', () => finish(false), { once: true });
+            confirmBtn?.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                finish(true);
+            }, { once: true });
+            cancelBtn?.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                finish(false);
+            }, { once: true });
         });
     }
 

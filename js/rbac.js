@@ -313,12 +313,16 @@ const TVC_RBAC = (function () {
     /** 계정이 접근 가능한 부서 목록. HQ는 전체, 선박은 자기 부서만. */
     function getAccessibleDepartments(user) {
         if (isHqAccount(user)) return [Department.DECK, Department.ENGINE];
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) {
+            return [Department.DECK, Department.ENGINE];
+        }
         return user?.department ? [user.department] : [];
     }
 
     function canAccessDepartment(user, dept) {
         if (!dept) return true;                 // null = 전체 뷰
         if (isHqAccount(user)) return true;     // HQ는 모든 부서 조회
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) return true;
         return user?.department === dept;
     }
 
@@ -631,20 +635,19 @@ const TVC_RBAC = (function () {
 
     /**
      * 목록 Modify/Delete — Reported·Draft: 작성자(동 부서)
-     * Confirmed: 확인자(동 부서) · Submitted: HQ only (선박 제출분) · Approved: 불가
+     * Confirmed: 확인자(동 부서) · Submitted / Approved: 삭제 불가
      */
     function canModifyDeleteListReport(user, dept, listStatus) {
         if (!user) return false;
         const st = String(listStatus || '').trim();
-        if (st === 'Approved') return false;
+        if (st === 'Approved' || st === 'Submitted') return false;
         if (isHqAccount(user)) {
-            return st === 'Submitted' || st === 'Draft' || st === 'Reported' || st === 'Confirmed';
+            return st === 'Draft' || st === 'Reported' || st === 'Confirmed';
         }
         const department = dept || user.department || '';
-        if (st === 'Submitted') return false;
         if (st === 'Draft' || st === 'Reported') {
             if (!can(user, Action.CREATE_DAILY_REPORT)) return false;
-            if (department && user.department && user.department !== department) return false;
+            if (department && !canAccessDepartment(user, department)) return false;
             return true;
         }
         if (st === 'Confirmed') return canConfirmDepartment(user, department);

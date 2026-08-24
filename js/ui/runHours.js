@@ -196,7 +196,6 @@ const TVC_RunHours = (function () {
                 await TVC_Dialog.alert(
                     `Monthly prep: ${unconfirmed} unfinished Work History item(s)\n` +
                     '· Maintenance / Postpone → Confirm\n' +
-                    '· Critical Postpone: Confirm updates Work Plan; Company approval via Export\n' +
                     '· Defect reports are separate (not an RH gate)\n' +
                     'Complete them before Running Hours Update.'
                 );

@@ -7,6 +7,11 @@ const TVC_WorkPermitSync = (function () {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     }
 
+    function printAttachmentNames(list) {
+        const names = (list || []).map(a => String(a?.name || '').trim()).filter(Boolean);
+        return names.length ? names.join(', ') : '—';
+    }
+
     function reportJobCode(row) {
         const fromItems = (row.job_items || []).map(i => i.job_code).find(Boolean);
         return fromItems || row.job_code || row.pms_job_code || '—';
@@ -53,7 +58,9 @@ const TVC_WorkPermitSync = (function () {
   <tr><th>SORT-1</th><td>${esc(row.item_sort1 || '—')}</td><th>SORT-2</th><td>${esc(row.item_sort2 || '—')}</td></tr>
   <tr><th>Job Detail</th><td colspan="3">${esc(row.job_detail || row.job_name || '—')}</td></tr>
   <tr><th>Ship's Comments</th><td colspan="3">${esc(row.outline_work_permit || '—')}</td></tr>
+  <tr><th>Ship's Attachment</th><td colspan="3">${esc(printAttachmentNames(row.ship_attachments))}</td></tr>
   <tr><th>Company's Comments</th><td colspan="3">${esc(row.company_comment || '—')}</td></tr>
+  <tr><th>Company's Attachment</th><td colspan="3">${esc(printAttachmentNames(row.company_attachments))}</td></tr>
   <tr><th>Reported by</th><td>${esc(row.reporter_name || '—')}</td><th>Confirmed by</th><td>${confirmed ? esc(row.confirmed_by || row.confirmed_at || 'Yes') : '<i>Pending</i>'}</td></tr>
 </table>
 </div>

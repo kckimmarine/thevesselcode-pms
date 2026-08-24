@@ -22,22 +22,23 @@ const TVC_StationSync = (function () {
     }
 
     /** Captain Hub — Station ZIP / JSON / CSV 병합 */
-    async function importStationPackage(user, file) {
+    async function importStationPackage(user, file, dept) {
         if (!file) throw new Error('파일을 선택하세요.');
         TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.HUB_IMPORT);
         const name = (file.name || '').toLowerCase();
+        const mergeDept = dept || null;
 
         if (name.endsWith('.zip')) {
-            return TVC_Sync.importZip(user, file, null, { allowHubMerge: true });
+            return TVC_Sync.importZip(user, file, mergeDept, { allowHubMerge: true });
         }
         if (name.endsWith('.json')) {
             const text = await file.text();
             const payload = JSON.parse(text);
-            return TVC_Sync.importPayload(user, payload, file, { allowHubMerge: true });
+            return TVC_Sync.importPayload(user, payload, file, { allowHubMerge: true, dept: mergeDept });
         }
         if (name.endsWith('.csv')) {
             const payload = await parseCsvToPayload(file);
-            return TVC_Sync.importPayload(user, payload, file, { allowHubMerge: true });
+            return TVC_Sync.importPayload(user, payload, file, { allowHubMerge: true, dept: mergeDept });
         }
         throw new Error('지원 형식: .zip, .json, .csv');
     }

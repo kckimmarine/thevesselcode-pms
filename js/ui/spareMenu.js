@@ -164,6 +164,14 @@ const TVC_SpareMenu = (function () {
         ORDERED: 'Ordered',
         RECEIVED: 'Received',
     };
+    /** HQ Report History phase tabs — distinct from vessel REQ_LIST_PHASE */
+    const HQ_REQ_LIST_PHASE = {
+        REQUISITION: 'hq_requisition',
+        REQ_QUOTE: 'hq_req_quote',
+        EVALUATING: 'hq_evaluating',
+        ORDERED: 'hq_ordered',
+        RECEIVED: 'hq_received',
+    };
     /** Vessel Requisition List — Status column (workflow) */
     const VESSEL_REQ_LIST_STATUS = {
         REPORTED: 'Reported',
@@ -319,7 +327,11 @@ const TVC_SpareMenu = (function () {
             if (j?.group) return safeTreeLabel(j.group);
         }
         if (draft?.job_items?.[0]?.job_code) {
-            const j = findJobByCode(st, draft.job_items[0].job_code);
+            const j = findJobByCode(st, draft.job_items[0].job_code, {
+                department: draft.department || st?.department,
+                groupKey: draft.spare_group_key,
+                group: draft.spare_group_label,
+            });
             if (j?.group) return safeTreeLabel(j.group);
         }
         if (draft?.spare_group_key) {
@@ -345,14 +357,20 @@ const TVC_SpareMenu = (function () {
         const form = rep?.report_form || {};
         const firstJobId = rep?.job_items?.[0]?.maintenance_job_id || rep?.maintenance_job_id;
         let job = firstJobId ? st.idx?.jobById?.get(firstJobId) : null;
-        if (!job && draft.job_code) job = findJobByCode(st, draft.job_code);
-        if (!job && draft.job_items?.[0]?.job_code) {
-            job = findJobByCode(st, draft.job_items[0].job_code);
+        if (!job) {
+            job = findConsumeLinkedJob(draft, st, {
+                jobId: firstJobId,
+                jobCode: draft.job_code || draft.job_items?.[0]?.job_code,
+                department: rep?.department || draft.department,
+                groupKey: draft.spare_group_key,
+                group: draft.spare_group_label || log?.pms_group_no || rep?.report_form?.pmsGroupNo,
+            });
         }
         const pmsGroupNo = resolveConsumePmsGroupNo(draft, log, rep, st, job);
         if (pmsGroupNo) draft.spare_group_label = pmsGroupNo;
         if (!String(draft.spare_group_key || '').trim() && job) {
-            draft.spare_group_key = `${job.department || ''}|${String(job.group || '').trim()}`;
+            draft.spare_group_key = spareFilterKeyFromPmsGroup(job.department, job.group)
+                || `${job.department || ''}|${String(job.group || '').trim()}`;
         }
         const repJobs = rep?.job_items || [];
         if (rep && repJobs.length > 1) {
@@ -368,6 +386,9 @@ const TVC_SpareMenu = (function () {
             syncConsumeDraftJobSummary(draft);
         } else if ((draft.job_items || []).length <= 1 && consumeLogJobItems(log).length > 1) {
             draft.job_items = consumeLogJobItems(log);
+            syncConsumeDraftJobSummary(draft);
+        } else if (job) {
+            draft.job_items = [jobRowFromMaintenanceJob(job)];
             syncConsumeDraftJobSummary(draft);
         }
         if (!String(draft.ships_comments || '').trim()) {
@@ -388,18 +409,18 @@ const TVC_SpareMenu = (function () {
 
     function buildConsumeWrPage2Meta(draft, reportedByVal, st = getState()) {
         ensureConsumeJobItems(draft);
-        let job = draft.job_code ? findJobByCode(st, draft.job_code) : null;
-        if (!job && draft.job_items?.[0]?.job_code) {
-            job = findJobByCode(st, draft.job_items[0].job_code);
-        }
+        const job = findConsumeLinkedJob(draft, st);
         const pmsGroupNo = resolveConsumePmsGroupNo(draft, null, null, st, job);
+        const jobItems = (job && draft.job_items.length <= 1)
+            ? [jobRowFromMaintenanceJob(job)]
+            : draft.job_items;
         return {
             workDate: draft.consumed_date || '',
             reportDate: draft.made_on || '',
             reportedBy: reportedByVal || '',
             pmsGroupNo,
             groupKey: draft.spare_group_key || '',
-            jobItems: draft.job_items,
+            jobItems,
             spareShipComments: draft.ships_comments || '',
             allowAdd: false,
         };
@@ -723,7 +744,7 @@ const TVC_SpareMenu = (function () {
     function wrJobGroupKey(st) {
         const job = st?.idx?.jobById?.get(st?._wrJobId);
         if (!job?.group) return null;
-        return `${job.department || ''}|${String(job.group).trim()}`;
+        return spareFilterKeyFromPmsGroup(job.department, job.group);
     }
 
     function groupKeyLabel(st, key) {
@@ -794,21 +815,59 @@ const TVC_SpareMenu = (function () {
     const NEW_SPARE_EDIT_ID = '__NEW_SPARE__';
 
     function spareGroupPrefix(group) {
-        const m = String(group || '').trim().match(/^(\d+)\s*\./);
+        const m = String(group || '').trim().match(/^(\d{1,2})(?:\s*\.|$|\s)/);
         return m ? `${m[1].padStart(2, '0')}.` : '';
+    }
+
+    function isSpareGenEngineRangeLabel(label, department) {
+        const s = String(label || '').trim();
+        if (!/^03\s*~\s*\d+/i.test(s)) return false;
+        const dept = String(department || 'ENGINE').toUpperCase();
+        return dept === 'ENGINE';
     }
 
     function isGeneratorEngineGroupLabel(label) {
         const s = String(label || '').trim();
+        if (!s) return false;
         if (/^03\s*~\s*05/i.test(s) && /GENERATOR\s+ENGINE/i.test(s)) return true;
+        if (isSpareGenEngineRangeLabel(s)) return true;
         if (normalizeGroupLabel(s) === normalizeGroupLabel(MERGED_GEN_ENGINE_LABEL)) return true;
         const prefix = spareGroupPrefix(label);
         if (!MERGED_GEN_ENGINE_PREFIXES.has(prefix)) return false;
-        return /GENERATOR\s+ENGINE/i.test(s);
+        if (/GENERATOR\s+ENGINE/i.test(s)) return true;
+        if (/G\s*\/\s*E/i.test(s)) return true;
+        if (/\bGEN(?:ERATOR)?\b/i.test(s)) return true;
+        return false;
+    }
+
+    /** ENGINE PMS 03/04/05 (No.1–3 G/E) share SPARE group 03. GENERATOR ENGINE. */
+    function mapsToMergedGeneratorSpare(label, department) {
+        if (isGeneratorEngineGroupLabel(label)) return true;
+        const dept = String(department || '').toUpperCase();
+        if (dept !== 'ENGINE') return false;
+        return MERGED_GEN_ENGINE_PREFIXES.has(spareGroupPrefix(label));
+    }
+
+    function spareFilterKeyFromPmsGroup(department, label) {
+        const lab = String(label || '').trim();
+        if (!lab) return null;
+        if (mapsToMergedGeneratorSpare(lab, department)) return MERGED_GEN_ENGINE_KEY;
+        return `${department || ''}|${lab}`;
+    }
+
+    function spareFilterKeyNormalized(st, key) {
+        if (!key || key === CRITICAL_GROUP_KEY || key === MERGED_GEN_ENGINE_KEY) return key || null;
+        const node = findGroupNodeByContext(st, key);
+        const label = node?.label || String(key).split('|').slice(1).join('|');
+        const dept = node?.department || String(key).split('|')[0];
+        if (mapsToMergedGeneratorSpare(label, dept)) return MERGED_GEN_ENGINE_KEY;
+        return key;
     }
 
     function spareInMergedGeneratorEngine(s) {
-        return isGeneratorEngineGroupLabel(s.group);
+        const cat = String(s?.category || 'ENGINE').toUpperCase();
+        const dept = cat === 'DECK' ? 'DECK' : 'ENGINE';
+        return mapsToMergedGeneratorSpare(s.group, dept);
     }
 
     function normalizeGroupLabel(s) {
@@ -1073,7 +1132,7 @@ const TVC_SpareMenu = (function () {
     function groupLabelsForPmsGroup(pmsGroupNo, st, groupKey) {
         const labels = [pmsGroupNo].filter(Boolean);
         if (groupKey === MERGED_GEN_ENGINE_KEY || isGeneratorEngineGroupLabel(pmsGroupNo)) {
-            labels.push(MERGED_GEN_ENGINE_LABEL, '03~05. GENERATOR ENGINE', '03~05        GENERATOR ENGINE', '03~05 GENERATOR ENGINE');
+            labels.push(MERGED_GEN_ENGINE_LABEL, '03~05. GENERATOR ENGINE', '03~05        GENERATOR ENGINE', '03~05 GENERATOR ENGINE', '03~06');
             (st?.idx?.groupNodes || []).forEach(n => {
                 if (isGeneratorEngineGroupLabel(n.label)) labels.push(n.label);
             });
@@ -1883,9 +1942,10 @@ const TVC_SpareMenu = (function () {
         const nodes = spareEditPmsGroupNodes(st);
         const exact = nodes.find(n => n.label === s || normalizeGroupLabel(n.label) === normalizeGroupLabel(s));
         if (exact) return exact.label;
-        if (isGeneratorEngineGroupLabel(s)) {
-            const gen = nodes.find(n => isGeneratorEngineGroupLabel(n.label));
+        if (mapsToMergedGeneratorSpare(s, st.department) || isGeneratorEngineGroupLabel(s)) {
+            const gen = nodes.find(n => n.key === MERGED_GEN_ENGINE_KEY || isGeneratorEngineGroupLabel(n.label));
             if (gen) return gen.label;
+            return MERGED_GEN_ENGINE_LABEL;
         }
         const n = pmsGroupSortNo(s);
         if (n != null && n >= 1 && n <= 26) {
@@ -2141,7 +2201,7 @@ const TVC_SpareMenu = (function () {
 
         let mergedCount = 0;
         nodes.forEach(n => {
-            if (isGeneratorEngineGroupLabel(n.label)) {
+            if (isGeneratorEngineGroupLabel(n.label) || mapsToMergedGeneratorSpare(n.label, n.department)) {
                 hasMerged = true;
                 mergedDept = n.department;
                 if (!n.isEmpty) mergedEmpty = false;
@@ -2763,7 +2823,9 @@ const TVC_SpareMenu = (function () {
     /** Vessel Received 탭 — Modify 없이 Received meta / Ship's Comments / Rcvd · Save */
     function reqWorkVesselReceivedRcvdOnlyEdit() {
         const m = modState(getState());
-        return reqWorkVesselOrderedOrReceivedView() && m.reqWorkVesselFlowStage === 'received';
+        if (!reqWorkVesselOrderedOrReceivedView() || m.reqWorkVesselFlowStage !== 'received') return false;
+        if (reqVesselReceivedExportComplete(getReqWorkSession())) return false;
+        return true;
     }
 
     function reqWorkVesselPostOrderLockTip() {
@@ -4017,10 +4079,12 @@ const TVC_SpareMenu = (function () {
                 if (reqListWorkflowLabel(req) !== 'Received') return false;
                 return !!m.reqWorkListEditing;
             }
+            if (reqVesselReceivedExportComplete(req)) return false;
             if (m.reqWorkVesselFlowStage === 'received') return true;
             return false;
         }
         if (m.reqWorkEditMode && !m.reqWorkPreview) return true;
+        if (reqVesselReceivedExportComplete(req)) return false;
         return reqListDisplayStatusLabel(req, st) === VESSEL_REQ_LIST_STATUS.RECEIVED;
     }
 
@@ -4039,8 +4103,9 @@ const TVC_SpareMenu = (function () {
         const line = _consumeLineBySpareId?.get(consumeSpareIdKey(s.id));
         if (!line) return '0';
         const qty = Number(line.qty_consumed) || 0;
+        const overCls = spareCosExceedsRob('consume', s) ? ' spare-cos-over-rob-input' : '';
         if (!consumeListEditable()) return esc(String(qty));
-        return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-consume-qty-input" value="${qty}"
+        return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-consume-qty-input${overCls}" value="${qty}"
             onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
             onfocus="event.stopPropagation();this.select()"
             onchange="TVC_SpareMenu.consumeSetQty('${sid}', this.value)">`;
@@ -4162,11 +4227,149 @@ const TVC_SpareMenu = (function () {
         const line = _wrSpareLineBySpareId?.get(wrSpareIdKey(s.id));
         if (!line) return '0';
         const qty = Number(line.qty_used) || 0;
+        const over = spareCosExceedsRob('wrSpare', s);
+        const overCls = over ? ' spare-cos-over-rob-input' : '';
         if (ro) return String(qty);
-        return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-consume-qty-input" value="${qty}"
+        return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-consume-qty-input${overCls}" value="${qty}"
             onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
             onfocus="event.stopPropagation();this.select()"
             onchange="TVC_SpareMenu.wrSpareSetQty('${sid}', this.value)">`;
+    }
+
+    function spareRobQty(spare, line) {
+        if (spare) return Number(TVC_Inventory.currentStock(spare)) || 0;
+        return Number(line?.qty_on_hand) || 0;
+    }
+
+    function qtyExceedsRob(qty, spare, line) {
+        const n = Number(qty) || 0;
+        if (n <= 0) return false;
+        return n > spareRobQty(spare, line);
+    }
+
+    function spareCosExceedsRob(ctx, s) {
+        if (ctx === 'wrSpare') {
+            const line = _wrSpareLineBySpareId?.get(wrSpareIdKey(s.id));
+            return !!(line && qtyExceedsRob(line.qty_used, s, line));
+        }
+        if (ctx === 'consume') {
+            const line = _consumeLineBySpareId?.get(consumeSpareIdKey(s.id));
+            return !!(line && qtyExceedsRob(line.qty_consumed, s, line));
+        }
+        return false;
+    }
+
+    function lineCosExceedsRob(line, spareRaw) {
+        if (!line) return false;
+        const cos = Number(line.qty_used ?? line.qty_consumed) || 0;
+        return qtyExceedsRob(cos, spareRaw, line);
+    }
+
+    function formatCosOverRobAlert(items) {
+        if (!items.length) return '';
+        const lines = items.map(it => `${it.name}: Cos ${it.cos} > ROB ${it.rob}`);
+        return `Consumption (Cos) exceeds ROB.\n\n${lines.join('\n')}`;
+    }
+
+    function wrSpareOverRobItems(st) {
+        const spares = st?.spares || [];
+        const byId = new Map();
+        const bags = [st?._wrUsedParts, st?._dfUsedParts, st?._wpUsedParts];
+        for (const rows of bags) {
+            for (const line of rows || []) {
+                const qty = Number(line.qty_used ?? line.qty_consumed ?? line.qty_estimated) || 0;
+                if (qty <= 0) continue;
+                const spare = spares.find(s => wrSameSpareId(s.id, line.spare_part_id));
+                if (!qtyExceedsRob(qty, spare, line)) continue;
+                const id = wrSpareIdKey(line.spare_part_id) || line.part_no || line.name;
+                if (!id) continue;
+                const rec = {
+                    name: line.name || spare?.name || line.part_no || 'item',
+                    code: line.part_no || spare?.part_no || line.name || 'item',
+                    cos: qty,
+                    rob: spareRobQty(spare, line),
+                };
+                const prev = byId.get(id);
+                if (!prev || rec.cos > prev.cos) byId.set(id, rec);
+            }
+        }
+        return Array.from(byId.values());
+    }
+
+    function consumeOverRobItems() {
+        const draft = getConsumeSession();
+        const spares = getState()?.spares || [];
+        return (draft?.lines || []).map(line => {
+            const qty = Number(line.qty_consumed ?? line.qty) || 0;
+            if (qty <= 0) return null;
+            const spare = spares.find(s => consumeSameSpareId(s.id, line.spare_part_id));
+            if (!qtyExceedsRob(qty, spare, line)) return null;
+            return {
+                name: line.name || spare?.name || line.part_no || 'item',
+                code: line.part_no || spare?.part_no || line.name || 'item',
+                cos: qty,
+                rob: spareRobQty(spare, line),
+            };
+        }).filter(Boolean);
+    }
+
+    function formatStockShortageConfirm(items) {
+        if (!items.length) return '';
+        const lines = items.map(it =>
+            `Insufficient stock: ${it.code || it.name} (on hand ${it.rob}, requested ${it.cos})`);
+        return `${lines.join('\n')}\n\nProceed anyway?`;
+    }
+
+    function toEnglishStockMessage(err) {
+        const part = err?.part;
+        const onHand = err?.onHand;
+        const requested = err?.requested;
+        if (part != null && onHand != null && requested != null) {
+            return `Insufficient stock: ${part} (on hand ${onHand}, requested ${requested})`;
+        }
+        const raw = String(err?.message || '').trim();
+        if (!raw || /[\uac00-\ud7a3]/.test(raw)) return 'Insufficient stock.';
+        return raw;
+    }
+
+    function stockShortageDialogOpts(message) {
+        return {
+            title: 'Insufficient stock',
+            message,
+            confirmLabel: 'Confirm',
+            cancelLabel: 'Cancel',
+        };
+    }
+
+    let _stockForceOk = false;
+
+    function consumeStockForceOk() {
+        return !!_stockForceOk;
+    }
+
+    function clearStockForceOk() {
+        _stockForceOk = false;
+    }
+
+    async function confirmProceedDespiteStock(err) {
+        const msg = toEnglishStockMessage(err);
+        return !!(await TVC_Dialog.confirm(stockShortageDialogOpts(`${msg}\n\nProceed anyway?`)));
+    }
+
+    /** Returns false if Cos > ROB and the user cancels — stay on the current
+     *  draft / modify editor; do not save and do not revert to view. */
+    async function confirmIfCosExceedsRob(kind) {
+        _stockForceOk = false;
+        const items = kind === 'consume' ? consumeOverRobItems() : wrSpareOverRobItems(getState());
+        const msg = formatStockShortageConfirm(items);
+        if (!msg) return true;
+        const ok = !!(await TVC_Dialog.confirm(stockShortageDialogOpts(msg)));
+        if (ok) _stockForceOk = true;
+        return ok;
+    }
+
+    async function alertIfCosExceedsRob(kind) {
+        return confirmIfCosExceedsRob(kind);
     }
 
     function wrSpareListEditable() {
@@ -4427,9 +4630,49 @@ const TVC_SpareMenu = (function () {
         } else if (st.currentTab === 'actual') {
             if (window.TVC_App?.renderPlanGroupHeader) TVC_App.renderPlanGroupHeader();
             if (window.TVC_App?.refreshActualPlan) TVC_App.refreshActualPlan();
+        } else if (st.currentTab === 'spare' && document.getElementById('spareListScroll')) {
+            refreshSpareInventoryUi();
         } else {
             render();
         }
+    }
+
+    /** SPARE inventory — full render 없이 목록·트리·편집 블록만 갱신 (스크롤 유지) */
+    function refreshSpareInventoryUi(opts = {}) {
+        const st = getState();
+        const scroll = document.getElementById('spareListScroll');
+        const prevScroll = opts.preserveScroll !== false ? (scroll?.scrollTop ?? 0) : 0;
+        ensureSpareGroupNodes(st);
+        if (isSpareInventoryFilterContext(st)) {
+            _cachedList = filteredSpares(st);
+        }
+        const list = _cachedList.length ? _cachedList : filteredSpares(st);
+        const allCanon = (st.spares || []).map(canon);
+        const countEl = document.getElementById('spareCount');
+        if (countEl) countEl.textContent = `${list.length} / ${allCanon.length}`;
+        renderSpareGroupTree();
+        refreshSpareEditBlock();
+        const hadVl = !!(vl && scroll?.querySelector('.vl-inner'));
+        if (hadVl && list.length) {
+            vl.refresh();
+        } else if (scroll) {
+            mountVirtualList();
+        }
+        if (scroll && prevScroll) {
+            scroll.scrollTop = prevScroll;
+            if (vl) vl.refresh();
+            requestAnimationFrame(() => {
+                scroll.scrollTop = prevScroll;
+                syncSpareHeadLayout();
+            });
+        } else {
+            requestAnimationFrame(syncSpareHeadLayout);
+        }
+        syncSpareToolbarUi();
+        syncSpareInventoryActionBar();
+        updateSpareHeadCheckAll();
+        renderSpareFilterDashboard();
+        if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
     }
 
     function isSpareChecked(st, id) {
@@ -4582,10 +4825,11 @@ const TVC_SpareMenu = (function () {
             const cat = (s.category || 'GENERAL').toUpperCase();
             if (cat !== deptScope) return false;
         }
-        if (groupKey === MERGED_GEN_ENGINE_KEY) {
+        const filterKey = spareFilterKeyNormalized(st, groupKey) || groupKey;
+        if (filterKey === MERGED_GEN_ENGINE_KEY) {
             if (!spareInMergedGeneratorEngine(s)) return false;
-        } else if (groupKey) {
-            const node = findSpareGroupNode(st, groupKey);
+        } else if (filterKey) {
+            const node = findSpareGroupNode(st, filterKey);
             if (node && !spareMatchesGroup(s, node)) return false;
         }
         const sf = f.spareFilter || (f.showLowOnly ? 'lowStock' : 'total');
@@ -4622,7 +4866,9 @@ const TVC_SpareMenu = (function () {
         });
         if (!key) return all;
         if (key === MERGED_GEN_ENGINE_KEY) return all.filter(s => spareInMergedGeneratorEngine(s));
-        const node = findSpareGroupNode(st, key);
+        const mapped = spareFilterKeyNormalized(st, key);
+        if (mapped === MERGED_GEN_ENGINE_KEY) return all.filter(s => spareInMergedGeneratorEngine(s));
+        const node = findSpareGroupNode(st, mapped || key);
         if (!node) return [];
         return all.filter(s => spareMatchesGroup(s, node));
     }
@@ -4686,7 +4932,9 @@ const TVC_SpareMenu = (function () {
     function groupFilterLabel(st) {
         const key = spareFilterGroupKey(st);
         if (!key) return '';
-        return groupKeyLabel(st, key);
+        const mapped = spareFilterKeyNormalized(st, key);
+        if (mapped === MERGED_GEN_ENGINE_KEY) return MERGED_GEN_ENGINE_LABEL;
+        return groupKeyLabel(st, mapped || key);
     }
 
     function updatePanelLayout(open) {
@@ -4813,6 +5061,7 @@ const TVC_SpareMenu = (function () {
         const panelOpen = m.panelOpen && getFocusedSpareId(st);
         const tb = spareToolbarFlags(st);
         const prevTreeScroll = document.getElementById('spareGroupTree')?.scrollTop || 0;
+        const prevListScroll = document.getElementById('spareListScroll')?.scrollTop || 0;
 
         const importBanners = `
           ${fileMode && needsImport ? `<div class="spare-import-banner file-mode">
@@ -4897,6 +5146,15 @@ const TVC_SpareMenu = (function () {
         const treeScrollEl = document.getElementById('spareGroupTree');
         if (treeScrollEl && prevTreeScroll) treeScrollEl.scrollTop = prevTreeScroll;
         mountVirtualList();
+        const listScrollEl = document.getElementById('spareListScroll');
+        if (listScrollEl && prevListScroll) {
+            listScrollEl.scrollTop = prevListScroll;
+            if (vl) vl.refresh();
+            requestAnimationFrame(() => {
+                listScrollEl.scrollTop = prevListScroll;
+                syncSpareHeadLayout();
+            });
+        }
         bindSpareListEvents();
         bindFileInputs();
         renderSpareFilterDashboard();
@@ -4910,6 +5168,13 @@ const TVC_SpareMenu = (function () {
         TVC_App.bindSearchClearInput?.('spareTreeSearch');
         TVC_App.updateSearchClearBtn?.('spareSearch');
         TVC_App.updateSearchClearBtn?.('spareTreeSearch');
+    }
+
+    function refreshSpareTabAfterModalClose() {
+        const st = getState();
+        if (st.currentTab !== 'spare') return;
+        if (document.getElementById('spareListScroll')) refreshList();
+        else render();
     }
 
     function refreshList() {
@@ -5228,6 +5493,9 @@ const TVC_SpareMenu = (function () {
         const dwgText = String(spareDwgNo(s, getState()) || '').trim();
         const pnoText = String(spareDrawingNo(s) || '').trim();
         const workText = String(spareWorking(s) || '').trim();
+        const cosOverRob = spareCosExceedsRob(ctx, s);
+        const overCls = cosOverRob ? ' spare-cos-over-rob' : '';
+        const overTitle = cosOverRob ? ' title="Consumption (Cos) exceeds ROB"' : '';
         const pipelineCells = (ctx === 'main' || (ctx === 'reqWork' && !quoteView))
             ? `<td class="c-await">${pipe.awaiting}</td><td class="c-need">${formatNeedHtml(pipe.need)}</td>`
             : '';
@@ -5242,15 +5510,15 @@ const TVC_SpareMenu = (function () {
             <td class="c-stk">${stockCell}</td>${reqCells}`)
             : `<td class="c-work"${cellTitleAttr(workText)}>${spareWorking(s)}</td>
             <td class="c-std">${spareStandardQty(s)}</td>
-            <td class="c-stk">${stockCell}</td>${reqCells}`;
+            <td class="c-stk${overCls}"${overTitle}>${stockCell}</td>${reqCells}`;
         const consumeCell = ctx === 'consume'
-            ? `<td class="c-cons">${consumeQtyCellHtml(s, sid)}</td>`
+            ? `<td class="c-cons${overCls}"${overTitle}>${consumeQtyCellHtml(s, sid)}</td>`
             : '';
         const receiveCell = ctx === 'receive'
             ? `<td class="c-await">${pipe.awaiting}</td><td class="c-recv">${receiveQtyCellHtml(s, sid)}</td>`
             : '';
         const wrQtyCell = ctx === 'wrSpare'
-            ? `<td class="c-cons">${wrQtyCellHtml(s, sid, wrRo)}</td>`
+            ? `<td class="c-cons${overCls}"${overTitle}>${wrQtyCellHtml(s, sid, wrRo)}</td>`
             : '';
         const tableCls = ctx === 'reqWork' ? 'spare-data-table spare-data-table-req spare-data-row'
             : ctx === 'consume' ? 'spare-data-table spare-data-table-consume spare-data-row'
@@ -5277,7 +5545,7 @@ const TVC_SpareMenu = (function () {
             <td class="c-unit">${esc(spareUnit(s))}</td>
             ${ctx === 'reqWork' ? reqWorkMetricCells : `<td class="c-work"${cellTitleAttr(workText)}>${spareWorking(s)}</td>
             <td class="c-std">${spareStandardQty(s)}</td>
-            <td class="c-stk">${stockCell}</td>${reqCells}`}${consumeCell}${receiveCell}${wrQtyCell}
+            <td class="c-stk${overCls}"${overTitle}>${stockCell}</td>${reqCells}`}${consumeCell}${receiveCell}${wrQtyCell}
         </tr></tbody></table>`;
     }
 
@@ -5704,6 +5972,28 @@ const TVC_SpareMenu = (function () {
             case HQ_REQ_LIST_STATUS.REQ_QUOTE: return REQ_LIST_PHASE.CONFIRMED;
             case HQ_REQ_LIST_STATUS.REQUISITION: return REQ_LIST_PHASE.SUBMITTED;
             default: return REQ_LIST_PHASE.DRAFT;
+        }
+    }
+
+    /** HQ Report History — phase tab key (Evaluating vs Ordered kept separate) */
+    function reqHqListPhaseKey(req) {
+        switch (reqHqListWorkflowStatus(req)) {
+            case HQ_REQ_LIST_STATUS.RECEIVED: return HQ_REQ_LIST_PHASE.RECEIVED;
+            case HQ_REQ_LIST_STATUS.ORDERED: return HQ_REQ_LIST_PHASE.ORDERED;
+            case HQ_REQ_LIST_STATUS.EVALUATING: return HQ_REQ_LIST_PHASE.EVALUATING;
+            case HQ_REQ_LIST_STATUS.REQ_QUOTE: return HQ_REQ_LIST_PHASE.REQ_QUOTE;
+            default: return HQ_REQ_LIST_PHASE.REQUISITION;
+        }
+    }
+
+    function reqHqListPhaseLabel(phaseKey) {
+        switch (phaseKey) {
+            case HQ_REQ_LIST_PHASE.REQUISITION: return HQ_REQ_LIST_STATUS.REQUISITION;
+            case HQ_REQ_LIST_PHASE.REQ_QUOTE: return HQ_REQ_LIST_STATUS.REQ_QUOTE;
+            case HQ_REQ_LIST_PHASE.EVALUATING: return HQ_REQ_LIST_STATUS.EVALUATING;
+            case HQ_REQ_LIST_PHASE.ORDERED: return HQ_REQ_LIST_STATUS.ORDERED;
+            case HQ_REQ_LIST_PHASE.RECEIVED: return HQ_REQ_LIST_STATUS.RECEIVED;
+            default: return phaseKey;
         }
     }
 
@@ -6163,6 +6453,12 @@ const TVC_SpareMenu = (function () {
 
     function filterReqList(reqs, st) {
         const m = modState(st);
+        if (isReqListHqUser(st)) {
+            const cur = m.reqListPhaseTab || REQ_LIST_PHASE.ALL;
+            if (cur !== REQ_LIST_PHASE.ALL && !Object.values(HQ_REQ_LIST_PHASE).includes(cur)) {
+                m.reqListPhaseTab = REQ_LIST_PHASE.ALL;
+            }
+        }
         const phase = m.reqListPhaseTab || REQ_LIST_PHASE.ALL;
         return reqListFilterBase(reqs, st).filter(req => reqListMatchesPhase(req, phase, st));
     }
@@ -6181,11 +6477,20 @@ const TVC_SpareMenu = (function () {
     function reqListPhaseCounts(allReqs, st) {
         const filtered = reqListFilterBase(allReqs, st);
         const counts = { all: filtered.length };
-        Object.values(REQ_LIST_PHASE).forEach(p => { if (p !== REQ_LIST_PHASE.ALL) counts[p] = 0; });
         const isHq = isReqListHqUser(st);
+        if (isHq) {
+            Object.values(HQ_REQ_LIST_PHASE).forEach(p => { counts[p] = 0; });
+        } else {
+            Object.values(REQ_LIST_PHASE).forEach(p => { if (p !== REQ_LIST_PHASE.ALL) counts[p] = 0; });
+        }
         filtered.forEach(req => {
-            const p = isHq ? reqHqWorkflowPhase(req) : reqWorkflowPhase(req);
-            if (!isHq && (p === REQ_LIST_PHASE.DRAFT || p === REQ_LIST_PHASE.REPORTED)) {
+            if (isHq) {
+                const p = reqHqListPhaseKey(req);
+                counts[p] = (counts[p] || 0) + 1;
+                return;
+            }
+            const p = reqWorkflowPhase(req);
+            if (p === REQ_LIST_PHASE.DRAFT || p === REQ_LIST_PHASE.REPORTED) {
                 counts[REQ_LIST_PHASE.REPORTED] = (counts[REQ_LIST_PHASE.REPORTED] || 0) + 1;
             } else {
                 counts[p] = (counts[p] || 0) + 1;
@@ -6199,17 +6504,16 @@ const TVC_SpareMenu = (function () {
         const isHq = isReqListHqUser(st);
         const tabs = isHq ? [
             [REQ_LIST_PHASE.ALL, 'All'],
-            [REQ_LIST_PHASE.DRAFT, 'Draft'],
+            [HQ_REQ_LIST_PHASE.REQUISITION, HQ_REQ_LIST_STATUS.REQUISITION],
+            [HQ_REQ_LIST_PHASE.REQ_QUOTE, HQ_REQ_LIST_STATUS.REQ_QUOTE],
+            [HQ_REQ_LIST_PHASE.EVALUATING, HQ_REQ_LIST_STATUS.EVALUATING],
+            [HQ_REQ_LIST_PHASE.ORDERED, HQ_REQ_LIST_STATUS.ORDERED],
+            [HQ_REQ_LIST_PHASE.RECEIVED, HQ_REQ_LIST_STATUS.RECEIVED],
+        ] : [
+            [REQ_LIST_PHASE.ALL, 'All'],
             [REQ_LIST_PHASE.REPORTED, 'Reported'],
             [REQ_LIST_PHASE.CONFIRMED, 'Confirmed'],
             [REQ_LIST_PHASE.SUBMITTED, 'Submitted'],
-            [REQ_LIST_PHASE.ASSESSED, 'Ordered'],
-            [REQ_LIST_PHASE.RECEIVED, 'Received'],
-        ] : [
-            [REQ_LIST_PHASE.ALL, 'All'],
-            [REQ_LIST_PHASE.REPORTED, 'Report'],
-            [REQ_LIST_PHASE.CONFIRMED, 'Confirm'],
-            [REQ_LIST_PHASE.SUBMITTED, 'Submit'],
             [REQ_LIST_PHASE.ASSESSED, 'Ordered'],
             [REQ_LIST_PHASE.RECEIVED, 'Received'],
         ];
@@ -6308,6 +6612,23 @@ const TVC_SpareMenu = (function () {
             || reqListWorkflowLabel(req) === 'Submitted';
     }
 
+    function reqListIsEvaluatingForApprove(req, st) {
+        if (!req) return false;
+        st = st || getState();
+        if (!isReqListHqUser(st)) return false;
+        return reqHqListWorkflowStatus(req) === HQ_REQ_LIST_STATUS.EVALUATING;
+    }
+
+    function reqListIsHqRequisitionStatus(req) {
+        return reqHqListWorkflowStatus(req) === HQ_REQ_LIST_STATUS.REQUISITION;
+    }
+
+    function reqListIsHqEvaluatingApproved(req) {
+        if (!req) return false;
+        if (reqHqListWorkflowStatus(req) !== HQ_REQ_LIST_STATUS.EVALUATING) return false;
+        return reqListApprovalFlags(req).isApproved;
+    }
+
     function canConfirmRequisition(st, req) {
         if (!req) return false;
         const user = spareInventoryUser(st);
@@ -6360,6 +6681,8 @@ const TVC_SpareMenu = (function () {
         if (TVC_RBAC.canHqDirectApprove(user, req)) {
             return spareListStatus(req) !== SPARE_LIST_STATUS.DRAFT;
         }
+        // Evaluating — Company Approve 후 Order Export 가능
+        if (reqListIsEvaluatingForApprove(req, st)) return true;
         // 선박 작성분: Submitted일 때 Approve
         return reqListIsSubmittedForApprove(req);
     }
@@ -6623,7 +6946,10 @@ const TVC_SpareMenu = (function () {
         }
         if (m.reqListFilterOpen) filterParts.push('Open');
         if (m.reqListPhaseTab && m.reqListPhaseTab !== REQ_LIST_PHASE.ALL) {
-            filterParts.push(`Phase: ${m.reqListPhaseTab}`);
+            const phaseLabel = isReqListHqUser(getState())
+                ? reqHqListPhaseLabel(m.reqListPhaseTab)
+                : m.reqListPhaseTab;
+            filterParts.push(`Phase: ${phaseLabel}`);
         }
         const head = `<tr>
             <th rowspan="2">Type</th>
@@ -7714,7 +8040,11 @@ const TVC_SpareMenu = (function () {
         const jobCode = consumeLogJobItems(log).map(i => i.job_code).find(Boolean)
             || String(log.job_code || '').trim();
         if (jobCode) {
-            const job = findJobByCode(st, jobCode);
+            const job = findJobByCode(st, jobCode, {
+                department: log.department || st.department,
+                groupKey: log.pms_group_key || log.spare_group_key,
+                group: log.pms_group_no,
+            });
             if (job) return `${job.department || ''}|${String(job.group || '').trim()}`;
         }
         const pmsNo = String(log.pms_group_no || '').trim();
@@ -7849,8 +8179,17 @@ const TVC_SpareMenu = (function () {
 
     function consumeLogCanDeleteSelection(m, st) {
         if (!canCreateConsume(st)) return false;
-        return Object.keys(m.consumeLogCheckedIds || {}).some(k => m.consumeLogCheckedIds[k])
-            || !!m.selectedConsumeLogId;
+        const ids = Object.keys(m.consumeLogCheckedIds || {}).filter(k => m.consumeLogCheckedIds[k]);
+        if (!ids.length && m.selectedConsumeLogId) ids.push(m.selectedConsumeLogId);
+        if (!ids.length) return false;
+        const logs = st.consumeLogs || [];
+        return ids.some(id => {
+            const log = logs.find(l => String(l.id) === String(id));
+            if (!log) return true;
+            if (log.approved_by || log.approved_at) return false;
+            if (consumeLogIsSubmitted(log)) return false;
+            return true;
+        });
     }
 
     function syncConsumeLogFilterUi(st) {
@@ -8310,8 +8649,9 @@ const TVC_SpareMenu = (function () {
             groupKey: meta.groupKey || '',
             readonly: true,
             allowAdd: false,
+            containerId: 'consumePage2JobRows',
         });
-        const container = document.getElementById('page2JobRows');
+        const container = page2JobRowsEl('consumePage2JobRows');
         if (container) {
             container.innerHTML = renderPage2JobRowsInner(getPage2JobContext(), {
                 readonly: true,
@@ -8907,7 +9247,7 @@ const TVC_SpareMenu = (function () {
     async function consumeHistConfirmOrApprove() {
         const st = getState();
         const m = modState(st);
-        if (!m.consumeFromHistory || !m.consumeLogListEditing) return;
+        if (!m.consumeFromHistory || m.consumeLogListEditing) return;
         const draft = getConsumeSession();
         const logId = draft?.log_id || m.selectedConsumeLogId;
         const user = spareInventoryUser(st);
@@ -8927,10 +9267,7 @@ const TVC_SpareMenu = (function () {
                         ? SPARE_LIST_STATUS.CONFIRMED
                         : SPARE_LIST_STATUS.REPORTED;
                     await TVC_Inventory.saveConsumeLog(log);
-                    await loadConsumeLogIntoListWindow(logId, { preserveHistPopover: false, keepFromHistory: true, skipRender: true });
-                    m.consumeFromHistory = true;
-                    m.consumeLogListEditing = true;
-                    await renderConsumeModal();
+                    await reloadConsumeLogKeepView(logId);
                     await TVC_Dialog.alert('Approval removed.');
                 } catch (e) {
                     await TVC_Dialog.alert(e.message || e.code || 'Unapprove failed');
@@ -8950,10 +9287,7 @@ const TVC_SpareMenu = (function () {
                 log.approved_at = now;
                 log.list_status = SPARE_LIST_STATUS.APPROVED;
                 await TVC_Inventory.saveConsumeLog(log);
-                await loadConsumeLogIntoListWindow(logId, { preserveHistPopover: false, keepFromHistory: true, skipRender: true });
-                m.consumeFromHistory = true;
-                m.consumeLogListEditing = true;
-                await renderConsumeModal();
+                await reloadConsumeLogKeepView(logId);
                 await TVC_Dialog.alert('Approved by Company.');
             } catch (e) {
                 await TVC_Dialog.alert(e.message || e.code || 'Approve failed');
@@ -8970,10 +9304,7 @@ const TVC_SpareMenu = (function () {
                 log.confirmed_at = '';
                 log.list_status = SPARE_LIST_STATUS.REPORTED;
                 await TVC_Inventory.saveConsumeLog(log);
-                await loadConsumeLogIntoListWindow(logId, { preserveHistPopover: false, keepFromHistory: true, skipRender: true });
-                m.consumeFromHistory = true;
-                m.consumeLogListEditing = true;
-                await renderConsumeModal();
+                await reloadConsumeLogKeepView(logId);
                 await TVC_Dialog.alert('Confirm removed. Consumption returned to Reported.');
             } catch (e) {
                 await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
@@ -8989,10 +9320,7 @@ const TVC_SpareMenu = (function () {
             log.confirmed_at = now;
             log.list_status = SPARE_LIST_STATUS.CONFIRMED;
             await TVC_Inventory.saveConsumeLog(log);
-            await loadConsumeLogIntoListWindow(logId, { preserveHistPopover: false, keepFromHistory: true, skipRender: true });
-            m.consumeFromHistory = true;
-            m.consumeLogListEditing = true;
-            await renderConsumeModal();
+            await reloadConsumeLogKeepView(logId);
             await TVC_Dialog.alert('Confirmed.');
         } catch (e) {
             await TVC_Dialog.alert(e.message || e.code || 'Confirm failed');
@@ -9201,10 +9529,25 @@ const TVC_SpareMenu = (function () {
             return;
         }
         const checkedIds = Object.keys(m.consumeLogCheckedIds || {}).filter(k => m.consumeLogCheckedIds[k]);
-        const idsToDelete = checkedIds.length
+        let idsToDelete = checkedIds.length
             ? checkedIds
             : (m.selectedConsumeLogId ? [m.selectedConsumeLogId] : []);
-        if (!idsToDelete.length) await TVC_Dialog.alert('Check one or more consumption logs to delete.');
+        if (!idsToDelete.length) {
+            await TVC_Dialog.alert('Check one or more consumption logs to delete.');
+            return;
+        }
+        const blocked = [];
+        const allowed = [];
+        for (const id of idsToDelete) {
+            const log = await TVC_Inventory.getConsumeLog(id);
+            if (log && (consumeLogIsSubmitted(log) || log.approved_by || log.approved_at)) blocked.push(id);
+            else allowed.push(id);
+        }
+        if (!allowed.length) {
+            await TVC_Dialog.alert('Submitted reports cannot be deleted.');
+            return;
+        }
+        idsToDelete = allowed;
         const labels = [];
         for (const id of idsToDelete) {
             const log = await TVC_Inventory.getConsumeLog(id);
@@ -10220,7 +10563,7 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToApprove.length) {
             if (checkedIds.length) {
-                await TVC_Dialog.alert('None of the selected requisitions can be approved. Submitted requisitions, or HQ-authored Reported requisitions, can be approved with HQ Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected requisitions can be approved. Submitted or Evaluating requisitions, or HQ-authored Reported requisitions, can be approved with HQ Superintendent permission.');
             }
             await TVC_Dialog.alert('Check one or more approvable requisitions to approve.');
         }
@@ -10236,7 +10579,7 @@ const TVC_SpareMenu = (function () {
                 req.confirmed_by = requisitionConfirmByLabel(st, req);
                 req.confirmed_at = now;
             }
-            req.approved_by = 'Company';
+            req.approved_by = hqSuperintendentApprovalLabel(st);
             req.approved_at = now;
             req.list_status = SPARE_LIST_STATUS.APPROVED;
             await TVC_Inventory.saveRequisition(req);
@@ -10250,7 +10593,7 @@ const TVC_SpareMenu = (function () {
         await syncReportedWaitAndRefreshList();
         const skipped = checkedIds.length - approved;
         if (skipped > 0) {
-            await TVC_Dialog.alert(`Approved ${approved} requisition(s). Skipped ${skipped} (not Submitted or no permission).`);
+            await TVC_Dialog.alert(`Approved ${approved} requisition(s). Skipped ${skipped} (not Submitted/Evaluating or no permission).`);
         } else {
             await TVC_Dialog.alert(`Approved ${approved} requisition(s).`);
         }
@@ -10322,7 +10665,7 @@ const TVC_SpareMenu = (function () {
                 const notReady = reqs.filter(r => !reqListCanPurchaseOrderExport(r));
                 if (notReady.length) {
                     const nos = notReady.map(r => r.req_no || r.id).join(', ');
-                    await TVC_Dialog.alert(`Complete Evaluation first: ${nos}`);
+                    await TVC_Dialog.alert(`Only ${HQ_REQ_LIST_STATUS.EVALUATING} and Approved requisitions can be exported: ${nos}`);
                     return;
                 }
             }
@@ -11230,8 +11573,9 @@ const TVC_SpareMenu = (function () {
             }
             m.inlineEditId = null;
             m.inlineDraft = null;
-            await refresh();
-            afterSpareListChange(st);
+            await reloadSparesCache({ force: true });
+            ensureSpareGroupNodes(st);
+            refreshSpareInventoryUi();
             if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
         } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
     }
@@ -11688,7 +12032,9 @@ const TVC_SpareMenu = (function () {
     async function exportPurchaseOrderReq(id) {
         const { st, isHq } = await vesselScope();
         const req = await resolveExportRequisition(id);
-        if (!reqListCanPurchaseOrderExport(req)) throw new Error('Reply Evaluation export required before Purchase Order.');
+        if (!reqListCanPurchaseOrderExport(req)) {
+            throw new Error(`Only ${HQ_REQ_LIST_STATUS.EVALUATING} and Approved requisitions can be exported as Purchase Order.`);
+        }
         if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
         if (!TVC_Excel?.buildSparePartsRequisitionBuffer) throw new Error('Purchase Order Excel export is not available.');
         if (_reqWorkDraft?.id && String(_reqWorkDraft.id) === String(id)) {
@@ -11755,6 +12101,7 @@ const TVC_SpareMenu = (function () {
         RECEIVED: 'RECEIVED',
         INVENTORY: 'INVENTORY',
     };
+    const SPARE_XFER_MONTHLY_REPORT_LABEL = 'Monthly Report';
 
     function resetSpareXfer() {
         _spareXfer = {
@@ -11770,19 +12117,19 @@ const TVC_SpareMenu = (function () {
         { key: 'requisition', label: 'Requisition' },
         { key: 'quotation', label: 'Quotation' },
         { key: 'received', label: 'Received' },
-        { key: 'inventory', label: 'Inventory' },
+        { key: 'inventory', label: SPARE_XFER_MONTHLY_REPORT_LABEL },
     ];
 
     const MASTER_IMPORT_TYPES = [
         { key: 'requisition', label: 'Requisition' },
         { key: 'evaluation', label: 'Order' },
         { key: 'received', label: 'Received' },
-        { key: 'inventory', label: 'Inventory' },
+        { key: 'inventory', label: SPARE_XFER_MONTHLY_REPORT_LABEL },
     ];
 
     const VESSEL_IMPORT_TYPES = [
         { key: 'evaluation', label: 'Order' },
-        { key: 'inventory', label: 'Inventory' },
+        { key: 'inventory', label: SPARE_XFER_MONTHLY_REPORT_LABEL },
     ];
 
     async function logSpareDataXfer(entry) {
@@ -11830,7 +12177,7 @@ const TVC_SpareMenu = (function () {
             REPLY_EVALUATION: 'Reply Evaluation',
             PURCHASE_ORDER: 'Purchase Order',
             RECEIVED: 'Received',
-            INVENTORY: 'Spare Parts Inventory',
+            INVENTORY: SPARE_XFER_MONTHLY_REPORT_LABEL,
             ASSESSMENT: 'Assessment',
         };
         return map[cat] || cat || '—';
@@ -11856,7 +12203,7 @@ const TVC_SpareMenu = (function () {
             evaluation: 'Evaluation',
             order: 'Order',
             received: 'Received',
-            inventory: 'Inventory',
+            inventory: SPARE_XFER_MONTHLY_REPORT_LABEL,
         }[key] || 'Requisition';
     }
 
@@ -11939,11 +12286,11 @@ const TVC_SpareMenu = (function () {
             const hqExportBtns = `
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenQuotationExportList()">Quotation</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenPurchaseOrderExportList()">Order</button>
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Inventory</button>`;
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">${esc(SPARE_XFER_MONTHLY_REPORT_LABEL)}</button>`;
             const vesselExportBtns = `
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReqExportList()">Requisition</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReceivedExportList()">Received</button>
-                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">Inventory</button>`;
+                    <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">${esc(SPARE_XFER_MONTHLY_REPORT_LABEL)}</button>`;
             content = `
                 <p class="spare-sync-hint">${isHq ? 'Select the data type to export.' : 'Select the data type to export to Master PC.'}</p>
                 <p class="spare-sync-note muted">Exports are saved as <strong>.zip</strong> packages (tvc_spare_sync.json inside), same as PMS.</p>
@@ -11959,7 +12306,7 @@ const TVC_SpareMenu = (function () {
                         onclick="TVC_SpareMenu.spareXferSelectHqImportType('${t.key}')">${esc(t.label)}${hqType === t.key ? ' ✓' : ''}</button>`).join('');
                 content = `
                 <p class="spare-sync-hint">Select import type, then open the file.</p>
-                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy <strong>.xlsx</strong> · Inventory also <strong>.xls / .csv</strong></p>
+                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy <strong>.xlsx</strong> · ${esc(SPARE_XFER_MONTHLY_REPORT_LABEL)} also <strong>.xls / .csv</strong></p>
                 <div class="spare-sync-actions">
                     ${typeBtns}
                     <button type="button" class="btn btn-green spare-sync-btn"
@@ -11974,7 +12321,7 @@ const TVC_SpareMenu = (function () {
                         onclick="TVC_SpareMenu.spareXferSelectMasterImportType('${t.key}')">${esc(t.label)}${masterType === t.key ? ' ✓' : ''}</button>`).join('');
                 content = `
                 <p class="spare-sync-hint">Select import type, then open the file.</p>
-                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Order <strong>.xlsx / .json</strong> · Inventory <strong>.xls / .xlsx / .csv</strong></p>
+                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Order <strong>.xlsx / .json</strong> · ${esc(SPARE_XFER_MONTHLY_REPORT_LABEL)} <strong>.xls / .xlsx / .csv</strong></p>
                 <div class="spare-sync-actions">
                     ${typeBtns}
                     <button type="button" class="btn btn-green spare-sync-btn"
@@ -11989,7 +12336,7 @@ const TVC_SpareMenu = (function () {
                         onclick="TVC_SpareMenu.spareXferSelectVesselImportType('${t.key}')">${esc(t.label)}${vesselType === t.key ? ' ✓' : ''}</button>`).join('');
                 content = `
                 <p class="spare-sync-hint">Select import type, then open the file.</p>
-                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Order <strong>.xlsx / .json</strong> · Inventory <strong>.xls / .xlsx / .csv</strong></p>
+                <p class="spare-sync-note muted">Import: <strong>.zip</strong> (preferred) or legacy Order <strong>.xlsx / .json</strong> · ${esc(SPARE_XFER_MONTHLY_REPORT_LABEL)} <strong>.xls / .xlsx / .csv</strong></p>
                 <div class="spare-sync-actions">
                     ${typeBtns}
                     <button type="button" class="btn btn-green spare-sync-btn"
@@ -12283,23 +12630,46 @@ const TVC_SpareMenu = (function () {
                 vesselId,
                 TVC_License.statusSync()?.companyId || TVC_License.COMPANY_ID
             );
-            if (!lic.ok) await TVC_Dialog.alert(lic.error || 'License does not allow Inventory export.');
+            if (!lic.ok) {
+                await TVC_Dialog.alert(lic.error || `License does not allow ${SPARE_XFER_MONTHLY_REPORT_LABEL} export.`);
+                return;
+            }
         }
         const { st, vesselId, isHq } = await vesselScope();
         const spares = (getState().spares || []).map(canon);
-        if (!spares.length) await TVC_Dialog.alert('No parts to export.');
-        if (typeof TVC_SpareSync === 'undefined') await TVC_Dialog.alert('SPARE ZIP export is not available.');
-        const { filename } = await TVC_SpareSync.exportInventoryZip(st.user, spares, {
+        if (!spares.length) {
+            await TVC_Dialog.alert('No parts to export.');
+            return;
+        }
+        if (typeof TVC_SpareSync === 'undefined') {
+            await TVC_Dialog.alert('SPARE ZIP export is not available.');
+            return;
+        }
+        const previewFilename = await TVC_SpareSync.resolveExportFilename(st.user, SPARE_XFER_EXPORT.INVENTORY, {
             vessel_id: vesselId,
             department: st.department,
             isHq,
         });
-        await logSpareDataXfer({
-            direction: 'EXPORT', category: SPARE_XFER_EXPORT.INVENTORY,
-            summary: `${spares.length} part(s) exported (ZIP)`, count: spares.length,
-            file_name: filename,
-        });
-        closeSpareSyncMenu();
+        if (!await TVC_Dialog.confirm({
+            message: `Export ${spares.length} spare part(s) as ${SPARE_XFER_MONTHLY_REPORT_LABEL}?\n\n${previewFilename}`,
+        })) return;
+        try {
+            const { filename } = await TVC_SpareSync.exportInventoryZip(st.user, spares, {
+                vessel_id: vesselId,
+                department: st.department,
+                isHq,
+                filename: previewFilename,
+            });
+            await logSpareDataXfer({
+                direction: 'EXPORT', category: SPARE_XFER_EXPORT.INVENTORY,
+                summary: `${spares.length} part(s) exported (ZIP)`, count: spares.length,
+                file_name: filename,
+            });
+            closeSpareSyncMenu();
+            await TVC_Dialog.alert(`Exported ${spares.length} part(s).\n${filename}`);
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || e.code || String(e));
+        }
     }
 
     async function spareXferImportRequisitionExcel(file, opts = {}) {
@@ -12512,13 +12882,13 @@ const TVC_SpareMenu = (function () {
 
             if (importKind === 'inventory') {
                 if (!(name.endsWith('.csv') || name.endsWith('.xls') || name.endsWith('.xlsx'))) {
-                    await TVC_Dialog.alert('Inventory Import accepts .xls, .xlsx, or .csv files only.');
+                    await TVC_Dialog.alert(`${SPARE_XFER_MONTHLY_REPORT_LABEL} Import accepts .xls, .xlsx, or .csv files only.`);
                 }
                 await onInventoryImportFile(file);
                 await logSpareDataXfer({
                     direction: 'IMPORT', category: SPARE_XFER_EXPORT.INVENTORY,
                     file_name: file.name,
-                    summary: 'Spare parts inventory file imported',
+                    summary: `${SPARE_XFER_MONTHLY_REPORT_LABEL} file imported`,
                 });
                 closeSpareSyncMenu();
                 return;
@@ -12541,7 +12911,7 @@ const TVC_SpareMenu = (function () {
                 await logSpareDataXfer({
                     direction: 'IMPORT', category: SPARE_XFER_EXPORT.INVENTORY,
                     file_name: file.name,
-                    summary: 'Spare parts inventory file imported',
+                    summary: `${SPARE_XFER_MONTHLY_REPORT_LABEL} file imported`,
                 });
                 closeSpareSyncMenu();
                 return;
@@ -12552,7 +12922,7 @@ const TVC_SpareMenu = (function () {
                     await logSpareDataXfer({
                         direction: 'IMPORT', category: SPARE_XFER_EXPORT.INVENTORY,
                         file_name: file.name,
-                        summary: 'Spare parts inventory file imported',
+                        summary: `${SPARE_XFER_MONTHLY_REPORT_LABEL} file imported`,
                     });
                     closeSpareSyncMenu();
                 } else {
@@ -12560,7 +12930,7 @@ const TVC_SpareMenu = (function () {
                 }
                 return;
             }
-            await TVC_Dialog.alert('Unsupported file type. Use .xlsx (Requisition), .json (Assessment), or .xls/.csv (Inventory).');
+            await TVC_Dialog.alert(`Unsupported file type. Use .xlsx (Requisition), .json (Assessment), or .xls/.csv (${SPARE_XFER_MONTHLY_REPORT_LABEL}).`);
         } catch (e) {
             await TVC_Dialog.alert('Import failed: ' + (e.message || e.code));
         } finally {
@@ -13322,6 +13692,7 @@ const TVC_SpareMenu = (function () {
 
     function canModifyReqHistory(st, req) {
         if (!req || !canCreateRequisition(st)) return false;
+        if (!isReqListHqUser(st) && reqVesselReceivedExportComplete(req)) return false;
         if (reqWorkVesselOrderedOrReceivedView()) return false;
         const status = spareListStatus(req);
         if (status === SPARE_LIST_STATUS.APPROVED || req.approved_by || req.approved_at) {
@@ -13334,6 +13705,9 @@ const TVC_SpareMenu = (function () {
     function reqHistModifyDisabledTitle(st, req) {
         if (canModifyReqHistory(st, req)) return '';
         if (!canCreateRequisition(st)) return 'No permission';
+        if (!isReqListHqUser(st) && reqVesselReceivedExportComplete(req)) {
+            return 'Received data has been exported and cannot be changed.';
+        }
         if (reqWorkVesselOrderedOrReceivedView()) return reqWorkVesselPostOrderLockTip();
         if (spareListStatus(req) === SPARE_LIST_STATUS.APPROVED || req?.approved_by || req?.approved_at) {
             return 'Approved — modify not available';
@@ -13394,7 +13768,7 @@ const TVC_SpareMenu = (function () {
         if (actionBtn) {
             const action = reqWorkApprovalActionState(st, req);
             actionBtn.textContent = action.label;
-            actionBtn.disabled = !(m.reqWorkListEditing && action.ok);
+            actionBtn.disabled = !(!m.reqWorkListEditing && action.ok);
         }
     }
 
@@ -13456,7 +13830,8 @@ const TVC_SpareMenu = (function () {
     async function reqHistConfirmOrApprove() {
         const st = getState();
         const m = modState(st);
-        if (!m.reqWorkListEditing) return;
+        const fromHistory = !!m.reqWorkFromHistory;
+        if (fromHistory ? m.reqWorkListEditing : !m.reqWorkListEditing) return;
         const reqId = _reqWorkDraft?.id || m.selectedReqId;
         const user = spareInventoryUser(st);
         if (!reqId || !user) return;
@@ -13474,8 +13849,10 @@ const TVC_SpareMenu = (function () {
                 skipRender: true,
             });
             if (keepHist) m.reqWorkFromHistory = true;
-            m.reqWorkListEditing = true;
+            m.reqWorkListEditing = !keepHist;
             await renderReqWorkModal();
+            await refreshReqListUi();
+            await syncReportedWaitAndRefreshList();
         };
         if (isReqListHqUser(st)) {
             if (req.approved_by || req.approved_at) {
@@ -13502,12 +13879,12 @@ const TVC_SpareMenu = (function () {
                     req.confirmed_by = requisitionConfirmByLabel(st, req);
                     req.confirmed_at = now;
                 }
-                req.approved_by = 'Company';
+                req.approved_by = hqSuperintendentApprovalLabel(st);
                 req.approved_at = now;
                 req.list_status = SPARE_LIST_STATUS.APPROVED;
                 await TVC_Inventory.saveRequisition(req);
                 await reloadAfterToggle();
-                await TVC_Dialog.alert('Approved by Company.');
+                await TVC_Dialog.alert('Approved by Superintendent.');
             } catch (e) {
                 await TVC_Dialog.alert(e.message || e.code || 'Approve failed');
             }
@@ -14079,8 +14456,11 @@ const TVC_SpareMenu = (function () {
     function reqListMatchesPhase(req, tab, st) {
         if (!tab || tab === REQ_LIST_PHASE.ALL) return true;
         st = st || getState();
-        const phase = isReqListHqUser(st) ? reqHqWorkflowPhase(req) : reqWorkflowPhase(req);
-        if (!isReqListHqUser(st) && tab === REQ_LIST_PHASE.REPORTED) {
+        if (isReqListHqUser(st)) {
+            return reqHqListPhaseKey(req) === tab;
+        }
+        const phase = reqWorkflowPhase(req);
+        if (tab === REQ_LIST_PHASE.REPORTED) {
             return phase === REQ_LIST_PHASE.DRAFT || phase === REQ_LIST_PHASE.REPORTED;
         }
         if (tab === 'exported') return phase === REQ_LIST_PHASE.SUBMITTED;
@@ -14105,6 +14485,9 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqListCanQuotationExport(req) {
+        if (!req) return false;
+        const st = getState();
+        if (isReqListHqUser(st)) return reqListIsHqRequisitionStatus(req);
         return reqWorkHqQuoteSetupReady(req);
     }
 
@@ -14113,11 +14496,13 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqListCanPurchaseOrderExport(req) {
+        if (!req) return false;
+        const st = getState();
+        if (isReqListHqUser(st)) return reqListIsHqEvaluatingApproved(req);
         return reqWorkHqEvaluationReady(req);
     }
 
     function reqListXferExportMeta(kind) {
-        const labels = reqWorkQuoteFlowLabels();
         const map = {
             requisition: {
                 title: ' — Export',
@@ -14129,8 +14514,8 @@ const TVC_SpareMenu = (function () {
             },
             quotation: {
                 title: ' — Quotation Export',
-                hint: `Select requisition(s) with <strong>${labels.selectVendor}</strong> complete (vendor, currency, checked items).`,
-                statusLabel: 'Quote-ready',
+                hint: 'Select requisition(s) with Status <strong>Requisition</strong> only.',
+                statusLabel: 'Requisition',
                 confirmTarget: 'quotation export(s)',
                 category: SPARE_XFER_EXPORT.QUOTATION,
                 successMsg: (n) => `Exported quotation for ${n} requisition(s).`,
@@ -14145,8 +14530,8 @@ const TVC_SpareMenu = (function () {
             },
             'purchase-order': {
                 title: ' — Purchase Order Export',
-                hint: 'Select requisition(s) with <strong>Reply Evaluation</strong> exported first.',
-                statusLabel: 'Order-ready',
+                hint: 'Select requisition(s) with Status <strong>Evaluating</strong> and <strong>Approved</strong>.',
+                statusLabel: 'Evaluating (Approved)',
                 confirmTarget: 'purchase order export(s)',
                 category: SPARE_XFER_EXPORT.PURCHASE_ORDER,
                 successMsg: (n) => `Exported purchase order for ${n} requisition(s).`,
@@ -14193,6 +14578,10 @@ const TVC_SpareMenu = (function () {
             return `${label} — only Received status can be exported`;
         }
         if (_reqListXferExportKind === 'quotation') {
+            const label = reqListDisplayStatusLabel(req, getState());
+            if (label !== HQ_REQ_LIST_STATUS.REQUISITION) {
+                return `${label} — only ${HQ_REQ_LIST_STATUS.REQUISITION} status can be exported`;
+            }
             const labels = reqWorkQuoteFlowLabels();
             return `Complete ${labels.selectVendor} (vendor, currency, checked items) first`;
         }
@@ -14200,7 +14589,14 @@ const TVC_SpareMenu = (function () {
             return 'Complete Evaluation (Eval column) first';
         }
         if (_reqListXferExportKind === 'purchase-order') {
-            return 'Export Reply Evaluation first';
+            const label = reqListDisplayStatusLabel(req, getState());
+            if (label !== HQ_REQ_LIST_STATUS.EVALUATING) {
+                return `${label} — only ${HQ_REQ_LIST_STATUS.EVALUATING} status can be exported`;
+            }
+            if (!reqListApprovalFlags(req).isApproved) {
+                return `${HQ_REQ_LIST_STATUS.EVALUATING} — Approve first before Order export`;
+            }
+            return 'Order export not available';
         }
         return reqListExportSelectDisabledTitle(req);
     }
@@ -14215,6 +14611,10 @@ const TVC_SpareMenu = (function () {
         const canConfirm = canConfirmRequisition(st, record);
         const canUnconfirm = canUnconfirmRequisition(st, record);
         const m = modState(st);
+        // Report History → Detail Report: confirm / unconfirm in view mode (same as Consumption)
+        if (m.reqWorkFromHistory && !listEditing) {
+            return canConfirm || canUnconfirm;
+        }
         if (!isRequisitionListWindow(m)) {
             return canConfirm || (listEditing && canUnconfirm);
         }
@@ -14249,7 +14649,7 @@ const TVC_SpareMenu = (function () {
                 ? (TVC_RBAC.resolveConfirmByLabel?.(record?.confirmed_by, record?.department || st?.department, user)
                     || requisitionConfirmByLabel(st, record))
                 : '',
-            approvedByVal: isApproved ? (record?.approved_by || 'Company') : '',
+            approvedByVal: isApproved ? (record?.approved_by || hqSuperintendentApprovalLabel(st)) : '',
         };
     }
 
@@ -14272,10 +14672,10 @@ const TVC_SpareMenu = (function () {
         const confirmEnabled = !displayOnly && canConfirmNow;
         const approveEnabled = !displayOnly && canApproveNow;
         const confirmLock = displayOnly
-            ? ' tabindex="-1" aria-readonly="true"'
+            ? ' disabled tabindex="-1" aria-readonly="true"'
             : (confirmEnabled ? '' : ' disabled');
         const approveLock = displayOnly
-            ? ' tabindex="-1" aria-readonly="true"'
+            ? ' disabled tabindex="-1" aria-readonly="true"'
             : (approveEnabled ? '' : ' disabled');
         return `<section class="wr-maint-card wr-maint-approval" aria-label="Approval">
             <div class="wr-maint-approval-item${confirmEnabled ? ' is-active' : ''}">
@@ -14291,6 +14691,7 @@ const TVC_SpareMenu = (function () {
 
     function renderSpareApprovalSection(record, { prefix, department, listMode, listEditing } = {}) {
         const approval = spareApprovalState(record, department, { listMode, listEditing });
+        const confirmLive = !!approval.canConfirmNow;
         return renderSpareApprovalHtml({
             prefix,
             canApproveNow: approval.canApproveNow,
@@ -14299,8 +14700,8 @@ const TVC_SpareMenu = (function () {
             isRepConfirmed: approval.isConfirmed,
             approvedByVal: approval.approvedByVal,
             confirmedByVal: approval.confirmedByVal,
-            displayOnly: true,
-            confirmToggle: '',
+            displayOnly: !confirmLive,
+            confirmToggle: confirmLive ? 'TVC_SpareMenu.reqWorkConfirmByToggle()' : '',
             approveToggle: '',
         });
     }
@@ -14490,24 +14891,19 @@ const TVC_SpareMenu = (function () {
             || !!(record?.confirmed_by || record?.confirmed_at);
         const isApproved = status === SPARE_LIST_STATUS.APPROVED || !!(record?.approved_by || record?.approved_at);
         const hasKey = !!(record?.log_id || record?.id);
-        const listMode = !!opts.listMode;
         const listEditing = !!opts.listEditing;
         const isHq = isReqListHqUser(st);
-        const fromHistory = !!modState(st).consumeFromHistory;
-        const canUnconfirmNow = hasKey && !isHq && listEditing
+        const approvalLive = !listEditing;
+        const canUnconfirmNow = hasKey && !isHq && approvalLive
             && isConfirmed && !isApproved
             && !!spareInventoryUser(st)
             && TVC_RBAC.canConfirmDepartment(spareInventoryUser(st), dept);
-        const canUnapproveNow = hasKey && isHq && listEditing
+        const canUnapproveNow = hasKey && isHq && approvalLive
             && isApproved && TVC_RBAC.canApproveHqReport(spareInventoryUser(st));
-        const canConfirmNow = fromHistory
-            ? canUnconfirmNow
-            : ((hasKey && consumeLogCanConfirm(st, { ...record, department: dept })
-                && (!listMode || listEditing)) || canUnconfirmNow);
-        const canApproveNow = fromHistory
-            ? canUnapproveNow
-            : ((hasKey && consumeLogCanApprove(st, { ...record, department: dept })
-                && (!listMode || listEditing || isHq)) || canUnapproveNow);
+        const canConfirmNow = canUnconfirmNow
+            || (approvalLive && hasKey && consumeLogCanConfirm(st, { ...record, department: dept }));
+        const canApproveNow = canUnapproveNow
+            || (approvalLive && hasKey && consumeLogCanApprove(st, { ...record, department: dept }));
         return {
             isConfirmed,
             isApproved,
@@ -14530,9 +14926,9 @@ const TVC_SpareMenu = (function () {
             isRepApproved: approval.isApproved,
             confirmedByVal: approval.confirmedByVal,
             approvedByVal: approval.approvedByVal,
-            displayOnly: true,
-            confirmToggle: '',
-            approveToggle: '',
+            displayOnly: !!opts.displayOnly,
+            confirmToggle: 'TVC_SpareMenu.consumeLogConfirmedByToggle()',
+            approveToggle: 'TVC_SpareMenu.consumeLogApprovedByToggle()',
         });
     }
 
@@ -14555,7 +14951,7 @@ const TVC_SpareMenu = (function () {
                 return;
             }
             if (!canUnconfirmRequisition(st, req)
-                || !(isRequisitionListWindow(m) && m.reqWorkListEditing)) {
+                || !(isRequisitionListWindow(m) && (m.reqWorkListEditing || m.reqWorkFromHistory))) {
                 cfCb.checked = true;
                 return;
             }
@@ -14604,12 +15000,26 @@ const TVC_SpareMenu = (function () {
         }
     }
 
+    async function reloadConsumeLogKeepView(logId) {
+        const st = getState();
+        const m = modState(st);
+        const keepHist = !!m.consumeFromHistory;
+        await loadConsumeLogIntoListWindow(logId, {
+            preserveHistPopover: false,
+            keepFromHistory: keepHist,
+            skipRender: true,
+        });
+        if (keepHist) m.consumeFromHistory = true;
+        m.consumeLogListEditing = false;
+        await renderConsumeModal();
+    }
+
     async function consumeLogConfirmedByToggle() {
         const cfCb = document.getElementById('consumeLogConfirmedBy');
         if (!cfCb || cfCb.disabled) return;
         const st = getState();
         const m = modState(st);
-        if (!m.consumeFromHistory || !m.consumeLogListEditing) return;
+        if (m.consumeLogListEditing) return;
         if (isReqListHqUser(st)) {
             cfCb.checked = !!(getConsumeSession()?.confirmed_by || getConsumeSession()?.confirmed_at);
             return;
@@ -14619,31 +15029,57 @@ const TVC_SpareMenu = (function () {
         const user = spareInventoryUser(st);
         const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
         if (!logId || !user) return;
-        if (cfCb.checked) return;
+
+        if (!cfCb.checked) {
+            try {
+                const log = await TVC_Inventory.getConsumeLog(logId);
+                if (!log) throw new Error('Consumption log not found.');
+                if (log.approved_by || log.approved_at) {
+                    cfCb.checked = true;
+                    return;
+                }
+                if (!TVC_RBAC.canConfirmDepartment(user, log.department || st.department)) {
+                    cfCb.checked = true;
+                    return;
+                }
+                log.confirmed_by = '';
+                log.confirmed_at = '';
+                log.list_status = SPARE_LIST_STATUS.REPORTED;
+                await TVC_Inventory.saveConsumeLog(log);
+                await reloadConsumeLogKeepView(logId);
+                await TVC_Dialog.alert('Confirm removed. Consumption returned to Reported.');
+            } catch (e) {
+                cfCb.checked = true;
+                if (input) input.value = draft?.confirmed_by || '';
+                await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
+            }
+            return;
+        }
+
+        if (draft?.confirmed_by || draft?.confirmed_at) return;
+        const label = TVC_RBAC.getDepartmentConfirmLabel(draft?.department || st.department, user)
+            || TVC_RBAC.getRankLabel(user)
+            || '';
+        if (input) input.value = label;
         try {
             const log = await TVC_Inventory.getConsumeLog(logId);
-            if (!log) throw new Error('Consumption log not found.');
-            if (log.approved_by || log.approved_at) {
-                cfCb.checked = true;
+            if (!log || !consumeLogCanConfirm(st, log)) {
+                cfCb.checked = false;
+                if (input) input.value = '';
+                await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
                 return;
             }
-            if (!TVC_RBAC.canConfirmDepartment(user, log.department || st.department)) {
-                cfCb.checked = true;
-                return;
-            }
-            log.confirmed_by = '';
-            log.confirmed_at = '';
-            log.list_status = SPARE_LIST_STATUS.REPORTED;
+            log.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(log.department || st.department, user)
+                || TVC_RBAC.getRankLabel(user);
+            log.confirmed_at = new Date().toISOString();
+            log.list_status = SPARE_LIST_STATUS.CONFIRMED;
             await TVC_Inventory.saveConsumeLog(log);
-            await loadConsumeLogIntoListWindow(logId, { preserveHistPopover: false, keepFromHistory: true, skipRender: true });
-            m.consumeFromHistory = true;
-            m.consumeLogListEditing = true;
-            await renderConsumeModal();
-            await TVC_Dialog.alert('Confirm removed. Consumption returned to Reported.');
+            await reloadConsumeLogKeepView(logId);
+            await TVC_Dialog.alert('Confirmed.');
         } catch (e) {
-            cfCb.checked = true;
-            if (input) input.value = draft?.confirmed_by || '';
-            await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
+            cfCb.checked = false;
+            if (input) input.value = '';
+            await TVC_Dialog.alert(e.message || e.code || 'Confirm failed');
         }
     }
 
@@ -14652,30 +15088,58 @@ const TVC_SpareMenu = (function () {
         if (!apCb || apCb.disabled) return;
         const st = getState();
         const m = modState(st);
-        if (!m.consumeFromHistory || !m.consumeLogListEditing) return;
+        if (m.consumeLogListEditing) return;
         if (!isReqListHqUser(st)) return;
         const draft = getConsumeSession();
         const logId = draft?.log_id || m.selectedConsumeLogId;
         const user = spareInventoryUser(st);
+        const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
         if (!logId || !user || !TVC_RBAC.canApproveHqReport(user)) return;
-        if (apCb.checked) return;
+
+        if (!apCb.checked) {
+            try {
+                const log = await TVC_Inventory.getConsumeLog(logId);
+                if (!log) throw new Error('Consumption log not found.');
+                log.approved_by = '';
+                log.approved_at = '';
+                log.list_status = (log.confirmed_by || log.confirmed_at)
+                    ? SPARE_LIST_STATUS.CONFIRMED
+                    : SPARE_LIST_STATUS.REPORTED;
+                await TVC_Inventory.saveConsumeLog(log);
+                await reloadConsumeLogKeepView(logId);
+                await TVC_Dialog.alert('Approval removed.');
+            } catch (e) {
+                apCb.checked = true;
+                await TVC_Dialog.alert(e.message || e.code || 'Unapprove failed');
+            }
+            return;
+        }
+
+        if (draft?.approved_by || draft?.approved_at) return;
+        if (input) input.value = 'Company';
         try {
             const log = await TVC_Inventory.getConsumeLog(logId);
-            if (!log) throw new Error('Consumption log not found.');
-            log.approved_by = '';
-            log.approved_at = '';
-            log.list_status = (log.confirmed_by || log.confirmed_at)
-                ? SPARE_LIST_STATUS.CONFIRMED
-                : SPARE_LIST_STATUS.REPORTED;
+            if (!log || !consumeLogCanApprove(st, log)) {
+                apCb.checked = false;
+                if (input) input.value = '';
+                await TVC_Dialog.alert('This log cannot be approved.');
+                return;
+            }
+            const now = new Date().toISOString();
+            if (!log.confirmed_at && !log.confirmed_by) {
+                log.confirmed_by = requisitionConfirmByLabel(st, log);
+                log.confirmed_at = now;
+            }
+            log.approved_by = 'Company';
+            log.approved_at = now;
+            log.list_status = SPARE_LIST_STATUS.APPROVED;
             await TVC_Inventory.saveConsumeLog(log);
-            await loadConsumeLogIntoListWindow(logId, { preserveHistPopover: false, keepFromHistory: true, skipRender: true });
-            m.consumeFromHistory = true;
-            m.consumeLogListEditing = true;
-            await renderConsumeModal();
-            await TVC_Dialog.alert('Approval removed.');
+            await reloadConsumeLogKeepView(logId);
+            await TVC_Dialog.alert('Approved by Company.');
         } catch (e) {
-            apCb.checked = true;
-            await TVC_Dialog.alert(e.message || e.code || 'Unapprove failed');
+            apCb.checked = false;
+            if (input) input.value = '';
+            await TVC_Dialog.alert(e.message || e.code || 'Approve failed');
         }
     }
 
@@ -14744,7 +15208,9 @@ const TVC_SpareMenu = (function () {
                         : (TVC_RBAC.getDepartmentConfirmLabel(dept) || TVC_RBAC.getRankLabel(user));
                     record.confirmed_at = now;
                 }
-                record.approved_by = 'Company';
+                record.approved_by = prefix === 'reqWork'
+                    ? hqSuperintendentApprovalLabel(st)
+                    : 'Company';
                 record.approved_at = now;
                 record.list_status = SPARE_LIST_STATUS.APPROVED;
                 changed = true;
@@ -14772,7 +15238,9 @@ const TVC_SpareMenu = (function () {
             await TVC_Inventory.saveRequisition(record);
         }
         if (after === SPARE_LIST_STATUS.CONFIRMED) await TVC_Dialog.alert('Confirmed.');
-        else if (after === SPARE_LIST_STATUS.APPROVED) await TVC_Dialog.alert('Approved by Company.');
+        else if (after === SPARE_LIST_STATUS.APPROVED) {
+            await TVC_Dialog.alert(kind === 'consume' ? 'Approved by Company.' : 'Approved by Superintendent.');
+        }
         return true;
     }
 
@@ -14795,7 +15263,8 @@ const TVC_SpareMenu = (function () {
             req.assessed_by = g('reqWorkAssessedBy');
             req.ordered_on = g('reqWorkOrderedOn');
             req.ordered_by = g('reqWorkOrderedBy');
-        } else if (!isReqListHqUser(st) && modState(st).reqWorkVesselFlowStage === 'received') {
+        } else if (!isReqListHqUser(st) && modState(st).reqWorkVesselFlowStage === 'received'
+            && !reqVesselReceivedExportComplete(req)) {
             const recvDate = g('reqWorkReceivedOn').trim();
             req.received_on = recvDate;
             req.received_date = recvDate;
@@ -15350,7 +15819,7 @@ const TVC_SpareMenu = (function () {
             const navBtns = `<button type="button" id="reqWorkHistPrevBtn" class="btn" onclick="TVC_SpareMenu.navReqHistory(-1)"${atFirst ? ' disabled' : ''}>&laquo; Previous</button>
                 <button type="button" id="reqWorkHistNextBtn" class="btn" onclick="TVC_SpareMenu.navReqHistory(1)"${atLast ? ' disabled' : ''}>Next &raquo;</button>`;
             const action = reqWorkApprovalActionState(st, req);
-            const histActionBtn = `<button type="button" id="reqWorkHistActionBtn" class="btn" onclick="TVC_SpareMenu.reqHistConfirmOrApprove()"${listEditing && action.ok ? '' : ' disabled'}>${action.label}</button>`;
+            const histActionBtn = `<button type="button" id="reqWorkHistActionBtn" class="btn" onclick="TVC_SpareMenu.reqHistConfirmOrApprove()"${!listEditing && action.ok ? '' : ' disabled'}>${action.label}</button>`;
             const printBtns = `${histActionBtn}<button type="button" class="btn" onclick="TVC_SpareMenu.reqWorkPrint()">Print</button>
                 <button type="button" class="btn" onclick="TVC_SpareMenu.reqWorkDocPreview()">Preview</button>`;
             const closeBtn = `<button type="button" class="btn" onclick="TVC_SpareMenu.closeReqWorkModal()">Close</button>`;
@@ -15366,16 +15835,13 @@ const TVC_SpareMenu = (function () {
                 <div class="wr-modal-actions-right">${printBtns}${closeBtn}</div>
                </div>`;
         } else if (listEditing) {
-            const action = reqWorkApprovalActionState(st, req);
             footerHtml = `<div class="modal-actions wr-actions wr-actions-split spare-req-draft-actions">
                 <div class="wr-modal-actions-left"></div>
                 <div class="wr-modal-actions-center">
                     <button type="button" id="reqWorkSaveBtn" class="btn btn-green" onclick="TVC_SpareMenu.reqWorkSave()"${saveDisabled ? ' disabled' : ''}${saveQtyBlocked ? ' title="Enter Request quantity for each selected part before Save."' : ''}>Save</button>
-                    <button type="button" id="reqWorkCancelBtn" class="btn" onclick="TVC_SpareMenu.reqWorkCancelEdit()">Cancel</button>
+                    <button type="button" id="reqWorkCancelBtn" class="btn" onclick="TVC_SpareMenu.reqWorkCancelDraft()">Cancel</button>
                 </div>
-                <div class="wr-modal-actions-right">
-                    <button type="button" class="btn" onclick="TVC_SpareMenu.reqHistConfirmOrApprove()"${action.ok ? '' : ' disabled'}>${action.label}</button>
-                </div>
+                <div class="wr-modal-actions-right"></div>
                </div>`;
         } else if (postSaveView) {
             footerHtml = `<div class="modal-actions wr-actions wr-actions-split spare-req-draft-actions">
@@ -15545,6 +16011,11 @@ const TVC_SpareMenu = (function () {
         await openRequisitionInListWindow(reqId, { editing: false });
     }
 
+    async function reqWorkCancelDraft() {
+        if (!await TVC_Dialog.confirm({ message: 'Cancel this requisition?' })) return;
+        await closeReqWorkModal();
+    }
+
     async function closeReqWorkModal() {
         const st = getState();
         const req = _reqWorkDraft;
@@ -15577,9 +16048,11 @@ const TVC_SpareMenu = (function () {
         if (_reqWorkResizeObs) { _reqWorkResizeObs.disconnect(); _reqWorkResizeObs = null; }
         if (vlReqWork) { vlReqWork.destroy(); vlReqWork = null; }
         document.getElementById('spareReqWorkModal')?.classList.remove('is-req-doc-preview');
+        const wasHistOverlay = _spareHistReportOverlay;
         cleanupSpareHistReportOverlay();
         closeSpicsModal('spareReqWorkModal');
-        if (st.currentTab === 'spare') render();
+        if (wasHistOverlay) await refreshReqListUi();
+        refreshSpareTabAfterModalClose();
     }
 
     async function reqWorkComplete() {
@@ -15660,6 +16133,11 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert(reqWorkVesselPostOrderLockTip());
             return;
         }
+        const displayedEarly = getReqWorkSession();
+        if (!isReqListHqUser(st) && reqVesselReceivedExportComplete(displayedEarly)) {
+            await TVC_Dialog.alert('Received data has been exported and cannot be changed.');
+            return;
+        }
         if (!canCreateRequisition(st)) {
             await TVC_Dialog.alert('No permission to modify requisitions.');
             return;
@@ -15736,6 +16214,10 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (m.reqWorkCompleted) return;
+        if (!isReqListHqUser(st) && reqVesselReceivedExportComplete(_reqWorkDraft || getReqWorkSession())) {
+            await TVC_Dialog.alert('Received data has been exported and cannot be changed.');
+            return;
+        }
         if (isRequisitionListWindow(m) && !m.reqWorkListEditing && !reqWorkVesselReceivedRcvdOnlyEdit()) return;
         finalizeReqWorkDraftForSave();
         if (!_reqWorkDraft) { await TVC_Dialog.alert('Requisition not found.'); return; }
@@ -16278,6 +16760,8 @@ const TVC_SpareMenu = (function () {
         if (modState(getState()).reqWorkShowSelectedOnly && !reqWorkCheckedSpareCount(getState())) {
             modState(getState()).reqWorkShowSelectedOnly = false;
             refreshReqWorkListUi();
+        } else if (checked && spare) {
+            reqWorkApplyRowFocus(spareId, false);
         } else {
             refreshReqWorkListUiSoft();
         }
@@ -16624,7 +17108,7 @@ const TVC_SpareMenu = (function () {
         if (groupKey === CRITICAL_GROUP_KEY) {
             jobs = jobs.filter(isCriticalMaintenanceJob);
         } else if (groupKey === MERGED_GEN_ENGINE_KEY) {
-            jobs = jobs.filter(j => isGeneratorEngineGroupLabel(j.group));
+            jobs = jobs.filter(j => mapsToMergedGeneratorSpare(j.group, j.department));
         } else if (groupKey) {
             const set = new Set(st.idx.jobsByGroupKey.get(groupKey) || []);
             jobs = jobs.filter(j => set.has(j.id));
@@ -16719,10 +17203,60 @@ const TVC_SpareMenu = (function () {
         };
     }
 
-    function findJobByCode(st, jobCode) {
+    function jobGroupLabelKey(label) {
+        return safeTreeLabel(String(label || '')).replace(/\s+/g, '').toLowerCase();
+    }
+
+    function isBroadLoginDepartment(dept) {
+        const d = String(dept || '').trim().toUpperCase();
+        return !d || d === 'MASTER' || d === 'HQ' || d === 'ADMIN';
+    }
+
+    /** JOB CODE lookup — ENGINE·DECK may share codes; prefer group then department. */
+    function findJobByCode(st, jobCode, opts = {}) {
         const code = String(jobCode || '').trim().toLowerCase();
         if (!code) return null;
-        return (st.jobs || []).find(j => String(j.job_code || '').trim().toLowerCase() === code) || null;
+        const matches = (st.jobs || []).filter(j => String(j.job_code || '').trim().toLowerCase() === code);
+        if (!matches.length) return null;
+        if (matches.length === 1) return matches[0];
+
+        const groupKey = String(opts.groupKey || '').trim();
+        if (groupKey) {
+            const hit = matches.find(j => {
+                const gk = `${j.department || ''}|${String(j.group || '').trim()}`;
+                const merged = spareFilterKeyFromPmsGroup(j.department, j.group);
+                return gk === groupKey || merged === groupKey;
+            });
+            if (hit) return hit;
+        }
+
+        const groupLabel = String(opts.group || opts.groupLabel || '').trim();
+        if (groupLabel) {
+            const want = jobGroupLabelKey(groupLabel);
+            const hit = matches.find(j => jobGroupLabelKey(j.group) === want);
+            if (hit) return hit;
+        }
+
+        const dept = String(opts.department || st.department || '').trim().toUpperCase();
+        if (!isBroadLoginDepartment(dept)) {
+            const hit = matches.find(j => String(j.department || '').trim().toUpperCase() === dept);
+            if (hit) return hit;
+        }
+        return matches[0];
+    }
+
+    function findConsumeLinkedJob(draft, st, extra = {}) {
+        if (!st) return null;
+        const jobId = extra.jobId;
+        if (jobId) {
+            const byId = st.idx?.jobById?.get(jobId);
+            if (byId) return byId;
+        }
+        return findJobByCode(st, extra.jobCode || draft?.job_code || draft?.job_items?.[0]?.job_code, {
+            department: extra.department || draft?.department || st.department,
+            groupKey: extra.groupKey || draft?.spare_group_key,
+            group: extra.group || draft?.spare_group_label,
+        });
     }
 
     function applyConsumeJobFields(job, rowIdx = _consumeActiveJobRowIndex || 0) {
@@ -16787,7 +17321,7 @@ const TVC_SpareMenu = (function () {
         captureConsumeMeta();
         const draft = getConsumeSession();
         if (!draft) return;
-        const job = findJobByCode(st, draft.job_code);
+        const job = findConsumeLinkedJob(draft, st);
         if (job) applyConsumeJobFields(job);
         renderConsumeMetaFields();
     }
@@ -16980,6 +17514,7 @@ const TVC_SpareMenu = (function () {
             groupKey: ctx.groupKey || '',
             readonly: !!ctx.readonly,
             allowAdd: !!ctx.allowAdd,
+            containerId: ctx.containerId || '',
         } : null;
     }
 
@@ -16987,10 +17522,35 @@ const TVC_SpareMenu = (function () {
         return _page2JobCtx;
     }
 
+    function page2JobRowsEl(preferredId) {
+        const wrModal = document.getElementById('workReportModal');
+        const consumeModal = document.getElementById('spareConsumeModal');
+        const wrOpen = wrModal && !wrModal.classList.contains('hidden');
+        const consumeOpen = consumeModal && !consumeModal.classList.contains('hidden');
+        const want = String(preferredId || _page2JobCtx?.containerId || '').trim();
+        if (want) {
+            const scoped = (wrOpen && wrModal.querySelector(`#${want}`))
+                || (consumeOpen && consumeModal.querySelector(`#${want}`))
+                || document.getElementById(want);
+            if (scoped) return scoped;
+        }
+        if (wrOpen) {
+            const el = wrModal.querySelector('#wrPage2JobRows, #page2JobRows');
+            if (el) return el;
+        }
+        if (consumeOpen) {
+            const el = consumeModal.querySelector('#consumePage2JobRows, #page2JobRows');
+            if (el) return el;
+        }
+        return document.getElementById('wrPage2JobRows')
+            || document.getElementById('consumePage2JobRows')
+            || document.getElementById('page2JobRows');
+    }
+
     function capturePage2JobItems() {
         const ctx = getPage2JobContext();
         if (!ctx?.items) return [];
-        const container = document.getElementById('page2JobRows');
+        const container = page2JobRowsEl(ctx.containerId);
         if (!container) return ctx.items;
         const rowEls = container.querySelectorAll('[data-page2-job-row]');
         if (rowEls.length) {
@@ -17141,7 +17701,7 @@ const TVC_SpareMenu = (function () {
 
     function renderPage2JobRowsSection() {
         const ctx = getPage2JobContext();
-        const container = document.getElementById('page2JobRows');
+        const container = page2JobRowsEl();
         if (!container || !ctx) return;
         const ro = container.dataset.readonly === '1';
         const allowAdd = container.dataset.batch === '1';
@@ -17331,6 +17891,7 @@ const TVC_SpareMenu = (function () {
 
     function consumeGroupLabelForKey(st, groupKey) {
         if (!groupKey) return '';
+        if (groupKey === MERGED_GEN_ENGINE_KEY) return MERGED_GEN_ENGINE_LABEL;
         if (groupKey === CONSUME_NO_GROUP_KEY) return CONSUME_NO_GROUP_LABEL;
         if (groupKey === CRITICAL_GROUP_KEY) return 'Critical Equipment';
         return planGroupNodes(st).find(n => n.key === groupKey)?.label
@@ -17463,11 +18024,10 @@ const TVC_SpareMenu = (function () {
             return clearBtn + (q ? '<div class="spare-consume-pick-empty muted">No search results</div>' : '');
         }
         return clearBtn + jobs.map(j => {
-            const code = escAttr(j.job_code || '');
             const sel = activeRow?.job_code === j.job_code ? ' selected' : '';
             const sub = [j.item_sort1, j.item_sort2].filter(Boolean).join(' · ');
             return `<button type="button" class="spare-consume-pick-item spare-consume-pick-item-job${sel}"
-                onclick="TVC_SpareMenu.pickConsumeMetaJob('${code}')">
+                onclick="TVC_SpareMenu.pickConsumeMetaJob('${escAttr(j.id)}')">
                 <span class="spare-consume-pick-job-code">${esc(j.job_code || '')}</span>
                 ${sub ? `<span class="spare-consume-pick-job-sub">${esc(sub)}</span>` : ''}
             </button>`;
@@ -17543,17 +18103,22 @@ const TVC_SpareMenu = (function () {
         };
     }
 
-    function pickConsumeMetaJob(jobCode) {
+    function pickConsumeMetaJob(jobIdOrCode) {
         const st = getState();
         const draft = getConsumeSession();
         if (!draft) return;
         ensureConsumeJobItems(draft);
         const idx = _consumeActiveJobRowIndex || 0;
-        const job = findJobByCode(st, jobCode);
+        const job = st.idx?.jobById?.get(jobIdOrCode)
+            || findJobByCode(st, jobIdOrCode, {
+                department: draft.department || st.department,
+                groupKey: draft.spare_group_key,
+                group: draft.spare_group_label,
+            });
         if (job) applyConsumeJobFields(job, idx);
         else {
             const row = draft.job_items[idx] || draft.job_items[0];
-            if (row) row.job_code = String(jobCode || '').trim();
+            if (row) row.job_code = String(jobIdOrCode || '').trim();
             syncConsumeDraftJobSummary(draft);
         }
         closeConsumeJobPickMenu();
@@ -18066,6 +18631,7 @@ const TVC_SpareMenu = (function () {
             groupKey: meta.groupKey || '',
             readonly: ro || !allowAdd,
             allowAdd,
+            containerId: 'consumePage2JobRows',
         });
         const fld = (label, inner, extraCls = '') =>
             `<div class="wr-maint-field${extraCls ? ' ' + extraCls : ''}"><label>${label}</label>${inner}</div>`;
@@ -18074,7 +18640,7 @@ const TVC_SpareMenu = (function () {
         const commentsCls = ro ? ' wr-ro' : '';
         const commentsInput = ro ? '' : ' oninput="TVC_SpareMenu.captureConsumeMeta()"';
         const commentsId = ro ? ' id="wrSpareShipComments" data-wf="spareShipComments"' : ' id="consumeShipComments"';
-        return `<div class="wr-page2-job-rows" id="page2JobRows" data-maint-style="1" data-readonly="${ro || !allowAdd ? '1' : '0'}" data-batch="${allowAdd ? '1' : '0'}">
+        return `<div class="wr-page2-job-rows" id="consumePage2JobRows" data-maint-style="1" data-readonly="${ro || !allowAdd ? '1' : '0'}" data-batch="${allowAdd ? '1' : '0'}">
                 ${renderPage2JobRowsInner(getPage2JobContext(), { readonly: ro || !allowAdd, allowAdd, maintStyle: true })}
             </div>
             ${allowAdd && !ro ? renderPage2JobPickMenuHtml() : ''}
@@ -18128,6 +18694,7 @@ const TVC_SpareMenu = (function () {
             groupKey: meta.groupKey || '',
             readonly: ro || !allowAdd,
             allowAdd,
+            containerId: 'wrPage2JobRows',
         });
         const roInp = (type, val) => type === 'date'
             ? `<input type="text" class="wr-ro tvc-date-input" value="${esc(fmtSpareDate(val))}" readonly disabled>`
@@ -18142,7 +18709,7 @@ const TVC_SpareMenu = (function () {
                 ${fld('Reported by', roInp('text', meta.reportedBy || ''))}
                 ${fld('PMS Group No.', roInp('text', pmsLabel), 'wr-maint-span-all')}
             </div>
-            <div class="wr-page2-job-rows" id="page2JobRows" data-maint-style="1" data-readonly="${ro || !allowAdd ? '1' : '0'}" data-batch="${allowAdd ? '1' : '0'}">
+            <div class="wr-page2-job-rows" id="wrPage2JobRows" data-maint-style="1" data-readonly="${ro || !allowAdd ? '1' : '0'}" data-batch="${allowAdd ? '1' : '0'}">
                 ${renderPage2JobRowsInner(getPage2JobContext(), { readonly: ro || !allowAdd, allowAdd, maintStyle: true })}
             </div>
             ${allowAdd && !ro ? renderPage2JobPickMenuHtml() : ''}
@@ -18832,7 +19399,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         m.wrSpareReadonly = !!ro;
         const isPreview = wrSparePreviewMode(st, ro);
         if (!isPreview && !ro) {
-            const jobGroupKey = wrJobGroupKey(st);
+            const jobGroupKey = spareFilterKeyNormalized(st, wrJobGroupKey(st));
             if (jobGroupKey) m.modalSpareGroupKey = jobGroupKey;
         }
         if (isPreview) {
@@ -19282,6 +19849,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             const rob = line.qty_on_hand != null
                 ? String(line.qty_on_hand)
                 : (spareRaw ? String(TVC_Inventory.currentStock(spareRaw)) : '—');
+            const over = lineCosExceedsRob(line, spareRaw);
+            const overCls = over ? ' spare-cos-over-rob' : '';
+            const overTitle = over ? ' title="Consumption (Cos) exceeds ROB"' : '';
             return `<tr class="${rowCls}">
                 <td class="c-chk"><input type="checkbox" class="spare-row-chk" checked disabled></td>
                 <td class="c-num"><strong>${esc(spareNumbering(s) || line.part_no || '')}</strong></td>
@@ -19292,8 +19862,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 <td class="c-unit">${esc(spareUnit(s))}</td>
                 <td class="c-work">${esc(spareWorking(s) || '')}</td>
                 <td class="c-std num">${esc(spareStandardQty(s) || '')}</td>
-                <td class="c-stk num">${esc(rob)}</td>
-                <td class="c-cons num">${esc(cos)}</td>
+                <td class="c-stk num${overCls}"${overTitle}>${esc(rob)}</td>
+                <td class="c-cons num${overCls}"${overTitle}>${esc(cos)}</td>
             </tr>`;
         }).join('') || `<tr><td colspan="11" style="text-align:center;color:#64748b;padding:12px">No spare parts selected.</td></tr>`;
         return `<div class="wr-spare-print-table-wrap">
@@ -19385,6 +19955,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 ? String(line.qty_on_hand)
                 : (spareRaw ? String(TVC_Inventory.currentStock(spareRaw)) : '—');
             const cos = String(Number(line.qty_used) || 0);
+            const over = lineCosExceedsRob(line, spareRaw);
+            const overCls = over ? ' spare-cos-over-rob' : '';
+            const overTitle = over ? ' title="Consumption (Cos) exceeds ROB"' : '';
             return `<tr>
                 <td class="c-num num"><strong>${esc(spareNumbering(s) || line.part_no || '')}</strong></td>
                 <td class="c-cls">${esc(spareClass(s || spareRaw) || '')}</td>
@@ -19394,8 +19967,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 <td class="c-unit">${esc(spareUnit(s))}</td>
                 <td class="c-work">${esc(spareWorking(s) || '')}</td>
                 <td class="c-std num">${esc(spareStandardQty(s) || '')}</td>
-                <td class="c-stk num">${esc(rob)}</td>
-                <td class="c-cons num">${esc(cos)}</td>
+                <td class="c-stk num${overCls}"${overTitle}>${esc(rob)}</td>
+                <td class="c-cons num${overCls}"${overTitle}>${esc(cos)}</td>
             </tr>`;
         }).join('') || `<tr><td colspan="10" style="text-align:center;color:#64748b;padding:12px">No spare parts selected.</td></tr>`;
         return `<table class="wr-print-spare-table spare-data-table-wrspare">${spareHead}<tbody>${spareRows}</tbody></table>`;
@@ -19660,9 +20233,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             const isHqUser = isReqListHqUser(st);
             const histActionLabel = isHqUser ? 'Approve' : 'Confirm';
             const consumeAppr = consumeLogApprovalState(draft, st.department, { listMode: true, listEditing });
-            const histActionOk = listEditing && (isHqUser
-                ? (consumeLogCanApprove(st, draft) || consumeAppr.isApproved)
-                : (consumeLogCanConfirm(st, draft) || (consumeAppr.isConfirmed && !consumeAppr.isApproved)));
+            const histActionOk = !listEditing && (isHqUser
+                ? consumeAppr.canApproveNow
+                : consumeAppr.canConfirmNow);
             const histActionBtn = `<button type="button" class="btn" onclick="TVC_SpareMenu.consumeHistConfirmOrApprove()"${histActionOk ? '' : ' disabled'}>${histActionLabel}</button>`;
             const printBtns = `${histActionBtn}<button type="button" class="btn" onclick="TVC_SpareMenu.consumeLogPrintReport()">Print</button>
                 <button type="button" class="btn" onclick="TVC_SpareMenu.consumeLogPrintPreview()">Preview</button>`;
@@ -19840,7 +20413,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         syncConsumeListModalSizing();
         cleanupSpareHistReportOverlay();
         closeSpicsModal('spareConsumeModal');
-        if (st.currentTab === 'spare') render();
+        refreshSpareTabAfterModalClose();
         if (returnToList) {
             await openConsumedLogWindow();
             if (selectId) await loadConsumeLogIntoListWindow(selectId, { preserveHistPopover: true });
@@ -19929,25 +20502,26 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         });
     }
 
-    async function applyConsumeLogStock(user, { logId, prevLog, nextLines, ref, note, sourceType = 'consume_log', skipRbac = false }) {
+    async function applyConsumeLogStock(user, { logId, prevLog, nextLines, ref, note, sourceType = 'consume_log', skipRbac = false, forceOk = false }) {
         const prevLines = consumeLogLinesToStock(prevLog?.lines);
         const lines = consumeLogLinesToStock(nextLines);
+        const allowOver = forceOk || consumeStockForceOk();
         if (!lines.length) {
             await reverseConsumeLogStockForLog(user, prevLog, undefined, { skipRbac });
             await reloadSparesCache();
             return '';
         }
-        const applyDiff = async (forceOk = false) => {
+        const applyDiff = async (ok = false) => {
             await TVC_InventoryService.applyConsumptionDiff(user, prevLines, lines, {
                 ref,
                 source_id: logId,
                 source_type: sourceType,
-                forceOk,
+                forceOk: ok,
             });
         };
         try {
             if (prevLog?.stock_applied_at) {
-                await applyDiff(false);
+                await applyDiff(allowOver);
                 await reloadSparesCache();
                 return prevLog.stock_applied_at;
             }
@@ -19957,11 +20531,12 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 source_id: logId,
                 source_type: sourceType,
                 skipRbac,
+                forceOk: allowOver,
             });
             await reloadSparesCache();
             return res.at;
         } catch (e) {
-            if (e.code === 'STOCK' && await TVC_Dialog.confirm({ message: e.message + '\n\nProceed anyway?' })) {
+            if (e.code === 'STOCK' && await confirmProceedDespiteStock(e)) {
                 if (prevLog?.stock_applied_at) {
                     await applyDiff(true);
                     await reloadSparesCache();
@@ -19972,6 +20547,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 });
                 await reloadSparesCache();
                 return res.at;
+            }
+            if (e.code === 'STOCK') {
+                throw Object.assign(e, { code: 'STOCK_CANCEL' });
             }
             throw e;
         }
@@ -20007,6 +20585,22 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const top = report.used_parts || [];
         if (top.length) return top.filter(p => Number(p.qty_used) > 0);
         return (report.job_items?.[0]?.used_parts || []).filter(p => Number(p.qty_used) > 0);
+    }
+
+    function consumeJobItemsFromWorkReport(report, job) {
+        const st = getState();
+        if (report?.is_batch && report.job_items?.length) {
+            return report.job_items.map(it => {
+                const j = st?.idx?.jobById?.get(it.maintenance_job_id);
+                return newConsumeJobRow({
+                    job_code: j?.job_code || it.job_code || '',
+                    sort1: j?.item_sort1 || it.item_sort1 || it.form?.sort1 || '',
+                    sort2: j?.item_sort2 || it.item_sort2 || it.form?.sort2 || '',
+                    job_detail: j?.job_detail || it.job_detail || it.form?.jobDetail || '',
+                });
+            });
+        }
+        return [jobRowFromMaintenanceJob(job)];
     }
 
     async function syncConsumeLogFromWorkReport({ report, job, usedParts, form, user, department }) {
@@ -20049,28 +20643,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             job_detail: job.job_detail || '',
             ships_comments: form?.shipComments || '',
             lines: logLines,
-            job_items: (() => {
-                const fromPage2 = capturePage2JobItems();
-                if (fromPage2.length) return fromPage2.map(i => newConsumeJobRow(i));
-                if (report.is_batch && report.job_items?.length) {
-                    const st = getState();
-                    return report.job_items.map(it => {
-                        const j = st?.idx?.jobById?.get(it.maintenance_job_id);
-                        return newConsumeJobRow({
-                            job_code: it.job_code || j?.job_code || '',
-                            sort1: j?.item_sort1 || it.item_sort1 || it.form?.sort1 || '',
-                            sort2: j?.item_sort2 || it.item_sort2 || it.form?.sort2 || '',
-                            job_detail: j?.job_detail || it.job_detail || it.form?.jobDetail || '',
-                        });
-                    });
-                }
-                return [newConsumeJobRow({
-                    job_code: job.job_code || '',
-                    sort1: job.item_sort1 || '',
-                    sort2: job.item_sort2 || '',
-                    job_detail: job.job_detail || '',
-                })];
-            })(),
+            job_items: consumeJobItemsFromWorkReport(report, job),
         };
 
         const st = getState();
@@ -20205,21 +20778,40 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         await refreshConsumeLogListUi();
     }
 
+    function keepConsumeEditorOpen() {
+        const m = modState(getState());
+        m.consumeLogListEditing = true;
+        m.consumePostSaveView = false;
+        m.consumeEditMode = true;
+    }
+
     async function saveConsume() {
         const { st, vesselId } = await vesselScope();
         const m = modState(st);
         if (isConsumedLogWindow(m) && !m.consumeLogListEditing) return;
-        if (!await TVC_Dialog.confirm({ message: 'Save changes?' })) return;
         captureConsumeMeta();
         captureConsumeLineQtys();
+        if (!await confirmIfCosExceedsRob('consume')) {
+            keepConsumeEditorOpen();
+            return;
+        }
+        if (!consumeStockForceOk()) {
+            if (!await TVC_Dialog.confirm({ message: 'Save changes?' })) return;
+        }
         const user = spareInventoryUser(st);
-        if (!user) await TVC_Dialog.alert('Login required.');
+        if (!user) {
+            await TVC_Dialog.alert('Login required.');
+            return;
+        }
         const draft = getConsumeSession();
         if (!draft) return;
         const lines = (draft.lines || [])
             .filter(l => consumeSpareIdKey(l.spare_part_id) && (Number(l.qty_consumed) || 0) > 0)
             .map(l => ({ spare_part_id: l.spare_part_id, qty: Number(l.qty_consumed), note: '' }));
-        if (!lines.length) await TVC_Dialog.alert('Select parts and enter Consumed quantity.');
+        if (!lines.length) {
+            await TVC_Dialog.alert('Select parts and enter Consumed quantity.');
+            return;
+        }
 
         const noteParts = [
             draft.consumed_date ? `Consumed: ${draft.consumed_date}` : '',
@@ -20253,18 +20845,19 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 };
                 try {
                     if (prev?.stock_applied_at) {
-                        await applyDiff(false);
+                        await applyDiff(consumeStockForceOk());
                     } else if (lines.length) {
                         const res = await TVC_InventoryService.recordConsumption(user, lines, {
                             ref: draft.job_code || '',
                             note,
                             source_id: draft.log_id,
                             source_type: 'consume_log',
+                            forceOk: consumeStockForceOk(),
                         });
                         draft.stock_applied_at = res.at;
                     }
                 } catch (e) {
-                    if (e.code === 'STOCK' && await TVC_Dialog.confirm({ message: e.message + '\n\nProceed anyway?' })) {
+                    if (e.code === 'STOCK' && await confirmProceedDespiteStock(e)) {
                         if (prev?.stock_applied_at) await applyDiff(true);
                         else {
                             const res = await TVC_InventoryService.recordConsumption(user, lines, {
@@ -20272,6 +20865,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                             });
                             draft.stock_applied_at = res.at;
                         }
+                    } else if (e.code === 'STOCK' || e.code === 'STOCK_CANCEL') {
+                        keepConsumeEditorOpen();
+                        return;
                     } else throw e;
                 }
             }
@@ -20304,7 +20900,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
 
         try {
-            const res = await TVC_InventoryService.recordConsumption(user, lines, { ref, note, source_type: 'consume_log' });
+            const res = await TVC_InventoryService.recordConsumption(user, lines, {
+                ref, note, source_type: 'consume_log', forceOk: consumeStockForceOk(),
+            });
             const saved = await persistConsumeLogFromDraft(draft, {
                 st, user, vesselId,
                 extra: { stock_applied_at: res.at, source: draft.source || 'consume' },
@@ -20322,7 +20920,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             await enterConsumePostSaveView(saved.id);
             await TVC_Dialog.alert(`CONSUMPTION recorded — ${res.count} item(s)`);
         } catch (e) {
-            if (e.code === 'STOCK' && await TVC_Dialog.confirm({ message: e.message + '\n\nProceed anyway?' })) {
+            if (e.code === 'STOCK' && await confirmProceedDespiteStock(e)) {
                 const res = await TVC_InventoryService.recordConsumption(user, lines, { ref, note, forceOk: true, source_type: 'consume_log' });
                 const saved = await persistConsumeLogFromDraft(draft, {
                     st, user, vesselId,
@@ -20340,6 +20938,9 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
                 await refresh();
                 await enterConsumePostSaveView(saved.id);
                 await TVC_Dialog.alert(`CONSUMPTION — ${res.count} item(s)`);
+            } else if (e.code === 'STOCK' || e.code === 'STOCK_CANCEL') {
+                keepConsumeEditorOpen();
+                return;
             } else await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
     }
@@ -20858,7 +21459,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (vlReceive) { vlReceive.destroy(); vlReceive = null; }
         if (_receiveResizeObs) { _receiveResizeObs.disconnect(); _receiveResizeObs = null; }
         closeSpicsModal('spareReceiveModal');
-        if (st.currentTab === 'spare') render();
+        refreshSpareTabAfterModalClose();
     }
 
     async function receiveToggleSelectedOnly() {
@@ -21265,10 +21866,12 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             await render();
             await TVC_Dialog.alert(`${res.tx_type} recorded — ${res.count} item(s)`);
         } catch (e) {
-            if (e.code === 'STOCK' && _txDraft.type === TVC_INVENTORY_TX.CONSUMPTION && await TVC_Dialog.confirm({ message: e.message + '\n\nProceed anyway?' })) {
+            if (e.code === 'STOCK' && _txDraft.type === TVC_INVENTORY_TX.CONSUMPTION && await confirmProceedDespiteStock(e)) {
                 const res = await TVC_InventoryService.recordConsumption(user, lines, { ref: _txDraft.ref, note: _txDraft.note, forceOk: true });
                 closeTxModal(); await refresh(); await render();
                 await TVC_Dialog.alert(`CONSUMPTION — ${res.count} item(s)`);
+            } else if (e.code === 'STOCK' || e.code === 'STOCK_CANCEL') {
+                return;
             } else await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
     }
@@ -22944,6 +23547,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         isGeneratorEngineGroupLabel,
         wrSpareSelectGroup, wrSpareSetTreeSearch, wrSpareSetSearch, wrSpareToggleLowOnly,
         wrSpareToggleGroupTree, wrSpareToggleSelectedOnly, wrSpareFocusRow, wrSpareToggleRow, wrSpareToggleAll, wrSpareSetQty,
+        alertIfCosExceedsRob, confirmIfCosExceedsRob, consumeStockForceOk,
         refreshWrSpareJobContext,
         onTxSearchInput, addTxLine, removeTxLine,
         openHqImportModal, onHqImportFile, openAssessmentModal, closeAssessmentModal, applyHqAssessment,
@@ -22985,7 +23589,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         consumeLogSetPeriod, consumeLogClearPeriod, consumeLogSetSearch, consumeLogClearSearch,
         getConsumeLogListFilters, setConsumeLogListFilters,
         toggleConsumeLogHistList, consumeLogEnterListEdit, consumeLogCancelEdit, loadConsumeLogIntoListWindow,
-        closeReqWorkModal, reqWorkComplete, reqWorkSave, reqWorkSwitchToNew, reqWorkEnterListEdit, reqWorkCancelEdit, reqWorkOpenList, reqWorkPrint, reqWorkDocPreview, reqWorkDocPreviewPrint, reqWorkExitDocPreview, reqWorkExitPreview, reqWorkEnterPreview, reqWorkPrintPreview, reqWorkExportExcel, reqWorkAddSpare, addToRequisition, reqWorkAddChecked, captureReqWorkMeta, reqWorkConfirmByToggle,
+        closeReqWorkModal, reqWorkComplete, reqWorkSave, reqWorkSwitchToNew, reqWorkEnterListEdit, reqWorkCancelEdit, reqWorkCancelDraft, reqWorkOpenList, reqWorkPrint, reqWorkDocPreview, reqWorkDocPreviewPrint, reqWorkExitDocPreview, reqWorkExitPreview, reqWorkEnterPreview, reqWorkPrintPreview, reqWorkExportExcel, reqWorkAddSpare, addToRequisition, reqWorkAddChecked, captureReqWorkMeta, reqWorkConfirmByToggle,
         toggleReqWorkHistList, reqWorkPickReqNo,
         reqWorkSetRequestQty, reqWorkSetEvalQty, reqWorkEvalQtyKeydown, reqWorkSetReceivedQty,
         reqWorkSelectGroup, reqWorkSetTreeSearch, reqWorkToggleGroupTree, reqWorkSetSearch, reqWorkToggleLowOnly,

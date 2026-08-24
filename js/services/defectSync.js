@@ -208,19 +208,25 @@ const TVC_DefectSync = (function () {
         };
     }
 
-    async function loadDefectHqReplyBatch(caseIds) {
+    async function loadDefectHqReplyBatch(caseIds, opts = {}) {
         const ids = (caseIds || []).filter(Boolean);
         if (!ids.length) throw new Error('No defect reports selected.');
+        const hubForward = !!opts.hubForward;
         const rows = [];
         for (const id of ids) {
             const row = await TVC_DefectCaseService.get(id);
             if (!row) throw new Error('Defect case not found.');
-            if (TVC_DefectCase.isHqReplyExported(row)) {
+            if (!hubForward && TVC_DefectCase.isHqReplyExported(row)) {
                 throw new Error(`${row.case_no}: HQ reply already exported.`);
             }
-            const v = TVC_DefectCase.validateHqDefectReplyExport(row);
-            if (!v.ok) {
-                throw new Error(`${row.case_no}: ${v.missing.join(', ')} required before HQ export.`);
+            if (hubForward && !TVC_DefectCase.isHqReplyStationForwardPending(row)) {
+                throw new Error(`${row.case_no}: HQ reply already forwarded to Station.`);
+            }
+            if (!hubForward) {
+                const v = TVC_DefectCase.validateHqDefectReplyExport(row);
+                if (!v.ok) {
+                    throw new Error(`${row.case_no}: ${v.missing.join(', ')} required before HQ export.`);
+                }
             }
             rows.push(row);
         }
@@ -266,9 +272,10 @@ const TVC_DefectSync = (function () {
         }
     }
 
-    async function exportHqReplyBatchZip(user, caseIds) {
-        const rows = await loadDefectHqReplyBatch(caseIds);
-        await finalizeHqReplyRows(user, rows);
+    async function exportHqReplyBatchZip(user, caseIds, opts = {}) {
+        const hubForward = !!opts.hubForward;
+        const rows = await loadDefectHqReplyBatch(caseIds, { hubForward });
+        if (!hubForward) await finalizeHqReplyRows(user, rows);
         const vesselId = await resolveVesselId(user, rows[0]);
         const payload = buildBatchHqReplyPayload(user, rows, vesselId);
         const filename = await buildExportFilename(user, vesselId, rows[0]?.department, { hqReply: true });
@@ -283,6 +290,12 @@ const TVC_DefectSync = (function () {
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
         await saveBatchHqReplyExport(user, rows, payload, filename);
+        if (hubForward) {
+            for (const row of rows) {
+                TVC_DefectCase.stampHqReplyStationForwarded(row);
+                await TVC_DB.put('defect_cases', row);
+            }
+        }
         return { payload, filename, count: rows.length };
     }
 
@@ -550,6 +563,16 @@ const TVC_DefectSync = (function () {
                 TVC_DefectCase.clearHubStampForNewOutbound(row);
                 row.sync_status = 'SYNCED';
                 await TVC_DB.put('defect_cases', row);
+            } else if (!isHq && (direction === 'DEFECT_REPLY_HQ_TO_SHIP' || direction === 'HQ_TO_SHIP')) {
+                if (row.approved_at || row.approved_by) {
+                    if (typeof TVC_DefectCase.applyHqReplyOnShip === 'function') {
+                        TVC_DefectCase.applyHqReplyOnShip(row);
+                    }
+                    if (isHub && !row.hq_reply_forwarded_at) {
+                        row.hq_reply_forward_pending = true;
+                    }
+                    await TVC_DB.put('defect_cases', row);
+                }
             } else if (isHub && direction === 'DEFECT_CLOSE_HQ_TO_SHIP') {
                 TVC_DefectCase.markPhase4CloseForwardPending(row);
                 await TVC_DB.put('defect_cases', row);
@@ -628,9 +651,14 @@ const TVC_DefectSync = (function () {
                         row.reply_by = row.reply_by || TVC_RBAC.getRankLabel(user);
                     }
                 } else {
+                    const alreadyForwarded = isHub && !!row.hq_reply_forwarded_at;
                     const completionReady = row.status === TVC_DefectCase.Status.AWAITING_COMPLETION
                         || (row.status === TVC_DefectCase.Status.CLOSED && row.defect_cleared && row.phase3_locked);
-                    if (isHub && TVC_DefectCase.isPhase4CloseForwardPending(row)) {
+                    if (isHub && TVC_DefectCase.isHqReplyStationForwardPending(row)) {
+                        TVC_DefectCase.stampHqReplyStationForwarded(row);
+                    } else if (alreadyForwarded) {
+                        /* Master already stamped HQ-reply forward during Case ZIP */
+                    } else if (isHub && TVC_DefectCase.isPhase4CloseForwardPending(row)) {
                         TVC_DefectCase.stampPhase4CloseForwarded(row);
                     } else if (completionReady) {
                         if (typeof TVC_DefectCase.clearHubStampForNewOutbound === 'function') {

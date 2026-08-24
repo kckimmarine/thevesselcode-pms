@@ -15,8 +15,8 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260823-import-groups">
-    <link rel="stylesheet" href="css/responsive-scale.css?v=20260822-hist-list-only">
+    <link rel="stylesheet" href="css/app.css?v=20260824-hist-appr2">
+    <link rel="stylesheet" href="css/responsive-scale.css?v=20260824-ship-docs">
 </head>
 <body>
 
@@ -81,7 +81,7 @@
         </div>
     </main>
 
-    <footer class="login-footer"><span id="loginAppVersion">v1.0.5</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
+    <footer class="login-footer"><span id="loginAppVersion">v1.0.6</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
 </div>
 
 <div id="appShell" class="hidden">
@@ -161,9 +161,10 @@
                                     <col class="fleet-col-imo">
                                     <col class="fleet-col-delivery">
                                     <col class="fleet-col-appver">
+                                    <col class="fleet-col-docs">
                                 </colgroup>
                                 <thead><tr>
-                                    <th>No</th><th>Company ID</th><th>Ship's Name</th><th>IMO No</th><th>Delivery</th><th>App (M/E/D)</th>
+                                    <th>No</th><th>Company ID</th><th>Ship's Name</th><th>IMO No</th><th>Delivery</th><th class="fleet-cell-ver">Version</th><th class="fleet-cell-docs">Docs</th>
                                 </tr></thead>
                                 <tbody id="fleetTableBody"></tbody>
                             </table>
@@ -401,6 +402,11 @@
 <div id="workProcedureModal" class="modal hidden">
     <div class="modal-box wp-modal" onclick="event.stopPropagation()"><button class="modal-x" onclick="TVC_App.closeModal('workProcedureModal')">×</button>
         <div id="workProcedureBody"></div>
+    </div>
+</div>
+<div id="vesselDocsModal" class="modal hidden">
+    <div class="modal-box wp-modal" onclick="event.stopPropagation()"><button type="button" class="modal-x" onclick="TVC_App.closeModal('vesselDocsModal')" aria-label="Close">×</button>
+        <div id="vesselDocsBody"></div>
     </div>
 </div>
 <div id="origJobEditorModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('origJobEditorModal')">
@@ -705,8 +711,8 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/rbac.js?v=20260820-df-co-ce"></script>
-<script src="js/core/schema.js?v=20260823-backup-dates"></script>
+<script src="js/rbac.js?v=20260824-no-sub-del"></script>
+<script src="js/core/schema.js?v=20260824-no-sub-del"></script>
 <script src="js/core/db.js?v=20260806-req-sort"></script>
 <script src="js/core/indexes.js?v=20260821-hide-detached"></script>
 <script src="js/core/spareIndexes.js?v=20260821-spare-group-src"></script>
@@ -715,58 +721,58 @@
 <script src="js/ui/viewportScale.js?v=20260723-readability"></script>
 <script src="js/ui/virtualList.js?v=20260723-readability"></script>
 <script src="js/ui/modalDrag.js?v=20260810-modal-nodrag"></script>
-<script src="js/ui/dialog.js?v=20260823-import-groups"></script>
+<script src="js/ui/dialog.js?v=20260824-stock-keep"></script>
 <script src="js/ui/attachments.js?v=20260820-preview"></script>
-<script src="js/ui/runHours.js?v=20260808-critical-postpone"></script>
+<script src="js/ui/runHours.js?v=20260824-pp-no-co"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
-<script src="js/core/filename.js?v=20260823-pms-backup-fn"></script>
+<script src="js/core/filename.js?v=20260825-spare-monthly-fn"></script>
 <script src="js/services/spareSync.js?v=20260806-req-excel"></script>
 <script src="js/services/spareMeta.js"></script>
-<script src="js/ui/spareMenu.js?v=20260823-alert-en"></script>
+<script src="js/ui/spareMenu.js?v=20260825-spare-edit-scroll"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
-<script src="js/services/inventoryService.js?v=20260820-delivery-diff"></script>
+<script src="js/services/inventoryService.js?v=20260824-stock-en2"></script>
 <script src="js/services/excel.js?v=20260822-quote-import-price"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
 <script src="js/space.js?v=20260813-admin-mode"></script>
 <script src="js/license.js?v=20260813-admin-mode"></script>
 <script src="js/services/fileExport.js?v=20260821-monthly-xfer"></script>
 <script src="js/auth.js?v=20260813-admin-mode"></script>
-<script src="js/services/transaction.js?v=20260822-postpone-hq"></script>
+<script src="js/services/transaction.js?v=20260824-no-sub-del"></script>
 <script src="js/services/maintenancePlan.js?v=20260823-append-hdr"></script>
 <script src="js/services/pmsMasterExcel.js?v=20260823-alert-en"></script>
 <script src="js/services/spareCode.js"></script>
 <script src="js/services/spareMasterExcel.js?v=20260823-alert-en"></script>
 <script src="js/services/defectCase.js?v=20260820-df-co-ce"></script>
-<script src="js/services/workPermitCase.js?v=20260821-wp-hq-comment"></script>
+<script src="js/services/workPermitCase.js?v=20260824-captain-dept"></script>
 <script src="js/services/hubRelay.js?v=20260820-hub-relay"></script>
-<script src="js/services/workPermitSync.js?v=20260821-wp-hq-comment"></script>
-<script src="js/services/defectSync.js?v=20260823-casereport-onezip"></script>
-<script src="js/services/postponeSync.js?v=20260822-postpone-hq"></script>
-<script src="js/services/sync.js?v=20260823-alert-en"></script>
+<script src="js/services/workPermitSync.js?v=20260824-wp-attach"></script>
+<script src="js/services/defectSync.js?v=20260824-dc-mod"></script>
+<script src="js/services/postponeSync.js?v=20260824-hq-fwd"></script>
+<script src="js/services/sync.js?v=20260824-dc-mod"></script>
 <script src="js/services/masterBackup.js?v=20260823-spare-backup-fn"></script>
 <script src="js/services/vesselProfileSync.js?v=20260813-vessel-profile"></script>
 <script src="js/services/appUpdate.js?v=20260820-company-scope"></script>
 <script src="js/services/adminCommercial.js?v=20260817-admin-commercial"></script>
 <script src="js/services/adminSop.js?v=20260820-admin-deliver"></script>
-<script src="js/services/adminPrint.js?v=20260816-admin-print"></script>
+<script src="js/services/adminPrint.js?v=20260824-ship-ver"></script>
 <script src="js/services/seatLicense.js?v=20260816-admin-seat"></script>
 <script src="js/services/setupExport.js?v=20260816-setup-handoff"></script>
 <script src="js/services/adminRelease.js?v=20260818-admin-release"></script>
-<script src="js/services/stationSync.js?v=20260811-monthly-export"></script>
+<script src="js/services/stationSync.js?v=20260824-master-dept"></script>
 <script src="js/services/onlineSync.js?v=20260728-data-xfer-fix"></script>
 <script src="js/services/fleet.js?v=20260820-fleet-sync"></script>
-<script src="js/services/adminRegistry.js?v=20260813-admin-registry-crud"></script>
+<script src="js/services/adminRegistry.js?v=20260824-ship-ver"></script>
 <script src="js/services/masterVesselScope.js?v=20260813-vessel-master"></script>
 <script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
 <script src="js/ui/listFilters.js?v=20260823-monthly-ui"></script>
-<script src="js/ui/defectReport.js?v=20260823-df-p4-comments"></script>
-<script src="js/ui/workPermit.js?v=20260821-wp-hq-comment"></script>
+<script src="js/ui/defectReport.js?v=20260824-no-sub-del"></script>
+<script src="js/ui/workPermit.js?v=20260824-hist-appr2"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
-<script src="js/app.js?v=20260823-alert-en"></script>
+<script src="js/app.js?v=20260825-spare-sel-scroll"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

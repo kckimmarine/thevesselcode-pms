@@ -12,7 +12,7 @@ const TVC_Filename = (function () {
         REPLY_EVALUATION: 'evaluation',
         PURCHASE_ORDER: 'order',
         RECEIVED: 'received',
-        INVENTORY: 'inventory',
+        INVENTORY: 'spare_monthly',
         ASSESSMENT: 'evaluation',
     };
 

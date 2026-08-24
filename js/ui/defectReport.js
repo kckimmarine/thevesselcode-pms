@@ -1221,9 +1221,9 @@ const TVC_DefectReport = (function () {
         if (row.status === TVC_DefectCase.Status.CLOSED && row.phase3_locked) return false;
         const st = TVC_DefectCase.listWorkflowStatus(row);
         if (!['Reported', 'Confirmed', 'Submitted', 'Approved'].includes(st)) return false;
-        if (TVC_DefectCase.isPhase1Editable(row)) return false;
+        if (st !== 'Submitted' && st !== 'Approved' && TVC_DefectCase.isPhase1Editable(row)) return false;
         if (st === 'Submitted' || st === 'Approved') {
-            if (!TVC_DefectCase.isPhase1Exported(row)) return false;
+            if (!TVC_DefectCase.isPhase1Exported(row) && !TVC_DefectCase.isPhase3Editable(row)) return false;
             return TVC_RBAC.canModifyDefectShipPhase3(getState().user);
         }
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
@@ -1248,7 +1248,9 @@ const TVC_DefectReport = (function () {
         if (!isHq()) {
             const st = TVC_DefectCase.listWorkflowStatus(row);
             if (st === 'Submitted' || st === 'Approved') {
-                return canModifyDfShipCommentsOnly(row);
+                if (canModifyDfShipCommentsOnly(row)) return true;
+                return TVC_DefectCase.isPhase3Editable(row)
+                    && TVC_RBAC.canModifyDefectShipPhase3(getState().user);
             }
         } else {
             if (canModifyDfHqFinalRow(row)) return true;
@@ -1480,8 +1482,13 @@ const TVC_DefectReport = (function () {
             syncDfDraftFromRow(saved);
         }
         const nav = getState()._dfNavSource;
-        if (nav === 'list' || nav === 'history') await openCase(id, 'view', { keepDraft: true });
-        else await openCase(id, undefined, { keepDraft: true });
+        if (nav === 'list' || nav === 'history') {
+            getState()._dfPostSaveView = false;
+            await openCase(id, 'view', { keepDraft: true });
+        } else {
+            getState()._dfPostSaveView = true;
+            await openCase(id, 'view', { keepDraft: true });
+        }
     }
 
     async function syncDefectConsumeStock(row, usedParts) {
@@ -1516,6 +1523,7 @@ const TVC_DefectReport = (function () {
                 }
             }
         } catch (syncErr) {
+            if (syncErr.code === 'STOCK_CANCEL' || syncErr.code === 'STOCK') throw syncErr;
             console.error('Defect consumed log sync failed:', syncErr);
             await TVC_Dialog.alert(syncErr.message || 'Spare parts stock sync failed.');
         }
@@ -1530,8 +1538,16 @@ const TVC_DefectReport = (function () {
         if (!row) return;
         if (!canDeleteDfListRow(row)) {
             const st = TVC_DefectCase.listWorkflowStatus(row);
-            if (st === 'Confirmed') await TVC_Dialog.alert('Only Captain / Chief Engineer can delete Confirmed items.');
+            if (st === 'Submitted' || st === 'Approved') {
+                await TVC_Dialog.alert('Submitted or Approved reports cannot be deleted.');
+                return;
+            }
+            if (st === 'Confirmed') {
+                await TVC_Dialog.alert('Only Captain / Chief Engineer can delete Confirmed items.');
+                return;
+            }
             await TVC_Dialog.alert('Cannot delete in this status.');
+            return;
         }
         if (!await TVC_Dialog.confirm({ message: `Delete defect report ${row.case_no}?` })) return;
         try {
@@ -1607,12 +1623,21 @@ const TVC_DefectReport = (function () {
 
     async function dfDeleteByIds(ids, opts = {}) {
         const user = getState().user;
-        if (!user) await TVC_Dialog.alert('Sign in required.');
+        if (!user) {
+            await TVC_Dialog.alert('Sign in required.');
+            return;
+        }
         const idList = (ids || []).filter(Boolean);
-        if (!idList.length) await TVC_Dialog.alert('Select item(s) to delete.');
+        if (!idList.length) {
+            await TVC_Dialog.alert('Select item(s) to delete.');
+            return;
+        }
         const rows = idList.map(id => (getState().defectCases || []).find(r => r.id === id)).filter(Boolean);
         const deletable = rows.filter(canDeleteDfListRow);
-        if (!deletable.length) await TVC_Dialog.alert('No delete permission or item is Submitted / Approved.');
+        if (!deletable.length) {
+            await TVC_Dialog.alert('No delete permission or item is Submitted / Approved.');
+            return;
+        }
         if (!await TVC_Dialog.confirm({ message: `Delete ${deletable.length} defect report(s)?` })) return;
 
         for (const row of deletable) {
@@ -1832,14 +1857,14 @@ const TVC_DefectReport = (function () {
         const user = s.user;
         const isConfirmed = !!(row.confirmed_at || row.confirmed_by);
         const isApproved = !!(row.approved_at || row.approved_by);
-        const editMode = s._defectMode !== 'view';
+        const approvalLive = s._defectMode === 'view';
         const hq = isHq();
         const hqPreExport = hq && !TVC_DefectCase.isHqReplyExported(row);
-        const canConfirmNew = !hq && isDefectReportConfirmable(row);
-        const canUnconfirmNow = !hq && editMode && isConfirmed && !isApproved
+        const canConfirmNew = approvalLive && !hq && isDefectReportConfirmable(row);
+        const canUnconfirmNow = approvalLive && !hq && isConfirmed && !isApproved
             && !!user && TVC_RBAC.canConfirmDepartment(user, row.department);
         const canConfirmNow = canConfirmNew || canUnconfirmNow;
-        const canApproveNow = hqPreExport && editMode && !!user && TVC_RBAC.canApproveHqReport(user)
+        const canApproveNow = approvalLive && hqPreExport && !!user && TVC_RBAC.canApproveHqReport(user)
             && (isConfirmed || TVC_RBAC.canHqDirectApprove(user, row) || isApproved);
         return {
             isConfirmed,
@@ -1861,7 +1886,7 @@ const TVC_DefectReport = (function () {
             isConfirmed, isApproved, canConfirmNow, canApproveNow,
             confirmedByVal, approvedByVal,
         } = dfApprovalState(row);
-        const displayOnly = forPrint || !!opts.displayOnly || getState()._dfNavSource === 'history';
+        const displayOnly = forPrint || !!opts.displayOnly;
         const confirmDis = displayOnly || !canConfirmNow ? ' disabled' : '';
         const approveDis = displayOnly || !canApproveNow ? ' disabled' : '';
         return `<section class="wr-maint-card wr-maint-approval">
@@ -2087,6 +2112,7 @@ const TVC_DefectReport = (function () {
         const navSource = getState()._dfNavSource;
         const fromHistoryNav = navSource === 'history';
         const fromListNav = navSource === 'list';
+        const postSaveView = !!getState()._dfPostSaveView && !fromListNav && !fromHistoryNav;
         const forceView = mode === 'view';
         const dfPage = getState()._dfPage || '1';
         const approval = dfApprovalState(row);
@@ -2138,7 +2164,12 @@ const TVC_DefectReport = (function () {
 
         let actionsClass = 'modal-actions wr-actions df-modal-actions';
         let actionsHtml;
-        if (fromListNav || fromHistoryNav) {
+        if (postSaveView) {
+            actionsClass += ' df-modal-actions-split wr-actions-split';
+            actionsHtml = `<div class="df-modal-actions-left"></div>
+                <div class="df-modal-actions-center"></div>
+                <div class="df-modal-actions-right"><button type="button" class="btn" onclick="TVC_DefectReport.closeDefectModal()">Close</button></div>`;
+        } else if (fromListNav || fromHistoryNav) {
             actionsClass += ' df-modal-actions-split';
             const canModifyRow = canOpenDfModifyRow(row);
             const modifyTitle = esc(dfModifyDisabledTitle(row));
@@ -2146,9 +2177,7 @@ const TVC_DefectReport = (function () {
             const appr = dfApprovalState(row);
             const isHqUser = isHq();
             const histActionLabel = isHqUser ? 'Approve' : 'Confirm';
-            const histActionOk = !forceView && (isHqUser
-                ? (appr.canApproveNow || appr.isApproved)
-                : (isDefectReportConfirmable(row) || (appr.isConfirmed && !appr.isApproved)));
+            const histActionOk = isHqUser ? appr.canApproveNow : appr.canConfirmNow;
             const histActionBtn = `<button type="button" class="btn" onclick="TVC_DefectReport.dfHistConfirmOrApprove()"${histActionOk ? '' : ' disabled'}>${histActionLabel}</button>`;
             const printBtn = `${histActionBtn}<button type="button" class="btn" onclick="TVC_DefectReport.printDefectModal()">Print</button>
                 <button type="button" class="btn" onclick="TVC_DefectReport.previewDefectModal()">Preview</button>`;
@@ -2238,6 +2267,9 @@ const TVC_DefectReport = (function () {
         }
         s._defectCaseId = id;
         s._defectMode = mode === 'view' ? 'view' : (mode || 'edit');
+        if (s._defectMode !== 'view' || s._dfNavSource === 'history' || s._dfNavSource === 'list') {
+            s._dfPostSaveView = false;
+        }
         s._reportKindLocked = s._defectMode === 'view' ? 'defect' : null;
         _dfListSelId = id;
         if (opts.keepDraft && s._dfDraft) {
@@ -2342,14 +2374,29 @@ const TVC_DefectReport = (function () {
         openCase(row.id, 'edit');
     }
 
+    function keepDefectEditorOpen() {
+        document.getElementById('defectReportModal')?.classList.remove('hidden');
+        const s = getState();
+        s._dfPostSaveView = false;
+        if (s._defectMode !== 'edit') s._defectMode = 'edit';
+    }
+
     async function saveModal() {
-        if (!await TVC_Dialog.confirm({ kind: 'save', message: 'Save this Defect Report?' })) return;
         const s = getState();
         const id = s._defectCaseId;
         if (!id) return;
         let row = await TVC_DefectCaseService.get(id);
         if (!row) return;
         captureForm();
+        await TVC_SpareMenu.persistWrSpareUsedParts?.();
+        captureDfUsedParts();
+        if (!await TVC_SpareMenu.confirmIfCosExceedsRob?.('wr')) {
+            keepDefectEditorOpen();
+            return;
+        }
+        if (!TVC_SpareMenu.consumeStockForceOk?.()) {
+            if (!await TVC_Dialog.confirm({ kind: 'save', message: 'Save this Defect Report?' })) return;
+        }
         try {
             await applyDfApprovalFromUi();
         } catch (e) {
@@ -2366,6 +2413,10 @@ const TVC_DefectReport = (function () {
         try {
             return await saveDraft();
         } catch (e) {
+            if (e.code === 'STOCK_CANCEL' || e.code === 'STOCK') {
+                keepDefectEditorOpen();
+                return;
+            }
             await TVC_Dialog.alert(e.message || e.code || 'Save failed');
         }
     }
@@ -2415,9 +2466,15 @@ const TVC_DefectReport = (function () {
         const codedItems = (data.job_items || []).filter(i => String(i.job_code || '').trim());
         const multiJobNewSave = !!(s._dfNewSession && codedItems.length >= 2);
         let row = await TVC_DefectCaseService.saveDraft(s.user, data, id);
-        row = await syncDefectConsumeStock(row, data.used_parts);
-        upsertDefectCaseInState(row);
-        syncDfDraftFromRow(row);
+        try {
+            row = await syncDefectConsumeStock(row, data.used_parts);
+        } catch (e) {
+            if (e.code === 'STOCK' || e.code === 'STOCK_CANCEL') {
+                keepDefectEditorOpen();
+                return;
+            }
+            throw e;
+        }
         s._dfSavedToList = true;
         promoteNewDefectToListView(id);
         TVC_App.clearPlanBatchSnapshot?.();
@@ -2444,8 +2501,20 @@ const TVC_DefectReport = (function () {
         const id = s._defectCaseId;
         if (!id) return;
         const form = captureForm();
+        if (!await TVC_SpareMenu.confirmIfCosExceedsRob?.('wr')) {
+            keepDefectEditorOpen();
+            return;
+        }
         let row = await TVC_DefectCaseService.saveDraft(s.user, form, id);
-        row = await syncDefectConsumeStock(row, form.used_parts);
+        try {
+            row = await syncDefectConsumeStock(row, form.used_parts);
+        } catch (e) {
+            if (e.code === 'STOCK' || e.code === 'STOCK_CANCEL') {
+                keepDefectEditorOpen();
+                return;
+            }
+            throw e;
+        }
         upsertDefectCaseInState(row);
         try {
             await TVC_DefectCaseService.submitToCompany(s.user, id);
@@ -2650,7 +2719,7 @@ const TVC_DefectReport = (function () {
         const superLabel = hqSuperintendentApprovalLabel(user);
 
         if (!apCb.checked) {
-            if ((row.approved_at || row.approved_by) && s._defectMode !== 'view'
+            if ((row.approved_at || row.approved_by) && s._defectMode === 'view'
                 && !TVC_DefectCase.isHqReplyExported(row) && TVC_RBAC.canApproveHqReport(user)) {
                 try {
                     await TVC_DefectCaseService.saveApprovalMeta(user, row.id, { unapprove: true });
@@ -2683,7 +2752,37 @@ const TVC_DefectReport = (function () {
             if (input) input.value = row.approved_by || superLabel;
             return;
         }
-        if (input) input.value = superLabel;
+        if (s._defectMode !== 'view') {
+            if (input) input.value = superLabel;
+            return;
+        }
+        if (!TVC_RBAC.canApproveHqReport(user)) {
+            apCb.checked = false;
+            if (input) input.value = '';
+            return;
+        }
+        if (!row.confirmed_at && !row.confirmed_by && !TVC_RBAC.canHqDirectApprove(user, row)) {
+            apCb.checked = false;
+            if (input) input.value = '';
+            await TVC_Dialog.alert('Confirm required before Approve.');
+            return;
+        }
+        try {
+            const needConfirm = !row.confirmed_at && !row.confirmed_by;
+            await TVC_DefectCaseService.saveApprovalMeta(user, row.id, {
+                confirm: needConfirm,
+                approve: true,
+            });
+            const fresh = await TVC_DefectCaseService.get(row.id);
+            if (fresh) upsertDefectCaseInState(fresh);
+            syncDfDraftFromRow(fresh || row);
+            refreshDefectModal();
+            await TVC_Dialog.alert(`${row.case_no} defect report approved.`);
+        } catch (e) {
+            apCb.checked = false;
+            if (input) input.value = '';
+            await TVC_Dialog.alert(e.message || e.code || 'Approve failed');
+        }
     }
 
     async function dfReportConfirmByToggle() {
@@ -2705,7 +2804,7 @@ const TVC_DefectReport = (function () {
                 input.value = '';
                 return;
             }
-            if (s._defectMode === 'view' || row.approved_at || row.approved_by) {
+            if (s._defectMode !== 'view' || row.approved_at || row.approved_by) {
                 cfCb.checked = true;
                 return;
             }
@@ -2715,16 +2814,6 @@ const TVC_DefectReport = (function () {
             }
             try {
                 let fresh = await TVC_DefectCaseService.saveApprovalMeta(user, row.id, { unconfirm: true });
-                if (fresh && fresh.stock_applied_at && (fresh.used_parts || []).length) {
-                    await TVC_InventoryService.reverseConsumption(user, fresh.used_parts, {
-                        ref: fresh.case_no || '',
-                        source_id: fresh.id,
-                        source_type: 'defect_case',
-                        note: 'Defect report unconfirmed — stock restored',
-                    });
-                    fresh.stock_applied_at = '';
-                    await TVC_DB.put('defect_cases', fresh);
-                }
                 fresh = await TVC_DefectCaseService.get(row.id);
                 if (fresh) upsertDefectCaseInState(fresh);
                 syncDfDraftFromRow(fresh || row);
@@ -2761,7 +2850,8 @@ const TVC_DefectReport = (function () {
 
     async function dfHistConfirmOrApprove() {
         const s = getState();
-        if (s._defectMode === 'view' || s._dfNavSource !== 'history') return;
+        if (s._defectMode !== 'view') return;
+        if (s._dfNavSource !== 'history' && s._dfNavSource !== 'list') return;
         const row = getDefectModalRow();
         const user = s.user;
         if (!row || !user) return;
@@ -2806,16 +2896,6 @@ const TVC_DefectReport = (function () {
             }
             try {
                 let fresh = await TVC_DefectCaseService.saveApprovalMeta(user, row.id, { unconfirm: true });
-                if (fresh && fresh.stock_applied_at && (fresh.used_parts || []).length) {
-                    await TVC_InventoryService.reverseConsumption(user, fresh.used_parts, {
-                        ref: fresh.case_no || '',
-                        source_id: fresh.id,
-                        source_type: 'defect_case',
-                        note: 'Defect report unconfirmed — stock restored',
-                    });
-                    fresh.stock_applied_at = '';
-                    await TVC_DB.put('defect_cases', fresh);
-                }
                 fresh = await TVC_DefectCaseService.get(row.id);
                 if (fresh) upsertDefectCaseInState(fresh);
                 syncDfDraftFromRow(fresh || row);

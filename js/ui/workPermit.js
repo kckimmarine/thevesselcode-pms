@@ -856,13 +856,116 @@ const TVC_WorkPermitReport = (function () {
         return TVC_RBAC.getReportedByLabel(getState().user) || '—';
     }
 
+    function cloneWpAttachments(list) {
+        return Array.isArray(list) ? list.map(a => ({ ...a })) : [];
+    }
+
     function ensureWpDraft(row) {
         const s = getState();
         if (!s._wpDraft || s._wpDraftId !== row.id) {
             s._wpDraftId = row.id;
-            s._wpDraft = { ...row };
+            s._wpDraft = {
+                ...row,
+                ship_attachments: cloneWpAttachments(row.ship_attachments),
+                company_attachments: cloneWpAttachments(row.company_attachments),
+            };
         }
+        if (!Array.isArray(s._wpDraft.ship_attachments)) s._wpDraft.ship_attachments = [];
+        if (!Array.isArray(s._wpDraft.company_attachments)) s._wpDraft.company_attachments = [];
         return s._wpDraft;
+    }
+
+    function wpAttachmentList(kind) {
+        const draft = ensureWpDraft(getModalRow() || {});
+        const key = kind === 'company' ? 'company_attachments' : 'ship_attachments';
+        if (!Array.isArray(draft[key])) draft[key] = [];
+        return draft[key];
+    }
+
+    function readWpAttachmentFile(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({
+                id: `att-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+                name: file.name,
+                type: file.type,
+                size: file.size,
+                dataUrl: reader.result,
+                uploaded_at: new Date().toISOString(),
+            });
+            reader.onerror = reject;
+            reader.readAsDataURL(file);
+        });
+    }
+
+    function renderWpAttachmentBlock(kind, { canUpload, forPrint = false }) {
+        const label = kind === 'company' ? "Company's Attachment" : "Ship's Attachment";
+        const inputId = kind === 'company' ? 'wpCompanyAttachInput' : 'wpShipAttachInput';
+        const list = wpAttachmentList(kind);
+        const items = list.map(a => TVC_Attachments.renderListItemHtml(a, {
+            forPrint,
+            canRemove: !forPrint && canUpload,
+            removeOnclick: (!forPrint && canUpload)
+                ? `TVC_WorkPermitReport.removeAttachment('${kind}','${esc(a.id)}')`
+                : '',
+        })).join('');
+        if (forPrint) {
+            const listHtml = list.length ? `<div class="wr-attach-list-wrap"><ul class="wr-attach-list">${items}</ul></div>` : '';
+            return `<div class="wr-attach-block wr-attach-print">
+                <div class="wr-attach-toolbar"><span class="wr-attach-btn wr-print-static-attach">📎 ${esc(label)}</span></div>
+                ${listHtml}
+            </div>`;
+        }
+        const uploadBtn = canUpload
+            ? `<button type="button" class="wr-attach-btn" onclick="document.getElementById('${inputId}').click()">📎 ${esc(label)}</button>
+               <input type="file" id="${inputId}" class="hidden" multiple onchange="TVC_WorkPermitReport.uploadAttachment('${kind}')">`
+            : `<button type="button" class="wr-attach-btn" disabled tabindex="-1">📎 ${esc(label)}</button>`;
+        const listHtml = list.length ? `<ul class="wr-attach-list">${items}</ul>` : '';
+        return `<div class="wr-attach-block">
+            <div class="wr-attach-toolbar">${uploadBtn}</div>
+            ${listHtml ? `<div class="wr-attach-list-wrap">${listHtml}</div>` : ''}
+        </div>`;
+    }
+
+    function canMutateWpAttachment(kind) {
+        const row = getModalRow();
+        if (!row) return false;
+        if (kind === 'company') return !wpCompanyCommentLocked(row) && isHq();
+        const ro = getState()._wpMode === 'view' || wpListViewLocked()
+            || !TVC_WorkPermit.canModifyListWorkflow(row);
+        return !ro && !isHq();
+    }
+
+    async function uploadAttachment(kind) {
+        if (!canMutateWpAttachment(kind)) return;
+        const inputId = kind === 'company' ? 'wpCompanyAttachInput' : 'wpShipAttachInput';
+        const input = document.getElementById(inputId);
+        if (!input?.files?.length) return;
+        captureWpFormFields();
+        const list = wpAttachmentList(kind);
+        const maxBytes = 8 * 1024 * 1024;
+        try {
+            for (const file of input.files) {
+                if (file.size > maxBytes) {
+                    await TVC_Dialog.alert(`${file.name}: Only files up to 8 MB can be attached.`);
+                    continue;
+                }
+                list.push(await readWpAttachmentFile(file));
+            }
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || 'Could not read the file.');
+        }
+        input.value = '';
+        await refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
+    }
+
+    async function removeAttachment(kind, attId) {
+        if (!canMutateWpAttachment(kind)) return;
+        captureWpFormFields();
+        const list = wpAttachmentList(kind);
+        const i = list.findIndex(a => a.id === attId);
+        if (i >= 0) list.splice(i, 1);
+        await refreshWorkPermitModal({ preserveScroll: true, preserveHist: true });
     }
 
     function getModalRow() {
@@ -1001,13 +1104,14 @@ const TVC_WorkPermitReport = (function () {
         const isConfirmed = !!(row.confirmed_at || row.confirmed_by);
         const isApproved = !!(row.approved_at || row.approved_by);
         const editMode = s._wpMode !== 'view' && !wpListViewLocked();
-        const canConfirmNew = isPermitConfirmable(row);
-        const canUnconfirmNow = editMode && isConfirmed && !isApproved
+        const approvalLive = !editMode;
+        const canConfirmNew = approvalLive && isPermitConfirmable(row);
+        const canUnconfirmNow = approvalLive && isConfirmed && !isApproved
             && !!user && TVC_RBAC.canConfirmDepartment(user, row.department);
         const canConfirmNow = canConfirmNew || canUnconfirmNow;
-        const canUnapproveNow = isHq() && editMode && isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
+        const canUnapproveNow = approvalLive && isHq() && isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
             && !TVC_WorkPermit.isHqReplyExported(row);
-        const canApproveNow = canUnapproveNow || (!isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
+        const canApproveNow = canUnapproveNow || (approvalLive && !isApproved && !!user && TVC_RBAC.canApproveHqReport(user)
             && (isConfirmed || TVC_RBAC.canHqDirectApprove(user, row)));
         return {
             isConfirmed, isApproved, canConfirmNow, canApproveNow,
@@ -1036,7 +1140,7 @@ const TVC_WorkPermitReport = (function () {
     function renderWpApprovalHtml(row, opts = {}) {
         const forPrint = !!opts.forPrint;
         const { isConfirmed, isApproved, canConfirmNow, canApproveNow, confirmedByVal, approvedByVal } = wpApprovalState(row);
-        const displayOnly = forPrint || !!opts.displayOnly || getState()._wpNavSource === 'history';
+        const displayOnly = forPrint || !!opts.displayOnly;
         const confirmDis = displayOnly || !canConfirmNow ? ' disabled' : '';
         const approveDis = displayOnly || !canApproveNow ? ' disabled' : '';
         return `<section class="wr-maint-card wr-maint-approval">
@@ -1216,6 +1320,8 @@ const TVC_WorkPermitReport = (function () {
             return `<textarea class="wr-maint-textarea${roClsLocal}" data-wp="${name}" rows="${rows}"${roAttr}>${esc(wpVal(row, name, val))}</textarea>`;
         };
         const companyCommentRo = forPrint || wpCompanyCommentLocked(row);
+        const canUploadShipAttach = !forPrint && !ro && !isHq();
+        const canUploadCompanyAttach = !forPrint && !companyCommentRo && isHq();
         const spareChk = `<label class="wr-maint-chk wp-est-spare-chk"><input type="checkbox" data-wp="checked_estimated_spare_parts"${wpVal(row, 'checked_estimated_spare_parts') ? ' checked' : ''}${ro ? ' disabled' : ''}> CHECKED ESTIMATED SPARE PARTS</label>`;
 
         const fileNoInner = forPrint
@@ -1268,7 +1374,9 @@ const TVC_WorkPermitReport = (function () {
                     ${fld('Running Hrs after Last Maint.', inp('rh_since_last_maintenance', '', 'number'))}
                 </div>
                 ${fld("Ship's Comments", ta('outline_work_permit', ''), 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld('', renderWpAttachmentBlock('ship', { canUpload: canUploadShipAttach, forPrint }), 'wr-maint-span-all wr-maint-grid-gap')}
                 ${fld("Company's Comments", ta('company_comment', '', 3, companyCommentRo), 'wr-maint-span-all wr-maint-grid-gap')}
+                ${fld('', renderWpAttachmentBlock('company', { canUpload: canUploadCompanyAttach, forPrint }), 'wr-maint-span-all wr-maint-grid-gap')}
                 <div class="wr-maint-span-all wr-maint-grid-gap">${spareChk}</div>
                 ${histPanel}
             </section>
@@ -1278,6 +1386,7 @@ const TVC_WorkPermitReport = (function () {
     function renderEditModalBody(row, mode) {
         const forceView = mode === 'view';
         const fromHistoryNav = getState()._wpNavSource === 'history';
+        const postSaveView = !!getState()._wpPostSaveView && !fromHistoryNav;
         const wpPage = getState()._wpPage || '1';
         const canModifyRow = TVC_WorkPermit.canModifyListWorkflow(row);
         const hqCommentOnly = canOpenWpHqCommentEdit(row);
@@ -1292,7 +1401,12 @@ const TVC_WorkPermitReport = (function () {
             : renderPage1(row, forceView || !canModifyRow);
         let actionsClass = 'modal-actions wr-actions df-modal-actions';
         let actionsHtml;
-        if (fromHistoryNav) {
+        if (postSaveView) {
+            actionsClass += ' wr-actions-split df-modal-actions-split';
+            actionsHtml = `<div class="wr-modal-actions-left df-modal-actions-left"></div>
+                <div class="wr-modal-actions-center df-modal-actions-center"></div>
+                <div class="wr-modal-actions-right df-modal-actions-right"><button type="button" class="btn" onclick="TVC_WorkPermitReport.closeModal()">Close</button></div>`;
+        } else if (fromHistoryNav) {
             actionsClass += ' wr-actions-split df-modal-actions-split';
             const navBtns = TVC_App?.histNavButtonsHtml
                 ? TVC_App.histNavButtonsHtml('TVC_WorkPermitReport.navWpHistory(-1)', 'TVC_WorkPermitReport.navWpHistory(1)')
@@ -1300,9 +1414,7 @@ const TVC_WorkPermitReport = (function () {
             const appr = wpApprovalState(row);
             const isHqUser = isHq();
             const histActionLabel = isHqUser ? 'Approve' : 'Confirm';
-            const histActionOk = !forceView && (isHqUser
-                ? (appr.canApproveNow || appr.isApproved)
-                : (isPermitConfirmable(row) || (appr.isConfirmed && !appr.isApproved)));
+            const histActionOk = isHqUser ? appr.canApproveNow : appr.canConfirmNow;
             const histActionBtn = `<button type="button" class="btn" onclick="TVC_WorkPermitReport.wpHistConfirmOrApprove()"${histActionOk ? '' : ' disabled'}>${histActionLabel}</button>`;
             const printBtn = `${histActionBtn}<button type="button" class="btn" onclick="TVC_WorkPermitReport.printWpModal()">Print</button>
                 <button type="button" class="btn" onclick="TVC_WorkPermitReport.previewWpModal()">Preview</button>`;
@@ -1993,8 +2105,11 @@ const TVC_WorkPermitReport = (function () {
         const row = (s.workPermits || []).find(r => r.id === id);
         if (!row) return;
         s._wpListMode = false;
-        if (opts.fromHistory) s._wpNavSource = 'history';
-        else if (!opts.keepNavSource) s._wpNavSource = null;
+        if (opts.fromHistory) {
+            s._wpNavSource = 'history';
+            s._wpPostSaveView = false;
+        } else if (!opts.keepNavSource) s._wpNavSource = null;
+        if (mode !== 'view') s._wpPostSaveView = false;
         if (opts.fromHistory || mode === 'view') s._reportKindLocked = 'permit';
         else s._reportKindLocked = null;
         s._workPermitId = id;
@@ -2318,21 +2433,37 @@ const TVC_WorkPermitReport = (function () {
         openWpPrint({ print: false });
     }
 
+    function keepWpEditorOpen() {
+        const s = getState();
+        s._wpMode = 'edit';
+        s._wpPostSaveView = false;
+        if (isWpListWindow()) s._wpListEditing = true;
+        document.getElementById('workPermitModal')?.classList.remove('hidden');
+    }
+
     async function saveModal() {
-        if (!await TVC_Dialog.confirm({ kind: 'save', message: 'Save this Work Permit?' })) return;
         const s = getState();
         const id = s._workPermitId;
         if (!id) return;
         captureWpFormFields();
         if ((s._wpPage || '1') === '2') {
-            TVC_SpareMenu.persistWrSpareUsedParts?.();
-            captureWpUsedParts();
+            await TVC_SpareMenu.persistWrSpareUsedParts?.();
+        }
+        captureWpUsedParts();
+        if (!await TVC_SpareMenu.confirmIfCosExceedsRob?.('wr')) {
+            keepWpEditorOpen();
+            return;
+        }
+        if (!TVC_SpareMenu.consumeStockForceOk?.()) {
+            if (!await TVC_Dialog.confirm({ kind: 'save', message: 'Save this Work Permit?' })) return;
         }
         const draft = captureWpFormFields();
         const row = getModalRow();
         if (row && !TVC_WorkPermit.canModifyListWorkflow(row) && TVC_RBAC.isHqAccount(s.user)) {
             try {
-                const saved = await TVC_WorkPermitCaseService.saveCompanyComment(s.user, id, draft.company_comment);
+                const saved = await TVC_WorkPermitCaseService.saveCompanyComment(s.user, id, draft.company_comment, {
+                    company_attachments: draft.company_attachments || [],
+                });
                 upsertPermitInState(saved);
                 if (isWpListWindow()) {
                     s._wpDraft = null;
@@ -2394,10 +2525,11 @@ const TVC_WorkPermitReport = (function () {
                 }
                 await TVC_Dialog.alert('Work Permit saved.');
             } else {
+                s._wpPostSaveView = s._wpNavSource !== 'history';
                 await refresh();
                 await openCase(saved.id, 'view', s._wpNavSource === 'history'
                     ? { fromHistory: true, skipModalToggle: true, preservePage: true, keepNavSource: true }
-                    : {});
+                    : { skipModalToggle: true, preservePage: true });
                 if (s.currentTab === 'history' && s._wpNavSource !== 'history') {
                     TVC_App.switchTab?.('actual');
                 }
@@ -2423,14 +2555,14 @@ const TVC_WorkPermitReport = (function () {
         if (!user) return;
         const isConfirmed = !!(row.confirmed_at || row.confirmed_by);
         const isApproved = !!(row.approved_at || row.approved_by);
-        const editMode = s._wpMode !== 'view' && !wpListViewLocked();
+        const approvalLive = s._wpMode === 'view' || wpListViewLocked();
 
         if (!cfCb.checked) {
             if (input && !isConfirmed) {
                 input.value = '';
                 return;
             }
-            const canUnconfirm = editMode && isConfirmed && !isApproved
+            const canUnconfirm = approvalLive && isConfirmed && !isApproved
                 && TVC_RBAC.canConfirmDepartment(user, row.department);
             if (!canUnconfirm) {
                 cfCb.checked = true;
@@ -2482,7 +2614,7 @@ const TVC_WorkPermitReport = (function () {
 
     async function wpHistConfirmOrApprove() {
         const s = getState();
-        if (s._wpMode === 'view' || s._wpNavSource !== 'history') return;
+        if (s._wpMode !== 'view' || s._wpNavSource !== 'history') return;
         const row = getModalRow();
         const user = s.user;
         if (!row?.id || row.id === 'wp-draft-empty' || !user) return;
@@ -2570,16 +2702,21 @@ const TVC_WorkPermitReport = (function () {
         if (!user || !TVC_RBAC.isHqAccount(user)) return;
 
         if (!apCb.checked) {
-            const editMode = s._wpMode !== 'view' && !wpListViewLocked();
+            const approvalLive = s._wpMode === 'view' || wpListViewLocked();
             const isApproved = !!(row.approved_at || row.approved_by);
-            if (editMode && isApproved && !TVC_WorkPermit.isHqReplyExported(row) && TVC_RBAC.canApproveHqReport(user)) {
+            if (approvalLive && isApproved && !TVC_WorkPermit.isHqReplyExported(row) && TVC_RBAC.canApproveHqReport(user)) {
                 try {
                     const fresh = await TVC_WorkPermitCaseService.saveApprovalMeta(user, row.id, { unapprove: true });
                     upsertPermitInState(fresh);
                     s._wpDraft = null;
                     s._wpDraftId = null;
                     await refresh();
-                    await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+                    if (isWpListWindow()) {
+                        await refreshWpListUi({ full: true });
+                        await refreshWpListWindowUi({ approvalOnly: true });
+                    } else {
+                        await refreshWorkPermitModal({ preserveScroll: true, patchList: false });
+                    }
                     await TVC_Dialog.alert(`${wpPermitLabel(row)} approval removed.`);
                 } catch (e) {
                     apCb.checked = true;
@@ -2728,8 +2865,8 @@ const TVC_WorkPermitReport = (function () {
             parts: (s._wpUsedParts || [])
                 .filter(p => Number(p.qty_used) > 0)
                 .map(p => [String(p.spare_part_id || ''), Number(p.qty_used) || 0]),
-            shipAtt: (draft.ship_attachments || []).length,
-            companyAtt: (draft.company_attachments || []).length,
+            shipAtt: (draft.ship_attachments || []).map(a => a.id).join('|'),
+            companyAtt: (draft.company_attachments || []).map(a => a.id).join('|'),
         });
     }
 
@@ -2759,6 +2896,7 @@ const TVC_WorkPermitReport = (function () {
         saveModal, closeModal, requestCloseModal, setWorkPermitPage,
         wpConfirmByToggle, wpApprovedByToggle, wpHistConfirmOrApprove,
         applyFileNoFromPicker, refreshWorkPermitModal, captureWpFormFields,
+        uploadAttachment, removeAttachment,
         filteredPermits, listRows, isPermitConfirmable,
         canOpenWpHqCommentEdit, canOpenWpModify,
         hasUnsavedMakeReportInput,

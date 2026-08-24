@@ -10,9 +10,9 @@
   "notes": "",
   "deploy": {
     "app_version": {
-      "VESSEL_MASTER": "1.0.5",
-      "VESSEL_ENGINE": "1.0.5",
-      "VESSEL_DECK": "1.0.5"
+      "VESSEL_MASTER": "1.0.6",
+      "VESSEL_ENGINE": "1.0.6",
+      "VESSEL_DECK": "1.0.6"
     },
     "app_updated_at": {
       "VESSEL_MASTER": "2026-08-23",

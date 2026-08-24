@@ -42,7 +42,9 @@ const TVC_Transaction = (function () {
         if (!dept) return;
         const ok = confirm
             ? TVC_RBAC.canConfirmDepartment(user, dept)
-            : TVC_RBAC.canAccessDepartment(user, dept);
+            : (typeof TVC_Space !== 'undefined'
+                ? TVC_Space.canAccessDepartment(user, dept)
+                : TVC_RBAC.canAccessDepartment(user, dept));
         if (!ok) {
             const code = String(job?.job_code || '').trim();
             throw Object.assign(new Error(code ? `DEPT_FORBIDDEN: ${code}` : 'DEPT_FORBIDDEN'), { code: 'FORBIDDEN' });
@@ -164,32 +166,24 @@ const TVC_Transaction = (function () {
         }
     }
 
-    function normalizeGroupLabel(label) {
-        return String(label || '').trim().toUpperCase();
+    function postponeDateRangeError(check) {
+        return TVC_WorkReport.postponeDateRangeMessage(check);
     }
 
-    async function jobRequiresCompanyPostponeApproval(api, job) {
-        if (!job) return false;
-        if (job.is_critical_equipment === true) return true;
-        if (job.is_critical_equipment === false) return false;
-        const groupLabel = job.group || '';
-        if (!groupLabel) return false;
-        const groups = await api.getAll('maintenance_groups');
-        const target = normalizeGroupLabel(groupLabel);
-        const def = groups.find(g =>
-            normalizeGroupLabel(g.label) === target
-            && (!job.department || !g.department || g.department === job.department)
-        );
-        return def?.is_critical_equipment === true;
+    function assertPostponeDateAllowed(job, postponeDate, report) {
+        if (!report || report.work_type !== 'POSTPONE') return;
+        const od = TVC_WorkReport.postponeOriginalDueDate(report, job);
+        const check = TVC_WorkReport.postponeDateWithinMax(od, postponeDate);
+        if (check.ok) return;
+        throw Object.assign(new Error(postponeDateRangeError(check)), { code: 'INVALID' });
     }
 
-    async function resolvePostponeCompanyApproval(api, job, payload) {
-        return true;
+    async function jobRequiresCompanyPostponeApproval() {
+        return false;
     }
 
     function reportRequiresCompanyPostponeApproval(report, job) {
-        if (!report || report.work_type !== 'POSTPONE') return false;
-        return true;
+        return false;
     }
 
     async function applyWorkReportJobSchedule(api, job, item, report, opts = {}) {
@@ -283,13 +277,14 @@ const TVC_Transaction = (function () {
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
             await stampHqLocalReport(report, user);
             if (report.work_type === 'POSTPONE') {
-                report.requires_company_approval = await resolvePostponeCompanyApproval(api, job, payload);
+                report.requires_company_approval = false;
+                assertPostponeDateAllowed(job, payload.postponeDate, report);
             }
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             stampPostponeOriginalDue(report);
             await api.put('daily_work_reports', report);
             const postponeNote = report.work_type === 'POSTPONE'
-                ? `NEXT ${job.next_date || '—'}${report.requires_company_approval ? ' · awaiting Company approval' : ''}`
+                ? `NEXT ${job.next_date || '—'}`
                 : `LAST DONE ${job.last_done || '—'} · NEXT ${job.next_date || '—'}`;
             const scheduleNote = postponeNote;
             await api.put('audit_logs', {
@@ -348,7 +343,8 @@ const TVC_Transaction = (function () {
             const report = markPending(TVC_WorkReport.buildRecord(base, jobItems));
             await stampHqLocalReport(report, user);
             if (report.work_type === 'POSTPONE') {
-                report.requires_company_approval = true;
+                report.requires_company_approval = false;
+                assertPostponeDateAllowed(firstJob, postponeDate, report);
             }
             await syncReportJobSchedules(api, report, { snapshotPrev: true });
             stampPostponeOriginalDue(report);
@@ -402,11 +398,12 @@ const TVC_Transaction = (function () {
                 if (payload.usedParts !== undefined && TVC_RBAC.isReportedStatus(report.status)) report.used_parts = payload.usedParts;
             }
 
-            if (report.work_type === 'POSTPONE' && report.job_items?.[0]) {
-                const modJob = await api.get('maintenance_jobs', report.job_items[0].maintenance_job_id);
-                if (modJob) {
-                    report.requires_company_approval = await resolvePostponeCompanyApproval(api, modJob, payload);
-                }
+            if (report.work_type === 'POSTPONE') {
+                report.requires_company_approval = false;
+                const modJob = report.job_items?.[0]
+                    ? await api.get('maintenance_jobs', report.job_items[0].maintenance_job_id)
+                    : null;
+                assertPostponeDateAllowed(modJob, report.postpone_date, report);
             }
             report.status = TVC_WorkReport.aggregateStatus(report.job_items);
             await stampHqLocalReport(report, user);
@@ -415,7 +412,7 @@ const TVC_Transaction = (function () {
             markPending(report);
             await api.put('daily_work_reports', report);
             const modScheduleNote = report.work_type === 'POSTPONE'
-                ? `NEXT DATE 반영${report.requires_company_approval ? ' · awaiting Company approval' : ''}`
+                ? 'NEXT DATE 반영'
                 : 'LAST DONE/NEXT DATE 반영';
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
@@ -426,8 +423,11 @@ const TVC_Transaction = (function () {
         });
     }
 
-    async function rollbackApprovedItem(api, item, user, report) {
-        if (report?.stock_applied_at && (item.used_parts || []).length) {
+    async function rollbackApprovedItem(api, item, user, report, opts = {}) {
+        // Cos is deducted on Save via consume_log. Unconfirm must not restore ROB.
+        // Delete restores via consume_log first; only reverse used_parts when there is no consume_log.
+        const restoreStock = opts.restoreStock === true && !report?.consume_log_id;
+        if (restoreStock && report?.stock_applied_at && (item.used_parts || []).length) {
             await TVC_InventoryService.reverseTaskPartsApi(api, user, item.used_parts, {
                 ref: item.job_code || '',
                 source_id: report.id,
@@ -448,6 +448,9 @@ const TVC_Transaction = (function () {
         TVC_WorkReport.fromLegacy(report);
 
         const normStatus = TVC_RBAC.normalizeReportStatus(report.status, report.is_locked);
+        if (normStatus === 'CONFIRMED' && report.sync_status === 'SYNCED') {
+            throw Object.assign(new Error('Submitted reports cannot be deleted.'), { code: 'LOCKED' });
+        }
         const isShipFinalized = normStatus === 'CONFIRMED'
             || report.job_items.some(i => TVC_RBAC.isConfirmedStatus(i.status));
 
@@ -485,7 +488,7 @@ const TVC_Transaction = (function () {
                 const job = await api.get('maintenance_jobs', item.maintenance_job_id);
                 if (job) assertJobDepartmentAllowed(user, job, rep);
                 if (rep.work_type !== 'POSTPONE') {
-                    await rollbackApprovedItem(api, item, user, rep);
+                    await rollbackApprovedItem(api, item, user, rep, { restoreStock: true });
                 } else {
                     await restoreJobScheduleFromSnapshot(api, item);
                 }
@@ -545,7 +548,7 @@ const TVC_Transaction = (function () {
                 if (!job) continue;
                 assertJobDepartmentAllowed(user, job, report);
                 if (!isPostpone) {
-                    await rollbackApprovedItem(api, item, user, report);
+                    await rollbackApprovedItem(api, item, user, report, { restoreStock: false });
                 } else {
                     await restoreJobScheduleFromSnapshot(api, item);
                 }
@@ -555,13 +558,11 @@ const TVC_Transaction = (function () {
             report.status = TVC_WorkReport.aggregateStatus(report.job_items);
             report.confirmed_by = '';
             report.confirmed_at = '';
-            report.stock_applied_at = '';
 
             if (report.consume_log_id) {
                 const log = await api.get('consume_logs', report.consume_log_id);
                 if (log) {
                     log.list_status = 'Reported';
-                    log.stock_applied_at = '';
                     log.confirmed_at = '';
                     log.confirmed_by = '';
                     await api.put('consume_logs', log);
@@ -580,7 +581,7 @@ const TVC_Transaction = (function () {
         });
     }
 
-    /** 선장/기관장: REPORTED → CONFIRMED + SPICS 재고 자동 차감 (단일·Batch) */
+    /** 선장/기관장: REPORTED → CONFIRMED. Cos/ROB already applied on Save; deduct only if not yet applied. */
     async function confirmReport(user, reportId) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.APPROVE_DAILY_REPORT);
 
@@ -653,9 +654,7 @@ const TVC_Transaction = (function () {
             let scheduleNote;
             if (isPostpone) {
                 const pd = report.postpone_date || reportedItems[0]?.form?.postponeDate || '—';
-                scheduleNote = report.requires_company_approval
-                    ? `NEXT DATE → ${pd} · awaiting Company approval`
-                    : `NEXT DATE → ${pd}`;
+                scheduleNote = `NEXT DATE → ${pd}`;
             } else {
                 scheduleNote = `LAST DONE ${report.job_items.find(i => i.status === 'CONFIRMED')?.form?.lastMaintDate || report.work_date || now().slice(0, 10)}`;
             }
@@ -698,15 +697,20 @@ const TVC_Transaction = (function () {
                 const approvedDate = String(
                     opts.approvedPostponeDate || report.approved_postpone_date || report.postpone_date || '',
                 ).slice(0, 10);
-                if (!approvedDate) {
-                    throw Object.assign(new Error('Approved Postpone Date required.'), { code: 'INVALID' });
-                }
-                report.approved_postpone_date = approvedDate;
+                if (approvedDate) report.approved_postpone_date = approvedDate;
             }
 
             report.status = 'APPROVED';
             report.approved_by = TVC_RBAC.getReportedByLabel(user) || user.display_name || '';
             report.approved_at = now();
+            if (!report.confirmed_by && !report.confirmed_at) {
+                const dept = report.department || '';
+                report.confirmed_by = TVC_RBAC.getConfirmByStoredLabel?.(dept, user)
+                    || TVC_RBAC.getDepartmentConfirmLabel?.(dept, user)
+                    || TVC_RBAC.getRankLabel(user)
+                    || '';
+                report.confirmed_at = now();
+            }
             report.company_comment = companyComment || '';
             report.is_locked = true;
             report.job_items.forEach(item => { item.status = 'APPROVED'; });
@@ -716,21 +720,15 @@ const TVC_Transaction = (function () {
             for (const item of report.job_items) {
                 const job = await api.get('maintenance_jobs', item.maintenance_job_id);
                 if (job) {
-                    if (isCriticalPostpone) {
-                        await applyWorkReportJobSchedule(api, job, item, report, { snapshotPrev: true });
-                    }
                     job.is_locked = true;
                     markPending(job);
                     await api.put('maintenance_jobs', job);
                 }
             }
 
-            const scheduleNote = isCriticalPostpone
-                ? ` · NEXT DATE → ${report.approved_postpone_date}`
-                : '';
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
-                log: `🏢 [APPROVED] ${report.job_code}${scheduleNote}${companyComment ? ': ' + companyComment : ''}`,
+                log: `🏢 [APPROVED] ${report.job_code}${companyComment ? ': ' + companyComment : ''}`,
                 sync_status: 'LOCAL',
             });
             return report;

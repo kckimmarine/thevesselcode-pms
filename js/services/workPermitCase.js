@@ -96,9 +96,11 @@ const TVC_WorkPermitCaseService = (function () {
             'last_maintenance_date', 'rh_since_last_maintenance', 'total_run_hrs',
             'outline_work_permit', 'company_comment', 'checked_estimated_spare_parts',
             'estimated_parts', 'job_items',
+            'ship_attachments', 'company_attachments',
         ];
         fields.forEach(k => {
-            if (k === 'company_comment' && !TVC_RBAC.isHqAccount(user)) return;
+            if (k === 'ship_attachments' && TVC_RBAC.isHqAccount(user)) return;
+            if ((k === 'company_comment' || k === 'company_attachments') && !TVC_RBAC.isHqAccount(user)) return;
             if (payload[k] !== undefined) row[k] = payload[k];
         });
         row.checked_estimated_spare_parts = payload.checked_estimated_spare_parts === true
@@ -173,7 +175,7 @@ const TVC_WorkPermitCaseService = (function () {
         return row;
     }
 
-    async function saveCompanyComment(user, id, comment) {
+    async function saveCompanyComment(user, id, comment, extras = {}) {
         if (!TVC_RBAC.isHqAccount(user)) {
             throw Object.assign(new Error('HQ only.'), { code: 'FORBIDDEN' });
         }
@@ -183,6 +185,9 @@ const TVC_WorkPermitCaseService = (function () {
             throw Object.assign(new Error('Reply already exported — Company Comments cannot be changed.'), { code: 'LOCKED' });
         }
         row.company_comment = String(comment ?? '');
+        if (Array.isArray(extras.company_attachments)) {
+            row.company_attachments = extras.company_attachments.map(a => ({ ...a }));
+        }
         markPending(row);
         await TVC_DB.put('work_permits', row);
         return row;
@@ -196,7 +201,9 @@ const TVC_WorkPermitCaseService = (function () {
         if (!hqImportedCleanup && !TVC_WorkPermit.canDeleteListWorkflow(row)) {
             throw Object.assign(new Error('Cannot delete this permit.'), { code: 'LOCKED' });
         }
-        if (!hqImportedCleanup && user?.department && row.department && user.department !== row.department) {
+        if (!hqImportedCleanup && row.department && !(typeof TVC_Space !== 'undefined'
+            ? TVC_Space.canAccessDepartment(user, row.department)
+            : TVC_RBAC.canAccessDepartment(user, row.department))) {
             throw Object.assign(new Error('Department forbidden.'), { code: 'FORBIDDEN' });
         }
         await TVC_DB.del('work_permits', id);
