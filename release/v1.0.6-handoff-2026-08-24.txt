@@ -1,0 +1,39 @@
+[TVC-PMS v1.0.6 App Update — 후배 전달용]
+
+■ 파일: TVC-PMS App Update v1.0.6.zip
+■ 경로: C:\Users\zzang\Desktop\thevesselcode-pms\dist\TVC-PMS App Update v1.0.6.zip
+■ 용량: 약 329.1 MB
+■ Drive/OneDrive link recommended
+
+■ 포함 SKU: HQ_OFFICE, VESSEL_ENGINE, VESSEL_DECK, VESSEL_MASTER
+
+■ 변경 사항
+- 창/바로가기/Setup 파일명: TVC-PMS {VESSEL_ID}_{Master|Engine|Deck} v1.0.6 / TVC-PMS {COMPANY_ID} v1.0.6
+- App Update ZIP: TVC-PMS App Update v1.0.6.zip (Data Import → App Update)
+- SPARE 탭: 체크박스 선택 시 PMS처럼 파란 포커스 이동 · Requisition/Consumption 작성·취소·Modify/Append 후 목록 스크롤 유지
+- SPARE GROUP Tree: 재고 XLS의 03~06 등 03~XX 범위 라벨을 03. GENERATOR ENGINE 병합 그룹으로 처리
+- HQ SPARE Export: Quotation Export는 Requisition 상태만 · Order Export는 Evaluating+Approved · Approve 시 Approved by = Superintendent
+- Vessel SPARE Monthly Report Export: {vessel}_spare_monthly_{engine|deck}_{YYYYMMDD}_{seq}.zip · 확인 대화상자
+- Case Report sync: job_code + department 기준으로 Deck/Engine job 참조 분리
+- Work Permit / Defect / Postpone transfer 및 Report UI 개선
+
+■ 설치
+1. Run the target SKU TVC app
+2. Menu → Data Export & Import → Import → App Update
+3. Select TVC-PMS App Update v1.0.6.zip → Install update
+4. Restart after install → confirm footer v1.0.6
+5. Verify existing Work History / Master data preserved
+
+■ 주의
+- App Update replaces program only — IndexedDB / Master / History preserved
+- Seat license re-issue not required
+- New vessels: Path B Setup handoff · existing pool: Path A App Update ZIP
+
+■ 설치 후 테스트
+[ ] 로그인 footer · 창 제목 v1.0.6
+[ ] SPARE 탭: 체크 시 파란 하이라이트 이동 · Modify/Append/Requisition/Consumption 후 스크롤 유지
+[ ] SPARE GROUP Tree: 03~06 미표시 · 03. GENERATOR ENGINE 병합
+[ ] HQ SPARE: Quotation Export(Requisition만) · Order Export(Evaluating/Approved) · Approve → Superintendent
+[ ] Vessel SPARE Monthly Report Export 파일명 · 확인 대화상자
+[ ] Case Report Export/Import · Deck/Engine job 참조 정상
+[ ] App Update: TVC-PMS App Update v1.0.6.zip → Import → Install update · data preserved
