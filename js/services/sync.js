@@ -575,6 +575,24 @@ const TVC_Sync = (function () {
         } catch (_) { /* store may not exist on legacy DB */ }
     }
 
+    const SPARE_SYNC_CATEGORIES = new Set([
+        'REQUISITION', 'QUOTATION', 'REPLY_EVALUATION', 'PURCHASE_ORDER',
+        'RECEIVED', 'INVENTORY', 'ASSESSMENT',
+    ]);
+
+    function isSpareSyncHistoryRow(row) {
+        const scope = String(row?.scope || '').toUpperCase();
+        if (scope === 'SPARE') return true;
+        const cat = String(row?.category || '').toUpperCase();
+        if (cat && SPARE_SYNC_CATEGORIES.has(cat)) return true;
+        const d = String(row?.direction || '').toUpperCase();
+        return d.startsWith('SPARE_');
+    }
+
+    function isPmsSyncHistoryRow(row) {
+        return !isSpareSyncHistoryRow(row);
+    }
+
     async function getHistory(limit = 30) {
         const rows = await TVC_DB.getAll('sync_history');
         return rows.sort((a, b) => (b.at || '').localeCompare(a.at || '')).slice(0, limit);
@@ -1164,7 +1182,8 @@ const TVC_Sync = (function () {
 
     return {
         exportZip, exportCompanyZip, importZip, importPayload, collectDelta, collectMonthlySnapshot, collectCaseReview, mergePayload,
-        getHistory, recordSyncHistory, validateImportVesselId, validateImportPackageScope, resolveFileDepartment,
+        getHistory, recordSyncHistory, isSpareSyncHistoryRow, isPmsSyncHistoryRow,
+        validateImportVesselId, validateImportPackageScope, resolveFileDepartment,
         resolveActiveImportDepartment, resolveExpectedVesselId,
         assertLicenseForPackage, licensedCompanyId,
     };

@@ -8867,6 +8867,11 @@ const TVC_App = (function () {
     async function buildMenuXferExportFilenameLookup(category) {
         let rows = [];
         try { rows = await TVC_Sync.getHistory(200); } catch (_) {}
+        if (typeof TVC_Sync?.isPmsSyncHistoryRow === 'function') {
+            rows = rows.filter(r => TVC_Sync.isPmsSyncHistoryRow(r));
+        } else {
+            rows = rows.filter(r => String(r?.scope || '').toUpperCase() !== 'SPARE');
+        }
         const map = {};
         const sorted = rows.slice().sort((a, b) => (a.at || '').localeCompare(b.at || ''));
         for (const r of sorted) {
@@ -8938,6 +8943,11 @@ const TVC_App = (function () {
     async function loadSyncHistoryRows() {
         let rows = [];
         try { rows = await TVC_Sync.getHistory(120); } catch (_) {}
+        if (typeof TVC_Sync?.isPmsSyncHistoryRow === 'function') {
+            rows = rows.filter(r => TVC_Sync.isPmsSyncHistoryRow(r));
+        } else {
+            rows = rows.filter(r => String(r?.scope || '').toUpperCase() !== 'SPARE');
+        }
         if (state.space === 'HQ') rows = rows.filter(r => r.space === 'HQ');
         else rows = rows.filter(r => r.space !== 'HQ');
         if (state.department) rows = rows.filter(r => !r.department || r.department === state.department || r.department === 'ALL');

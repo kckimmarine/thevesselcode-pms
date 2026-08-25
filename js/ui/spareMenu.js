@@ -8769,6 +8769,98 @@ const TVC_SpareMenu = (function () {
         initConsumeListView(st);
     }
 
+    function canSoftPatchConsumeHistNav(st = getState()) {
+        const m = modState(st);
+        if (!m.consumeFromHistory || !m.consumeOpen || m.consumeLogListEditing) return false;
+        const modal = document.getElementById('spareConsumeModal');
+        if (!modal || modal.classList.contains('hidden')) return false;
+        return !!document.querySelector('#spareConsumeBody .spare-consume-draft-wrap');
+    }
+
+    function captureConsumeHistScroll() {
+        const modal = document.getElementById('spareConsumeModal');
+        const workScroll = document.querySelector('#spareConsumeBody .spare-req-work-scroll');
+        const listScroll = document.getElementById('consumeListScroll');
+        return {
+            modal: modal?.scrollTop ?? 0,
+            modalBox: modal?.querySelector('.modal-box')?.scrollTop ?? 0,
+            work: workScroll?.scrollTop ?? 0,
+            list: listScroll?.scrollTop ?? 0,
+        };
+    }
+
+    function restoreConsumeHistScroll(saved) {
+        if (!saved) return;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                const modal = document.getElementById('spareConsumeModal');
+                const workScroll = document.querySelector('#spareConsumeBody .spare-req-work-scroll');
+                const listScroll = document.getElementById('consumeListScroll');
+                if (modal) modal.scrollTop = saved.modal;
+                const box = modal?.querySelector('.modal-box');
+                if (box) box.scrollTop = saved.modalBox;
+                if (workScroll) workScroll.scrollTop = saved.work;
+                if (listScroll) listScroll.scrollTop = saved.list;
+            });
+        });
+    }
+
+    function renderConsumeHistFooterHtml(st, m, draft) {
+        const listEditing = !!m.consumeLogListEditing;
+        const navBtns = TVC_App?.histNavButtonsHtml
+            ? TVC_App.histNavButtonsHtml('TVC_App.navWorkHistoryEntry(-1)', 'TVC_App.navWorkHistoryEntry(1)')
+            : '';
+        const isHqUser = isReqListHqUser(st);
+        const histActionLabel = isHqUser ? 'Approve' : 'Confirm';
+        const consumeAppr = consumeLogApprovalState(draft, st.department, { listMode: true, listEditing });
+        const histActionOk = !listEditing && (isHqUser
+            ? consumeAppr.canApproveNow
+            : consumeAppr.canConfirmNow);
+        const histActionBtn = `<button type="button" class="btn" onclick="TVC_SpareMenu.consumeHistConfirmOrApprove()"${histActionOk ? '' : ' disabled'}>${histActionLabel}</button>`;
+        const printBtns = `${histActionBtn}<button type="button" class="btn" onclick="TVC_SpareMenu.consumeLogPrintReport()">Print</button>
+                <button type="button" class="btn" onclick="TVC_SpareMenu.consumeLogPrintPreview()">Preview</button>`;
+        const closeBtn = `<button type="button" class="btn" onclick="TVC_SpareMenu.closeConsumeModal()">Close</button>`;
+        const canModifyLog = canModifyConsumeHistory(st, draft);
+        const modifyTitle = consumeHistModifyDisabledTitle(st, draft);
+        const centerBtns = listEditing
+            ? `<button type="button" id="consumeLogSaveBtn" class="btn btn-green" onclick="TVC_SpareMenu.saveConsume()">Save</button>
+                    <button type="button" id="consumeLogCancelBtn" class="btn" onclick="TVC_SpareMenu.consumeLogCancelEdit()">Cancel</button>`
+            : `<button type="button" class="btn" onclick="TVC_SpareMenu.consumeLogEnterListEdit()"${canModifyLog ? '' : ' disabled'}${modifyTitle ? ` title="${escAttr(modifyTitle)}"` : ''}>Modify</button>`;
+        return `<div class="modal-actions wr-actions wr-actions-split spare-consume-draft-actions">
+                <div class="wr-modal-actions-left">${navBtns}</div>
+                <div class="wr-modal-actions-center">${centerBtns}</div>
+                <div class="wr-modal-actions-right">${printBtns}${closeBtn}</div>
+               </div>`;
+    }
+
+    function syncConsumeHistFooterFromSession(st = getState()) {
+        const m = modState(st);
+        const draft = getConsumeSession();
+        const footer = document.querySelector('#spareConsumeBody .spare-consume-draft-actions');
+        if (!footer || !draft) return;
+        footer.outerHTML = renderConsumeHistFooterHtml(st, m, draft);
+    }
+
+    async function patchConsumeHistNavFromSession(st, opts = {}) {
+        const draft = getConsumeSession();
+        if (!draft) return;
+        const scrollSaved = opts.preserveScroll ? captureConsumeHistScroll() : null;
+        if (canPatchConsumeMetaInPlace(draft, st)) {
+            applyConsumeMetaFromSession(draft, st);
+        } else {
+            syncConsumeMetaPanelFromSession(draft, st);
+        }
+        await refreshConsumeListWindowFromSession(st);
+        syncConsumeHistFooterFromSession(st);
+        syncConsumeReportWindowTitle();
+        applyConsumeLogScrollLock(document.getElementById('spareConsumeBody'));
+        if (scrollSaved) restoreConsumeHistScroll(scrollSaved);
+        requestAnimationFrame(() => {
+            syncConsumeHeadLayout();
+            syncConsumeListModalSizing();
+        });
+    }
+
     async function loadConsumeLogIntoListWindow(logId, opts = {}) {
         closeAllConsumeMetaPicks();
         const log = await TVC_Inventory.getConsumeLog(logId);
@@ -8793,6 +8885,12 @@ const TVC_SpareMenu = (function () {
         m.partNo = '';
         m.description = '';
         st.spareSearch = '';
+        const softHistNav = !!(opts.softHistNav
+            || (opts.keepFromHistory && opts.skipRender && canSoftPatchConsumeHistNav(st)));
+        if (softHistNav) {
+            await patchConsumeHistNavFromSession(st, { preserveScroll: opts.preserveScroll !== false });
+            return true;
+        }
         const preserveHist = opts.preserveHistPopover !== false
             && _consumeLogHistOpen
             && isConsumedLogWindow(m);
@@ -8888,6 +8986,10 @@ const TVC_SpareMenu = (function () {
 
     async function openConsumeFromPmsHistory(logId, opts = {}) {
         if (!logId) return false;
+        const modal = document.getElementById('spareConsumeModal');
+        const softNav = !!(opts.skipModalToggle && modal && !modal.classList.contains('hidden')
+            && document.querySelector('#spareConsumeBody .spare-consume-draft-wrap'));
+        const preserveScroll = !!(opts.preserveScroll || opts.swapOpts?.preserveScroll);
         const st = getState();
         const m = modState(st);
         m.consumeOpen = true;
@@ -8902,13 +9004,19 @@ const TVC_SpareMenu = (function () {
             preserveHistPopover: false,
             keepFromHistory: true,
             skipRender: true,
+            softHistNav: softNav,
+            preserveScroll: softNav && preserveScroll,
         });
         if (!loaded) return false;
         m.consumeFromHistory = true;
         m.consumeLogListEditing = !!opts.edit;
         m.consumePostSaveView = false;
+        if (softNav) {
+            modal?.classList.remove('hidden');
+            syncConsumeListModalSizing();
+            return true;
+        }
         await renderConsumeModal();
-        const modal = document.getElementById('spareConsumeModal');
         if (opts.skipModalToggle) {
             modal?.classList.remove('hidden');
         } else if (opts.swapHide && typeof TVC_App?.swapHistoryModals === 'function') {
@@ -20226,30 +20334,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
         let footerHtml = '';
         if (fromHistory) {
-            const navBtns = TVC_App?.histNavButtonsHtml
-                ? TVC_App.histNavButtonsHtml('TVC_App.navWorkHistoryEntry(-1)', 'TVC_App.navWorkHistoryEntry(1)')
-                : '';
-            const isHqUser = isReqListHqUser(st);
-            const histActionLabel = isHqUser ? 'Approve' : 'Confirm';
-            const consumeAppr = consumeLogApprovalState(draft, st.department, { listMode: true, listEditing });
-            const histActionOk = !listEditing && (isHqUser
-                ? consumeAppr.canApproveNow
-                : consumeAppr.canConfirmNow);
-            const histActionBtn = `<button type="button" class="btn" onclick="TVC_SpareMenu.consumeHistConfirmOrApprove()"${histActionOk ? '' : ' disabled'}>${histActionLabel}</button>`;
-            const printBtns = `${histActionBtn}<button type="button" class="btn" onclick="TVC_SpareMenu.consumeLogPrintReport()">Print</button>
-                <button type="button" class="btn" onclick="TVC_SpareMenu.consumeLogPrintPreview()">Preview</button>`;
-            const closeBtn = `<button type="button" class="btn" onclick="TVC_SpareMenu.closeConsumeModal()">Close</button>`;
-            const canModifyLog = canModifyConsumeHistory(st, draft);
-            const modifyTitle = consumeHistModifyDisabledTitle(st, draft);
-            const centerBtns = listEditing
-                ? `<button type="button" id="consumeLogSaveBtn" class="btn btn-green" onclick="TVC_SpareMenu.saveConsume()">Save</button>
-                    <button type="button" id="consumeLogCancelBtn" class="btn" onclick="TVC_SpareMenu.consumeLogCancelEdit()">Cancel</button>`
-                : `<button type="button" class="btn" onclick="TVC_SpareMenu.consumeLogEnterListEdit()"${canModifyLog ? '' : ' disabled'}${modifyTitle ? ` title="${escAttr(modifyTitle)}"` : ''}>Modify</button>`;
-            footerHtml = `<div class="modal-actions wr-actions wr-actions-split spare-consume-draft-actions">
-                <div class="wr-modal-actions-left">${navBtns}</div>
-                <div class="wr-modal-actions-center">${centerBtns}</div>
-                <div class="wr-modal-actions-right">${printBtns}${closeBtn}</div>
-               </div>`;
+            footerHtml = renderConsumeHistFooterHtml(st, m, draft);
         } else if (listEditing) {
             footerHtml = `<div class="modal-actions wr-actions spare-consume-draft-actions">
                 <button type="button" id="consumeLogSaveBtn" class="btn btn-green" onclick="TVC_SpareMenu.saveConsume()">Save</button>
