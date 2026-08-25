@@ -41,7 +41,7 @@ const TVC_Excel = (function () {
      * @param opts { vendorOnly:true } vendorOnly면 가격/코멘트만, 아니면 본사 셀도 해제
      */
     async function exportRequisition(req, opts = {}) {
-        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        if (!available()) throw new Error('ExcelJS library is not loaded. Please refresh the page (Ctrl+F5).');
         const vendorOnly = opts.vendorOnly !== false; // 기본: 업체용(가격/코멘트만)
         const wb = new ExcelJS.Workbook();
         wb.creator = 'TVC-PMS';
@@ -106,7 +106,7 @@ const TVC_Excel = (function () {
      * @param opts { vendorName, currency, lines, filename }
      */
     async function exportQuoteRequisition(req, opts = {}) {
-        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        if (!available()) throw new Error('ExcelJS library is not loaded. Please refresh the page (Ctrl+F5).');
         const vendorName = String(opts.vendorName || '').trim();
         const currency = String(opts.currency || 'USD').trim().toUpperCase();
         const lines = Array.isArray(opts.lines) ? opts.lines : [];
@@ -312,11 +312,11 @@ const TVC_Excel = (function () {
      * 반환: [{ part_no, price, currency, vendor_comment, qty_approved, hq_comment }]
      */
     async function parseRequisitionFile(file, opts = {}) {
-        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        if (!available()) throw new Error('ExcelJS library is not loaded. Please refresh the page (Ctrl+F5).');
         const wb = new ExcelJS.Workbook();
         await wb.xlsx.load(await file.arrayBuffer());
         const ws = wb.getWorksheet(SHEET) || wb.worksheets[0];
-        if (!ws) throw new Error('시트를 찾을 수 없습니다.');
+        if (!ws) throw new Error('Worksheet not found.');
 
         const { map, headerRowNo } = buildHeaderMap(ws);
         if (isQuotePrintForm(map)) {
@@ -329,7 +329,7 @@ const TVC_Excel = (function () {
 
         const col = (name) => map[name.toLowerCase()];
         const cPart = col('part no');
-        if (!cPart) throw new Error("'Part No' 열을 찾을 수 없습니다.");
+        if (!cPart) throw new Error("Column 'Part No' not found.");
 
         const rows = [];
         ws.eachRow((row, rn) => {
@@ -369,7 +369,7 @@ const TVC_Excel = (function () {
      * @param {{ ship, dept, filterParts?, rows, count, exportedAt? }} ctx
      */
     async function exportSparePartsList(ctx) {
-        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        if (!available()) throw new Error('ExcelJS library is not loaded. Please refresh the page (Ctrl+F5).');
         const rows = ctx?.rows || [];
         if (!rows.length) throw new Error('No parts to export.');
 
@@ -629,7 +629,7 @@ const TVC_Excel = (function () {
     }
 
     async function buildQuoteSparePartsWorkbook(ctx) {
-        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        if (!available()) throw new Error('ExcelJS library is not loaded. Please refresh the page (Ctrl+F5).');
         const pages = ctx?.pages || [];
         if (!pages.length) throw new Error('No items to export.');
 
@@ -747,7 +747,7 @@ const TVC_Excel = (function () {
     }
 
     async function buildSparePartsRequisitionWorkbook(ctx) {
-        if (!available()) throw new Error('ExcelJS 라이브러리가 로드되지 않았습니다.');
+        if (!available()) throw new Error('ExcelJS library is not loaded. Please refresh the page (Ctrl+F5).');
         const pages = ctx?.pages || [];
         if (!pages.length) throw new Error('No items to export.');
 

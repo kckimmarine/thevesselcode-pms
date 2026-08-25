@@ -2303,7 +2303,7 @@ const TVC_WorkPermitReport = (function () {
             if (checkedIds.length) {
                 await TVC_Dialog.alert('None of the selected Work Permits can be confirmed.\nOnly Reported permits can be confirmed, and you need Chief Engineer / Chief Officer / Captain permission.');
             } else {
-                await TVC_Dialog.alert('Check one or more Reported Work Permits to confirm.');
+                await TVC_Dialog.alert('Select one or more Reported Work Permits to confirm.');
             }
             return;
         }
@@ -2343,7 +2343,7 @@ const TVC_WorkPermitReport = (function () {
             return r && !r.approved_at && (r.confirmed_at || TVC_RBAC.canHqDirectApprove(user, r));
         });
         if (!ids.length) {
-            await TVC_Dialog.alert('Check one or more Confirmed Work Permits to approve.');
+            await TVC_Dialog.alert('Select one or more Confirmed Work Permits to approve.');
             return;
         }
         if (!await TVC_Dialog.confirm({ kind: 'approve', message: `Approve ${ids.length} Work Permit(s)?` })) return;
@@ -2362,7 +2362,7 @@ const TVC_WorkPermitReport = (function () {
             return r && TVC_WorkPermit.canDeleteListWorkflow(r);
         });
         if (!ids.length) {
-            await TVC_Dialog.alert('Check one or more deletable Work Permits.');
+            await TVC_Dialog.alert('Select one or more deletable Work Permits.');
             return;
         }
         if (!await TVC_Dialog.confirm({ kind: 'delete', message: `Delete ${ids.length} Work Permit(s)?` })) return;
@@ -2627,7 +2627,7 @@ const TVC_WorkPermitReport = (function () {
         if (!row?.id || row.id === 'wp-draft-empty' || !user) return;
         if (isHq()) {
             if (!TVC_RBAC.canApproveHqReport(user)) {
-                await TVC_Dialog.alert('Approve is available in HQ mode only.');
+                await TVC_Dialog.alert('This action is available in HQ Mode only.');
                 return;
             }
             if (row.approved_at || row.approved_by) {

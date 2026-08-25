@@ -1158,7 +1158,7 @@ const TVC_SpareMasterExcel = (function () {
             ? TVC_RBAC.canModifyOriginalPlan(user)
             : (TVC_RBAC.isMaintPlanEditor(user) && TVC_RBAC.canModifySpareInventory(user));
         if (!canImport) {
-            throw Object.assign(new Error('SPARE Master Import는 Chief Engineer, Chief Officer, Captain(Master), 또는 HQ Superintendent만 사용할 수 있습니다.'), { code: 'PERMISSION_DENIED' });
+            throw Object.assign(new Error('SPARE Master Import requires Chief Engineer, Chief Officer, Captain (Master), or HQ Superintendent.'), { code: 'PERMISSION_DENIED' });
         }
         if (TVC_RBAC.isHqAccount(user)) TVC_RBAC.assertModifyOriginalPlan(user);
         const department = normDept(opts.department);

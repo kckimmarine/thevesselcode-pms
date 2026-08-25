@@ -5,7 +5,7 @@ const TVC_Dialog = (function () {
 
     const KIND = {
         save: { confirmLabel: 'Save', cancelLabel: 'Cancel', confirmClass: 'btn-green' },
-        confirm: { confirmLabel: 'Confirm', cancelLabel: 'Cancel', confirmClass: 'btn-green' },
+        confirm: { confirmLabel: 'Yes', cancelLabel: 'Cancel', confirmClass: 'btn-green' },
         delete: { confirmLabel: 'Delete', cancelLabel: 'Cancel', confirmClass: 'btn-red' },
         cancel: { confirmLabel: 'Yes', cancelLabel: 'No', confirmClass: 'btn-green' },
         warning: { confirmLabel: 'Continue', cancelLabel: 'Cancel', confirmClass: 'btn-green' },
@@ -180,7 +180,7 @@ const TVC_Dialog = (function () {
             kind: o.kind || 'confirm',
             title: o.title || "Company's Comments",
             textarea: true,
-            confirmLabel: o.confirmLabel || 'OK',
+            confirmLabel: o.confirmLabel || 'Yes',
             cancelLabel: o.cancelLabel || 'Cancel',
         });
         if (!ok) return null;

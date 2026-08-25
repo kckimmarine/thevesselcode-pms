@@ -311,7 +311,7 @@ const TVC_DefectCaseService = (function () {
         let changed = false;
         if (confirm && !row.confirmed_at) {
             if (row.visible_in_list === false) {
-                throw Object.assign(new Error('목록에 저장된 Report만 Confirm할 수 있습니다.'), { code: 'INVALID_STATUS' });
+                throw Object.assign(new Error('Only saved reports in the list can be confirmed.'), { code: 'INVALID_STATUS' });
             }
             if (row.status === TVC_DefectCase.Status.CLOSED) {
                 throw Object.assign(new Error('Closed case cannot be confirmed.'), { code: 'INVALID_STATUS' });

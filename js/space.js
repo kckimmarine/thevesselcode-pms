@@ -70,9 +70,9 @@ const TVC_Space = (function () {
     };
 
     const LOGIN_MODE_DENIED = {
-        [LoginMode.MASTER]: 'Vessel Mode - Master는 Captain(captain) 계정만 접속할 수 있습니다.',
-        [LoginMode.DECK]: 'Vessel Mode - Deck은 Officer(officer) · Chief officer(co) 계정만 접속할 수 있습니다.',
-        [LoginMode.ENGINE]: 'Vessel Mode - Engine은 Engineer(engineer) · Chief engineer(ce) 계정만 접속할 수 있습니다.',
+        [LoginMode.MASTER]: 'Vessel Mode - Master allows Captain (captain) accounts only.',
+        [LoginMode.DECK]: 'Vessel Mode - Deck allows Officer (officer) or Chief officer (co) accounts only.',
+        [LoginMode.ENGINE]: 'Vessel Mode - Engine allows Engineer (engineer) or Chief engineer (ce) accounts only.',
     };
 
     function stationFromLoginMode(mode) {
@@ -115,19 +115,19 @@ const TVC_Space = (function () {
 
     /** Login gate — loginMode: MASTER | DECK | ENGINE */
     function validateLogin(user, loginMode) {
-        if (!user) return { ok: false, error: '계정을 확인할 수 없습니다.' };
+        if (!user) return { ok: false, error: 'Unable to verify account.' };
         if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
-            return { ok: false, error: 'HQ 계정은 Department 선택 없이 로그인하세요.' };
+            return { ok: false, error: 'HQ accounts must sign in without selecting a Department.' };
         }
 
         if (!loginMode || !LOGIN_MODE_LABELS[loginMode]) {
-            return { ok: false, error: 'Department(Master / Deck / Engine)를 선택하세요.' };
+            return { ok: false, error: 'Select Department (Master / Deck / Engine).' };
         }
 
         const uname = String(user.username || '').toLowerCase();
         const allowed = LOGIN_MODE_USERS[loginMode];
         if (!allowed?.has(uname)) {
-            return { ok: false, error: LOGIN_MODE_DENIED[loginMode] || '이 Department에 접속할 수 없는 계정입니다.' };
+            return { ok: false, error: LOGIN_MODE_DENIED[loginMode] || 'This account cannot sign in with the selected Department.' };
         }
 
         const station = stationFromLoginMode(loginMode);
@@ -151,7 +151,7 @@ const TVC_Space = (function () {
                 code: 'STATION_ACCESS_DENIED',
                 endpoint,
                 station,
-                message: `${stationLabel(station)}에서는 이 작업(${endpoint})을 수행할 수 없습니다.`,
+                message: `This action (${endpoint}) is not available for ${stationLabel(station)}.`,
             });
         }
     }
@@ -175,7 +175,7 @@ const TVC_Space = (function () {
             if (!canStationDataXfer(user)) {
                 const station = getStation(user);
                 const who = station === Station.CCR ? 'Chief officer (co)' : 'Chief engineer (ce) / Captain';
-                throw Object.assign(new Error(`Data Export & Import는 ${who}만 수행할 수 있습니다.`), {
+                throw Object.assign(new Error(`Data Export & Import can only be performed by ${who}.`), {
                     code: 'STATION_XFER_DENIED',
                 });
             }

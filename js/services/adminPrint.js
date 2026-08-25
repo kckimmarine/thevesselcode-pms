@@ -57,7 +57,7 @@ const TVC_AdminPrint = (function () {
 
     function vesselsTableHtml(vessels) {
         if (!vessels.length) {
-            return '<p class="meta">등록된 선박이 없습니다.</p>';
+            return '<p class="meta">No vessels registered.</p>';
         }
         const rows = vessels.map((v, i) => {
             const ver = typeof TVC_AdminRegistry !== 'undefined'

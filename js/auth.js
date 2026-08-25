@@ -43,9 +43,9 @@ const TVC_Auth = (function () {
         else if (typeof TVC_Pbkdf2 !== 'undefined') {
             hash = TVC_Pbkdf2.pbkdf2Hex(password, PBKDF2_SALT, PBKDF2_ITER, 32);
         } else if (typeof location !== 'undefined' && location.protocol === 'file:') {
-            throw new Error('file:// 모드에서는 로그인할 수 없습니다. Electron 설치본, START-TVC-PMS.bat, 또는 npm start → http://localhost:3000 으로 실행하세요.');
+            throw new Error('Sign-in is not available in file:// mode. Use the Electron app, START-TVC-PMS.bat, or npm start → http://localhost:3000.');
         } else {
-            throw new Error('이 브라우저에서 비밀번호 검증을 사용할 수 없습니다. Chrome/Edge 최신 버전을 사용하세요.');
+            throw new Error('Password verification is not available in this browser. Use the latest Chrome or Edge.');
         }
         _hashCache.set(password, hash);
         return hash;
@@ -132,9 +132,9 @@ const TVC_Auth = (function () {
             ? (users.find(u => u.id === template.id && u.is_active)
                 || users.find(u => u.username === template.username && u.is_active))
             : users.find(u => u.username === uname && u.is_active);
-        if (!user) return { ok: false, error: '존재하지 않는 계정입니다.' };
+        if (!user) return { ok: false, error: 'Account not found.' };
         const hash = await hashPassword(password);
-        if (hash !== user.password_hash) return { ok: false, error: '비밀번호가 올바르지 않습니다.' };
+        if (hash !== user.password_hash) return { ok: false, error: 'Incorrect password.' };
 
         const sessionRole = user.role || (window.TVC_RBAC?.resolveUserRole?.(user));
 
@@ -149,8 +149,8 @@ const TVC_Auth = (function () {
                 return {
                     ok: false,
                     error: user.account_type === 'ADMIN'
-                        ? 'TVC Admin(tvc) 계정은 Department 선택 없이 로그인하세요.'
-                        : 'Superintendent(hq) 계정은 Department 선택 없이 로그인하세요.',
+                        ? 'TVC Admin (tvc) accounts must sign in without selecting a Department.'
+                        : 'Superintendent (hq) accounts must sign in without selecting a Department.',
                 };
             }
             const session = {
@@ -169,7 +169,7 @@ const TVC_Auth = (function () {
             if (!spaceCheck.ok) return spaceCheck;
             station = spaceCheck.station;
         } else if (!loginMode) {
-            return { ok: false, error: 'Department(Master / Deck / Engine)를 선택하세요.' };
+            return { ok: false, error: 'Select Department (Master / Deck / Engine).' };
         }
 
         const session = {
@@ -219,7 +219,7 @@ const TVC_Auth = (function () {
             const station = TVC_Space.getStation(user);
             if (station) {
                 try { TVC_Space.assertAction(user, action); }
-                catch (e) { await TVC_Dialog.alert(e.message || 'Station access denied'); return null; }
+                catch (e) { await TVC_Dialog.alert(e.message || 'Station access denied.'); return null; }
             }
         }
         return user;

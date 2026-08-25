@@ -1671,7 +1671,7 @@ const TVC_DefectReport = (function () {
         let rows = defectListRows().filter(r => _dfListChecked?.[r.id]);
         const sel = getSelectedDfRow();
         if (!rows.length && sel && isDfListRowConfirmable(sel)) rows = [sel];
-        if (!rows.length) await TVC_Dialog.alert('Check one or more Reported items to confirm.');
+        if (!rows.length) await TVC_Dialog.alert('Select one or more Reported items to confirm.');
 
         if (isHq()) {
             const pending = rows.filter(r => r.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY);
@@ -2858,7 +2858,7 @@ const TVC_DefectReport = (function () {
         if (!row || !user) return;
         if (isHq()) {
             if (!TVC_RBAC.canApproveHqReport(user)) {
-                await TVC_Dialog.alert('Approve is available in HQ mode only.');
+                await TVC_Dialog.alert('This action is available in HQ Mode only.');
                 return;
             }
             if (row.approved_at || row.approved_by) {

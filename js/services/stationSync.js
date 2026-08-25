@@ -23,7 +23,7 @@ const TVC_StationSync = (function () {
 
     /** Captain Hub — Station ZIP / JSON / CSV 병합 */
     async function importStationPackage(user, file, dept) {
-        if (!file) throw new Error('파일을 선택하세요.');
+        if (!file) throw new Error('Select a file.');
         TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.HUB_IMPORT);
         const name = (file.name || '').toLowerCase();
         const mergeDept = dept || null;
@@ -40,7 +40,7 @@ const TVC_StationSync = (function () {
             const payload = await parseCsvToPayload(file);
             return TVC_Sync.importPayload(user, payload, file, { allowHubMerge: true, dept: mergeDept });
         }
-        throw new Error('지원 형식: .zip, .json, .csv');
+        throw new Error('Supported formats: .zip, .json, .csv');
     }
 
     /** Captain — 회사 보고용 전체 패키지 */
@@ -52,7 +52,7 @@ const TVC_StationSync = (function () {
     async function parseCsvToPayload(file) {
         const text = await file.text();
         const lines = text.split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 2) throw new Error('CSV에 데이터 행이 없습니다.');
+        if (lines.length < 2) throw new Error('CSV has no data rows.');
 
         const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
         const idx = (k) => headers.indexOf(k);

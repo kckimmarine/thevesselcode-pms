@@ -67,13 +67,13 @@ const TVC_VesselProfileSync = (function () {
 
     async function exportZip(user, opts = {}) {
         if (!user || !TVC_RBAC.isHqAccount(user)) {
-            throw Object.assign(new Error('Vessel Profile Export는 HQ Mode에서만 가능합니다.'), { code: 'FORBIDDEN' });
+            throw Object.assign(new Error('Vessel Profile Export is available in HQ Mode only.'), { code: 'FORBIDDEN' });
         }
         const vesselId = opts.vesselId
             || opts.selectedVesselId
             || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.getSelectedId() : null);
         const payload = await buildPayload(user, vesselId);
-        if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
+        if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded. Please refresh the page.');
 
         let filename;
         if (typeof TVC_Filename !== 'undefined' && TVC_Filename.build) {
@@ -118,26 +118,26 @@ const TVC_VesselProfileSync = (function () {
     }
 
     async function parseFile(file) {
-        if (!file) throw new Error('파일이 없습니다.');
+        if (!file) throw new Error('No file selected.');
         const name = (file.name || '').toLowerCase();
         let text = '';
         if (name.endsWith('.json')) {
             text = await file.text();
         } else {
-            if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
+            if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded. Please refresh the page.');
             const zip = await JSZip.loadAsync(await file.arrayBuffer());
             const jsonFile = zip.file(JSON_NAME)
                 || zip.file(/tvc_vessel_profile\.json$/i)[0]
                 || zip.file(/\.json$/i)[0];
-            if (!jsonFile) throw new Error('ZIP에 tvc_vessel_profile.json이 없습니다.');
+            if (!jsonFile) throw new Error('ZIP does not contain tvc_vessel_profile.json.');
             text = await jsonFile.async('string');
         }
         const payload = JSON.parse(text);
         if (payload?.kind !== KIND) {
-            throw new Error('Vessel Profile 파일이 아닙니다.');
+            throw new Error('This is not a Vessel Profile file.');
         }
         if (!payload.profile?.vessel_id && !payload.export_meta?.vessel_id) {
-            throw new Error('Vessel Profile에 vessel_id가 없습니다.');
+            throw new Error('Vessel Profile has no vessel_id.');
         }
         payload.profile = normalizeProfile({
             ...payload.profile,
@@ -162,23 +162,23 @@ const TVC_VesselProfileSync = (function () {
 
     async function validateForShip(payload, user) {
         if (!user || TVC_RBAC.isHqAccount(user)) {
-            return { ok: false, error: 'Vessel Profile Import는 선박 Mode에서만 가능합니다.' };
+            return { ok: false, error: 'Vessel Profile Import is available in vessel mode only.' };
         }
         const expected = await resolveShipVesselId(user);
         const got = String(payload?.profile?.vessel_id || '').trim();
-        if (!expected) return { ok: false, error: '이 PC의 vessel_id를 확인할 수 없습니다.' };
-        if (!got) return { ok: false, error: '파일에 vessel_id가 없습니다.' };
+        if (!expected) return { ok: false, error: 'Unable to determine vessel_id on this PC.' };
+        if (!got) return { ok: false, error: 'File has no vessel_id.' };
         if (expected !== got) {
             return {
                 ok: false,
-                error: `선박 불일치: 이 PC는 "${expected}", 파일은 "${got}" 입니다.`,
+                error: `Vessel mismatch: this PC is "${expected}", file is "${got}".`,
             };
         }
         const company = String(payload?.profile?.company_id || '').trim();
         if (company && company !== companyId()) {
             return {
                 ok: false,
-                error: `Company 불일치: 파일 "${company}", 이 설치본 "${companyId()}"`,
+                error: `Company mismatch: file "${company}", this installation "${companyId()}".`,
             };
         }
         return { ok: true, expected, profile: payload.profile };

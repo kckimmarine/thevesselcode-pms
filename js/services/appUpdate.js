@@ -68,9 +68,9 @@ const TVC_AppUpdate = (function () {
 
     async function buildZip(user, opts = {}) {
         if (!isAdminUser(user)) {
-            throw Object.assign(new Error('App Update Export는 Admin Mode(tvc)에서만 가능합니다.'), { code: 'FORBIDDEN' });
+            throw Object.assign(new Error('App Update Export is available in Admin Mode (tvc) only.'), { code: 'FORBIDDEN' });
         }
-        if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
+        if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded. Please refresh the page.');
 
         const appVersion = String(opts.appVersion || '').trim();
         if (!appVersion) throw new Error('App version is required (e.g. 2.0.1).');
@@ -120,9 +120,9 @@ const TVC_AppUpdate = (function () {
     /** Build shared App Update ZIP from dist/ Setup.exe (Admin — no manual attach). */
     async function buildZipFromSource(user, opts = {}) {
         if (!isAdminUser(user)) {
-            throw Object.assign(new Error('App Update Export는 Admin Mode(tvc)에서만 가능합니다.'), { code: 'FORBIDDEN' });
+            throw Object.assign(new Error('App Update Export is available in Admin Mode (tvc) only.'), { code: 'FORBIDDEN' });
         }
-        if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
+        if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded. Please refresh the page.');
 
         const appVersion = String(opts.appVersion || '').trim();
         if (!appVersion) throw new Error('App version is required (e.g. 1.0.6).');
@@ -208,7 +208,7 @@ const TVC_AppUpdate = (function () {
 
     async function parseFile(file) {
         if (!file) throw new Error('No file selected.');
-        if (typeof JSZip === 'undefined') throw new Error('JSZip이 로드되지 않았습니다.');
+        if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded. Please refresh the page.');
         const zip = await JSZip.loadAsync(await file.arrayBuffer());
         const jsonFile = zip.file(JSON_NAME)
             || Object.keys(zip.files).map(n => zip.file(n)).find(f => f && /tvc_app_update\.json$/i.test(f.name));

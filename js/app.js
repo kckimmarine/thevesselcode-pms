@@ -3002,7 +3002,7 @@ const TVC_App = (function () {
     async function openHqApproveDefectReport() {
         if (!TVC_RBAC.isHqAccount(state.user)) return;
         if (!TVC_RBAC.can(state.user, TVC_RBAC.Action.REPLY_DEFECT_REPORT)) {
-            await TVC_Dialog.alert('No permission to approve Defect Report.');
+            await TVC_Dialog.alert('You do not have permission to approve Defect Report.');
         }
         state.listFilters.history = {
             ...state.listFilters.history,
@@ -3020,7 +3020,7 @@ const TVC_App = (function () {
     async function openHqApprovePostponeReport() {
         if (!TVC_RBAC.isHqAccount(state.user)) return;
         if (!TVC_RBAC.canApproveHqReport(state.user)) {
-            await TVC_Dialog.alert('No permission to approve Postpone Report.');
+            await TVC_Dialog.alert('You do not have permission to approve Postpone Report.');
         }
         state.listFilters.history = {
             ...state.listFilters.history,
@@ -5757,7 +5757,7 @@ const TVC_App = (function () {
     async function menuXferConfirmVesselProfileExport() {
         const user = TVC_Auth.getCurrentUser();
         if (!user || !TVC_RBAC.isHqAccount(user)) {
-            await TVC_Dialog.alert('Vessel Profile Export is available in HQ Mode only.');
+            await TVC_Dialog.alert('This action is available in HQ Mode only.');
             return;
         }
         if (!state.selectedVesselId) {
@@ -5864,7 +5864,7 @@ const TVC_App = (function () {
         }
         const target = menuXferResolveExportTarget(state.user, 'workPermit');
         if (!target || !menuXferCanExportTarget(state.user, target)) {
-            await TVC_Dialog.alert('No permission to export Case Reports.');
+            await TVC_Dialog.alert('You do not have permission to export Case Reports.');
             return;
         }
         const dirKind = isMasterHubMode() ? classifySelectedCaseExportDirection() : '';
@@ -5929,7 +5929,7 @@ const TVC_App = (function () {
         if (!target || !menuXferCanExportTarget(user, target)) {
             await TVC_Dialog.alert(isMasterHubMode()
                 ? 'Select Deck or Engine first, then export Monthly Report to Company.'
-                : 'No permission to export monthly report.');
+                : 'You do not have permission to export monthly report.');
             return;
         }
         let reportIds = null;
@@ -6368,8 +6368,8 @@ const TVC_App = (function () {
                         return;
                     }
                     throw new Error(
-                        'Engine/Deck station export ZIP은 Master Mode 또는 HQ Mode(해당 부서 토글)에서 Import하세요. ' +
-                        'Engine export는 Deck Mode에 반영되지 않습니다.'
+                        'Import Engine/Deck station export ZIP in Master Mode or HQ Mode (matching department toggle). ' +
+                        'Engine export cannot be imported in Deck Mode.'
                     );
                 }
                 if (TVC_RBAC.isHqAccount(user) && (dir === 'SHIP_TO_HQ' || payload.export_meta?.package_type === 'COMPANY_REPORT')) {
@@ -6436,12 +6436,12 @@ const TVC_App = (function () {
             if (selected === 'case') {
                 if (!caseKinds) {
                     throw new Error(
-                        `선택한 유형(Case Report)과 파일 유형(${labels[detected] || detected})이 일치하지 않습니다.`
+                        `Selected type (Case Report) does not match file type (${labels[detected] || detected}).`
                     );
                 }
             } else if (expected && detected !== expected) {
                 throw new Error(
-                    `선택한 유형(${labels[expected] || expected})과 파일 유형(${labels[detected] || detected})이 일치하지 않습니다.`
+                    `Selected type (${labels[expected] || expected}) does not match file type (${labels[detected] || detected}).`
                 );
             }
             if (selected === 'appUpdate') {
@@ -6472,7 +6472,7 @@ const TVC_App = (function () {
     async function menuXferLoadVesselProfilePreview(file) {
         const user = TVC_Auth.getCurrentUser();
         if (!user || TVC_RBAC.isHqAccount(user)) {
-            throw new Error('Vessel Profile Import는 선박 Mode에서만 가능합니다.');
+            throw new Error('Vessel Profile Import is available in vessel mode only.');
         }
         if (typeof TVC_VesselProfileSync === 'undefined') {
             throw new Error('Vessel Profile module is unavailable.');
@@ -6501,10 +6501,10 @@ const TVC_App = (function () {
 
     function menuHistAccountHint(user) {
         const kind = menuHistViewerKind(user);
-        if (kind === 'hq') return 'HQ Mode — vessel(Master)과 Export / Import 이력을 표시합니다.';
-        if (kind === 'hub') return 'Hub (Captain) — Engine/Deck Station · Company(HQ)와 Export / Import 이력을 표시합니다.';
+        if (kind === 'hq') return 'HQ Mode — shows Export / Import history for the vessel (Master).';
+        if (kind === 'hub') return 'Hub (Captain) — shows Export / Import history with Engine/Deck stations and Company (HQ).';
         if (kind === 'station') {
-            return '확인자 — 주로 Master와 Export / Import합니다. Master PC 장애 시 Company(HQ) 패키지도 기록됩니다.';
+            return 'Confirmer — primarily exports/imports with Master. Company (HQ) packages are also recorded if Master PC is unavailable.';
         }
         return 'Data Export & Import History';
     }
@@ -9230,7 +9230,7 @@ const TVC_App = (function () {
     }
 
     function origPlanEditDeniedMessage() {
-        return 'Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.';
+        return 'Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.';
     }
 
     /** PMS job Modify / Append / Delete — not blocked by Original Plan lock or RH gate (master data). */
@@ -9247,9 +9247,9 @@ const TVC_App = (function () {
 
     function workProcedureEditDeniedMessage() {
         if (state.user && TVC_RBAC.isShipAccount(state.user) && !TVC_RBAC.isApprover(state.user)) {
-            return 'Captain / Chief Engineer만 Work Procedure를 수정할 수 있습니다.';
+            return 'Only Captain or Chief Engineer can edit the Work Procedure.';
         }
-        return 'Work Procedure를 편집할 수 없습니다.';
+        return 'You do not have permission to edit the Work Procedure.';
     }
 
     /** PMS/SPARE Master Excel — plan lock과 무관, ce/co/captain/hq + 부서 토글(DECK|ENGINE) 필수 */
@@ -9331,13 +9331,13 @@ const TVC_App = (function () {
     }
 
     async function openOrigGroupAdd() {
-        if (!canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+        if (!canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
         renderGroupEditor('add');
         showModal('groupEditorModal');
     }
 
     async function openOrigGroupRename() {
-        if (!canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+        if (!canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
         const node = selectedGroupNode();
         if (!node) await TVC_Dialog.alert('Select a group in PMS GROUP Tree.');
         renderGroupEditor('rename');
@@ -9346,7 +9346,7 @@ const TVC_App = (function () {
 
     async function deleteOrigGroup() {
         const user = TVC_Auth.getCurrentUser();
-        if (!user || !canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+        if (!user || !canEditPlanGroupHeader()) await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
         const node = selectedGroupNode();
         if (!node) await TVC_Dialog.alert('Select a group to delete.');
         if (state.selectedGroupKey === CRITICAL_GROUP_KEY
@@ -9370,7 +9370,7 @@ const TVC_App = (function () {
     async function saveGroupEditor() {
         const user = TVC_Auth.getCurrentUser();
         if (!user || !canEditPlanGroupHeader()) {
-            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
             return;
         }
         const form = document.getElementById('groupEditorForm');
@@ -10189,7 +10189,7 @@ const TVC_App = (function () {
     async function approveWorkPlanFromHq() {
         if (!TVC_RBAC.isHqAccount(state.user)) return;
         if (!TVC_RBAC.can(state.user, TVC_RBAC.Action.APPROVE_ORIGINAL_PLAN)) {
-            await TVC_Dialog.alert('No permission to approve Work Plan.');
+            await TVC_Dialog.alert('You do not have permission to approve Work Plan.');
             return;
         }
         if (!getPlanLockDept()) {
@@ -11474,27 +11474,27 @@ const TVC_App = (function () {
             const dc = entry.defect;
             if (!state.user) return 'Sign in required';
             if (TVC_RBAC.isHqAccount(state.user)) {
-                if (dc.approved_at) return '승인 완료';
-                if (dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Report Confirm 또는 Approve 대상';
-                if (dc.confirmed_at) return 'Approve 대기';
-                return 'Awaiting HQ · Confirmed 항목만 선택 가능';
+                if (dc.approved_at) return 'Approved';
+                if (dc.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Eligible for Report Confirm or Approve';
+                if (dc.confirmed_at) return 'Awaiting Approve';
+                return 'Awaiting HQ — select Confirmed items only';
             }
-            if (dc.confirmed_at || dc.confirmed_by) return '이미 Confirm 됨';
-            if (dc.approved_at || dc.approved_by) return '승인 완료';
+            if (dc.confirmed_at || dc.confirmed_by) return 'Already confirmed';
+            if (dc.approved_at || dc.approved_by) return 'Approved';
             if (dc.status === TVC_DefectCase.Status.CLOSED) return 'Closed';
             if (!TVC_DefectReport.isDefectReportConfirmable(dc)) {
-                return 'Confirm 권한 없음 (Engine · C/E · Deck · C/O · Master · Captain · HQ)';
+                return 'No permission to confirm (Engine · C/E · Deck · C/O · Master · Captain · HQ)';
             }
             return 'Not selectable';
         }
         const { report: r, item } = entry;
         if (!state.user) return 'Sign in required';
-        if (r.is_locked || reportIsApproved(r)) return '승인 완료된 리포트';
-        if (itemSt(item) !== 'REPORTED' && !isHistRowHqApprovable(entry)) return 'REPORTED · Confirmed 항목만 선택 가능';
+        if (r.is_locked || reportIsApproved(r)) return 'Approved report';
+        if (itemSt(item) !== 'REPORTED' && !isHistRowHqApprovable(entry)) return 'REPORTED or Confirmed items only';
             if (!TVC_RBAC.canConfirmDepartment(state.user, reportDept(r)) && !isHistRowHqApprovable(entry)) {
-            return 'Confirm 권한 없음 (Engine · C/E · Deck · C/O · Master · Captain · HQ)';
+            return 'No permission to confirm (Engine · C/E · Deck · C/O · Master · Captain · HQ)';
         }
-        if (TVC_RBAC.isConfirmedStatus(r.status) && !isHistRowHqApprovable(entry)) return '이미 Confirm 됨';
+        if (TVC_RBAC.isConfirmedStatus(r.status) && !isHistRowHqApprovable(entry)) return 'Already confirmed';
         return 'Not selectable';
     }
 
@@ -12165,7 +12165,7 @@ const TVC_App = (function () {
         );
         const confirmCandidates = getHistConfirmCandidates();
         if (!confirmCandidates.length) {
-            await TVC_Dialog.alert('Check one or more REPORTED items to confirm.');
+            await TVC_Dialog.alert('Select one or more REPORTED items to confirm.');
         }
         if (checkedEntries.length && confirmCandidates.length !== checkedEntries.filter(isHistRowApprovable).length) {
             await TVC_Dialog.alert('Some selected items cannot be confirmed.\nCheck Engine (C/E), Deck (C/O), Master (Captain), or HQ permission.');
@@ -12276,7 +12276,7 @@ const TVC_App = (function () {
         );
         const approveCandidates = getHistHqApproveCandidates();
         if (!approveCandidates.length) {
-            await TVC_Dialog.alert('Check one or more Reported items to approve.');
+            await TVC_Dialog.alert('Select one or more Reported items to approve.');
         }
         if (checkedEntries.length && approveCandidates.length !== checkedEntries.filter(isHistRowHqApprovable).length) {
             await TVC_Dialog.alert('Some selected items cannot be approved.\nCheck Reported status and HQ approval permission.');
@@ -12688,7 +12688,7 @@ const TVC_App = (function () {
         const canEdit = canEditSpareItems();
         const modifyIds = spareActionIds('modify');
         const deleteIds = spareActionIds('delete');
-        const tip = 'Chief Engineer / Captain 권한 필요';
+        const tip = 'Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required';
         const pickTip = '행을 클릭하거나 ㅁ에서 선택하세요';
         const mod = document.getElementById('spareModifyBtn');
         if (mod) {
@@ -12751,7 +12751,7 @@ const TVC_App = (function () {
     }
 
     async function openSpareAppend() {
-        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
         TVC_SpareMenu.append();
     }
 
@@ -12761,15 +12761,15 @@ const TVC_App = (function () {
         }
         const ids = spareActionIds('modify');
         if (!ids.length) await TVC_Dialog.alert('Select a part to edit (click the row or check the box).');
-        if (batchSelectedSpareIds().length > 1) await TVC_Dialog.alert('Modify allows only one selected item.');
-        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+        if (batchSelectedSpareIds().length > 1) await TVC_Dialog.alert('Modify supports only one selected item.');
+        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
         TVC_SpareMenu.edit(ids[0]);
     }
 
     async function deleteSpareItem() {
         const ids = spareActionIds('delete');
         if (!ids.length) await TVC_Dialog.alert('Select a part to delete (click the row or check the box).');
-        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+        if (!canEditSpareItems()) await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
         TVC_SpareMenu.deleteSpareItems(ids);
     }
 
@@ -14845,7 +14845,7 @@ const TVC_App = (function () {
         if (!user || !rep || !job) return;
         if (TVC_RBAC.isHqAccount(user)) {
             if (!TVC_RBAC.canApproveHqReport(user)) {
-                await TVC_Dialog.alert('Approve is available in HQ mode only.');
+                await TVC_Dialog.alert('This action is available in HQ Mode only.');
                 return;
             }
             if (reportIsApproved(rep)) {
@@ -14883,7 +14883,7 @@ const TVC_App = (function () {
             return;
         }
         if (!TVC_RBAC.canConfirmDepartment(user, job.department)) {
-            await TVC_Dialog.alert('No permission to confirm this report.');
+            await TVC_Dialog.alert('You do not have permission to confirm this report.');
             return;
         }
         if (TVC_RBAC.isConfirmedStatus(rep.status, rep.is_locked)) {

@@ -93,7 +93,7 @@ const TVC_Settings = (function () {
         setMsg('settingsPasswordMsg', '');
         const user = TVC_Auth.getCurrentUser();
         if (!user) {
-            setMsg('settingsPasswordMsg', 'Login required.', 'error');
+            setMsg('settingsPasswordMsg', 'Sign in required.', 'error');
             return;
         }
         const current = el('settingsCurrentPassword')?.value || '';

@@ -1445,7 +1445,7 @@ const TVC_SpareMenu = (function () {
     async function savePlanCriticalEquipment(rawVal) {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
             return;
         }
         if (!st.selectedGroupKey || st.selectedGroupKey === CRITICAL_GROUP_KEY) return;
@@ -3911,7 +3911,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!window.TVC_Vendors?.register) {
-            await TVC_Dialog.alert('Vendor registry is not loaded. Please refresh the page (Ctrl+F5).');
+            await TVC_Dialog.alert('Vendor registry is not loaded. Please refresh the page.');
             showReqQuoteVendorAddStatus(slot, 'Vendor registry not loaded.', true);
             return;
         }
@@ -4336,7 +4336,7 @@ const TVC_SpareMenu = (function () {
         return {
             title: 'Insufficient stock',
             message,
-            confirmLabel: 'Confirm',
+            confirmLabel: 'Yes',
             cancelLabel: 'Cancel',
         };
     }
@@ -5214,7 +5214,7 @@ const TVC_SpareMenu = (function () {
         const modifyIds = spareActionIds('modify');
         const deleteIds = spareActionIds('delete');
         const checkedCount = getCheckedSpareIds(st).length;
-        const permTip = 'Chief Engineer / Captain permission required';
+        const permTip = 'Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required';
         const pickTip = 'Click a row or select using the checkbox';
         const editingTip = 'Not available while editing';
         return {
@@ -5225,7 +5225,7 @@ const TVC_SpareMenu = (function () {
             modifyEnabled: canModify && !editing && modifyIds.length === 1,
             deleteEnabled: canModify && !editing && deleteIds.length >= 1,
             appendEnabled: canModify && !editing,
-            modifyTitle: !canModify ? permTip : (editing ? editingTip : (checkedCount > 1 ? 'Modify allows only one selected item' : (modifyIds.length ? '' : pickTip))),
+            modifyTitle: !canModify ? permTip : (editing ? editingTip : (checkedCount > 1 ? 'Modify supports only one selected item' : (modifyIds.length ? '' : pickTip))),
             deleteTitle: !canModify ? permTip : (editing ? editingTip : (deleteIds.length ? '' : pickTip)),
             appendTitle: !canModify ? permTip : (editing ? 'Cannot Append while editing' : 'Register new part'),
         };
@@ -8825,7 +8825,7 @@ const TVC_SpareMenu = (function () {
     async function startConsumeLogListSession(opts = {}) {
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
-        if (!user) await TVC_Dialog.alert('Login required.');
+        if (!user) await TVC_Dialog.alert('Sign in required.');
         _consumeDraft = newConsumeDraft(st, user);
         syncConsumeLineMap();
         const m = modState(st);
@@ -8925,7 +8925,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (!isConsumedLogWindow(m)) return;
         if (!canCreateConsume(st)) {
-            await TVC_Dialog.alert('No permission to modify consumption logs.');
+            await TVC_Dialog.alert('You do not have permission to modify consumption logs.');
             return;
         }
         if (!consumeLogListHasDisplayedLog(m)) {
@@ -9161,9 +9161,9 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToConfirm.length) {
             if (checkedIds.length) {
-                await TVC_Dialog.alert('None of the selected logs can be confirmed. Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
+                await TVC_Dialog.alert('None of the selected logs can be confirmed. Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             } else {
-                await TVC_Dialog.alert('Check one or more Reported logs to confirm.');
+                await TVC_Dialog.alert('Select one or more Reported logs to confirm.');
             }
             return;
         }
@@ -9196,7 +9196,7 @@ const TVC_SpareMenu = (function () {
     async function consumeLogReportApprove() {
         const st = getState();
         if (!isReqListHqUser(st)) {
-            await TVC_Dialog.alert('Approve is available in HQ mode only.');
+            await TVC_Dialog.alert('This action is available in HQ Mode only.');
         }
         const m = modState(st);
         const { vesselId } = await vesselScope();
@@ -9209,7 +9209,7 @@ const TVC_SpareMenu = (function () {
             if (checkedIds.length) {
                 await TVC_Dialog.alert('None of the selected logs can be approved. Confirmed logs, or HQ-authored Reported logs, can be approved with HQ Superintendent permission.');
             } else {
-                await TVC_Dialog.alert('Check one or more approvable Consumption logs to approve.');
+                await TVC_Dialog.alert('Select one or more approvable Consumption logs to approve.');
             }
             return;
         }
@@ -9288,7 +9288,7 @@ const TVC_SpareMenu = (function () {
                 log.list_status = SPARE_LIST_STATUS.APPROVED;
                 await TVC_Inventory.saveConsumeLog(log);
                 await reloadConsumeLogKeepView(logId);
-                await TVC_Dialog.alert('Approved by Company.');
+                await TVC_Dialog.alert('Approved by HQ.');
             } catch (e) {
                 await TVC_Dialog.alert(e.message || e.code || 'Approve failed');
             }
@@ -9305,14 +9305,14 @@ const TVC_SpareMenu = (function () {
                 log.list_status = SPARE_LIST_STATUS.REPORTED;
                 await TVC_Inventory.saveConsumeLog(log);
                 await reloadConsumeLogKeepView(logId);
-                await TVC_Dialog.alert('Confirm removed. Consumption returned to Reported.');
+                await TVC_Dialog.alert('Confirmation removed. Status returned to Reported.');
             } catch (e) {
                 await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
             }
             return;
         }
         if (!consumeLogCanConfirm(st, log)) {
-            await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
+            await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             return;
         }
         try {
@@ -9369,7 +9369,7 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
         if (!user || !canCreateConsume(st)) {
-            await TVC_Dialog.alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('You do not have permission to enter consumption records.');
             return false;
         }
         const m = modState(st);
@@ -9406,7 +9406,7 @@ const TVC_SpareMenu = (function () {
     async function consumeLogNew() {
         const { st } = await vesselScope();
         if (!canCreateConsume(st)) {
-            await TVC_Dialog.alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('You do not have permission to enter consumption records.');
             return;
         }
         const m = modState(st);
@@ -9448,7 +9448,7 @@ const TVC_SpareMenu = (function () {
         if (!item?.maintenance_job_id) await TVC_Dialog.alert('Work Report job item not found.');
 
         _consumeWorkReportOverlay = true;
-        if (!window.TVC_App?.openWorkReportFromHistory) await TVC_Dialog.alert('Cannot open Work Report screen.');
+        if (!window.TVC_App?.openWorkReportFromHistory) await TVC_Dialog.alert('Cannot open Work Report.');
         TVC_App.openWorkReportFromHistory(reportId, item.maintenance_job_id);
         document.getElementById('workReportModal')?.classList.add('modal-over-consume');
     }
@@ -9475,7 +9475,7 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateConsume(st)) {
-            await TVC_Dialog.alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('You do not have permission to enter consumption records.');
             return;
         }
         const logId = m.consumeLastSavedLogId || m.selectedConsumeLogId;
@@ -9490,7 +9490,7 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateConsume(st)) {
-            await TVC_Dialog.alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('You do not have permission to enter consumption records.');
             return;
         }
         if (!m.selectedConsumeLogId) await TVC_Dialog.alert('Select a consumption log to edit.');
@@ -9525,7 +9525,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         const user = spareInventoryUser(st);
         if (!canCreateConsume(st)) {
-            await TVC_Dialog.alert('No permission to delete consumption logs.');
+            await TVC_Dialog.alert('You do not have permission to delete consumption logs.');
             return;
         }
         const checkedIds = Object.keys(m.consumeLogCheckedIds || {}).filter(k => m.consumeLogCheckedIds[k]);
@@ -9533,7 +9533,7 @@ const TVC_SpareMenu = (function () {
             ? checkedIds
             : (m.selectedConsumeLogId ? [m.selectedConsumeLogId] : []);
         if (!idsToDelete.length) {
-            await TVC_Dialog.alert('Check one or more consumption logs to delete.');
+            await TVC_Dialog.alert('Select one or more consumption logs to delete.');
             return;
         }
         const blocked = [];
@@ -10012,7 +10012,7 @@ const TVC_SpareMenu = (function () {
     async function reqListNew() {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('You do not have permission to create requisitions.');
             return;
         }
         closeReqListModal();
@@ -10026,7 +10026,7 @@ const TVC_SpareMenu = (function () {
         const { st } = await vesselScope();
         const m = modState(st);
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('You do not have permission to create requisitions.');
             return;
         }
         if (!m.selectedReqId) await TVC_Dialog.alert('Select a requisition to edit.');
@@ -10050,7 +10050,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (window.TVC_RBAC && !TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION)) {
-            await TVC_Dialog.alert('No permission to delete requisitions.');
+            await TVC_Dialog.alert('You do not have permission to delete requisitions.');
             return;
         }
         const { vesselId } = await vesselScope();
@@ -10059,7 +10059,7 @@ const TVC_SpareMenu = (function () {
         const idsToDelete = checkedIds.length
             ? checkedIds
             : (m.selectedReqId ? [m.selectedReqId] : []);
-        if (!idsToDelete.length) await TVC_Dialog.alert('Check one or more requisitions to delete.');
+        if (!idsToDelete.length) await TVC_Dialog.alert('Select one or more requisitions to delete.');
         const reqNos = idsToDelete.map(id => allReqs.find(r => r.id === id)?.req_no || id);
         const confirmMsg = idsToDelete.length === 1
             ? `Delete requisition ${reqNos[0]}?`
@@ -10385,7 +10385,7 @@ const TVC_SpareMenu = (function () {
 
     async function exportReqPreviewExcel(st, req, vesselName, opts = {}) {
         if (!TVC_Excel?.available?.()) {
-            await TVC_Dialog.alert('ExcelJS library not loaded.');
+            await TVC_Dialog.alert('Excel export is not available. Please refresh the page (Ctrl+F5).');
             return false;
         }
         const pages = buildReqPreviewExportPages(st, req, opts);
@@ -10474,7 +10474,7 @@ const TVC_SpareMenu = (function () {
 
     async function openReqPrintWindow(html, { print = false } = {}) {
         const w = window.open('', '_blank', 'width=900,height=700');
-        if (!w) { await TVC_Dialog.alert('Popup blocked. Please allow popups in your browser.'); return null; }
+        if (!w) { await TVC_Dialog.alert('Pop-up blocked. Allow pop-ups in your browser settings.'); return null; }
         w.document.write(`<!DOCTYPE html><html><head><title>Parts Requisition</title>
             <style>body{font-family:Segoe UI,Arial,sans-serif;font-size:12px;padding:16px}
             table{width:100%;border-collapse:collapse;margin-top:12px} th,td{border:1px solid #999;padding:4px 6px}
@@ -10522,9 +10522,9 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToConfirm.length) {
             if (checkedIds.length) {
-                await TVC_Dialog.alert('None of the selected requisitions can be confirmed. Only Reported requisitions can be confirmed, and you need Chief Engineer / Captain / Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected requisitions can be confirmed. Only Reported requisitions can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             }
-            await TVC_Dialog.alert('Check one or more Reported requisitions to confirm.');
+            await TVC_Dialog.alert('Select one or more Reported requisitions to confirm.');
         }
         const loadedId = _reqSheet.reqId || _reqWorkDraft?.id;
         let confirmed = 0;
@@ -10565,7 +10565,7 @@ const TVC_SpareMenu = (function () {
             if (checkedIds.length) {
                 await TVC_Dialog.alert('None of the selected requisitions can be approved. Submitted or Evaluating requisitions, or HQ-authored Reported requisitions, can be approved with HQ Superintendent permission.');
             }
-            await TVC_Dialog.alert('Check one or more approvable requisitions to approve.');
+            await TVC_Dialog.alert('Select one or more approvable requisitions to approve.');
         }
         const loadedId = _reqSheet.reqId || _reqWorkDraft?.id;
         let approved = 0;
@@ -10607,11 +10607,11 @@ const TVC_SpareMenu = (function () {
         const meta = reqListXferExportMeta(xferKind);
         if (xferKind === 'received') {
             if (!canCreateDeliver(st)) {
-                await TVC_Dialog.alert('No permission to export received data.');
+                await TVC_Dialog.alert('You do not have permission to export received data.');
                 return;
             }
         } else if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to export requisitions.');
+            await TVC_Dialog.alert('You do not have permission to export requisitions.');
             return;
         }
         const allReqs = await TVC_Inventory.listRequisitions(vesselId);
@@ -10657,7 +10657,7 @@ const TVC_SpareMenu = (function () {
                 const notReady = reqs.filter(r => !reqWorkHqEvaluationReady(r));
                 if (notReady.length) {
                     const nos = notReady.map(r => r.req_no || r.id).join(', ');
-                    await TVC_Dialog.alert(`Complete Evaluation (Eval column) first: ${nos}`);
+                    await TVC_Dialog.alert(`Complete evaluation for all items first: ${nos}`);
                     return;
                 }
             }
@@ -10816,7 +10816,7 @@ const TVC_SpareMenu = (function () {
         if (window.TVC_App?.openSpareModify) return TVC_App.openSpareModify();
         const ids = spareActionIds('modify');
         if (!ids.length) await TVC_Dialog.alert('Select a part to edit (click row or use checkbox).');
-        if (getCheckedSpareIds(getState()).length > 1) await TVC_Dialog.alert('Modify allows only one selected item.');
+        if (getCheckedSpareIds(getState()).length > 1) await TVC_Dialog.alert('Modify supports only one selected item.');
         edit(ids[0]);
     }
 
@@ -10824,7 +10824,7 @@ const TVC_SpareMenu = (function () {
         if (reqWorkSpareActionBlocked()) return;
         if (window.TVC_App?.openSpareAppend) return TVC_App.openSpareAppend();
         if (!canModifySpare(getState())) {
-            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
         }
         append();
     }
@@ -10880,7 +10880,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const s = (st.spares || []).map(canon).find(x => x.id === spareId);
         if (!s) return;
-        const jobCode = prompt(`JOB CODE에 "${partNo(s)}" 할당\n\nJob Code:`, '');
+        const jobCode = prompt(`Assign "${partNo(s)}" to a JOB CODE\n\nJob Code:`, '');
         if (!jobCode || !jobCode.trim()) return;
         const qty = parseInt(prompt('Qty per job:', '1') || '1', 10) || 1;
         try {
@@ -11118,12 +11118,12 @@ const TVC_SpareMenu = (function () {
     async function appendGroupFromTree() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
+            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             return;
         }
         if (st.currentTab === 'actual') {
             if (window.TVC_App?.openOrigGroupAdd) return TVC_App.openOrigGroupAdd();
-            await TVC_Dialog.alert('Group append is unavailable.');
+            await TVC_Dialog.alert('Group append is not available.');
             return;
         }
         const label = await TVC_Dialog.promptText({
@@ -11147,7 +11147,7 @@ const TVC_SpareMenu = (function () {
     async function deleteGroupFromTree() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
+            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             return;
         }
         if (st.currentTab === 'actual') {
@@ -11182,7 +11182,7 @@ const TVC_SpareMenu = (function () {
     async function startGroupHeaderEdit() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
+            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             return;
         }
         const key = activeTreeGroupKey(st);
@@ -11224,7 +11224,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (!m.groupHeaderEdit) return;
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Modify, Append, and Delete require Chief Engineer, Chief Officer, Captain, or Superintendent (HQ) permission.');
+            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             return;
         }
         const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
@@ -11722,9 +11722,8 @@ const TVC_SpareMenu = (function () {
     async function loadBundledXls() {
         if (TVC_Env.isFileProtocol()) {
             await TVC_Dialog.alert(
-                'Automatic Import is not available in file:// mode.\n\n' +
-                '▶ Click “Select spare-inventory.xls” directly\n' +
-                '▶ Recommended: npm run serve → http://localhost:3000'
+                'Automatic import is not available when opened as a local file.\n\n' +
+                'Select spare-inventory.xls manually, or use npm run serve / the installed app.'
             );
             return;
         }
@@ -12229,12 +12228,12 @@ const TVC_SpareMenu = (function () {
 
     function spareHistAccountHint(user) {
         if (window.TVC_RBAC?.isHqAccount?.(user)) {
-            return 'HQ Mode — vessel(Master)과 SPARE Export / Import 이력을 표시합니다.';
+            return 'HQ Mode — shows SPARE Export / Import history for the vessel (Master).';
         }
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub?.(user)) {
-            return 'Hub (Captain) — Station · Company와 SPARE Export / Import 이력을 표시합니다.';
+            return 'Hub (Captain) — shows SPARE Export / Import history with stations and Company (HQ).';
         }
-        return '확인자 — 주로 Master와 SPARE Export / Import합니다. Master PC 장애 시 Company(HQ) 패키지도 기록됩니다.';
+        return 'Confirmer — primarily exports/imports SPARE data with Master. Company (HQ) packages are also recorded if Master PC is unavailable.';
     }
 
     /** Vessel SPARE: Master 기본 · HQ 직송은 Company · HQ Mode: Vessel */
@@ -12469,7 +12468,7 @@ const TVC_SpareMenu = (function () {
 
     async function spareXferOpenReqExportList() {
         const st = getState();
-        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export requisitions.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('You do not have permission to export requisitions.');
         const m = modState(st);
         m.reqListPhaseTab = REQ_LIST_PHASE.ALL;
         _reqListXferExportKind = 'requisition';
@@ -12488,28 +12487,28 @@ const TVC_SpareMenu = (function () {
 
     async function spareXferOpenQuotationExportList() {
         const st = getState();
-        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export quotations.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('You do not have permission to export quotations.');
         closeSpareSyncMenu();
         await openReqXferExportList('quotation', { returnTo: 'sync' });
     }
 
     async function spareXferOpenReplyEvalExportList() {
         const st = getState();
-        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export evaluation replies.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('You do not have permission to export evaluation replies.');
         closeSpareSyncMenu();
         await openReqXferExportList('reply-evaluation', { returnTo: 'sync' });
     }
 
     async function spareXferOpenPurchaseOrderExportList() {
         const st = getState();
-        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export purchase orders.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('You do not have permission to export purchase orders.');
         closeSpareSyncMenu();
         await openReqXferExportList('purchase-order', { returnTo: 'sync' });
     }
 
     async function spareXferOpenReceivedExportList() {
         const st = getState();
-        if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
+        if (!canCreateDeliver(st)) await TVC_Dialog.alert('You do not have permission to export received data.');
         closeSpareSyncMenu();
         await openReqXferExportList('received', { returnTo: 'sync' });
     }
@@ -12586,7 +12585,7 @@ const TVC_SpareMenu = (function () {
 
     async function spareXferExportReceived() {
         const st = getState();
-        if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
+        if (!canCreateDeliver(st)) await TVC_Dialog.alert('You do not have permission to export received data.');
         const { vesselId, isHq } = await vesselScope();
         const reqs = (await TVC_Inventory.listRequisitions(vesselId))
             .filter(r => reqListCanReceivedExport(r));
@@ -13043,7 +13042,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to export requisitions.');
+            await TVC_Dialog.alert('You do not have permission to export requisitions.');
             return;
         }
         reqVesselSetViewFlowStage(m, _reqWorkDraft, 'submit');
@@ -13143,7 +13142,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!canCreateDeliver(st)) {
-            await TVC_Dialog.alert('No permission to export received data.');
+            await TVC_Dialog.alert('You do not have permission to export received data.');
             return;
         }
         reqVesselSetViewFlowStage(m, _reqWorkDraft, 'received-export');
@@ -13225,7 +13224,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to export quotations.');
+            await TVC_Dialog.alert('You do not have permission to export quotations.');
             return;
         }
         const req = getReqWorkSession();
@@ -13278,7 +13277,7 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert('Complete Import Quote first before Reply Evaluation.');
             return;
         }
-        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export evaluation replies.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('You do not have permission to export evaluation replies.');
         await openReqXferExportList('reply-evaluation', { returnTo: 'req-work', selectId: _reqWorkDraft?.id });
     }
 
@@ -13292,7 +13291,7 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert('Complete Evaluation first before Purchase Order.');
             return;
         }
-        if (!canCreateRequisition(st)) await TVC_Dialog.alert('No permission to export purchase orders.');
+        if (!canCreateRequisition(st)) await TVC_Dialog.alert('You do not have permission to export purchase orders.');
         await openReqXferExportList('purchase-order', { returnTo: 'req-work', selectId: _reqWorkDraft?.id });
     }
 
@@ -13407,7 +13406,7 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert('Import Received data from vessel first (Data Export & Import → Import → Received).');
             return;
         }
-        if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
+        if (!canCreateDeliver(st)) await TVC_Dialog.alert('You do not have permission to export received data.');
         await openReqXferExportList('received', { returnTo: 'req-work', selectId: _reqWorkDraft?.id });
     }
 
@@ -13901,14 +13900,14 @@ const TVC_SpareMenu = (function () {
                 req.list_status = SPARE_LIST_STATUS.REPORTED;
                 await TVC_Inventory.saveRequisition(req);
                 await reloadAfterToggle();
-                await TVC_Dialog.alert('Confirm removed. Requisition returned to Reported.');
+                await TVC_Dialog.alert('Confirmation removed. Status returned to Reported.');
             } catch (e) {
                 await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
             }
             return;
         }
         if (!canConfirmRequisition(st, req)) {
-            await TVC_Dialog.alert('Only Reported requisitions can be confirmed, and you need Chief Engineer / Captain permission.');
+            await TVC_Dialog.alert('Only Reported requisitions can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             return;
         }
         try {
@@ -14586,7 +14585,7 @@ const TVC_SpareMenu = (function () {
             return `Complete ${labels.selectVendor} (vendor, currency, checked items) first`;
         }
         if (_reqListXferExportKind === 'reply-evaluation') {
-            return 'Complete Evaluation (Eval column) first';
+            return 'Complete evaluation for all items first';
         }
         if (_reqListXferExportKind === 'purchase-order') {
             const label = reqListDisplayStatusLabel(req, getState());
@@ -14965,7 +14964,7 @@ const TVC_SpareMenu = (function () {
                 await refreshReqListUi();
                 await renderReqWorkModal();
                 await syncReportedWaitAndRefreshList();
-                await TVC_Dialog.alert('Confirm removed. Requisition returned to Reported.');
+                await TVC_Dialog.alert('Confirmation removed. Status returned to Reported.');
             } catch (e) {
                 cfCb.checked = true;
                 await TVC_Dialog.alert(e.message || e.code || 'Unconfirm failed');
@@ -14978,7 +14977,7 @@ const TVC_SpareMenu = (function () {
         if (!canConfirmRequisition(st, req)) {
             cfCb.checked = false;
             if (input) input.value = '';
-            await TVC_Dialog.alert('Cannot confirm this requisition. Only Reported requisitions can be confirmed with Chief Engineer / Captain permission.');
+            await TVC_Dialog.alert('Cannot confirm this requisition. Only Reported requisitions can be confirmed with Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
             return;
         }
         if (spareListStatus(req) === SPARE_LIST_STATUS.CONFIRMED
@@ -15047,7 +15046,7 @@ const TVC_SpareMenu = (function () {
                 log.list_status = SPARE_LIST_STATUS.REPORTED;
                 await TVC_Inventory.saveConsumeLog(log);
                 await reloadConsumeLogKeepView(logId);
-                await TVC_Dialog.alert('Confirm removed. Consumption returned to Reported.');
+                await TVC_Dialog.alert('Confirmation removed. Status returned to Reported.');
             } catch (e) {
                 cfCb.checked = true;
                 if (input) input.value = draft?.confirmed_by || '';
@@ -15066,7 +15065,7 @@ const TVC_SpareMenu = (function () {
             if (!log || !consumeLogCanConfirm(st, log)) {
                 cfCb.checked = false;
                 if (input) input.value = '';
-                await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer / Captain permission.');
+                await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
                 return;
             }
             log.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(log.department || st.department, user)
@@ -15135,7 +15134,7 @@ const TVC_SpareMenu = (function () {
             log.list_status = SPARE_LIST_STATUS.APPROVED;
             await TVC_Inventory.saveConsumeLog(log);
             await reloadConsumeLogKeepView(logId);
-            await TVC_Dialog.alert('Approved by Company.');
+            await TVC_Dialog.alert('Approved by HQ.');
         } catch (e) {
             apCb.checked = false;
             if (input) input.value = '';
@@ -15239,7 +15238,7 @@ const TVC_SpareMenu = (function () {
         }
         if (after === SPARE_LIST_STATUS.CONFIRMED) await TVC_Dialog.alert('Confirmed.');
         else if (after === SPARE_LIST_STATUS.APPROVED) {
-            await TVC_Dialog.alert(kind === 'consume' ? 'Approved by Company.' : 'Approved by Superintendent.');
+            await TVC_Dialog.alert(kind === 'consume' ? 'Approved by HQ.' : 'Approved by Superintendent.');
         }
         return true;
     }
@@ -15959,7 +15958,7 @@ const TVC_SpareMenu = (function () {
     async function startReqWorkSession(createNew = true, opts = {}) {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('You do not have permission to create requisitions.');
             return;
         }
         closeReqSheetModal();
@@ -15999,7 +15998,7 @@ const TVC_SpareMenu = (function () {
     async function startReqWorkEditSession(reqId) {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('You do not have permission to create requisitions.');
             return;
         }
         closeReqSheetModal();
@@ -16096,15 +16095,15 @@ const TVC_SpareMenu = (function () {
         // 폼 데이터를 유지한 채 전체를 잠금 상태로 다시 렌더링 (입력 필드·버튼 disabled)
         await renderReqWorkModal();
         const doneMsg = m.reqWorkEditMode
-            ? `청구서 ${savedNo} 수정 완료 (${lineCount} line(s)).`
-            : `Requisition ${savedNo} completed (${lineCount} line(s)) — Requisition List에 추가되었습니다.`;
+            ? `Requisition ${savedNo} updated (${lineCount} line(s)).`
+            : `Requisition ${savedNo} completed (${lineCount} line(s)) — added to Requisition List.`;
         await TVC_Dialog.alert(doneMsg);
     }
 
     async function reqWorkSwitchToNew() {
         const { st } = await vesselScope();
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('You do not have permission to create requisitions.');
             return;
         }
         const m = modState(st);
@@ -16139,7 +16138,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to modify requisitions.');
+            await TVC_Dialog.alert('You do not have permission to modify requisitions.');
             return;
         }
         if (!reqWorkListHasDisplayedReq(m)) {
@@ -16243,7 +16242,7 @@ const TVC_SpareMenu = (function () {
                 const hasDate = !!String(_reqWorkDraft.received_on || _reqWorkDraft.received_date || '').trim();
                 if (hasReceived && hasDate) {
                     const user = spareInventoryUser(st);
-                    if (!user) { await TVC_Dialog.alert('Login required.'); return; }
+                    if (!user) { await TVC_Dialog.alert('Sign in required.'); return; }
                     const prevReq = _reqWorkDraft.id ? await TVC_Inventory.getRequisition(_reqWorkDraft.id) : null;
                     try {
                         const stockRes = await applyReqWorkReceivedStock(user, _reqWorkDraft, prevReq);
@@ -16303,7 +16302,7 @@ const TVC_SpareMenu = (function () {
     async function openReqWorkPreviewWindow(ctx, print = false) {
         const pages = buildReqPreviewPagesHtml(ctx.st, ctx.req, ctx.vesselName);
         const w = window.open('', '_blank', 'width=980,height=760');
-        if (!w) { await TVC_Dialog.alert('Popup blocked. Please allow popups in your browser.'); return; }
+        if (!w) { await TVC_Dialog.alert('Pop-up blocked. Allow pop-ups in your browser settings.'); return; }
         w.document.write(`<!DOCTYPE html><html><head><title>Parts Requisition — ${esc(ctx.req.req_no || '')}</title>
             <style>${reqPreviewPrintStyles()}</style></head><body>${pages}</body></html>`);
         w.document.close();
@@ -16869,7 +16868,7 @@ const TVC_SpareMenu = (function () {
     async function addToRequisition() {
         const st = getState();
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('You do not have permission to create requisitions.');
         }
         const ids = spareListSelectedIds(st);
         if (!ids.length) await TVC_Dialog.alert('Select parts using the checkbox.');
@@ -20363,7 +20362,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function startConsumeEditSession(logId) {
         const { st } = await vesselScope();
         if (!canCreateConsume(st)) {
-            await TVC_Dialog.alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('You do not have permission to enter consumption records.');
             return;
         }
         await openConsumeLogInListWindow(logId, { editing: true });
@@ -20800,7 +20799,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
         const user = spareInventoryUser(st);
         if (!user) {
-            await TVC_Dialog.alert('Login required.');
+            await TVC_Dialog.alert('Sign in required.');
             return;
         }
         const draft = getConsumeSession();
@@ -20988,8 +20987,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
     function validateReceiveSave(draft) {
         if (!draft.requisition_id) return 'Select Requisition No.';
-        if (!String(draft.received_date || '').trim()) return 'Received Date를 입력하세요.';
-        if (!String(draft.deliver_port || '').trim()) return 'Received Port를 입력하세요.';
+        if (!String(draft.received_date || '').trim()) return 'Enter Received Date.';
+        if (!String(draft.deliver_port || '').trim()) return 'Enter Received Port.';
         const lines = (draft.lines || [])
             .filter(l => receiveSpareIdKey(l.spare_part_id) && (Number(l.qty_received) || 0) > 0);
         if (!lines.length) return 'Select parts and enter Received quantity.';
@@ -21105,7 +21104,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         await syncReportedWaitAndRefreshList();
         syncReqWorkListWindowHeadButtons();
         if (reqOsWaived(req)) {
-            await TVC_Dialog.alert('O/S closed — approved by Company.');
+            await TVC_Dialog.alert('Outstanding quantity closed — approved by HQ.');
             closeCloseOsModal();
             return;
         }
@@ -21426,7 +21425,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
         if (!user || !canCreateDeliver(st)) {
-            await TVC_Dialog.alert('No permission to record received parts.');
+            await TVC_Dialog.alert('You do not have permission to record received parts.');
         }
         _receiveDraft = newReceiveDraft(st, user);
         syncReceiveLineMap();
@@ -21685,7 +21684,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         captureReceiveMeta();
         const { st } = await vesselScope();
         const user = spareInventoryUser(st);
-        if (!user) await TVC_Dialog.alert('Login required.');
+        if (!user) await TVC_Dialog.alert('Sign in required.');
         const draft = getReceiveSession();
         if (!draft) return;
         const err = validateReceiveSave(draft);
@@ -21854,7 +21853,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         captureTxDraftFromDom();
         const { st } = await vesselScope();
         const user = st.user;
-        if (!user) await TVC_Dialog.alert('Login required.');
+        if (!user) await TVC_Dialog.alert('Sign in required.');
         const lines = _txDraft.lines.filter(l => l.qty > 0).map(l => ({ spare_part_id: l.spare_part_id, qty: l.qty, note: _txDraft.note }));
         if (!lines.length) await TVC_Dialog.alert('Enter quantity.');
         try {
@@ -21930,7 +21929,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     let _shHistoryCacheKey = '';
 
     function spareItemNoteEditDeniedMessage() {
-        return 'Chief Engineer / Captain 권한이 필요합니다.';
+        return 'Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.';
     }
 
     function renderSpareItemNoteAttachmentList(attachments, canRemove) {
@@ -21998,7 +21997,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function makeRequisitionFromList() {
         const st = getState();
         if (!canCreateRequisition(st)) {
-            await TVC_Dialog.alert('No permission to create requisitions.');
+            await TVC_Dialog.alert('You do not have permission to create requisitions.');
             return;
         }
         if (getCheckedSpareIds(st).length) {
@@ -22011,7 +22010,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function makeConsumptionFromList() {
         const st = getState();
         if (!canCreateConsume(st)) {
-            await TVC_Dialog.alert('No permission to enter consumption records.');
+            await TVC_Dialog.alert('You do not have permission to enter consumption records.');
             return;
         }
         const ids = getCheckedSpareIds(st);
@@ -22657,7 +22656,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function openReqSheetModal() {
         const { st, vesselId } = await vesselScope();
         if (window.TVC_RBAC && !TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION)) {
-            await TVC_Dialog.alert('No permission to create requisitions.'); return;
+            await TVC_Dialog.alert('You do not have permission to create requisitions.'); return;
         }
         try {
             const req = _reqSheet.reqId
@@ -23212,7 +23211,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function openEquipmentListModal() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
             return;
         }
         const groupLabel = equipmentListGroupLabel(st);
@@ -23278,7 +23277,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const st = getState();
         const m = modState(st);
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
             return;
         }
         const groupLabel = equipmentListGroupLabel(st);
@@ -23383,7 +23382,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function deleteEquipmentListItem(name) {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Chief Engineer / Captain permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
             return;
         }
         const groupLabel = equipmentListGroupLabel(st);
@@ -23493,7 +23492,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
 
     async function exportDeliveryData() {
         const st = getState();
-        if (!canCreateDeliver(st)) await TVC_Dialog.alert('No permission to export received data.');
+        if (!canCreateDeliver(st)) await TVC_Dialog.alert('You do not have permission to export received data.');
         const { vesselId, isHq } = await vesselScope();
         const reqs = (await TVC_Inventory.listRequisitions(vesselId))
             .filter(r => reqWorkflowPhase(r) === REQ_LIST_PHASE.RECEIVED || !!reqListReceivedDate(r));

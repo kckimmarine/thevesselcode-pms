@@ -81,7 +81,7 @@ const TVC_Inventory = (function () {
     /** 부품 추가/수정. id 없으면 신규 생성. universal_code 없으면 이름 기반 자동 매핑. */
     async function saveSpare(user, spare) {
         assertSpareModify(user);
-        if (!spare.part_no || !spare.name) throw Object.assign(new Error('Part No / Name 은 필수입니다.'), { code: 'VALIDATION' });
+        if (!spare.part_no || !spare.name) throw Object.assign(new Error('Part No and Name are required.'), { code: 'VALIDATION' });
 
         const rec = { ...blankSpare(), ...spare };
         rec.id = rec.id || 'SP-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
@@ -108,7 +108,7 @@ const TVC_Inventory = (function () {
             }
             return true;
         })) {
-            throw Object.assign(new Error(`Part No "${rec.part_no}" 는 이미 존재합니다.`), { code: 'DUP' });
+            throw Object.assign(new Error(`Part No "${rec.part_no}" already exists.`), { code: 'DUP' });
         }
 
         markPending(rec);

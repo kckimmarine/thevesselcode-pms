@@ -329,7 +329,7 @@ const TVC_SpareInventoryParser = (function () {
      * .csv / .xlsx(ExcelJS) / .xls(SheetJS)
      */
     async function parseFile(file, opts = {}) {
-        if (!file) throw Object.assign(new Error('파일이 없습니다.'), { code: 'NO_FILE' });
+        if (!file) throw Object.assign(new Error('No file selected.'), { code: 'NO_FILE' });
         const name = (file.name || '').toLowerCase();
         const sheetName = opts.sheetName || (name.includes('engine') ? 'ENGINE' : null);
 
@@ -343,7 +343,7 @@ const TVC_SpareInventoryParser = (function () {
             const wb = new ExcelJS.Workbook();
             await wb.xlsx.load(buf);
             const ws = sheetName ? wb.getWorksheet(sheetName) : (wb.worksheets[0]);
-            if (!ws) throw Object.assign(new Error(`시트 "${sheetName}" 를 찾을 수 없습니다.`), { code: 'NO_SHEET' });
+            if (!ws) throw Object.assign(new Error(`Worksheet "${sheetName}" not found.`), { code: 'NO_SHEET' });
             return parseRows(worksheetToRows(ws), { ...opts, sheetName: ws.name });
         }
 
@@ -354,7 +354,7 @@ const TVC_SpareInventoryParser = (function () {
             return parseRows(xlsxSheetToRows(wb.Sheets[sn]), { ...opts, sheetName: sn });
         }
 
-        throw Object.assign(new Error('지원 형식: .csv, .xls, .xlsx'), { code: 'UNSUPPORTED' });
+        throw Object.assign(new Error('Supported formats: .csv, .xls, .xlsx'), { code: 'UNSUPPORTED' });
     }
 
     return {
@@ -874,7 +874,7 @@ const TVC_DB = (function () {
     async function importSpareInventoryFile(file, opts = {}) {
         const parsed = await TVC_SpareInventoryParser.parseFile(file, opts);
         if (!parsed.spares.length) {
-            throw Object.assign(new Error('파싱된 부품(SparePart) 행이 없습니다. 파일 형식을 확인하세요.'), { code: 'EMPTY' });
+            throw Object.assign(new Error('No spare part rows parsed. Check the file format.'), { code: 'EMPTY' });
         }
         return importSpareInventory(parsed, opts);
     }
@@ -914,7 +914,7 @@ const TVC_DB = (function () {
             }
             if (!csvText) {
                 throw Object.assign(
-                    new Error(`ENGINE CSV를 찾을 수 없습니다: ${TVC_ENGINE_CSV_PATHS.join(', ')}`),
+                    new Error(`ENGINE CSV not found: ${TVC_ENGINE_CSV_PATHS.join(', ')}`),
                     { code: 'NOT_FOUND', cause: lastErr }
                 );
             }
@@ -927,7 +927,7 @@ const TVC_DB = (function () {
                     throw Object.assign(new Error(TVC_Env.FILE_HINT), { code: 'FILE_PROTOCOL' });
                 }
                 const res = await fetch(source);
-                if (!res.ok) throw Object.assign(new Error(`CSV fetch 실패: ${source}`), { code: 'NOT_FOUND' });
+                if (!res.ok) throw Object.assign(new Error(`CSV fetch failed: ${source}`), { code: 'NOT_FOUND' });
                 csvText = await res.text();
                 sourceLabel = source;
             }
@@ -935,12 +935,12 @@ const TVC_DB = (function () {
             csvText = await source.text();
             sourceLabel = source.name || 'upload';
         } else {
-            throw Object.assign(new Error('지원 source: CSV 문자열, URL, File, null(번들)'), { code: 'INVALID_SOURCE' });
+            throw Object.assign(new Error('Supported source: CSV string, URL, File, or null (bundle).'), { code: 'INVALID_SOURCE' });
         }
 
         const parsed = TVC_SpareInventoryParser.parseCsvLineByLine(csvText, { department, sheetName: department });
         if (!parsed.spares.length) {
-            throw Object.assign(new Error('CSV에서 부품(SparePart) 행을 찾지 못했습니다. 헤더/형식을 확인하세요.'), { code: 'EMPTY' });
+            throw Object.assign(new Error('No spare part rows found in CSV. Check headers and format.'), { code: 'EMPTY' });
         }
 
         const migrated = await importSpareInventory(parsed, { ...opts, department, merge: opts.merge !== false });
@@ -985,7 +985,7 @@ const TVC_DB = (function () {
 
         /** File → migrateCsvToDb */
         async migrateCsvFileToDb(file, opts = {}) {
-            if (!file) throw Object.assign(new Error('파일이 없습니다.'), { code: 'NO_FILE' });
+            if (!file) throw Object.assign(new Error('No file selected.'), { code: 'NO_FILE' });
             const text = await file.text();
             const dept = opts.department
                 || (file.name.toLowerCase().includes('deck') ? 'DECK' : 'ENGINE');
@@ -1007,16 +1007,16 @@ const TVC_DB = (function () {
                 throw Object.assign(new Error(TVC_Env.FILE_HINT), { code: 'FILE_PROTOCOL' });
             }
             if (typeof window === 'undefined' || typeof window.XLSX === 'undefined') {
-                throw Object.assign(new Error('SheetJS(XLSX)가 로드되지 않았습니다.'), { code: 'NO_XLSX' });
+                throw Object.assign(new Error('SheetJS (XLSX) is not loaded. Please refresh the page.'), { code: 'NO_XLSX' });
             }
             const res = await fetch(url);
-            if (!res.ok) throw Object.assign(new Error(`XLS 파일을 찾을 수 없습니다: ${url}`), { code: 'NOT_FOUND' });
+            if (!res.ok) throw Object.assign(new Error(`XLS file not found: ${url}`), { code: 'NOT_FOUND' });
             const buf = await res.arrayBuffer();
             const department = String(opts.department || opts.sheetName || 'ENGINE').trim().toUpperCase();
             const file = new File([buf], 'spare-inventory.xls', { type: 'application/vnd.ms-excel' });
             const parsed = await TVC_SpareInventoryParser.parseFile(file, { department, sheetName: department });
             if (!parsed.spares.length) {
-                throw Object.assign(new Error('XLS에서 부품 행을 찾지 못했습니다.'), { code: 'EMPTY' });
+                throw Object.assign(new Error('No spare part rows found in XLS.'), { code: 'EMPTY' });
             }
             const migrated = await importSpareInventory(parsed, { ...opts, department, merge: opts.merge !== false });
             const parts = await SparePart.listAll();
@@ -1032,13 +1032,13 @@ const TVC_DB = (function () {
 
         /** File 객체로 XLS import (파일 선택용) */
         async importXlsFile(file, opts = {}) {
-            if (!file) throw Object.assign(new Error('파일이 없습니다.'), { code: 'NO_FILE' });
+            if (!file) throw Object.assign(new Error('No file selected.'), { code: 'NO_FILE' });
             const parsed = await TVC_SpareInventoryParser.parseFile(file, {
                 department: opts.department || 'ENGINE',
                 sheetName: opts.sheetName || 'ENGINE',
             });
             if (!parsed.spares.length) {
-                throw Object.assign(new Error('XLS에서 부품 행을 찾지 못했습니다.'), { code: 'EMPTY' });
+                throw Object.assign(new Error('No spare part rows found in XLS.'), { code: 'EMPTY' });
             }
             const department = String(opts.department || 'ENGINE').trim().toUpperCase();
             const migrated = await importSpareInventory(parsed, { ...opts, department, merge: opts.merge !== false });

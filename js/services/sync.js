@@ -59,8 +59,8 @@ const TVC_Sync = (function () {
         const s = String(scope || '').toLowerCase();
         if (s === 'deck') return 'Deck';
         if (s === 'engine') return 'Engine';
-        if (s === 'deck_hq') return 'Deck (HQ 회신)';
-        if (s === 'engine_hq') return 'Engine (HQ 회신)';
+        if (s === 'deck_hq') return 'Deck (HQ reply)';
+        if (s === 'engine_hq') return 'Engine (HQ reply)';
         if (s === 'hq') return 'HQ (legacy)';
         if (s === 'hub') return 'Hub (Master)';
         return s || '—';
@@ -185,18 +185,18 @@ const TVC_Sync = (function () {
             return {
                 ok: false,
                 code: 'VESSEL_ID_MISSING',
-                message: 'ZIP에 유효한 vessel_id가 없습니다. 올바른 선박 Export 파일인지 확인하세요.',
+                message: 'ZIP has no valid vessel_id. Check that this is a correct vessel export file.',
             };
         }
         if (!exp) return { ok: true, warning: 'expected_unconfigured' };
         if (exp !== got) {
             const ctx = isHq
-                ? `HQ에서 선택한 선박은 "${exp}"입니다.`
-                : `이 PC에 등록된 선박은 "${exp}"입니다.`;
+                ? `Selected vessel in HQ is "${exp}".`
+                : `Registered vessel on this PC is "${exp}".`;
             return {
                 ok: false,
                 code: 'VESSEL_MISMATCH',
-                message: `선박 ID 불일치: 이 ZIP은 "${got}" 선박 데이터입니다. ${ctx} 데이터 오염 방지를 위해 Import가 중단되었습니다.`,
+                message: `Vessel ID mismatch: this ZIP is for vessel "${got}". ${ctx} Import stopped to prevent data corruption.`,
                 expected: exp,
                 incoming: got,
             };
@@ -669,10 +669,10 @@ const TVC_Sync = (function () {
         };
 
         if (fileDept && fileDept !== dept && fileDept !== 'ALL') {
-            await failImport(new Error(`부서 불일치: 선택한 부서(${dept})와 파일의 부서(${fileDept})가 다릅니다.`));
+            await failImport(new Error(`Department mismatch: selected department (${dept}) does not match the file (${fileDept}).`));
         }
         if (directionHint && fileDirection && fileDirection !== directionHint) {
-            await failImport(new Error(`방향 불일치: 기대 ${directionHint}, 파일 ${fileDirection}`));
+            await failImport(new Error(`Direction mismatch: expected ${directionHint}, file has ${fileDirection}.`));
         }
 
         const expectedVesselId = await resolveExpectedVesselId(user, isHq, opts.expectedVesselId);
