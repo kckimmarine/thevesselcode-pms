@@ -2197,11 +2197,37 @@ const TVC_App = (function () {
         }
     }
 
-    const LIST_FILTER_SEARCH_SEL = '.list-filter-stack .list-filter-search-row .search-input, .spare-list-search-bar .search-input, .list-filter-group-search';
-    let _listFilterSearchClearBound = false;
+    const SEARCH_INPUT_SEL = 'input.search-input';
+    let _searchClearGlobalBound = false;
 
+    function isSearchClearInput(el) {
+        return !!el?.matches?.(SEARCH_INPUT_SEL) && !!el.closest('.search-field-wrap');
+    }
+
+    /** @deprecated use isSearchClearInput */
     function isListFilterSearchInput(el) {
-        return !!el?.matches?.('input.search-input') && !!el.closest('.list-filter-stack, .spare-list-search-bar, .list-filter-section');
+        return isSearchClearInput(el);
+    }
+
+    function appendSearchClearBtn(el) {
+        const wrap = el.closest('.search-field-wrap') || el.parentElement;
+        if (!wrap) return;
+        let btn = wrap.querySelector('.search-clear-btn');
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'search-clear-btn hidden';
+            btn.title = 'Clear search';
+            btn.setAttribute('aria-label', 'Clear search');
+            btn.textContent = '×';
+            if (el.id) {
+                btn.setAttribute('onclick', `TVC_App.clearSearchField('${el.id.replace(/'/g, "\\'")}')`);
+            } else {
+                btn.addEventListener('click', () => clearListFilterSearch(el));
+            }
+            wrap.appendChild(btn);
+        }
+        updateSearchClearBtnForEl(el);
     }
 
     function updateSearchClearBtnForEl(el) {
@@ -2226,12 +2252,6 @@ const TVC_App = (function () {
 
     function clearListFilterSearch(el) {
         if (!el) return;
-        const btn = el.closest('.search-field-wrap')?.querySelector('.search-clear-btn');
-        if (btn && !btn.classList.contains('hidden')) {
-            btn.click();
-            el.focus();
-            return;
-        }
         if (el.id) {
             clearSearchField(el.id);
             return;
@@ -2243,9 +2263,9 @@ const TVC_App = (function () {
     }
 
     function ensureSearchClearUi(root = document) {
-        root.querySelectorAll(LIST_FILTER_SEARCH_SEL).forEach(el => {
+        root.querySelectorAll(SEARCH_INPUT_SEL).forEach(el => {
             if (el.closest('.search-field-wrap')) {
-                updateSearchClearBtnForEl(el);
+                appendSearchClearBtn(el);
                 return;
             }
             const parent = el.parentElement;
@@ -2254,50 +2274,50 @@ const TVC_App = (function () {
             wrap.className = 'search-field-wrap';
             parent.insertBefore(wrap, el);
             wrap.appendChild(el);
-            const btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'search-clear-btn hidden';
-            btn.title = 'Clear search';
-            btn.setAttribute('aria-label', 'Clear search');
-            btn.textContent = '×';
-            if (el.id) btn.setAttribute('onclick', `TVC_App.clearSearchField('${el.id}')`);
-            wrap.appendChild(btn);
-            updateSearchClearBtnForEl(el);
+            appendSearchClearBtn(el);
         });
     }
 
-    function bindSearchClearInput(inputId) {
-        const el = document.getElementById(inputId);
+    function bindSearchClearInput(inputIdOrEl) {
+        const el = typeof inputIdOrEl === 'string' ? document.getElementById(inputIdOrEl) : inputIdOrEl;
         if (!el || el.dataset.searchClearBound) return;
         el.dataset.searchClearBound = '1';
         el.addEventListener('input', () => updateSearchClearBtnForEl(el));
         updateSearchClearBtnForEl(el);
     }
 
-    function bindListFilterSearchClear() {
-        if (_listFilterSearchClearBound) return;
-        _listFilterSearchClearBound = true;
+    function bindSearchClearGlobal() {
+        if (_searchClearGlobalBound) return;
+        _searchClearGlobalBound = true;
         document.addEventListener('input', (e) => {
-            if (!isListFilterSearchInput(e.target)) return;
-            updateSearchClearBtnForEl(e.target);
+            const el = e.target;
+            if (!el?.matches?.(SEARCH_INPUT_SEL)) return;
+            if (!el.closest('.search-field-wrap')) ensureSearchClearUi(el.parentElement || document);
+            if (!el.dataset.searchClearBound) bindSearchClearInput(el);
+            else updateSearchClearBtnForEl(el);
         }, true);
         document.addEventListener('keydown', (e) => {
             if (e.key !== 'Escape') return;
             const el = e.target;
-            if (!isListFilterSearchInput(el) || !String(el.value || '').trim()) return;
+            if (!isSearchClearInput(el) || !String(el.value || '').trim()) return;
             e.preventDefault();
             clearListFilterSearch(el);
         }, true);
     }
 
-    function bindTabSearchClearInputs() {
-        bindListFilterSearchClear();
-        ensureSearchClearUi();
-        [
-            'actSearch', 'actTreeSearch', 'histSearch', 'spareHistReqSearch', 'spareSearch', 'spareTreeSearch',
-            'reqListSearch', 'reqHistSearch', 'consumeLogSearch', 'wpListSearch', 'dfListSearch',
-            'reqWorkSearch', 'wrSpareSearch', 'consumeSearch', 'receiveSearch',
-        ].forEach(bindSearchClearInput);
+    /** @deprecated use bindSearchClearGlobal */
+    function bindListFilterSearchClear() {
+        bindSearchClearGlobal();
+    }
+
+    function refreshSearchClearUi(root = document) {
+        ensureSearchClearUi(root);
+        root.querySelectorAll(SEARCH_INPUT_SEL).forEach(el => bindSearchClearInput(el));
+    }
+
+    function bindTabSearchClearInputs(root = document) {
+        bindSearchClearGlobal();
+        refreshSearchClearUi(root);
     }
     function sortJobs(field) {
         if (state.jobSort.field === field) state.jobSort.asc = !state.jobSort.asc;
@@ -2329,6 +2349,11 @@ const TVC_App = (function () {
     function clearActualPeriod() {
         state.actualPeriodFrom = '';
         state.actualPeriodTo = '';
+        if (state.listFilters?.actual) {
+            Object.assign(state.listFilters.actual, { pics: [], unassigned: false, criticalOnly: false });
+        }
+        TVC_ListFilters?.refreshOpenPopover?.();
+        TVC_ListFilters?.syncBtn('actual');
         renderActualPlan();
     }
 
@@ -5363,6 +5388,7 @@ const TVC_App = (function () {
         } else {
             TVC_ListFilters?.closePopover();
         }
+        refreshSearchClearUi(body);
     }
 
     async function openMenuXferMenu() {
@@ -6818,7 +6844,10 @@ const TVC_App = (function () {
         panel.dataset.adminLayout = '1';
         panel.innerHTML = `
             <div class="fleet-search-bar">
-                <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…">
+                <div class="search-field-wrap">
+                    <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…">
+                    <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('fleetSearch')">×</button>
+                </div>
             </div>
             <div class="admin-company-field">
                 <span class="admin-company-label">Company</span>
@@ -6853,7 +6882,10 @@ const TVC_App = (function () {
                 <button class="fleet-view-btn" data-fview="selected" onclick="TVC_App.setFleetView('selected')">Selected</button>
             </div>
             <div class="fleet-search-bar">
-                <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…" oninput="TVC_App.setFleetSearch(this.value)">
+                <div class="search-field-wrap">
+                    <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…" oninput="TVC_App.setFleetSearch(this.value)">
+                    <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('fleetSearch')">×</button>
+                </div>
             </div>
             <div class="fleet-table-wrap">
                 <table class="fleet-table">
@@ -6898,6 +6930,7 @@ const TVC_App = (function () {
         if (theadRow) theadRow.innerHTML = ADMIN_FLEET_TABLE_HEAD;
         if (listCompanyId === null) {
             body.innerHTML = `<tr><td colspan="${ADMIN_FLEET_COLSPAN}" class="muted" style="text-align:center">Select All or a Company ID</td></tr>`;
+            refreshSearchClearUi(document.getElementById('fleetListPanel') || document);
             return;
         }
 
@@ -6910,6 +6943,7 @@ const TVC_App = (function () {
             : [];
         if (!rows.length) {
             body.innerHTML = `<tr><td colspan="${ADMIN_FLEET_COLSPAN}" class="muted" style="text-align:center">No vessels found</td></tr>`;
+            refreshSearchClearUi(document.getElementById('fleetListPanel') || document);
             return;
         }
         body.innerHTML = rows.map((v, i) => {
@@ -6929,6 +6963,7 @@ const TVC_App = (function () {
                 ${fleetDocsCellHtml(v.vessel_id, v.company_id)}
             </tr>`;
         }).join('');
+        refreshSearchClearUi(document.getElementById('fleetListPanel') || document);
     }
 
     function setAdminSearch(q) {
@@ -8568,6 +8603,7 @@ const TVC_App = (function () {
 
         if (!vessels.length) {
             body.innerHTML = `<tr><td colspan="${ADMIN_FLEET_COLSPAN}" class="muted" style="text-align:center">No vessels found</td></tr>`;
+            refreshSearchClearUi(document.getElementById('fleetListPanel') || document);
             return;
         }
         body.innerHTML = vessels.map((v, i) => {
@@ -8583,6 +8619,7 @@ const TVC_App = (function () {
                 ${fleetDocsCellHtml(v.id, companyId)}
             </tr>`;
         }).join('');
+        refreshSearchClearUi(document.getElementById('fleetListPanel') || document);
     }
 
     function canEditVesselDocs() {
@@ -16991,7 +17028,7 @@ const TVC_App = (function () {
         if (typeof TVC_SpareMasterExcel === 'undefined') { await TVC_Dialog.alert('SPARE Master Export is not available.'); return; }
         try {
             const department = requireAppDepartment();
-            await TVC_SpareMasterExcel.exportToFile({ department, simplifyCodes: true, ...masterVesselOpts() });
+            await TVC_SpareMasterExcel.exportToFile({ department, simplifyCodes: true, user: TVC_Auth.getCurrentUser(), ...masterVesselOpts() });
             if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache();
             await refreshAll();
         } catch (e) {
@@ -17139,7 +17176,7 @@ const TVC_App = (function () {
         adminAppUpdatePickFolder, adminAppUpdateSetVersion, adminAppUpdateSetNotes,
         adminAppUpdateSetRecordDeploy, adminAppUpdateSetRecordPool, adminAppUpdateToggleSku, adminAppUpdateRun,
         saveAdminCompanyForm, saveAdminVesselForm, deactivateAdminCompany, deactivateAdminVessel,
-        setSearch, setTreeSearch, clearSearchField, clearListFilterSearch, updateSearchClearBtn, updateSearchClearBtnForEl, ensureSearchClearUi, bindSearchClearInput, bindListFilterSearchClear, bindTabSearchClearInputs, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, clearHistoryPeriodAndFilters, syncReportPeriodInputs, hasReportPeriodFilter, setHistoryScope, onSpareHistPeriodChange, clearSpareHistPeriod, setSpareHistSearch, selectSpareHistRow, spareHistDetailReport, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, isTreeDeptCollapsed, toggleTreeDept, renderGroupTree,
+        setSearch, setTreeSearch, clearSearchField, clearListFilterSearch, updateSearchClearBtn, updateSearchClearBtnForEl, ensureSearchClearUi, bindSearchClearInput, bindListFilterSearchClear, bindTabSearchClearInputs, refreshSearchClearUi, sortJobs, setActualFilter, onActualPeriodChange, clearActualPeriod, onReportPeriodChange, clearReportPeriod, clearHistoryPeriodAndFilters, syncReportPeriodInputs, hasReportPeriodFilter, setHistoryScope, onSpareHistPeriodChange, clearSpareHistPeriod, setSpareHistSearch, selectSpareHistRow, spareHistDetailReport, defectCaseReportDate, listReportedDateStr, compareDefectCaseByReportedDate, matchReportPeriodDate, selectGroup, isTreeDeptCollapsed, toggleTreeDept, renderGroupTree,
         getListFilterState, setListFilters, clearListFilters, syncListFilterBtns, listFilterCtx,
         jobShowsCriticalEquipmentMark, jobCriticalEquipmentDisplay, renderWrPmsGroupCriticalRow,
         postponeRequiresCompanyApproval, workReportListWorkflowStatus,

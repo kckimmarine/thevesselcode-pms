@@ -40,6 +40,11 @@ const TVC_Filename = (function () {
         return `${scopeToken(dept, false)}_hq`;
     }
 
+    /** Master Hub SPARE master excel scope: engine_master | deck_master */
+    function masterHubScopeToken(dept) {
+        return `${scopeToken(dept, false)}_master`;
+    }
+
     function spareType(category) {
         const key = String(category || '').trim().toUpperCase();
         return SPARE_TYPE[key] || String(category || 'export').toLowerCase().replace(/[^a-z0-9_]+/g, '_');
@@ -104,6 +109,19 @@ const TVC_Filename = (function () {
                 seq: m[5],
             };
         }
+        m = base.match(/^([a-z0-9]+)_([a-z0-9_]+)_(engine|deck)_master_(\d{8})_(\d{3})$/i);
+        if (m) {
+            const dept = m[3].toLowerCase();
+            return {
+                vessel: m[1],
+                type: m[2].toLowerCase(),
+                scope: `${dept}_master`,
+                department: dept,
+                isHqReply: false,
+                dateTag: m[4],
+                seq: m[5],
+            };
+        }
         m = base.match(/^([a-z0-9]+)_([a-z0-9_]+)_(hq|engine|deck|hub)_(\d{8})_(\d{3})$/i);
         if (!m) return null;
         const scope = m[3].toLowerCase();
@@ -132,6 +150,7 @@ const TVC_Filename = (function () {
         vesselSlug,
         scopeToken,
         hqReplyScopeToken,
+        masterHubScopeToken,
         spareType,
         todayTag,
         nextSeq,

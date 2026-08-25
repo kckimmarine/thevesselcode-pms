@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260824-hist-appr2">
+    <link rel="stylesheet" href="css/app.css?v=20260825-period-filter-ui">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260824-ship-docs">
 </head>
 <body>
@@ -145,7 +145,10 @@
                 <div class="hq-left-col hidden" id="hqLeftCol">
                     <aside id="fleetListPanel" class="fleet-list-panel" data-admin-layout="1">
                         <div class="fleet-search-bar">
-                            <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…" oninput="TVC_App.setFleetSearch(this.value)">
+                            <div class="search-field-wrap">
+                                <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…" oninput="TVC_App.setFleetSearch(this.value)">
+                                <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('fleetSearch')">×</button>
+                            </div>
                         </div>
                         <div class="admin-company-field">
                             <span class="admin-company-label">Company</span>
@@ -725,10 +728,10 @@
 <script src="js/ui/attachments.js?v=20260820-preview"></script>
 <script src="js/ui/runHours.js?v=20260824-pp-no-co"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
-<script src="js/core/filename.js?v=20260825-spare-monthly-fn"></script>
-<script src="js/services/spareSync.js?v=20260806-req-excel"></script>
+<script src="js/core/filename.js?v=20260825-spare-filename"></script>
+<script src="js/services/spareSync.js?v=20260825-spare-monthly-scope"></script>
 <script src="js/services/spareMeta.js"></script>
-<script src="js/ui/spareMenu.js?v=20260825-spare-edit-scroll"></script>
+<script src="js/ui/spareMenu.js?v=20260825-spare-filename"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -743,7 +746,7 @@
 <script src="js/services/maintenancePlan.js?v=20260823-append-hdr"></script>
 <script src="js/services/pmsMasterExcel.js?v=20260823-alert-en"></script>
 <script src="js/services/spareCode.js"></script>
-<script src="js/services/spareMasterExcel.js?v=20260823-alert-en"></script>
+<script src="js/services/spareMasterExcel.js?v=20260825-spare-filename"></script>
 <script src="js/services/defectCase.js?v=20260820-df-co-ce"></script>
 <script src="js/services/workPermitCase.js?v=20260824-captain-dept"></script>
 <script src="js/services/hubRelay.js?v=20260820-hub-relay"></script>
@@ -767,12 +770,12 @@
 <script src="js/services/masterVesselScope.js?v=20260813-vessel-master"></script>
 <script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
 <script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
-<script src="js/ui/listFilters.js?v=20260823-monthly-ui"></script>
-<script src="js/ui/defectReport.js?v=20260824-no-sub-del"></script>
-<script src="js/ui/workPermit.js?v=20260824-hist-appr2"></script>
+<script src="js/ui/listFilters.js?v=20260825-period-filter-ui"></script>
+<script src="js/ui/defectReport.js?v=20260825-search-clear-all"></script>
+<script src="js/ui/workPermit.js?v=20260825-period-filter-ui"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
-<script src="js/app.js?v=20260825-spare-sel-scroll"></script>
+<script src="js/app.js?v=20260825-spare-filename"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

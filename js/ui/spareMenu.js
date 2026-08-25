@@ -5164,10 +5164,7 @@ const TVC_SpareMenu = (function () {
         if (panelOpen) await renderDetailPanel(getFocusedSpareId(st), canRequisition, canModify);
         if (window.TVC_App?.syncSpareItemToolbar) TVC_App.syncSpareItemToolbar();
         else syncSpareToolbarUi();
-        TVC_App.bindSearchClearInput?.('spareSearch');
-        TVC_App.bindSearchClearInput?.('spareTreeSearch');
-        TVC_App.updateSearchClearBtn?.('spareSearch');
-        TVC_App.updateSearchClearBtn?.('spareTreeSearch');
+        TVC_App.refreshSearchClearUi?.(root);
     }
 
     function refreshSpareTabAfterModalClose() {
@@ -6749,13 +6746,10 @@ const TVC_SpareMenu = (function () {
             : prefix === 'spareHistReq' ? 'spareHistReqListFilterBtn'
             : 'reqListFilterBtn';
         const pmsLayout = !!opts.pmsLayout;
-        const periodClear = pmsLayout
-            ? `<button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.reqListClearPeriodAndFilters()">Clear</button>`
-            : `<button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.reqListClearPeriod()">Clear</button>`;
+        const periodClear = `<button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.reqListClearPeriodAndFilters()">Clear</button>`;
         const filterBtn = `<div class="list-filter-wrap">
                         <button type="button" id="${btnId}" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('reqList', event)">Filter</button>
                     </div>`;
-        const toolbarClear = '';
         const countHtml = opts.countId
             ? `<span class="count-label" id="${escAttr(opts.countId)}">${esc(opts.countLabel || '—')}</span>`
             : '';
@@ -6771,10 +6765,9 @@ const TVC_SpareMenu = (function () {
                         ${periodInput(prefix + 'PeriodFrom', m.reqListPeriodFrom)}
                         <span class="act-period-sep">~</span>
                         ${periodInput(prefix + 'PeriodTo', m.reqListPeriodTo)}
-                        ${pmsLayout ? filterBtn : periodClear}
+                        ${filterBtn}
                     </div>
-                    ${pmsLayout ? periodClear : filterBtn}
-                    ${toolbarClear}
+                    ${periodClear}
                     ${countHtml}
                 </div>
                 <div class="filter-bar list-filter-search-row">
@@ -8215,11 +8208,11 @@ const TVC_SpareMenu = (function () {
                         <span class="act-period-sep">~</span>
                         <input type="text" id="consumeLogPeriodTo" class="act-period-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" aria-label="Period to"
                             value="${escAttr(m.consumeLogPeriodTo || '')}" onchange="TVC_SpareMenu.consumeLogSetPeriod()">
-                        <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.consumeLogClearPeriod()">Clear</button>
+                        <div class="list-filter-wrap">
+                            <button type="button" id="consumeLogListFilterBtn" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('consumeLog', event)">Filter</button>
+                        </div>
                     </div>
-                    <div class="list-filter-wrap">
-                        <button type="button" id="consumeLogListFilterBtn" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('consumeLog', event)">Filter</button>
-                    </div>
+                    <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_SpareMenu.consumeLogClearPeriodAndFilters()">Clear</button>
                 </div>
                 <div class="filter-bar list-filter-search-row">
                     <div class="search-field-wrap">
@@ -8241,10 +8234,17 @@ const TVC_SpareMenu = (function () {
     }
 
     function consumeLogClearPeriod() {
+        consumeLogClearPeriodAndFilters();
+    }
+
+    function consumeLogClearPeriodAndFilters() {
         const st = getState();
         const m = modState(st);
         m.consumeLogPeriodFrom = '';
         m.consumeLogPeriodTo = '';
+        m.consumeLogFilterGroupKeys = [];
+        m.consumeLogFilterType = 'all';
+        TVC_ListFilters?.refreshOpenPopover?.();
         refreshConsumeLogListUi();
     }
 
@@ -12292,7 +12292,7 @@ const TVC_SpareMenu = (function () {
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReceivedExportList()">Received</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">${esc(SPARE_XFER_MONTHLY_REPORT_LABEL)}</button>`;
             content = `
-                <p class="spare-sync-hint">${isHq ? 'Select the data type to export.' : 'Select the data type to export to Master PC.'}</p>
+                <p class="spare-sync-hint">${isHq ? 'Select the data type to export.' : isMaster ? 'Select the data type to export after import (relay to HQ / Station).' : 'Select the data type to export to Master PC.'}</p>
                 <p class="spare-sync-note muted">Exports are saved as <strong>.zip</strong> packages (tvc_spare_sync.json inside), same as PMS.</p>
                 <div class="spare-sync-actions">
                     ${isHq ? hqExportBtns : vesselExportBtns}
@@ -23586,7 +23586,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         consumeLogPrintPreview, consumeLogPrintReport, consumeLogWindowDocPreview, consumeLogOpenList,
         openConsumeFromPmsHistory, isConsumeHistoryView, currentConsumeHistLogId,
         consumeLogSelectRow, consumeLogOpenRow, consumeLogToggleRow, consumeLogToggleAll,
-        consumeLogSetPeriod, consumeLogClearPeriod, consumeLogSetSearch, consumeLogClearSearch,
+        consumeLogSetPeriod, consumeLogClearPeriod, consumeLogClearPeriodAndFilters, consumeLogSetSearch, consumeLogClearSearch,
         getConsumeLogListFilters, setConsumeLogListFilters,
         toggleConsumeLogHistList, consumeLogEnterListEdit, consumeLogCancelEdit, loadConsumeLogIntoListWindow,
         closeReqWorkModal, reqWorkComplete, reqWorkSave, reqWorkSwitchToNew, reqWorkEnterListEdit, reqWorkCancelEdit, reqWorkCancelDraft, reqWorkOpenList, reqWorkPrint, reqWorkDocPreview, reqWorkDocPreviewPrint, reqWorkExitDocPreview, reqWorkExitPreview, reqWorkEnterPreview, reqWorkPrintPreview, reqWorkExportExcel, reqWorkAddSpare, addToRequisition, reqWorkAddChecked, captureReqWorkMeta, reqWorkConfirmByToggle,

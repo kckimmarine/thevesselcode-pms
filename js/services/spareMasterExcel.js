@@ -282,10 +282,19 @@ const TVC_SpareMasterExcel = (function () {
         await TVC_FileExport.save(blob, filename);
     }
 
-    async function masterExcelFilename(vesselId, department) {
+    async function masterExcelFilename(vesselId, department, opts = {}) {
         const dept = normDept(department);
+        let scope;
+        const user = opts.user || null;
+        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isHqAccount?.(user) && typeof TVC_Filename !== 'undefined') {
+            scope = TVC_Filename.hqReplyScopeToken(dept);
+        } else if (user && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub?.(user) && typeof TVC_Filename !== 'undefined') {
+            scope = TVC_Filename.masterHubScopeToken(dept);
+        } else if (typeof TVC_Filename !== 'undefined') {
+            scope = TVC_Filename.scopeToken(dept, false);
+        }
         if (typeof TVC_Filename !== 'undefined') {
-            return TVC_Filename.build({ vesselId, type: 'spare_master', department: dept, ext: 'xlsx' });
+            return TVC_Filename.build({ vesselId, type: 'spare_master', scope, ext: 'xlsx' });
         }
         const slug = String(vesselId || 'vessel').toLowerCase().replace(/[^a-z0-9]+/g, '') || 'vessel';
         const dateTag = new Date().toISOString().slice(0, 10).replace(/-/g, '');
@@ -658,7 +667,7 @@ const TVC_SpareMasterExcel = (function () {
         }
         const wb = await exportToWorkbook({ ...opts, department, vesselId });
         const buf = await wb.xlsx.writeBuffer();
-        const filename = await masterExcelFilename(vesselId, department);
+        const filename = await masterExcelFilename(vesselId, department, { user: opts.user });
         await downloadBlob(buf, filename);
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({

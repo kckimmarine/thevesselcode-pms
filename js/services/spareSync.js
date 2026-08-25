@@ -19,16 +19,28 @@ const TVC_SpareSync = (function () {
         return !!(typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isHqAccount?.(user));
     }
 
+    function resolveSpareExportScope(user, category, department, opts = {}) {
+        if (opts.scope) return opts.scope;
+        const cat = String(category || '').toUpperCase();
+        const dept = department || null;
+        const isHq = opts.isHq != null ? !!opts.isHq : isHqUser(user);
+        if (dept && isHq && (cat === 'QUOTATION' || cat === 'PURCHASE_ORDER' || cat === 'REPLY_EVALUATION' || cat === 'INVENTORY')) {
+            return TVC_Filename.hqReplyScopeToken(dept);
+        }
+        if (dept) return TVC_Filename.scopeToken(dept, false);
+        if (isHq) return 'hq';
+        return TVC_Filename.scopeToken(dept, false);
+    }
+
     async function resolveExportFilename(user, category, opts = {}) {
         const vesselId = opts.vessel_id || user?.vessel_id || 'UNKNOWN';
         const department = opts.department || user?.department || null;
-        const isHq = opts.isHq != null ? !!opts.isHq : isHqUser(user);
+        const scope = resolveSpareExportScope(user, category, department, opts);
         if (typeof TVC_Filename !== 'undefined') {
             return TVC_Filename.build({
                 vesselId,
                 type: TVC_Filename.spareType(category),
-                department,
-                isHq,
+                scope,
                 ext: 'zip',
             });
         }

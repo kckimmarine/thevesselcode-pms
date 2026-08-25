@@ -2069,6 +2069,7 @@ const TVC_DefectReport = (function () {
         document.querySelectorAll('body > .spare-consume-pick-menu-portal').forEach(el => el.remove());
         restoreDefectModalScroll(scroll);
         TVC_PWA?.initDateInputFormat?.(body);
+        TVC_App.refreshSearchClearUi?.(body);
     }
 
     function setDefectReportPage(page) {

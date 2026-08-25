@@ -365,16 +365,8 @@ const TVC_ListFilters = (function () {
         _groupSearch = '';
     }
 
-    function popActionsHtml() {
-        return `<div class="list-filter-actions">
-            <button type="button" class="btn btn-sm" data-filter-clear>Clear</button>
-            <button type="button" class="btn btn-sm btn-green" data-filter-apply>Apply</button>
-        </div>`;
-    }
-
-    function popShell(bodyHtml, opts = {}) {
-        const actions = opts.omitActions ? '' : popActionsHtml();
-        return `<div class="list-filter-pop-body">${bodyHtml}</div>${actions}`;
+    function popShell(bodyHtml) {
+        return `<div class="list-filter-pop-body">${bodyHtml}</div>`;
     }
 
     function renderPopover(tab) {
@@ -440,7 +432,7 @@ const TVC_ListFilters = (function () {
                         ${types.map(t => `<button type="button" class="list-filter-type-btn${curType === t ? ' active' : ''}" data-hist-type="${t}">${TYPE_LABELS[t]}</button>`).join('')}
                     </div>
                 </div>
-                ${renderGroupPanel(f, tab)}`, { omitActions: true });
+                ${renderGroupPanel(f, tab)}`);
         } else if (tab === 'workPermit') {
             const statuses = ['all', 'reported', 'confirmed', 'approved'];
             const WP_STATUS_LABELS = { all: 'All', reported: 'Reported', confirmed: 'Confirmed', approved: 'Approved' };
@@ -468,7 +460,7 @@ const TVC_ListFilters = (function () {
                 <div class="list-filter-section">
                     <div class="list-filter-section-title">Status</div>
                     <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="reqListFilterOpenOnly"${f.openOnly ? ' checked' : ''}> Open <span class="muted">(not Received, or Received with O/S &gt; 0)</span></label>
-                </div>`, { omitActions: spareHist });
+                </div>`);
         } else {
             const types = ['all', 'w', 'm', 'p', 'd', 'c'];
             const histType = f.type || 'all';
@@ -482,27 +474,21 @@ const TVC_ListFilters = (function () {
                 ${renderGroupPanel(f, tab)}
                 <div class="list-filter-section">
                     <label class="list-filter-check list-filter-open-only"><input type="checkbox" id="histFilterNoClosedOut"${f.noClosedOut ? ' checked' : ''}> No Closed-out</label>
-                </div>`, { omitActions: true });
+                </div>`);
         }
 
-        pop.querySelector('[data-filter-apply]')?.addEventListener('click', () => applyFromPopover(tab, pop));
-        pop.querySelector('[data-filter-clear]')?.addEventListener('click', (ev) => {
-            ev.stopPropagation();
-            resetPopoverForm(tab, pop);
-        });
         pop.querySelectorAll('[data-hist-type]').forEach(typeBtn => {
             typeBtn.addEventListener('click', () => {
                 pop.querySelectorAll('[data-hist-type]').forEach(b => b.classList.remove('active'));
                 typeBtn.classList.add('active');
-                if (tab === 'history' || isXferTab(tab) || (tab === 'reqList' && isSpareHistReqFilter())) {
-                    applyFromPopover(tab, pop, { keepOpen: true });
-                }
+                applyFromPopover(tab, pop, { keepOpen: true });
             });
         });
         pop.querySelectorAll('[data-wp-status]').forEach(statusBtn => {
             statusBtn.addEventListener('click', () => {
                 pop.querySelectorAll('[data-wp-status]').forEach(b => b.classList.remove('active'));
                 statusBtn.classList.add('active');
+                applyFromPopover(tab, pop, { keepOpen: true });
             });
         });
         const gs = pop.querySelector('.list-filter-group-search');
@@ -704,11 +690,19 @@ const TVC_ListFilters = (function () {
         document.addEventListener('change', (ev) => {
             const pop = getPopover();
             if (!pop || pop.classList.contains('hidden') || !pop.contains(ev.target)) return;
+            if (_openTab === 'actual' && ev.target.matches('[data-pic], #actFilterUnassigned, #actFilterCriticalOnly')) {
+                applyFromPopover('actual', pop, { keepOpen: true });
+            }
             if (_openTab === 'history' && ev.target.matches('[data-group-key], #histFilterNoClosedOut')) {
                 applyFromPopover('history', pop, { keepOpen: true });
             }
-            if (_openTab === 'reqList' && isSpareHistReqFilter()
-                && ev.target.matches('[data-group-key], #reqListFilterOpenOnly')) {
+            if (_openTab === 'consumeLog' && ev.target.matches('[data-group-key]')) {
+                applyFromPopover('consumeLog', pop, { keepOpen: true });
+            }
+            if (_openTab === 'workPermit' && ev.target.matches('[data-group-key]')) {
+                applyFromPopover('workPermit', pop, { keepOpen: true });
+            }
+            if (_openTab === 'reqList' && ev.target.matches('[data-group-key], #reqListFilterOpenOnly')) {
                 applyFromPopover('reqList', pop, { keepOpen: true });
             }
             if (_openTab === 'caseXfer' && ev.target.matches('[data-group-key]')) {

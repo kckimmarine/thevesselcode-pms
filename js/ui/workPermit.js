@@ -1240,11 +1240,11 @@ const TVC_WorkPermitReport = (function () {
                     <span class="act-period-sep">~</span>
                     <input type="text" id="wpListPeriodTo" class="act-period-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" aria-label="Period to"
                         value="${escAttr(_wpListPeriodTo || '')}" onchange="TVC_WorkPermitReport.wpListSetPeriod()">
-                    <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_WorkPermitReport.wpListClearPeriod()">Clear</button>
+                    <div class="list-filter-wrap">
+                        <button type="button" id="wpListFilterBtn" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('workPermit', event)">Filter</button>
+                    </div>
                 </div>
-                <div class="list-filter-wrap">
-                    <button type="button" id="wpListFilterBtn" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('workPermit', event)">Filter</button>
-                </div>
+                <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_WorkPermitReport.wpListClearPeriodAndFilters()">Clear</button>
             </div>
             <div class="filter-bar list-filter-search-row">
                 <div class="search-field-wrap">
@@ -1861,8 +1861,7 @@ const TVC_WorkPermitReport = (function () {
         updateWpListHeadCheckAll(rows);
         syncWpListFilterUi();
         TVC_PWA?.initDateInputFormat?.(panel);
-        TVC_App.bindSearchClearInput?.('wpListSearch');
-        TVC_App.updateSearchClearBtn?.('wpListSearch');
+        TVC_App.refreshSearchClearUi?.(panel || document);
         positionWpHistPopover();
         requestAnimationFrame(() => {
             positionWpHistPopover();
@@ -1909,8 +1908,16 @@ const TVC_WorkPermitReport = (function () {
     }
 
     function wpListClearPeriod() {
+        wpListClearPeriodAndFilters();
+    }
+
+    function wpListClearPeriodAndFilters() {
         _wpListPeriodFrom = '';
         _wpListPeriodTo = '';
+        _wpFilterGroupKeys = [];
+        _wpFilterStatus = 'all';
+        TVC_ListFilters?.refreshOpenPopover?.();
+        TVC_ListFilters?.syncBtn?.('workPermit');
         refreshWpListUi();
     }
 
@@ -2884,7 +2891,7 @@ const TVC_WorkPermitReport = (function () {
     return {
         init,
         openListModal, closeListModal: closeModal,
-        wpListSetSearch, wpListClearSearch, wpListSetPeriod, wpListClearPeriod,
+        wpListSetSearch, wpListClearSearch, wpListSetPeriod, wpListClearPeriod, wpListClearPeriodAndFilters,
         wpListSelectRow, wpListToggleRow, wpListToggleAll,
         wpListNew, wpListEnterEdit, wpListCancelEdit, wpListConfirm, wpListApprove, wpListDelete,
         wpListPrint, wpListPreview, toggleWpHistList,

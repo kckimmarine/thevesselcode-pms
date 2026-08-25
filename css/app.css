@@ -457,6 +457,11 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .fleet-table td.fleet-cell-docs {
     text-align: center;
 }
+/* HQ Ship List — all column headers and cells center-aligned */
+.cmaxs-body.hq-mode .fleet-table th,
+.cmaxs-body.hq-mode .fleet-table td {
+    text-align: center;
+}
 .fleet-table td.fleet-cell-ver,
 .fleet-table td.fleet-cell-docs {
     font-size: inherit;
@@ -796,6 +801,18 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .search-clear-btn:hover { background: #cbd5e0; color: #1a202c; }
 .search-clear-btn.hidden { display: none; }
+.fleet-search-bar .search-field-wrap,
+.spare-consume-pick-search .search-field-wrap,
+.spics-tx-search .search-field-wrap,
+.tree-search-bar .search-field-wrap {
+    width: 100%;
+    min-width: 0;
+}
+.spare-consume-pick-search .search-field-wrap .search-input,
+.spics-tx-search .search-field-wrap .search-input {
+    width: 100%;
+    box-sizing: border-box;
+}
 .count-label { padding: 4px 14px; font-size: 11px; color: #718096; }
 
 /* Virtual List */
@@ -8366,6 +8383,10 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 .menu-xfer-case-filters .list-filter-search-row {
     padding-bottom: 0;
+}
+.menu-xfer-case-filters .act-period-filter.active {
+    background: #fff;
+    border-color: #cbd5e0;
 }
 
 .menu-xfer-table-wrap {
