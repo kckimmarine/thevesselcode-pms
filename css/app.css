@@ -4211,9 +4211,11 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 #spareEquipmentListModal .modal-box.spare-equipment-list-modal {
     width: min(1840px, calc(100vw - 32px));
+    max-width: min(1840px, calc(100vw - 32px));
     max-height: min(720px, calc(100vh - 32px));
     display: flex;
     flex-direction: column;
+    overflow: hidden;
 }
 #spareEquipmentListBody {
     display: flex;
@@ -4232,19 +4234,26 @@ label.spare-file-pick input[type=file] { display: none; }
     flex: 1;
     min-height: 180px;
     max-height: 420px;
-    overflow: auto;
+    overflow-x: hidden;
+    overflow-y: auto;
     border: 1px solid #e2e8f0;
     border-radius: 8px;
     background: #fff;
 }
 .spare-equipment-list-table {
     width: 100%;
+    table-layout: fixed;
     font-size: 12px;
 }
 .spare-equipment-list-table th,
 .spare-equipment-list-table td {
     padding: 6px 8px;
     vertical-align: middle;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+}
+.spare-equipment-list-table thead th {
+    white-space: nowrap;
 }
 .spare-equipment-list-table .c-eqno {
     text-align: center;

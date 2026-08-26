@@ -353,7 +353,7 @@ const TVC_SpareMasterExcel = (function () {
                 const n = parseInt(String(hit?.equipment_no ?? hit?.sort_order ?? ''), 10);
                 if (Number.isFinite(n) && n > 0) return n;
             }
-            return TVC_SpareCode.resolveEquipNo(c);
+            return 0;
         };
         return TVC_SpareCode.assignCodes(exportSpares, {
             groupNoFor: s => groupNoForSpareExport(s, groupNodes),
@@ -622,7 +622,6 @@ const TVC_SpareMasterExcel = (function () {
                 const hit = (spareGroups || []).find(gr => norm(gr.label) === norm(raw) && norm(gr.item_sort1 || '') === norm(eqName));
                 eqNo = parseInt(String(hit?.equipment_no ?? hit?.sort_order ?? ''), 10) || 0;
             }
-            if (!eqNo && typeof TVC_SpareCode !== 'undefined') eqNo = TVC_SpareCode.resolveEquipNo(c);
             const r = wsP.getRow(DATA_START + idx);
             const code = codeMap?.get(s.id) || spareNumbering(s);
             r.getCell(1).value = dept;
@@ -1229,17 +1228,14 @@ const TVC_SpareMasterExcel = (function () {
         const importBlockSeq = new Map();
 
         function resolveImportEquipNo(row) {
-            if (row.equipment_no != null && row.equipment_no >= 0) return row.equipment_no;
+            if (row.equipment_no != null && row.equipment_no >= 0 && norm(row.equipment)) return row.equipment_no;
             const eqName = norm(row.equipment);
             if (eqName) {
                 const hit = equipRows.find(e => norm(e.label) === norm(row.group)
                     && norm(e.item_sort1 || '') === eqName);
                 if (hit?.equipment_no != null && hit.equipment_no > 0) return hit.equipment_no;
             }
-            if (row.code && typeof TVC_SpareCode !== 'undefined') {
-                return TVC_SpareCode.parse(row.code).equipNo || 0;
-            }
-            return eqName ? 0 : 0;
+            return 0;
         }
 
         function nextImportCode(groupNo, equipNo) {
@@ -1368,7 +1364,7 @@ const TVC_SpareMasterExcel = (function () {
                             && norm(e.item_sort1 || '') === norm(c.equipment));
                         if (hit?.equipment_no > 0) return hit.equipment_no;
                     }
-                    return TVC_SpareCode.resolveEquipNo(c);
+                    return 0;
                 },
             });
         }

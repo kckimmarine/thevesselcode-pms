@@ -289,7 +289,7 @@ const TVC_SpareSchema = (function () {
             dwgNo: textField(row.dwg_no ?? row.dwgNo ?? row.drawing_no ?? row.drawingNo),
             shipComponentId: row.ship_component_id || row.shipComponentId || '',
             parentEquipmentID: row.parent_equipment_id || row.parentEquipmentID || '',
-            equipment: textField(row.equipment || row.item_sort1 || row.itemSort1),
+            equipment: textField(row.equipment),
             equipmentNo: intStock(row.equipment_no ?? row.equipmentNo ?? 0),
             location: row.location || row.storage_location || '',
             maker: row.maker || row.vendor_comment || '',

@@ -258,6 +258,20 @@ const TVC_App = (function () {
                     await TVC_MasterVesselScope.ensureBackfill();
                 }
             } catch (e) { console.warn('[TVC_MasterVesselScope]', e); }
+            try {
+                const dedup = await TVC_SpareDedup.runOnce();
+                if (dedup?.totalRemoved > 0) {
+                    console.info('[SPARE] duplicate parts removed:', dedup.totalRemoved);
+                    state._spareImportMsg = `Removed ${dedup.totalRemoved} duplicate spare part(s). Inventory count restored.`;
+                }
+            } catch (e) { console.warn('[TVC_SpareDedup]', e); }
+            try {
+                const scrub = await TVC_SpareDedup.scrubInferredEquipmentOnce();
+                if (scrub?.cleared > 0) {
+                    console.info('[SPARE] inferred equipment cleared:', scrub.cleared);
+                    state._spareImportMsg = `Cleared ${scrub.cleared} auto-assigned Equipment field(s). Codes re-aligned to group level (EE=00) where applicable.`;
+                }
+            } catch (e) { console.warn('[TVC_SpareDedup] equipment scrub', e); }
 
             if (TVC_Env.isFileProtocol()) {
                 document.getElementById('fileProtocolBanner')?.classList.remove('hidden');
@@ -9514,6 +9528,9 @@ const TVC_App = (function () {
     }
 
     function jobEquipmentDraftValue(job) {
+        if (TVC_SpareMenu?.resolveJobEquipment) {
+            return TVC_SpareMenu.resolveJobEquipment(state, job).equipment;
+        }
         const eq = String(job?.equipment || '').trim();
         if (eq) return eq;
         const sort1 = String(job?.item_sort1 || '').trim();
@@ -9553,6 +9570,90 @@ const TVC_App = (function () {
         return `<input class="${cls}" id="${id}" value="${esc(String(value ?? ''))}"${changeAttr} onclick="event.stopPropagation()">`;
     }
 
+    function parseJobCodeBlockParts(group, eqNo) {
+        const prefixMatch = String(group || '').match(/^(\d+)/);
+        const g = prefixMatch ? prefixMatch[1].padStart(2, '0') : '';
+        const ee = Math.max(0, parseInt(String(eqNo ?? 0), 10) || 0);
+        return { g, ee };
+    }
+
+    function formatPmsJobCodeLocal(g, ee, itemNo) {
+        if (TVC_PmsMasterExcel?.formatPmsJobCode) return TVC_PmsMasterExcel.formatPmsJobCode(g, ee, itemNo);
+        return `${g}-${String(ee).padStart(2, '0')}-${String(itemNo).padStart(3, '0')}`;
+    }
+
+    function parsePmsJobCodeLocal(code) {
+        if (TVC_PmsMasterExcel?.parsePmsJobCode) return TVC_PmsMasterExcel.parsePmsJobCode(code);
+        const m = String(code || '').match(/^(\d{1,2})-(\d{2})-(\d{1,3})$/);
+        if (!m) return null;
+        return {
+            valid: true,
+            groupNo: m[1].padStart(2, '0'),
+            equipNo: parseInt(m[2], 10),
+            itemNo: parseInt(m[3], 10),
+        };
+    }
+
+    function usedJobItemNosInBlock(group, dept, eqNo, excludeJobId) {
+        const { g, ee } = parseJobCodeBlockParts(group, eqNo);
+        const used = new Set();
+        if (!g) return used;
+        state.jobs.forEach(j => {
+            if (excludeJobId && String(j.id) === String(excludeJobId)) return;
+            if (dept && j.department !== dept) return;
+            const p = parsePmsJobCodeLocal(j.job_code);
+            if (p?.valid && p.groupNo === g && p.equipNo === ee) used.add(p.itemNo);
+        });
+        return used;
+    }
+
+    function jobCodeMatchesBlock(code, group, eqNo) {
+        const { g, ee } = parseJobCodeBlockParts(group, eqNo);
+        if (!g || !code) return false;
+        const p = parsePmsJobCodeLocal(code);
+        return !!(p?.valid && p.groupNo === g && p.equipNo === ee);
+    }
+
+    function listJobCodeOptions(group, dept, eqNo, currentCode, excludeJobId, maxOptions = 40) {
+        const { g, ee } = parseJobCodeBlockParts(group, eqNo);
+        if (!g) return currentCode ? [{ code: currentCode }] : [];
+        const used = usedJobItemNosInBlock(group, dept, eqNo, excludeJobId);
+        const options = [];
+        const seen = new Set();
+        const add = (code) => {
+            if (!code || seen.has(code)) return;
+            seen.add(code);
+            options.push({ code });
+        };
+        if (currentCode && jobCodeMatchesBlock(currentCode, group, eqNo)) add(currentCode);
+        for (let n = 1; options.length < maxOptions && n <= 999; n++) {
+            if (used.has(n)) continue;
+            add(formatPmsJobCodeLocal(g, ee, n));
+        }
+        if (!options.length) add(suggestNextJobCode(group, dept, eqNo));
+        return options;
+    }
+
+    function renderOrigJobCodeSelect(draft) {
+        const m = origJobInlineState();
+        const excludeId = m.mode === 'modify' ? m.editId : null;
+        const eqNo = draft.equipment && TVC_SpareMenu?.equipmentNoForName
+            ? TVC_SpareMenu.equipmentNoForName(state, draft.group, draft.equipment, 'pms')
+            : 0;
+        const opts = listJobCodeOptions(draft.group, draft.department, eqNo, draft.job_code, excludeId);
+        const cur = draft.job_code || opts[0]?.code || '';
+        if (!opts.length) return origJobCellInput('oie_code', cur);
+        return `<select class="spare-inline-input orig-inline-code" id="oie_code" onclick="event.stopPropagation()">${opts.map(o =>
+            `<option value="${escAttr(o.code)}"${o.code === cur ? ' selected' : ''}>${esc(o.code)}</option>`
+        ).join('')}</select>`;
+    }
+
+    function refreshOrigJobCodeCell(draft) {
+        const cell = document.querySelector('.orig-job-inline-table tbody .c-code');
+        if (!cell || !draft) return;
+        cell.innerHTML = renderOrigJobCodeSelect(draft);
+    }
+
     function origJobCellDate(id, value) {
         const v = esc(String(value ?? '').slice(0, 10));
         return `<input type="text" class="spare-inline-input orig-inline-date tvc-date-input" id="${id}" value="${v}" placeholder="YYYY-MM-DD" autocomplete="off" onclick="event.stopPropagation()">`;
@@ -9575,7 +9676,7 @@ const TVC_App = (function () {
         const units = ['M', 'W', 'D', 'H', 'Y'];
         const unitSelect = `<select class="spare-inline-input orig-inline-unit" id="oie_unit" onclick="event.stopPropagation()">${units.map(u => `<option ${(r.unit || 'M') === u ? 'selected' : ''}>${u}</option>`).join('')}</select>`;
         const groupSelect = `<select class="spare-inline-input spare-inline-input-wide" id="oie_group" onchange="TVC_App.syncOrigJobInlineHeader()" onclick="event.stopPropagation()">${origGroupOptions(dept, r.group)}</select>`;
-        const codeCell = origJobCellInput('oie_code', r.job_code);
+        const codeCell = renderOrigJobCodeSelect(r);
         const colgroup = '<colgroup><col style="width:32px"><col style="width:56px"><col style="width:72px"><col><col><col><col style="width:100px"><col style="width:80px"><col style="width:130px"><col style="width:130px"></colgroup>';
         return `<section class="spare-item-edit-panel orig-job-inline-panel" aria-label="Maintenance job edit">
             <div class="spare-item-edit-head">${panelHead}</div>
@@ -9620,6 +9721,7 @@ const TVC_App = (function () {
     }
 
     function startOrigJobInlineEdit(job) {
+        const scrollTop = captureActListScroll();
         if (TVC_SpareMenu?.cancelGroupHeaderEdit) TVC_SpareMenu.cancelGroupHeaderEdit();
         const equipment = jobEquipmentDraftValue(job);
         const hdr = resolveOrigJobHeaderDraft({ ...job, equipment });
@@ -9652,6 +9754,7 @@ const TVC_App = (function () {
         refreshActJobEditBlock();
         renderPlanGroupHeader();
         syncPlanItemUi();
+        restoreActListScroll(scrollTop);
     }
 
     function resolveOrigJobHeaderDraft(jobLike) {
@@ -9663,6 +9766,7 @@ const TVC_App = (function () {
         if (!m.editId || !m.draft) return;
         const g = (id) => { const el = document.getElementById(id); return el ? String(el.value).trim() : ''; };
         const prevGroup = m.draft.group || '';
+        const prevEquipment = m.draft.equipment || '';
         const group = g('oie_group') || prevGroup;
         let equipment = g('oie_equipment');
         if (document.getElementById('oie_equipment') == null) equipment = m.draft.equipment || '';
@@ -9670,6 +9774,16 @@ const TVC_App = (function () {
         if (group !== prevGroup) {
             const names = TVC_SpareMenu?.equipmentNamesForGroup?.(state, group, 'pms') || [];
             if (equipment && !names.includes(equipment)) equipment = '';
+        }
+        const eqNo = equipment && TVC_SpareMenu?.equipmentNoForName
+            ? TVC_SpareMenu.equipmentNoForName(state, group, equipment, 'pms')
+            : 0;
+        let jobCode = g('oie_code') || m.draft.job_code || '';
+        const blockChanged = group !== prevGroup || equipment !== prevEquipment;
+        if (blockChanged || !jobCodeMatchesBlock(jobCode, group, eqNo)) {
+            if (m.mode === 'append' || !jobCodeMatchesBlock(jobCode, group, eqNo)) {
+                jobCode = suggestNextJobCode(group, m.draft.department, eqNo);
+            }
         }
         const hdr = resolveOrigJobHeaderDraft({
             department: m.draft.department,
@@ -9692,15 +9806,20 @@ const TVC_App = (function () {
         m.draft.group = group;
         m.draft.equipment = equipment;
         m.draft.item_sort1 = sort1;
+        m.draft.job_code = jobCode;
         m.draft.maker = hdr.maker || '';
         m.draft.modelType = hdr.modelType || '';
         m.draft.capacity = hdr.capacity || '';
         m.draft.serialNo = hdr.serialNo || '';
         m.draft.criticalEquipment = groupCrit;
         if (group !== prevGroup) renderPlanGroupHeader();
+        refreshOrigJobCodeCell(m.draft);
+        const codeEl = document.getElementById('oie_code');
+        if (codeEl) codeEl.value = jobCode;
     }
 
     function startOrigJobInlineAppend() {
+        const scrollTop = captureActListScroll();
         if (TVC_SpareMenu?.cancelGroupHeaderEdit) TVC_SpareMenu.cancelGroupHeaderEdit();
         const ctx = defaultAppendContext();
         const hdr = resolveOrigJobHeaderDraft({ department: ctx.dept, group: ctx.group });
@@ -9721,7 +9840,7 @@ const TVC_App = (function () {
             next_date: '',
             last_done: '',
             is_critical_equipment: '',
-            equipment: '',
+            equipment: ctx.equipment || '',
             maker: hdr.maker || '',
             modelType: hdr.modelType || '',
             capacity: hdr.capacity || '',
@@ -9733,6 +9852,7 @@ const TVC_App = (function () {
         refreshActJobEditBlock();
         renderPlanGroupHeader();
         syncPlanItemUi();
+        restoreActListScroll(scrollTop);
     }
 
     function cancelOrigJobInlineEdit(opts = {}) {
@@ -9883,7 +10003,15 @@ const TVC_App = (function () {
             }
         }
         const eqNo = selJob?.equipment_no || 0;
-        return { group: (group || '').trim(), dept, job_code: suggestNextJobCode(group, dept, eqNo) };
+        const equipment = selJob ? jobEquipmentDraftValue(selJob) : '';
+        return {
+            group: (group || '').trim(),
+            dept,
+            equipment,
+            job_code: suggestNextJobCode(group, dept, equipment
+                ? (TVC_SpareMenu?.equipmentNoForName?.(state, group, equipment, 'pms') || eqNo)
+                : eqNo),
+        };
     }
 
     function renderOrigJobEditor(mode, job) {
@@ -17112,7 +17240,8 @@ const TVC_App = (function () {
         try {
             const department = requireAppDepartment();
             const r = await TVC_SpareMasterExcel.importFromFile(file, user, { department, simplifyCodes: true, ...masterVesselOpts() });
-            if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache();
+            if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache({ force: true });
+            if (typeof TVC_SpareMenu?.reloadSpareGroupsCache === 'function') await TVC_SpareMenu.reloadSpareGroupsCache();
             await refreshAll();
             const vesselLine = r.vessel_id ? `\nVessel: ${r.vessel_id}` : '';
             const codeLine = r.codesRenumbered ? `\nCodes renumbered: ${r.codesRenumbered}` : '';
