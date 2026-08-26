@@ -10,8 +10,8 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="TVC-PMS">
     <meta name="application-name" content="TVC-PMS">
-    <meta name="description" content="THE VESSEL CODE ??Offline-first Planned Maintenance System">
-    <title>THE VESSEL CODE ??TVC-PMS</title>
+    <meta name="description" content="THE VESSEL CODE — Offline-first Planned Maintenance System">
+    <title>THE VESSEL CODE — TVC-PMS</title>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
@@ -24,8 +24,8 @@
 <!-- 1. Login -->
 <div id="loginScreen" class="login-screen">
     <div id="loginFileBanner" class="login-file-banner hidden">
-        ?�️ <b>Opened via file://</b> ??PMS/SPARE data may appear empty.
-        Double-click <code>START-TVC-PMS.bat</code> or run <code>npm start</code> ??localhost:3000
+        ⚠️ <b>Opened via file://</b> — PMS/SPARE data may appear empty.
+        Double-click <code>START-TVC-PMS.bat</code> or run <code>npm start</code> → localhost:3000
     </div>
 
     <header class="login-brand" aria-label="THE VESSEL CODE">
@@ -52,12 +52,12 @@
                 </div>
                 <div class="login-field">
                     <label for="loginPass">Password</label>
-                    <input id="loginPass" type="password" placeholder="?�••••••�? autocomplete="current-password">
+                    <input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">
                 </div>
                 <div class="login-field">
                     <label for="loginDept">Department</label>
                     <select id="loginDept">
-                        <option value="">??Select Department ??/option>
+                        <option value="">— Select Department —</option>
                         <option value="MASTER">Master</option>
                         <option value="ENGINE">Engine</option>
                         <option value="DECK">Deck</option>
@@ -73,9 +73,9 @@
                     <li><b>Master</b> · captain</li>
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / co</li>
-                    <li><b>HQ</b> · hq (?�당 ?�사 ?�박�?· Department 불필??</li>
-                    <li><b>HQ</b> · tvc (HQ Mode SKU · ?�사 ?�체 조회)</li>
-                    <li><b>Admin</b> · tvc (Admin Mode SKU · Department 불필??</li>
+                    <li><b>HQ</b> · hq (해당 선사 선박만 · Department 불필요)</li>
+                    <li><b>HQ</b> · tvc (HQ Mode SKU · 선사 전체 조회)</li>
+                    <li><b>Admin</b> · tvc (Admin Mode SKU · Department 불필요)</li>
                 </ul>
             </div>
         </div>
@@ -86,10 +86,10 @@
 
 <div id="appShell" class="hidden">
     <div id="fileProtocolBanner" class="file-protocol-banner hidden">
-        ?�️ <b>file:// mode</b> ??Uses a different storage than localhost. Use <code>START-TVC-PMS.bat</code>.
+        ⚠️ <b>file:// mode</b> — Uses a different storage than localhost. Use <code>START-TVC-PMS.bat</code>.
     </div>
     <div id="seedBanner" class="hidden">
-        ?�️ Load seed: <input type="file" id="seedFile" accept=".json" hidden onchange="TVC_App.loadSeedFile(this.files[0])">
+        ⚠️ Load seed: <input type="file" id="seedFile" accept=".json" hidden onchange="TVC_App.loadSeedFile(this.files[0])">
         <button class="btn-sm" onclick="document.getElementById('seedFile').click()">pms-unified.json</button>
         or <code>npx serve .</code>
     </div>
@@ -104,13 +104,13 @@
             <div class="ship-fields">
                 <div class="ship-name-row">
                     <span class="fld-label">Ship's Name</span>
-                    <strong id="cmaxsShipName" class="fld-value ship-name">??/strong>
+                    <strong id="cmaxsShipName" class="fld-value ship-name">—</strong>
                 </div>
                 <div class="ship-meta">
-                    <span><span class="fld-label">IMO No</span> <span id="cmaxsShipCode" class="fld-value">??/span></span>
-                    <span><span class="fld-label">Delivery</span> <span id="cmaxsShipDelivery" class="fld-value">??/span></span>
-                    <span><span class="fld-label">User</span> <span class="userNameEl fld-value title-badge">??/span></span>
-                    <span class="userBadgeEl pill ok">??/span>
+                    <span><span class="fld-label">IMO No</span> <span id="cmaxsShipCode" class="fld-value">—</span></span>
+                    <span><span class="fld-label">Delivery</span> <span id="cmaxsShipDelivery" class="fld-value">—</span></span>
+                    <span><span class="fld-label">User</span> <span class="userNameEl fld-value title-badge">—</span></span>
+                    <span class="userBadgeEl pill ok">—</span>
                 </div>
             </div>
         </div>
@@ -123,18 +123,18 @@
     </header>
 
     <div id="pwaOfflineBadge" class="pwa-offline-badge hidden" role="status" aria-live="polite">
-        ?�� Offline mode ??local data available
+        📡 Offline mode — local data available
     </div>
 
     <div id="mobileNavBackdrop" class="mobile-nav-backdrop" aria-hidden="true"></div>
 
     <!-- Persistent Tab Bar -->
     <nav id="tabBar" class="tab-bar" role="tablist">
-        <button class="tab-btn active" data-tab="menu" onclick="TVC_App.switchTab('menu')">?�� Menu</button>
-        <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">?�� PMS</button>
-        <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">?�� SPARE</button>
-        <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">?�� Report History</button>
-        <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">??Settings</button>
+        <button class="tab-btn active" data-tab="menu" onclick="TVC_App.switchTab('menu')">📑 Menu</button>
+        <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 PMS</button>
+        <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
+        <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Report History</button>
+        <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">⚙ Settings</button>
     </nav>
 
     <div id="tabContent">
@@ -146,7 +146,7 @@
                     <aside id="fleetListPanel" class="fleet-list-panel" data-admin-layout="1">
                         <div class="fleet-search-bar">
                             <div class="search-field-wrap">
-                                <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No?? oninput="TVC_App.setFleetSearch(this.value)">
+                                <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…" oninput="TVC_App.setFleetSearch(this.value)">
                                 <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('fleetSearch')">×</button>
                             </div>
                         </div>
@@ -154,7 +154,7 @@
                             <span class="admin-company-label">Company</span>
                             <select class="admin-company-select" id="adminCompanySelect" onchange="TVC_App.setFleetCompanyFilter(this.value)"></select>
                         </div>
-                        <div class="fleet-list-head">?�� Ship List</div>
+                        <div class="fleet-list-head">🚢 Ship List</div>
                         <div class="fleet-table-wrap">
                             <table class="fleet-table fleet-table--with-company">
                                 <colgroup>
@@ -185,7 +185,7 @@
         <!-- TAB: Work Plan -->
         <section id="tab-actual" class="tab-pane hidden">
             <div class="sheet-head">
-                <h2>?�� PMS</h2>
+                <h2>📝 PMS</h2>
                 <span style="flex:1"></span>
             </div>
             <div id="actPlanActionBar" class="plan-action-bar"></div>
@@ -193,42 +193,42 @@
             <div class="plan-layout actual-layout">
                 <aside class="panel tree-panel">
                     <div class="panel-head spare-tree-head">
-                        <span>?�� PMS GROUP Tree</span>
+                        <span>🌳 PMS GROUP Tree</span>
                         <span class="spare-tree-actions">
                             <button type="button" id="actPlanTreeModifyBtn" class="spare-tree-action-btn hidden"
                                 onclick="TVC_SpareMenu.startGroupHeaderEdit()"
-                                title="Modify group equipment info" aria-label="Modify">?�️</button>
+                                title="Modify group equipment info" aria-label="Modify">✏️</button>
                             <button type="button" id="actPlanTreeAppendBtn" class="spare-tree-action-btn hidden"
                                 onclick="TVC_App.openOrigGroupAdd()"
-                                title="Add group" aria-label="Append">??/button>
+                                title="Add group" aria-label="Append">➕</button>
                             <button type="button" id="actPlanTreeDeleteBtn" class="spare-tree-action-btn hidden"
                                 onclick="TVC_App.deleteOrigGroup()"
-                                title="Delete empty group" aria-label="Delete">?��</button>
+                                title="Delete empty group" aria-label="Delete">🗑</button>
                         </span>
                     </div>
                     <div class="tree-search-bar">
                         <div class="search-field-wrap">
-                            <input class="search-input" id="actTreeSearch" placeholder="Search GROUP?? oninput="TVC_App.setTreeSearch(this.value)">
+                            <input class="search-input" id="actTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
                             <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('actTreeSearch')">×</button>
                         </div>
                     </div>
                     <div class="tree-actions hidden" id="actTreeActions">
-                        <button type="button" id="actGroupAddBtn" class="btn btn-sm" onclick="TVC_App.openOrigGroupAdd()">??Add Group</button>
-                        <button type="button" id="actGroupRenameBtn" class="btn btn-sm" disabled onclick="TVC_App.openOrigGroupRename()">?�️ Rename Group</button>
+                        <button type="button" id="actGroupAddBtn" class="btn btn-sm" onclick="TVC_App.openOrigGroupAdd()">➕ Add Group</button>
+                        <button type="button" id="actGroupRenameBtn" class="btn btn-sm" disabled onclick="TVC_App.openOrigGroupRename()">✏️ Rename Group</button>
                     </div>
                     <div class="panel-body tree-scroll" id="actTree"></div>
                 </aside>
                 <main class="panel plan-main">
                     <div class="filter-bar orig-toolbar spare-item-toolbar act-plan-admin-toolbar">
-                        <button type="button" id="actModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">?�️ Modify</button>
-                        <button type="button" id="actAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">??Append</button>
-                        <button type="button" id="actDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">?�� Delete</button>
-                        <button type="button" id="actPmsMasterExportBtn" class="btn btn-sm btn-excel hidden" onclick="TVC_App.exportPmsMasterExcel()" title="Export PMS Master Excel (incheonchemi_pms_master_YYYYMMDD_001.xlsx)">?�� Master Export</button>
-                        <button type="button" id="actPmsMasterImportBtn" class="btn btn-sm hidden" onclick="TVC_App.triggerPmsMasterImport()" title="Import PMS Master Excel (incheonchemi_pms_master_YYYYMMDD_001.xlsx)">?�� Master Import</button>
+                        <button type="button" id="actModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">✏️ Modify</button>
+                        <button type="button" id="actAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">➕ Append</button>
+                        <button type="button" id="actDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">🗑 Delete</button>
+                        <button type="button" id="actPmsMasterExportBtn" class="btn btn-sm btn-excel hidden" onclick="TVC_App.exportPmsMasterExcel()" title="Export PMS Master Excel (incheonchemi_pms_master_YYYYMMDD_001.xlsx)">📤 Master Export</button>
+                        <button type="button" id="actPmsMasterImportBtn" class="btn btn-sm hidden" onclick="TVC_App.triggerPmsMasterImport()" title="Import PMS Master Excel (incheonchemi_pms_master_YYYYMMDD_001.xlsx)">📥 Master Import</button>
                         <input type="file" id="pmsMasterImportFile" accept=".xlsx" class="hidden" onchange="TVC_App.importPmsMasterExcel(this.files[0]); this.value='';">
                         <div class="tab-toolbar-end">
-                            <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', false)">?�� Print</button>
-                            <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', true)">?�� Preview</button>
+                            <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', false)">🖨 Print</button>
+                            <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', true)">👁 Preview</button>
                         </div>
                     </div>
                     <div id="actFilterDashboard" class="act-filter-dashboard"></div>
@@ -244,11 +244,11 @@
                                 </div>
                             </div>
                             <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearActualPeriod()">Clear</button>
-                            <span class="count-label" id="actCount">??/span>
+                            <span class="count-label" id="actCount">—</span>
                         </div>
                         <div class="filter-bar list-filter-search-row">
                             <div class="search-field-wrap">
-                                <input class="search-input spare-list-search-input" id="actSearch" placeholder="Search JOB CODE?? oninput="TVC_App.setSearch(this.value)">
+                                <input class="search-input spare-list-search-input" id="actSearch" placeholder="Search JOB CODE…" oninput="TVC_App.setSearch(this.value)">
                                 <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('actSearch')">×</button>
                             </div>
                         </div>
@@ -265,7 +265,7 @@
 
         <!-- TAB: Report History -->
         <section id="tab-history" class="tab-pane hidden">
-            <div class="sheet-head"><h2>?�� Report History</h2></div>
+            <div class="sheet-head"><h2>📜 Report History</h2></div>
             <div id="histScopeTabs" class="hist-scope-tabs" role="tablist" aria-label="Report History scope">
                 <button type="button" class="hist-scope-tab active" data-hist-scope="pms" onclick="TVC_App.setHistoryScope('pms')">PMS</button>
                 <button type="button" class="hist-scope-tab" data-hist-scope="spare" data-feature="showSpareTab" onclick="TVC_App.setHistoryScope('spare')">SPARE</button>
@@ -282,8 +282,8 @@
                     <button type="button" id="histBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_App.histModifyReport()">Modify</button>
                     <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
                     <div class="tab-toolbar-end">
-                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', false)">?�� Print</button>
-                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', true)">?�� Preview</button>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', false)">🖨 Print</button>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('history', true)">👁 Preview</button>
                     </div>
                 </div>
                 <div class="hist-toolbar hist-toolbar-filters list-filter-stack">
@@ -298,11 +298,11 @@
                             </div>
                         </div>
                         <button type="button" class="btn btn-sm act-period-clear" onclick="TVC_App.clearHistoryPeriodAndFilters()">Clear</button>
-                        <span class="count-label" id="histCount">??/span>
+                        <span class="count-label" id="histCount">—</span>
                     </div>
                     <div class="filter-bar list-filter-search-row">
                         <div class="search-field-wrap">
-                            <input class="search-input" id="histSearch" placeholder="Search JOB CODE / GROUP / DEFECT?? oninput="TVC_App.setSearch(this.value)">
+                            <input class="search-input" id="histSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_App.setSearch(this.value)">
                             <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('histSearch')">×</button>
                         </div>
                     </div>
@@ -345,7 +345,7 @@
                         <th class="hist-chk-h"><input type="checkbox" id="histSelectAll" title="Select all pending" onclick="TVC_App.toggleHistSelectAll(this.checked)"></th>
                         <th class="hist-type-h" title="W: Work Permit · M: Maintenance · D: Defect Report · P: Postponed · C: Consumption">Type</th>
                         <th class="hist-file-h">File No</th>
-                        <th class="hist-crit-h" title="Critical Equipment" aria-label="Critical Equipment">??/th>
+                        <th class="hist-crit-h" title="Critical Equipment" aria-label="Critical Equipment">⚠</th>
                         <th class="hist-code-h">JOB CODE</th>
                         <th class="hist-sort1-h">SORT-1</th>
                         <th class="hist-sort2-h">SORT-2</th>
@@ -381,7 +381,7 @@
             </div>
         </section>
 
-        <!-- TAB: SPARE (Unified ??Inventory · Search · Requisition) -->
+        <!-- TAB: SPARE (Unified — Inventory · Search · Requisition) -->
         <section id="tab-spare" class="tab-pane hidden">
             <div id="spareMenuBody"></div>
         </section>
@@ -440,8 +440,8 @@
         <h3 id="deptPickTitle">Select your department</h3>
         <p class="muted">Choose the correct department to keep data separated.</p>
         <div class="dept-pick-row">
-            <button class="btn dept-pick-btn engine" onclick="TVC_App.resolveDeptPick('ENGINE')">?�️<br>Engine</button>
-            <button class="btn dept-pick-btn deck" onclick="TVC_App.resolveDeptPick('DECK')">??br>Deck</button>
+            <button class="btn dept-pick-btn engine" onclick="TVC_App.resolveDeptPick('ENGINE')">⚙️<br>Engine</button>
+            <button class="btn dept-pick-btn deck" onclick="TVC_App.resolveDeptPick('DECK')">⚓<br>Deck</button>
         </div>
     </div>
 </div>
@@ -534,8 +534,8 @@
             <div class="settings-row">
                 <div class="settings-row-main">
                     <div class="settings-label">Location</div>
-                    <div id="settingsExportPath" class="settings-path">??/div>
-                    <div id="settingsExportNote" class="settings-note muted">??/div>
+                    <div id="settingsExportPath" class="settings-path">—</div>
+                    <div id="settingsExportNote" class="settings-note muted">—</div>
                 </div>
                 <div class="settings-row-actions">
                     <button type="button" id="settingsExportChangeBtn" class="btn btn-sm settings-outline-btn" onclick="TVC_Settings.changeExportFolder()">Change</button>
@@ -575,16 +575,16 @@
     <div class="modal-box runhrs-modal" onclick="event.stopPropagation()">
         <button type="button" class="modal-x" onclick="TVC_App.closeRunHoursModal()" aria-label="Close">×</button>
         <div class="sheet-head runhrs-modal-head">
-            <h2>??Running Hours</h2>
+            <h2>⏱ Running Hours</h2>
             <span class="sheet-sub">Run-hour based predictive scheduling · M/E &amp; No.1~3 G/E</span>
         </div>
         <div class="rh-content-frame">
             <div class="rh-toolbar filter-bar">
-                <button type="button" id="rhUpdateBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateRunHrs()">??Update</button>
-                <button type="button" id="rhRevertBtn" class="btn btn-sm" onclick="TVC_App.revertRunHrs()" disabled>??Revert</button>
+                <button type="button" id="rhUpdateBtn" class="btn btn-sm btn-green" onclick="TVC_App.updateRunHrs()">↻ Update</button>
+                <button type="button" id="rhRevertBtn" class="btn btn-sm" onclick="TVC_App.revertRunHrs()" disabled>↩ Revert</button>
                 <span class="rh-toolbar-sep" aria-hidden="true"></span>
                 <label class="rh-last-label" for="rhLastUpdated">Last Updated Date</label>
-                <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="?? aria-label="Last Updated Date">
+                <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="—" aria-label="Last Updated Date">
             </div>
             <div class="sheet-table-wrap list-table-scroll-wrap">
                 <table class="sheet-table runhrs-table">
@@ -652,7 +652,7 @@
         <h3 class="plan-update-title">Original Plan Update</h3>
         <p class="plan-update-msg">If 'OK' button was selected, 'Original Plan' would be updated and following figures would be recorded as final result.<br>
             If there were remained work report, please input them after selecting 'Cancel' button.</p>
-        <p class="plan-update-status">Status On : <strong id="planUpdateStatusDate">??/strong></p>
+        <p class="plan-update-status">Status On : <strong id="planUpdateStatusDate">—</strong></p>
         <table class="plan-update-table">
             <thead><tr><th>Item</th><th>Outstand'g</th><th>Monthly Planned</th><th>Rate (%)</th></tr></thead>
             <tbody>
@@ -697,14 +697,14 @@
 <div id="fileProtocolModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('fileProtocolModal')">
     <div class="modal-box">
         <button class="modal-x" onclick="TVC_App.closeModal('fileProtocolModal')">×</button>
-        <h3>?�️ Opening index.html directly (file://)</h3>
+        <h3>⚠️ Opening index.html directly (file://)</h3>
         <p>Browser security uses a <b>different storage</b> than localhost.</p>
         <ul class="file-protocol-list">
             <li>PMS/SPARE data may <b>appear empty</b> or Import may fail</li>
             <li>Data is <b>not shared</b> with <code>npm start</code></li>
         </ul>
         <p><b>Fix:</b> Double-click <code>START-TVC-PMS.bat</code> in the project folder<br>
-        (or run <code>npm start</code> ??<code>http://localhost:3000</code>)</p>
+        (or run <code>npm start</code> → <code>http://localhost:3000</code>)</p>
         <div class="modal-actions">
             <button class="btn btn-green" onclick="TVC_App.closeModal('fileProtocolModal')">OK</button>
         </div>
@@ -716,7 +716,7 @@
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/rbac.js?v=20260824-no-sub-del"></script>
 <script src="js/core/schema.js?v=20260824-no-sub-del"></script>
-<script src="js/core/db.js?v=20260825-dialog-en"></script>
+<script src="js/core/db.js?v=20260806-req-sort"></script>
 <script src="js/core/indexes.js?v=20260821-hide-detached"></script>
 <script src="js/core/spareIndexes.js?v=20260821-spare-group-src"></script>
 <script src="js/services/spareGroups.js?v=20260821-eq-pms-spare-split"></script>
@@ -731,35 +731,35 @@
 <script src="js/core/filename.js?v=20260825-spare-filename"></script>
 <script src="js/services/spareSync.js?v=20260825-spare-monthly-scope"></script>
 <script src="js/services/spareMeta.js"></script>
-<script src="js/ui/spareMenu.js?v=20260825-dialog-en"></script>
+<script src="js/ui/spareMenu.js?v=20260825-consume-nav"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
 <script src="js/services/inventoryService.js?v=20260824-stock-en2"></script>
-<script src="js/services/excel.js?v=20260825-dialog-en"></script>
+<script src="js/services/excel.js?v=20260822-quote-import-price"></script>
 <script src="js/core/pbkdf2-fallback.js"></script>
-<script src="js/space.js?v=20260825-dialog-en"></script>
+<script src="js/space.js?v=20260813-admin-mode"></script>
 <script src="js/license.js?v=20260813-admin-mode"></script>
 <script src="js/services/fileExport.js?v=20260821-monthly-xfer"></script>
-<script src="js/auth.js?v=20260825-dialog-en"></script>
+<script src="js/auth.js?v=20260813-admin-mode"></script>
 <script src="js/services/transaction.js?v=20260824-no-sub-del"></script>
 <script src="js/services/maintenancePlan.js?v=20260823-append-hdr"></script>
 <script src="js/services/pmsMasterExcel.js?v=20260823-alert-en"></script>
 <script src="js/services/spareCode.js"></script>
-<script src="js/services/spareMasterExcel.js?v=20260825-dialog-en"></script>
-<script src="js/services/defectCase.js?v=20260825-dialog-en"></script>
+<script src="js/services/spareMasterExcel.js?v=20260825-spare-filename"></script>
+<script src="js/services/defectCase.js?v=20260820-df-co-ce"></script>
 <script src="js/services/workPermitCase.js?v=20260824-captain-dept"></script>
 <script src="js/services/hubRelay.js?v=20260820-hub-relay"></script>
 <script src="js/services/workPermitSync.js?v=20260824-wp-attach"></script>
 <script src="js/services/defectSync.js?v=20260824-dc-mod"></script>
 <script src="js/services/postponeSync.js?v=20260824-hq-fwd"></script>
-<script src="js/services/sync.js?v=20260825-dialog-en"></script>
+<script src="js/services/sync.js?v=20260825-hist-scope"></script>
 <script src="js/services/masterBackup.js?v=20260823-spare-backup-fn"></script>
 <script src="js/services/vesselProfileSync.js?v=20260825-dialog-en"></script>
 <script src="js/services/appUpdate.js?v=20260825-dialog-en"></script>
 <script src="js/services/adminCommercial.js?v=20260817-admin-commercial"></script>
 <script src="js/services/adminSop.js?v=20260820-admin-deliver"></script>
-<script src="js/services/adminPrint.js?v=20260825-dialog-en"></script>
+<script src="js/services/adminPrint.js?v=20260824-ship-ver"></script>
 <script src="js/services/seatLicense.js?v=20260816-admin-seat"></script>
 <script src="js/services/setupExport.js?v=20260816-setup-handoff"></script>
 <script src="js/services/adminRelease.js?v=20260818-admin-release"></script>
@@ -775,7 +775,7 @@
 <script src="js/ui/workPermit.js?v=20260825-dialog-en"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
-<script src="js/app.js?v=20260825-dialog-en"></script>
+<script src="js/app.js?v=20260825-hist-scope"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>
