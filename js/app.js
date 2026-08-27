@@ -1412,7 +1412,18 @@ const TVC_App = (function () {
             return Promise.resolve(dept);
         }
         return new Promise((resolve) => {
+            const hideMenuXfer = isModalOpen('menuXferModal');
+            if (hideMenuXfer) {
+                closeModal('menuXferModal');
+                state._deptPickRestoreMenuXfer = true;
+            }
             state._deptPickResolve = (dept) => {
+                if (!dept && state._deptPickRestoreMenuXfer) {
+                    state._deptPickRestoreMenuXfer = false;
+                    showModal('menuXferModal');
+                } else if (dept) {
+                    state._deptPickRestoreMenuXfer = false;
+                }
                 if (cb) cb(dept);
                 resolve(dept || null);
             };
