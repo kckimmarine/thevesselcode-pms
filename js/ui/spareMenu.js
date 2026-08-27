@@ -2532,6 +2532,7 @@ const TVC_SpareMenu = (function () {
     function init(opts) {
         getState = opts.getState || getState;
         refresh = opts.refresh || refresh;
+        bindFileInputs();
     }
 
     let _sparesCacheScopeKey = '';
@@ -5460,7 +5461,6 @@ const TVC_SpareMenu = (function () {
         <input type="file" id="srCsvUploadFile" accept=".csv" class="hidden">
         <input type="file" id="srInventoryImportFile" accept=".csv,.xls,.xlsx" class="hidden">
         <input type="file" id="spareHqImportFile" accept=".json" class="hidden">
-        <input type="file" id="spareXferImportFile" accept=".json,.xlsx,.xls,.csv" class="hidden">
         <input type="file" id="spareMasterImportFile" accept=".xlsx" class="hidden" onchange="TVC_App.importSpareMasterExcel(this.files[0]); this.value='';">`;
 
         renderSpareGroupTree();
@@ -12842,6 +12842,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function openSpareSyncMenu() {
+        bindFileInputs();
         resetSpareXfer();
         renderSpareXferModal();
         showSpicsModal('spareSyncModal');
@@ -12933,7 +12934,10 @@ const TVC_SpareMenu = (function () {
         const mode = kind || 'general';
         _spareXfer.importKind = mode;
         const fi = document.getElementById('spareXferImportFile');
-        if (!fi) return;
+        if (!fi) {
+            await TVC_Dialog.alert('File picker is unavailable. Reload the app and try again.');
+            return;
+        }
         if (mode === 'evaluation') {
             fi.setAttribute('accept', '.zip,.json,.xlsx,application/zip,application/json,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
         } else if (mode === 'inventory') {
@@ -24010,7 +24014,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         refreshWrSpareJobContext,
         onTxSearchInput, addTxLine, removeTxLine,
         openHqImportModal, onHqImportFile, openAssessmentModal, closeAssessmentModal, applyHqAssessment,
-        openSpareSyncMenu, closeSpareSyncMenu, spareXferPickMode, spareXferBack, spareXferSelectVesselImportType, spareXferSelectMasterImportType, spareXferSelectHqImportType, spareXferTriggerImport,
+        openSpareSyncMenu, closeSpareSyncMenu, spareXferPickMode, spareXferBack, spareXferSelectVesselImportType, spareXferSelectMasterImportType, spareXferSelectHqImportType, spareXferTriggerImport, onSpareXferImportFile,
         spareXferOpenReqExportList, spareXferOpenQuotationExportList, spareXferOpenReplyEvalExportList, spareXferOpenPurchaseOrderExportList,
         spareXferOpenReceivedExportList, spareXferExportRequisitions, spareXferExportReceived, spareXferExportInventory,
         reqListXferExportBack,

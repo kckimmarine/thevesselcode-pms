@@ -1,7 +1,7 @@
 /* THE VESSEL CODE — Master Data Backup / Restore (Menu PMS · SPARE) */
 const TVC_MasterBackup = (function () {
     const KIND = 'TVC_MASTER_BACKUP';
-    const VERSION = 1;
+    const VERSION = 2;
 
     const SCOPE = {
         PMS: 'pms',
@@ -13,6 +13,14 @@ const TVC_MasterBackup = (function () {
         'maintenance_groups',
         'ship_components',
         'job_bom',
+        'daily_work_reports',
+        'defect_cases',
+    ];
+
+    /** Work Report · Defect Case — vessel/department scoped replace (Outstanding Postponed/Defect) */
+    const PMS_OPERATIONAL_STORES = [
+        'daily_work_reports',
+        'defect_cases',
     ];
 
     const SPARE_STORES = [
@@ -120,13 +128,85 @@ const TVC_MasterBackup = (function () {
         return meta;
     }
 
-    async function collectStores(storeNames, vesselId) {
+    function normDept(dept) {
+        return String(dept || '').trim().toUpperCase();
+    }
+
+    function rowBelongsToVessel(row, vesselId) {
+        if (!vesselId) return true;
+        const vid = String(vesselId).trim();
+        const rowVid = String(row?.vessel_id || '').trim();
+        if (!rowVid) return true;
+        return rowVid === vid;
+    }
+
+    function buildJobDeptByCode(jobs) {
+        const map = new Map();
+        for (const job of jobs || []) {
+            const code = String(job?.job_code || '').trim();
+            const dept = normDept(job?.department);
+            if (!code || !dept) continue;
+            const prev = map.get(code);
+            if (!prev) map.set(code, dept);
+            else if (prev !== dept) {
+                if (typeof prev === 'string') map.set(code, [prev, dept]);
+                else if (Array.isArray(prev) && !prev.includes(dept)) prev.push(dept);
+            }
+        }
+        return map;
+    }
+
+    function filterOperationalRows(storeName, rows, vesselId, dept, jobDeptByCode) {
+        const wantDept = normDept(dept);
+        return (rows || []).filter(row => {
+            if (!rowBelongsToVessel(row, vesselId)) return false;
+            if (storeName === 'daily_work_reports') {
+                if (!wantDept) return true;
+                if (typeof TVC_WorkReport !== 'undefined') {
+                    return TVC_WorkReport.belongsToDepartment(row, wantDept, jobDeptByCode);
+                }
+                const own = normDept(row?.department);
+                return !own || own === wantDept;
+            }
+            if (storeName === 'defect_cases') {
+                if (!wantDept) return true;
+                if (typeof TVC_DefectCase !== 'undefined') {
+                    return TVC_DefectCase.belongsToDepartment(row, wantDept);
+                }
+                const own = normDept(row?.department);
+                return !own || own === wantDept;
+            }
+            return true;
+        });
+    }
+
+    function isOperationalStore(storeName) {
+        return PMS_OPERATIONAL_STORES.includes(storeName);
+    }
+
+    async function collectStores(storeNames, vesselId, opts = {}) {
         const stores = {};
+        const dept = normDept(opts.department);
+        let jobDeptByCode = null;
+
         for (const name of storeNames) {
             let rows = await TVC_DB.getAll(name).catch(() => []);
             if (vesselId && typeof TVC_MasterVesselScope !== 'undefined'
                 && TVC_MasterVesselScope.MASTER_STORES.includes(name)) {
                 rows = TVC_MasterVesselScope.filterRows(rows, vesselId);
+            }
+            if (isOperationalStore(name)) {
+                if (!jobDeptByCode) {
+                    const jobs = stores.maintenance_jobs
+                        || (typeof TVC_MasterVesselScope !== 'undefined'
+                            ? TVC_MasterVesselScope.filterRows(
+                                await TVC_DB.getAll('maintenance_jobs').catch(() => []),
+                                vesselId,
+                            )
+                            : await TVC_DB.getAll('maintenance_jobs').catch(() => []));
+                    jobDeptByCode = buildJobDeptByCode(jobs);
+                }
+                rows = filterOperationalRows(name, rows, vesselId, dept, jobDeptByCode);
             }
             stores[name] = rows;
         }
@@ -135,7 +215,7 @@ const TVC_MasterBackup = (function () {
 
     async function buildPayload(scope, user, opts = {}) {
         const vesselId = await resolveVesselId(user, opts);
-        const stores = await collectStores(storesFor(scope), vesselId);
+        const stores = await collectStores(storesFor(scope), vesselId, opts);
         const meta = await collectMeta(metaKeysFor(scope));
         const payload = {
             kind: KIND,
@@ -143,6 +223,7 @@ const TVC_MasterBackup = (function () {
             scope,
             exported_at: new Date().toISOString(),
             vessel_id: vesselId,
+            department: normDept(opts.department) || null,
             account_type: user?.account_type || '',
             exported_by: user?.username || '',
             stores,
@@ -166,10 +247,15 @@ const TVC_MasterBackup = (function () {
             'THE VESSEL CODE — Master Data Backup',
             `Scope: ${scopeLabel(scope)}`,
             `Vessel: ${payload.vessel_id}`,
+            payload.department ? `Department: ${payload.department}` : '',
             `Exported: ${payload.exported_at}`,
             '',
+            scope === SCOPE.PMS
+                ? 'Includes: Jobs, Groups, Equipment, BOM, Running Hours, Work Reports (Postpone), Defect Cases.'
+                : '',
+            '',
             'Restore: Menu/SPARE → Database Backup & Restore → Restore',
-        ].join('\n'));
+        ].filter(Boolean).join('\n'));
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         const filename = await buildBackupFilename(scope, payload.vessel_id, opts.department || user?.department);
         await TVC_FileExport.save(blob, filename);
@@ -206,11 +292,41 @@ const TVC_MasterBackup = (function () {
         return JSON.parse(await jsonFile.async('string'));
     }
 
-    async function replaceStore(storeName, rows, vesselId) {
+    async function clearOperationalStore(storeName, vesselId, dept, jobDeptByCode) {
+        const rows = await TVC_DB.getAll(storeName).catch(() => []);
+        let n = 0;
+        for (const row of rows) {
+            if (!filterOperationalRows(storeName, [row], vesselId, dept, jobDeptByCode).length) continue;
+            await TVC_DB.del(storeName, row.id);
+            n++;
+        }
+        return n;
+    }
+
+    async function replaceStore(storeName, rows, vesselId, opts = {}) {
         const list = Array.isArray(rows) ? rows : [];
+        const dept = normDept(opts.department);
         const masterScoped = typeof TVC_MasterVesselScope !== 'undefined'
             && vesselId
             && TVC_MasterVesselScope.MASTER_STORES.includes(storeName);
+        if (isOperationalStore(storeName)) {
+            const jobs = opts.maintenanceJobs
+                || (typeof TVC_MasterVesselScope !== 'undefined'
+                    ? TVC_MasterVesselScope.filterRows(
+                        await TVC_DB.getAll('maintenance_jobs').catch(() => []),
+                        vesselId,
+                    )
+                    : await TVC_DB.getAll('maintenance_jobs').catch(() => []));
+            const jobDeptByCode = buildJobDeptByCode(jobs);
+            await clearOperationalStore(storeName, vesselId, dept, jobDeptByCode);
+            const stamped = list.map(r => {
+                const copy = { ...r };
+                if (vesselId && !copy.vessel_id) copy.vessel_id = vesselId;
+                return copy;
+            });
+            if (stamped.length) await TVC_DB.bulkPut(storeName, stamped);
+            return stamped.length;
+        }
         if (masterScoped) {
             await TVC_MasterVesselScope.clearVesselStore(storeName, vesselId);
             const stamped = list.map(r => {
@@ -247,9 +363,24 @@ const TVC_MasterBackup = (function () {
         }
 
         const storeNames = storesFor(scope);
+        const restoreDept = normDept(opts.department) || normDept(payload.department);
+        const restoreJobs = payload.stores?.maintenance_jobs || [];
+        const replaceOpts = {
+            department: restoreDept,
+            maintenanceJobs: restoreJobs,
+        };
         const counts = {};
         for (const name of storeNames) {
-            counts[name] = await replaceStore(name, payload.stores?.[name] || [], expectedVessel);
+            if (isOperationalStore(name)
+                && !Object.prototype.hasOwnProperty.call(payload.stores || {}, name)) {
+                continue;
+            }
+            counts[name] = await replaceStore(
+                name,
+                payload.stores?.[name] || [],
+                expectedVessel,
+                replaceOpts,
+            );
         }
 
         const meta = payload.meta || {};

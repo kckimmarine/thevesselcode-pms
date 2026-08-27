@@ -92,6 +92,21 @@ const TVC_Sync = (function () {
         }
     }
 
+    /** Engine/Deck station PCs must Export to Master — not Import STATION_TO_HUB ZIP locally. */
+    function stationExportImportDeniedMessage(fileDept) {
+        const deptHint = fileDept ? ` (${TVC_RBAC.getDeptLabel(fileDept)} toggle)` : '';
+        const crossDept = fileDept === 'ENGINE'
+            ? 'Engine export is not applied in Deck Mode.'
+            : fileDept === 'DECK'
+                ? 'Deck export is not applied in Engine Mode.'
+                : 'Engine/Deck export is not applied in the other department Mode.';
+        return (
+            `Import station export ZIP in Master Mode or HQ Mode${deptHint}.\n\n`
+            + `${crossDept}\n\n`
+            + 'On Engine/Deck station PCs, use Export to send data to Master — do not import station export ZIP here.'
+        );
+    }
+
     /** Enforce Engine/Deck import routing — Master·HQ toggle, station direct HQ reply, no cross-dept merge. */
     function validateImportPackageScope(user, file, payload, opts = {}) {
         const direction = String(payload?.export_meta?.direction || '');
@@ -106,9 +121,7 @@ const TVC_Sync = (function () {
 
         if (direction === 'STATION_TO_HUB') {
             if (isEngineStation || isDeckStation) {
-                throw new Error(
-                    `Import Station export ZIP in Master Mode or HQ Mode${fileDept ? ` (${TVC_RBAC.getDeptLabel(fileDept)} toggle)` : ''}.\n\n${fileDept === 'ENGINE' ? 'Engine export is not applied in Deck Mode.' : fileDept === 'DECK' ? 'Deck export is not applied in Engine Mode.' : 'Engine/Deck export is not applied in the other department Mode.'}`
-                );
+                throw new Error(stationExportImportDeniedMessage(fileDept));
             }
             if (!isMaster && !isHq) {
                 throw new Error('Station export ZIP can be imported in Master Mode or HQ Mode.');
@@ -1185,6 +1198,6 @@ const TVC_Sync = (function () {
         getHistory, recordSyncHistory, isSpareSyncHistoryRow, isPmsSyncHistoryRow,
         validateImportVesselId, validateImportPackageScope, resolveFileDepartment,
         resolveActiveImportDepartment, resolveExpectedVesselId,
-        assertLicenseForPackage, licensedCompanyId,
+        assertLicenseForPackage, licensedCompanyId, stationExportImportDeniedMessage,
     };
 })();

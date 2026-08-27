@@ -3520,12 +3520,17 @@ input.tvc-date-input::placeholder {
     font-variant-numeric: tabular-nums;
 }
 .runhrs-table td.rh-prev .rh-input,
-.runhrs-table td.rh-total-cell .rh-input,
 .runhrs-table td.rh-exp .rh-input {
     display: block;
     margin-left: auto;
     margin-right: auto;
     width: min(100px, 92%);
+}
+.runhrs-table td.rh-total-cell .rh-total-display {
+    display: inline-block;
+    min-width: 72px;
+    padding: 6px 8px;
+    text-align: center;
 }
 .rh-total { font-weight: 700; color: #1a365d; font-variant-numeric: tabular-nums; }
 .rh-total.rh-total-live { color: #276749; background: #f0fff4; }

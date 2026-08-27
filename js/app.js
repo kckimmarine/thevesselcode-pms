@@ -6382,8 +6382,14 @@ const TVC_App = (function () {
                         return;
                     }
                     throw new Error(
-                        'Import Engine/Deck station export ZIP in Master Mode or HQ Mode (matching department toggle). ' +
-                        'Engine export cannot be imported in Deck Mode.'
+                        typeof TVC_Sync.stationExportImportDeniedMessage === 'function'
+                            ? TVC_Sync.stationExportImportDeniedMessage(
+                                payload.export_meta?.department
+                                    || (typeof TVC_Sync.resolveFileDepartment === 'function'
+                                        ? TVC_Sync.resolveFileDepartment(payload, file.name)
+                                        : null),
+                            )
+                            : 'Import station export ZIP in Master Mode or HQ Mode (matching department toggle).'
                     );
                 }
                 if (TVC_RBAC.isHqAccount(user) && (dir === 'SHIP_TO_HQ' || payload.export_meta?.package_type === 'COMPANY_REPORT')) {
@@ -12769,7 +12775,6 @@ const TVC_App = (function () {
     function revertRunHrs() { return TVC_RunHours.revert(); }
     function saveRunHrs(i) { return TVC_RunHours.save(i); }
     function runHrsPreview(i) { TVC_RunHours.preview(i); }
-    function runHrsTotalEdit(i) { TVC_RunHours.totalEdit(i); }
 
     // ── TAB: Unified SPARE ────────────────────────────────────────────
     function spareSessionUser() {
@@ -16879,7 +16884,7 @@ const TVC_App = (function () {
     function masterBackupSubject() {
         return _masterBackupScope === 'spare'
             ? 'SPARE Master Data (Spare Parts · Catalog)'
-            : 'Menu (PMS) Master Data (Jobs · Groups · Equipment · BOM · Running Hours)';
+            : 'Menu (PMS) Master Data (Jobs · Groups · Equipment · BOM · Running Hours · Work Reports · Defect Cases)';
     }
 
     async function paintMasterBackupCopy() {
@@ -17351,7 +17356,7 @@ const TVC_App = (function () {
         
         selectJobRow,
         selectSpareRow, focusSpareRow, toggleSpareRow, syncSpareItemToolbar, spareActionIds, canEditSpareItems, openSpareAppend, openSpareModify, deleteSpareItem,
-        saveRunHrs, updateRunHrs, revertRunHrs, runHrsPreview, runHrsTotalEdit,
+        saveRunHrs, updateRunHrs, revertRunHrs, runHrsPreview,
         openRunHoursModal, closeRunHoursModal,
         updateOriginalPlanFromRunHours, approveWorkPlanFromHq,
         openOrigJobModify, openOrigJobAppend, saveOrigJobEditor, saveOrigJobInlineEdit, cancelOrigJobInlineEdit, deleteOrigJob,

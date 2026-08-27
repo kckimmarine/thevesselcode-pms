@@ -1,9 +1,9 @@
 /* THE VESSEL CODE — Predictive Maintenance Engine (Run-hour based scheduling)
  *
- * 시간 기반(Run-hour based)으로 관리되는 정비 항목의 Due Date를 장비 가동시간으로 재계산한다.
+ * 월간 Update: Last Month 가동시간 입력 → Total 자동 누적 → Estimated 월간 가동시간으로 Due Date 산출
  * - 대상 장비 그룹: 01. MAIN ENGINE, 03. No.1 G/E, 04. No.2 G/E, 05. No.3 G/E
  * - 대상 정비 항목: unit === 'H' (시간 주기)
- * - 공식: (주기 - 사이클 내 누적시간) / 예상 월간 운전시간 = 정비까지 남은 개월수
+ * - 공식: (주기 - 사이클 내 누적시간) / Estimated Run Hours Next month = 정비까지 남은 개월수
  */
 const TVC_PMS = (function () {
     // 시간 기반으로 관리하는 장비 그룹 (GROUP 접두 번호 기준)

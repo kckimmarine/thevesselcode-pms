@@ -1,7 +1,7 @@
 /* THE VESSEL CODE — Running Hours UI
  *
- * 시간 기반 관리 장비(M/E, No.1~3 G/E)의 가동시간을 입력/누적하고,
- * TVC_PMS.updateMaintenanceSchedule 로 Due Date 를 재계산한다.
+ * 월간 Update: Last Month Run Hours 입력 → Total 자동 합산(저장 Total + Last)
+ * → Estimated Run Hours Next month 로 NEXT DATE 재계산 (TVC_PMS.updateMaintenanceSchedule).
  */
 const TVC_RunHours = (function () {
     let ctx = null; // { getState: () => state, refresh: async () => {} }
@@ -119,50 +119,44 @@ const TVC_RunHours = (function () {
             const rec = store[n.key] || {};
             const total = Number(rec.totalRunHours) || 0;
             const hourJobs = n.jobIds.filter(id => TVC_PMS.isRunHourJob(state.idx.jobById.get(id))).length;
+            const totalCls = ['rh-total', 'rh-total-display', fieldsEditable ? 'rh-total-auto' : 'rh-readonly'].filter(Boolean).join(' ');
             return `<tr>
                 <td class="rh-equip"><strong>${esc(n.label)}</strong></td>
                 <td class="rh-jobs">${hourJobs}</td>
                 <td class="rh-prev"><input type="number" min="0" step="1" class="rh-input${fieldsEditable ? '' : ' rh-readonly'}" id="rh-prev-${i}" placeholder="0"${ro}
                     oninput="TVC_App.runHrsPreview(${i})"></td>
-                <td class="rh-total-cell"><input type="number" min="0" step="1" class="rh-input rh-total${fieldsEditable ? '' : ' rh-readonly'}" id="rh-total-${i}"
-                    data-base="${total}" value="${total}"${ro}
-                    oninput="TVC_App.runHrsTotalEdit(${i})"></td>
+                <td class="rh-total-cell"><span class="${totalCls}" id="rh-total-${i}" data-base="${total}" aria-label="Total Run Hours (auto)">${total.toLocaleString()}</span></td>
                 <td class="rh-exp"><input type="number" min="0" step="1" class="rh-input${fieldsEditable ? '' : ' rh-readonly'}" id="rh-exp-${i}"
                     value="${rec.expectedNextMonth ?? ''}" placeholder="0"${ro}></td>
             </tr>`;
         }).join('');
     }
 
-    /** Actual Run Hours Previous Month 입력 시 Total Run Hours 실시간 합산 미리보기 */
-    function preview(i) {
-        const prevEl = document.getElementById('rh-prev-' + i);
-        const totalEl = document.getElementById('rh-total-' + i);
-        if (!prevEl || !totalEl) return;
-        const base = Number(totalEl.dataset.base) || 0;
-        const add = Number(prevEl.value) || 0;
-        totalEl.value = add ? base + add : base;
-        totalEl.classList.toggle('rh-total-live', add !== 0);
-    }
-
-    /** Total Run Hours 직접 수정 시 미리보기 하이라이트 해제 */
-    function totalEdit(i) {
+    function syncTotalDisplay(i) {
         const prevEl = document.getElementById('rh-prev-' + i);
         const totalEl = document.getElementById('rh-total-' + i);
         if (!totalEl) return;
         const base = Number(totalEl.dataset.base) || 0;
-        const cur = Number(totalEl.value) || 0;
         const add = Number(prevEl?.value) || 0;
-        const fromPreview = add !== 0 && cur === base + add;
-        totalEl.classList.toggle('rh-total-live', fromPreview);
+        const next = base + add;
+        totalEl.textContent = next.toLocaleString();
+        totalEl.classList.toggle('rh-total-live', add !== 0);
+    }
+
+    /** Last Month Run Hours 입력 시 Total Run Hours 자동 합산 표시 */
+    function preview(i) {
+        syncTotalDisplay(i);
     }
 
     function collectRowInput(i) {
         const prevEl = document.getElementById('rh-prev-' + i);
         const totalEl = document.getElementById('rh-total-' + i);
         const expEl = document.getElementById('rh-exp-' + i);
+        const base = Number(totalEl?.dataset.base) || 0;
+        const add = Number(prevEl?.value) || 0;
         return {
-            add: Number(prevEl?.value) || 0,
-            newTotal: Number(totalEl?.value) || 0,
+            add,
+            newTotal: base + add,
             expected: Number(expEl?.value) || 0,
         };
     }
@@ -208,6 +202,25 @@ const TVC_RunHours = (function () {
         }
 
         const storeBefore = TVC_PMS.readStore();
+        const needsEstimate = [];
+        for (let i = 0; i < nodes.length; i++) {
+            const n = nodes[i];
+            const hourJobs = n.jobIds.filter(id => TVC_PMS.isRunHourJob(state.idx.jobById.get(id))).length;
+            if (!hourJobs) continue;
+            const { add, expected } = collectRowInput(i);
+            const rec = storeBefore[n.key] || {};
+            const prevTotal = Number(rec.totalRunHours) || 0;
+            const willRecalc = add > 0 || prevTotal > 0;
+            if (willRecalc && expected <= 0) needsEstimate.push(n.label);
+        }
+        if (needsEstimate.length) {
+            await TVC_Dialog.alert(
+                'Enter Estimated Run Hours Next month for equipment with run-hour jobs.\n\n' +
+                needsEstimate.join('\n')
+            );
+            return;
+        }
+
         revertSnapshot = {
             store: JSON.parse(JSON.stringify(storeBefore)),
             lastUpdatedDate: readLastUpdatedDate(storeBefore),
@@ -251,7 +264,7 @@ const TVC_RunHours = (function () {
         await TVC_Dialog.alert(
             `Running Hours updated · ${updatedYmd}\n\n` +
             (summaries.length ? summaries.join('\n') + '\n\n' : '') +
-            `Recalculated due dates for ${res.changed} run-hour job(s).${resetNote}`
+            `Recalculated NEXT DATE for ${res.changed} run-hour job(s) using Estimated monthly hours.${resetNote}`
         );
     }
 
@@ -303,7 +316,7 @@ const TVC_RunHours = (function () {
     async function save(i) { return updateAll(); }
 
     return {
-        init, render, preview, totalEdit, updateAll, revert, save,
+        init, render, preview, updateAll, revert, save,
         hasPendingRevert, syncRhToolbarUi, resetInputEditMode, clearRevertAfterPlanLock,
     };
 })();

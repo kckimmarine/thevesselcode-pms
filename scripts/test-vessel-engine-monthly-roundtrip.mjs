@@ -461,7 +461,7 @@ async function main() {
 
         assertThrows('Engine station cannot import its own STATION_TO_HUB on Engine PC', () => {
             Sync.validateImportPackageScope(CE, engineFile, engineStationZip);
-        }, /Master Mode 또는 HQ Mode/);
+        }, /Import station export ZIP in Master Mode or HQ Mode/);
 
         global.TVC_App.getAppDepartment = () => 'ENGINE';
         assert('Master + Engine toggle accepts Engine station export',
@@ -472,11 +472,11 @@ async function main() {
         global.TVC_App.getAppDepartment = () => 'DECK';
         assertThrows('HQ Deck toggle rejects Engine station export', () => {
             Sync.validateImportPackageScope(HQ, engineFile, engineStationZip);
-        }, /부서 불일치/);
+        }, /Department mismatch/);
 
         assertThrows('Deck station rejects Engine station export', () => {
             Sync.validateImportPackageScope(deckUser, engineFile, engineStationZip);
-        }, /Deck Mode에 반영되지 않습니다|Master Mode 또는 HQ Mode/);
+        }, /Deck export is not applied in Engine Mode|Import station export ZIP in Master Mode or HQ Mode/);
 
         global.TVC_App.getAppDepartment = () => 'ENGINE';
         assert('Engine station accepts HQ engine reply (direct path)',
@@ -484,7 +484,7 @@ async function main() {
 
         assertThrows('Deck station rejects Engine HQ reply', () => {
             Sync.validateImportPackageScope(deckUser, hqReplyFile, hqReply);
-        }, /Deck Mode에 반영되지 않습니다/);
+        }, /Engine HQ reply is not applied in Deck Mode/);
 
         global.TVC_App.getAppDepartment = () => 'ENGINE';
     });

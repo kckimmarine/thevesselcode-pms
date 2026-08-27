@@ -390,6 +390,7 @@
     <input type="file" id="importZip" accept=".zip" hidden onchange="TVC_App.handleImport(this.files[0]);this.value=''">
     <input type="file" id="importStation" accept=".zip,.json,.csv" hidden onchange="TVC_App.handleHubImport(this.files[0]);this.value=''">
     <input type="file" id="menuXferImportFile" accept=".zip,.json,.csv" hidden onchange="TVC_App.onMenuXferImportFile(this.files[0]);this.value=''">
+    <input type="file" id="spareXferImportFile" accept=".zip,.json,.xlsx,.xls,.csv" hidden onchange="TVC_SpareMenu.onSpareXferImportFile(this.files[0]);this.value=''">
     <input type="file" id="menuXferAppUpdateSetupFile" accept=".exe,application/vnd.microsoft.portable-executable" hidden
         onchange="TVC_App.menuXferAppUpdateOnSetupFile(this.files &amp;&amp; this.files[0]); this.value='';">
     <input type="file" id="importDefectUrgent" accept=".zip" hidden onchange="TVC_App.handleDefectImport(this.files[0]);this.value=''">
@@ -511,7 +512,7 @@
     <div class="modal-box spare-sync-modal" onclick="event.stopPropagation()">
         <button type="button" class="modal-x" onclick="TVC_App.closeMasterBackupModal()" aria-label="Close">×</button>
         <h3 class="spare-sync-title" id="masterBackupTitle">Database Backup &amp; Restore</h3>
-        <p class="spare-sync-hint" id="masterBackupHint">Back up or restore Menu (PMS) Master Data (Jobs · Groups · Equipment · BOM · Running Hours).</p>
+        <p class="spare-sync-hint" id="masterBackupHint">Back up or restore Menu (PMS) Master Data (Jobs · Groups · Equipment · BOM · Running Hours · Work Reports · Defect Cases).</p>
         <p class="spare-sync-note muted" id="masterBackupNote"></p>
         <div class="spare-sync-actions">
             <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.runMasterBackup()">Backup</button>
@@ -576,7 +577,7 @@
         <button type="button" class="modal-x" onclick="TVC_App.closeRunHoursModal()" aria-label="Close">×</button>
         <div class="sheet-head runhrs-modal-head">
             <h2>⏱ Running Hours</h2>
-            <span class="sheet-sub">Run-hour based predictive scheduling · M/E &amp; No.1~3 G/E</span>
+            <span class="sheet-sub">Last month hours + auto total · NEXT DATE from estimated monthly hours · M/E &amp; No.1~3 G/E</span>
         </div>
         <div class="rh-content-frame">
             <div class="rh-toolbar filter-bar">
@@ -598,8 +599,8 @@
                     <thead><tr>
                         <th class="rh-equip-h">Group / Equipment</th>
                         <th class="rh-jobs-h">Run hour Jobs</th>
-                        <th class="rh-hours-h">Actual Run Hours<br>Previous Month</th>
-                        <th class="rh-hours-h">Total Run Hours</th>
+                        <th class="rh-hours-h">Last Month<br>Run Hours</th>
+                        <th class="rh-hours-h">Total Run Hours<br><span class="muted" style="font-weight:400">(auto)</span></th>
                         <th class="rh-hours-h">Estimated Run Hours<br>Next month</th>
                     </tr></thead>
                     <tbody id="runHrsBody"></tbody>
@@ -726,12 +727,12 @@
 <script src="js/ui/modalDrag.js?v=20260810-modal-nodrag"></script>
 <script src="js/ui/dialog.js?v=20260825-dialog-en"></script>
 <script src="js/ui/attachments.js?v=20260820-preview"></script>
-<script src="js/ui/runHours.js?v=20260824-pp-no-co"></script>
+<script src="js/ui/runHours.js?v=20260826-rh-last-auto"></script>
 <script src="js/services/vendors.js?v=20260802-req-list-filter"></script>
 <script src="js/core/filename.js?v=20260825-spare-filename"></script>
 <script src="js/services/spareSync.js?v=20260825-spare-monthly-scope"></script>
 <script src="js/services/spareMeta.js"></script>
-<script src="js/ui/spareMenu.js?v=20260826-spare-eq-code"></script>
+<script src="js/ui/spareMenu.js?v=20260826-spare-xfer-import"></script>
 <script src="js/ui/spareRequest.js"></script>
 <script src="js/services/jobMeta.js"></script>
 <script src="js/services/inventory.js"></script>
@@ -754,8 +755,8 @@
 <script src="js/services/workPermitSync.js?v=20260824-wp-attach"></script>
 <script src="js/services/defectSync.js?v=20260824-dc-mod"></script>
 <script src="js/services/postponeSync.js?v=20260824-hq-fwd"></script>
-<script src="js/services/sync.js?v=20260825-hist-scope"></script>
-<script src="js/services/masterBackup.js?v=20260823-spare-backup-fn"></script>
+<script src="js/services/sync.js?v=20260827-station-import-en"></script>
+<script src="js/services/masterBackup.js?v=20260827-pms-backup-operational"></script>
 <script src="js/services/vesselProfileSync.js?v=20260825-dialog-en"></script>
 <script src="js/services/appUpdate.js?v=20260825-dialog-en"></script>
 <script src="js/services/adminCommercial.js?v=20260817-admin-commercial"></script>
