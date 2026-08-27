@@ -161,6 +161,49 @@ const TVC_RunHours = (function () {
         };
     }
 
+    /** Run-hour job Work Plan fields — Revert 시 Update 직전 NEXT DATE 복원용 */
+    function snapshotRunHourJobs(state) {
+        const out = [];
+        for (const job of (state.jobs || [])) {
+            if (!TVC_PMS.isRunHourJob(job) || !TVC_PMS.isTrackedGroup(job.group)) continue;
+            if (job.schedule_basis === 'POSTPONE') continue;
+            out.push({
+                id: job.id,
+                next_date: job.next_date ?? null,
+                is_overdue: !!job.is_overdue,
+                schedule_basis: job.schedule_basis ?? null,
+                original_next_date: job.original_next_date ?? null,
+                run_hours_total: job.run_hours_total ?? null,
+                run_hours_expected: job.run_hours_expected ?? null,
+            });
+        }
+        return out;
+    }
+
+    async function restoreRunHourJobSnapshots(state, snapshots) {
+        if (!snapshots?.length || typeof TVC_DB === 'undefined') return 0;
+        const byId = new Map((state.jobs || []).map(j => [j.id, j]));
+        const ts = new Date().toISOString();
+        let n = 0;
+        for (const snap of snapshots) {
+            const job = byId.get(snap.id);
+            if (!job) continue;
+            job.next_date = snap.next_date;
+            job.is_overdue = snap.is_overdue;
+            job.schedule_basis = snap.schedule_basis;
+            job.original_next_date = snap.original_next_date;
+            if (snap.run_hours_total != null) job.run_hours_total = snap.run_hours_total;
+            else delete job.run_hours_total;
+            if (snap.run_hours_expected != null) job.run_hours_expected = snap.run_hours_expected;
+            else delete job.run_hours_expected;
+            job.updated_at = ts;
+            job.sync_status = job.sync_status === 'SYNCED' ? 'PENDING_SYNC' : (job.sync_status || 'LOCAL');
+            await TVC_DB.put('maintenance_jobs', job);
+            n++;
+        }
+        return n;
+    }
+
     /** Update: 1st click → unlock inputs; 2nd click (Apply Update) → save */
     async function updateAll() {
         if (!canEditRh()) {
@@ -224,6 +267,7 @@ const TVC_RunHours = (function () {
         revertSnapshot = {
             store: JSON.parse(JSON.stringify(storeBefore)),
             lastUpdatedDate: readLastUpdatedDate(storeBefore),
+            jobs: snapshotRunHourJobs(state),
         };
 
         const store = TVC_PMS.readStore();
@@ -280,18 +324,21 @@ const TVC_RunHours = (function () {
         }
         if (!await TVC_Dialog.confirm({
             kind: 'warning',
-            message: 'Revert the last Running Hours update?\nWork Plan due dates will be recalculated.',
+            message: 'Revert the last Running Hours update?\nWork Plan NEXT DATE values will return to their pre-update state.',
         })) {
             return;
         }
 
+        const jobSnaps = revertSnapshot.jobs || [];
         TVC_PMS.writeStore(JSON.parse(JSON.stringify(revertSnapshot.store)));
         revertSnapshot = null;
         inputEditMode = false;
 
         const state = ctx.getState();
-        await TVC_PMS.updateMaintenanceSchedule(state, { persist: true });
+        await restoreRunHourJobSnapshots(state, jobSnaps);
+        state._skipRhRecalcOnce = true;
         if (ctx.refresh) await ctx.refresh();
+        state._skipRhRecalcOnce = false;
         render();
         syncRhToolbarUi();
         await TVC_Dialog.alert('Running Hours update reverted.');

@@ -160,24 +160,25 @@ const TVC_PMS = (function () {
             if (job.schedule_basis === 'POSTPONE') continue;
             const key = TVC_Indexes.groupKey(job);
             const rec = store[key];
-            if (!rec) continue;
 
             ensureOriginalSnapshot(job);
-            const total = Number(rec.totalRunHours) || 0;
+            const total = rec ? (Number(rec.totalRunHours) || 0) : 0;
 
-            if (total === 0) {
-                const oldDate = job.next_date;
-                const wasRunHour = job.schedule_basis === 'RUN_HOUR';
-                restoreRunHourJob(job, today);
-                if (wasRunHour || oldDate !== job.next_date) {
-                    changed.push(job);
-                    log.push({
-                        job_code: job.job_code,
-                        group: normGroup(job.group),
-                        reset: true,
-                        oldDate,
-                        newDate: job.next_date,
-                    });
+            if (!rec || total === 0) {
+                if (job.schedule_basis === 'RUN_HOUR' || job.run_hours_total != null) {
+                    const oldDate = job.next_date;
+                    const wasRunHour = job.schedule_basis === 'RUN_HOUR';
+                    restoreRunHourJob(job, today);
+                    if (wasRunHour || oldDate !== job.next_date) {
+                        changed.push(job);
+                        log.push({
+                            job_code: job.job_code,
+                            group: normGroup(job.group),
+                            reset: true,
+                            oldDate,
+                            newDate: job.next_date,
+                        });
+                    }
                 }
                 continue;
             }

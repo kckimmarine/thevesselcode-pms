@@ -1016,7 +1016,11 @@ const TVC_App = (function () {
         await loadOriginalPlanLock();
         const lockDept = state.user && !TVC_RBAC.isHqAccount(state.user) ? state.user.department : null;
         if (!lockDept || !isOriginalPlanUpdateLocked(lockDept)) {
-            try { await TVC_PMS.updateMaintenanceSchedule(state, { silent: true }); } catch (e) { console.warn('[TVC_PMS] schedule recalc skipped:', e); }
+            try {
+                if (!state._skipRhRecalcOnce) {
+                    await TVC_PMS.updateMaintenanceSchedule(state, { silent: true });
+                }
+            } catch (e) { console.warn('[TVC_PMS] schedule recalc skipped:', e); }
         }
         clearActualFilterKeysCache();
         state._outstandingReqLoaded = false;
