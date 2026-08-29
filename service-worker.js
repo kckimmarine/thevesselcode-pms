@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260804-menu-logo';
+const CACHE_VERSION = 'tvc-pms-20260830-web-deploy';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -36,6 +36,7 @@ const PRECACHE_ASSETS = [
     '/data/spare-parts-requisition-template.xlsx',
     '/js/core/pbkdf2-fallback.js',
     '/js/space.js',
+    '/js/config.js',
     '/js/auth.js',
     '/js/services/transaction.js',
     '/js/services/maintenancePlan.js',

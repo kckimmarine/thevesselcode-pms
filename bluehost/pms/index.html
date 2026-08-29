@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PMS — THE VESSEL CODE</title>
+    <!--
+      Bluehost 업로드: public_html/pms/index.html
+      홈페이지 PMS 탭 링크: https://thevesselcode.com/pms/
+    -->
+    <style>
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1a365d; }
+        iframe { border: 0; width: 100%; height: 100%; display: block; }
+        .load-fallback {
+            color: #fff; font-family: system-ui, sans-serif; text-align: center;
+            padding: 48px 24px; line-height: 1.6;
+        }
+        .load-fallback a { color: #90cdf4; }
+    </style>
+</head>
+<body>
+    <iframe
+        id="tvcPmsFrame"
+        src="https://app.thevesselcode.com/?embed=1"
+        title="THE VESSEL CODE — PMS"
+        allow="clipboard-read; clipboard-write"
+        referrerpolicy="strict-origin-when-cross-origin"
+    ></iframe>
+    <noscript>
+        <div class="load-fallback">
+            <p>JavaScript가 필요합니다.</p>
+            <p><a href="https://app.thevesselcode.com/?embed=1">PMS 직접 열기</a></p>
+        </div>
+    </noscript>
+    <script>
+        (function () {
+            var frame = document.getElementById('tvcPmsFrame');
+            if (!frame) return;
+            // Local preview: thevesselcode.com/pms/?local=1
+            try {
+                var q = new URLSearchParams(location.search);
+                if (q.get('local') === '1') {
+                    frame.src = 'http://localhost:3000/?web=1&embed=1';
+                }
+            } catch (_) {}
+        })();
+    </script>
+</body>
+</html>

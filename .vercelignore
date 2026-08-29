@@ -1,0 +1,15 @@
+dist/
+node_modules/
+build/_*
+build/docx-images/
+build/sku-stamps/
+build/test-seat/
+data/_test*
+*.exe
+electron/keys/private.pem
+.git/
+scripts/_sim*
+scripts/_peek*
+scripts/_inspect*
+scripts/_scan*
+scripts/_force*

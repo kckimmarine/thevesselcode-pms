@@ -252,6 +252,75 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .login-hint-list li { margin-bottom: 4px; }
 .login-hint strong { color: var(--navy); font-weight: 600; }
 
+.login-beta-badge {
+    display: inline-block;
+    margin-top: 10px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #2b6cb0;
+    background: rgba(43, 108, 176, 0.12);
+    border: 1px solid rgba(43, 108, 176, 0.25);
+}
+
+.login-download {
+    margin-top: 20px;
+    padding-top: 18px;
+    border-top: 1px solid #edf2f7;
+    text-align: center;
+}
+.login-download-btn {
+    display: inline-block;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--navy);
+    background: #f7fafc;
+    border: 1px solid #cbd5e0;
+    text-decoration: none;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+.login-download-btn:hover {
+    background: #edf2f7;
+    border-color: var(--login-accent);
+}
+.login-download-note {
+    margin: 8px 0 0;
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.tvc-web-deploy .login-hint { display: none !important; }
+
+.login-main-site-link {
+    margin: 0 0 8px;
+    font-size: 12px;
+}
+.login-main-site-link a {
+    color: rgba(255, 255, 255, 0.72);
+    text-decoration: none;
+    font-weight: 600;
+}
+.login-main-site-link a:hover { color: #fff; text-decoration: underline; }
+
+.tvc-embed .login-screen { min-height: 100vh; }
+.tvc-embed #loginFileBanner { display: none !important; }
+
+.app-main-site-link {
+    font-size: 12px;
+    margin-right: 12px;
+}
+.app-main-site-link a {
+    color: rgba(255, 255, 255, 0.85);
+    text-decoration: none;
+    font-weight: 600;
+}
+.app-main-site-link a:hover { text-decoration: underline; }
+
 .login-footer {
     flex-shrink: 0;
     font-size: 11px;

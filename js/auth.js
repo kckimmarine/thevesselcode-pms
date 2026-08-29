@@ -2,7 +2,7 @@
 const TVC_Auth = (function () {
     const SESSION_KEY = 'tvc_session_v2';
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 9;
+    const USERS_SEED_VERSION = 10;
 
     const DEFAULT_USERS = [
         // Deck part
@@ -14,8 +14,11 @@ const TVC_Auth = (function () {
         { id: 'user-chief', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'INCHEON CHEMI' },
         // Head office
         { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent (본사)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'DAEMYUNG' },
+        // Web HQ pilot (Daemyung demo / thevesselcode.com)
+        { id: 'user-dm-hq', username: 'dm_user@thevesselcode.com', display_name: 'Daemyung HQ (Pilot)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'DAEMYUNG' },
         // THE VESSEL CODE — Admin Mode (app updates only)
         { id: 'user-tvc', username: 'tvc', display_name: 'TVC Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null },
+        { id: 'user-tvc-admin', username: 'admin@thevesselcode.com', display_name: 'TVC Super Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null },
     ];
 
     const PBKDF2_SALT = 'tvc-pms-salt-v2';

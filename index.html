@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260826-eq-list-modal">
+    <link rel="stylesheet" href="css/app.css?v=20260830-web-deploy">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260824-ship-docs">
 </head>
 <body>
@@ -43,6 +43,7 @@
             <div class="login-card-head">
                 <h2 class="login-card-title">Sign in</h2>
                 <p class="login-card-sub">Enter your credentials to access the platform</p>
+                <p id="loginBetaBadge" class="login-beta-badge hidden" aria-label="Beta version">Beta · Cloud HQ Portal</p>
                 <p id="loginLicenseBadge" class="login-license-badge muted hidden" aria-live="polite"></p>
             </div>
             <form class="login-form" onsubmit="event.preventDefault();TVC_App.handleLogin();">
@@ -66,6 +67,12 @@
                 <button type="submit" class="login-submit">Sign In</button>
                 <div id="loginErr" class="login-err" role="alert"></div>
             </form>
+            <div id="loginDownloadSection" class="login-download hidden">
+                <a id="loginDownloadLink" class="login-download-btn" href="/downloads/TVC-PMS-HQ_OFFICE-Setup.exe" download>
+                    Download TVC-PMS (Vessel PC Installer)
+                </a>
+                <p class="login-download-note">Install on ship PC · sync to HQ via web portal</p>
+            </div>
             <div class="login-hint">
                 <span class="login-hint-label">Demo access</span>
                 Password <strong>0000</strong>
@@ -81,7 +88,12 @@
         </div>
     </main>
 
-    <footer class="login-footer"><span id="loginAppVersion">v1.0.6</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE</footer>
+    <footer class="login-footer">
+        <p id="loginMainSiteLink" class="login-main-site-link hidden">
+            <a href="https://thevesselcode.com" target="_top" rel="noopener">← thevesselcode.com</a>
+        </p>
+        <span id="loginAppVersion">v1.0.6</span> &nbsp;|&nbsp; © 2026 THE VESSEL CODE
+    </footer>
 </div>
 
 <div id="appShell" class="hidden">
@@ -115,6 +127,9 @@
             </div>
         </div>
         <div class="cmaxs-toprite">
+            <p id="appMainSiteLink" class="app-main-site-link hidden">
+                <a href="https://thevesselcode.com" target="_top" rel="noopener">← Home</a>
+            </p>
             <div class="dept-toggle" role="group" aria-label="Department">
                 <span class="dept-label">Department</span>
             </div>
@@ -715,6 +730,7 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
+<script src="js/config.js?v=20260830-web-deploy"></script>
 <script src="js/rbac.js?v=20260824-no-sub-del"></script>
 <script src="js/core/schema.js?v=20260826-eq-scrub"></script>
 <script src="js/core/db.js?v=20260806-req-sort"></script>
@@ -742,7 +758,7 @@
 <script src="js/space.js?v=20260813-admin-mode"></script>
 <script src="js/license.js?v=20260813-admin-mode"></script>
 <script src="js/services/fileExport.js?v=20260821-monthly-xfer"></script>
-<script src="js/auth.js?v=20260813-admin-mode"></script>
+<script src="js/auth.js?v=20260830-web-deploy"></script>
 <script src="js/services/transaction.js?v=20260824-no-sub-del"></script>
 <script src="js/services/maintenancePlan.js?v=20260823-append-hdr"></script>
 <script src="js/services/pmsMasterExcel.js?v=20260823-alert-en"></script>
@@ -777,7 +793,7 @@
 <script src="js/ui/workPermit.js?v=20260825-dialog-en"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
-<script src="js/app.js?v=20260827-dept-pick-over-xfer"></script>
+<script src="js/app.js?v=20260830-web-deploy"></script>
 <script src="js/pwa.js?v=20260723-boot-fix"></script>
 </body>
 </html>

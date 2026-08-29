@@ -1,0 +1,26 @@
+{
+  "version": 2,
+  "name": "thevesselcode-pms",
+  "rewrites": [
+    { "source": "/((?!vendor|js|css|icons|data|admin|downloads|bluehost|manifest.json|service-worker.js|package.json).*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Content-Security-Policy",
+          "value": "frame-ancestors 'self' https://thevesselcode.com https://www.thevesselcode.com https://*.thevesselcode.com"
+        }
+      ]
+    },
+    {
+      "source": "/service-worker.js",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    }
+  ]
+}

@@ -334,6 +334,8 @@ const TVC_App = (function () {
         startBootWatchdog();
         try {
             try { await syncLoginAppVersion(); } catch (e) { console.warn('[TVC] version', e); }
+            try { TVC_Config?.applyLoginChrome?.(); } catch (e) { console.warn('[TVC] login chrome', e); }
+            try { TVC_Config?.applyEmbedChrome?.(); } catch (e) { console.warn('[TVC] embed chrome', e); }
             if (typeof TVC_License !== 'undefined') {
                 try {
                     const lic = await TVC_License.refresh();
@@ -1071,9 +1073,10 @@ const TVC_App = (function () {
     async function onLogin(user) {
         const role = user.role || TVC_RBAC.resolveUserRole(user);
         state.user = role && role !== user.role ? { ...user, role } : user;
+        const webSuperHq = typeof TVC_Config !== 'undefined' && TVC_Config.isWebSuperHqUser?.(state.user);
         // 데이터 공간(Space) 분리: HQ와 선박(Vessel)은 서로의 실시간 데이터를 보지 못하며, 오직 Export/Import(ZIP)로만 동기화된다.
-        const isAdmin = TVC_RBAC.isAdminAccount?.(state.user);
-        const isHq = !isAdmin && TVC_RBAC.isHqAccount(state.user);
+        const isAdmin = TVC_RBAC.isAdminAccount?.(state.user) && !webSuperHq;
+        const isHq = !isAdmin && (TVC_RBAC.isHqAccount(state.user) || webSuperHq);
         state.space = isAdmin ? 'ADMIN' : (isHq ? 'HQ' : 'SHIP');
         state.station = state.user.station || null;
         if (isAdmin) {
@@ -1146,6 +1149,7 @@ const TVC_App = (function () {
             setText('cmaxsShipDelivery', '—');
         }
         showApp();
+        try { TVC_Config?.applyEmbedChrome?.(); } catch (_) {}
         switchTab('menu');
     }
 
