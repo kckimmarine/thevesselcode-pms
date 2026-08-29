@@ -240,12 +240,43 @@ const TVC_PWA = (function () {
         window._tvcDateFmtObs.observe(document.body, { childList: true, subtree: true });
     }
 
+    function isWebPortalHost() {
+        try {
+            if (typeof TVC_Config !== 'undefined' && TVC_Config.isWebDeploy?.()) return true;
+        } catch (_) {}
+        try {
+            const h = String(location.hostname || '').toLowerCase();
+            const q = new URLSearchParams(location.search);
+            if (q.get('web') === '1' || q.get('embed') === '1') return true;
+            if (!h || h === 'localhost' || h === '127.0.0.1') return false;
+            if (h.endsWith('.vercel.app')) return true;
+            return ['thevesselcode.com', 'www.thevesselcode.com', 'app.thevesselcode.com', 'pms.thevesselcode.com'].includes(h);
+        } catch (_) { return false; }
+    }
+
+    async function clearStaleCachesOnWeb() {
+        if (!isWebPortalHost()) return;
+        try {
+            if ('serviceWorker' in navigator) {
+                const regs = await navigator.serviceWorker.getRegistrations();
+                await Promise.all(regs.map(r => r.unregister()));
+            }
+            if ('caches' in window) {
+                const keys = await caches.keys();
+                await Promise.all(keys.filter(k => k.startsWith('tvc-pms-')).map(k => caches.delete(k)));
+            }
+        } catch (err) {
+            console.warn('[TVC-PWA] web cache clear', err);
+        }
+    }
+
     function boot() {
         bindConnectivity();
         initMobileNav();
         bindDateInputFormatObserver();
         if (isStandalone()) document.body.classList.add('pwa-standalone');
-        registerServiceWorker();
+        if (isWebPortalHost()) clearStaleCachesOnWeb();
+        else registerServiceWorker();
     }
 
     return { boot, toggleMobileNav, closeMobileNav, registerServiceWorker, initDateInputFormat, normalizeDateText };

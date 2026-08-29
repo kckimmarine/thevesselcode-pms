@@ -15,6 +15,47 @@ const TVC_App = (function () {
     function repSt(r) { return TVC_RBAC.normalizeReportStatus(r?.status, !!r?.is_locked); }
     function itemSt(item) { return TVC_RBAC.normalizeReportStatus(item?.status); }
 
+    /** Web HQ portal (Vercel / thevesselcode.com) — not Electron ship PC. */
+    function isWebPortal() {
+        try {
+            if (typeof TVC_Config !== 'undefined' && TVC_Config.isWebDeploy?.()) return true;
+        } catch (_) {}
+        try {
+            const h = String(location.hostname || '').toLowerCase();
+            const q = new URLSearchParams(location.search);
+            if (q.get('web') === '1' || q.get('embed') === '1') return true;
+            if (!h || h === 'localhost' || h === '127.0.0.1') return false;
+            if (h.endsWith('.vercel.app')) return true;
+            return ['thevesselcode.com', 'www.thevesselcode.com', 'app.thevesselcode.com', 'pms.thevesselcode.com'].includes(h);
+        } catch (_) { return false; }
+    }
+
+    function filterAdminMenuForWeb(sections) {
+        if (!isWebPortal()) return sections;
+        if (typeof TVC_Config !== 'undefined' && TVC_Config.filterAdminMenuSections) {
+            return TVC_Config.filterAdminMenuSections(sections);
+        }
+        return sections.map(section => {
+            if (section.key === 'commercial') {
+                return {
+                    ...section,
+                    items: (section.items || []).filter(it =>
+                        String(it.action || '').includes('openAdminDeliverModal')
+                    ),
+                };
+            }
+            if (section.key === 'admin') {
+                return {
+                    ...section,
+                    items: (section.items || []).filter(it =>
+                        String(it.action || '').includes('openAdminRegistryHub')
+                    ),
+                };
+            }
+            return section;
+        }).filter(s => (s.items || []).length > 0);
+    }
+
     let state = {
         user: null,
         components: [], jobs: [], groups: [], spareGroups: [], spares: [], reports: [], defectCases: [], workPermits: [],
@@ -1073,10 +1114,10 @@ const TVC_App = (function () {
     async function onLogin(user) {
         const role = user.role || TVC_RBAC.resolveUserRole(user);
         state.user = role && role !== user.role ? { ...user, role } : user;
-        const webSuperHq = typeof TVC_Config !== 'undefined' && TVC_Config.isWebSuperHqUser?.(state.user);
+        const webAdminToHq = isWebPortal() && TVC_RBAC.isAdminAccount?.(state.user);
         // 데이터 공간(Space) 분리: HQ와 선박(Vessel)은 서로의 실시간 데이터를 보지 못하며, 오직 Export/Import(ZIP)로만 동기화된다.
-        const isAdmin = TVC_RBAC.isAdminAccount?.(state.user) && !webSuperHq;
-        const isHq = !isAdmin && (TVC_RBAC.isHqAccount(state.user) || webSuperHq);
+        const isAdmin = TVC_RBAC.isAdminAccount?.(state.user) && !webAdminToHq;
+        const isHq = !isAdmin && (TVC_RBAC.isHqAccount(state.user) || webAdminToHq);
         state.space = isAdmin ? 'ADMIN' : (isHq ? 'HQ' : 'SHIP');
         state.station = state.user.station || null;
         if (isAdmin) {
@@ -3142,10 +3183,7 @@ const TVC_App = (function () {
                     ],
                 },
             ];
-            if (typeof TVC_Config !== 'undefined' && TVC_Config.filterAdminMenuSections) {
-                return TVC_Config.filterAdminMenuSections(sections);
-            }
-            return sections;
+            return filterAdminMenuForWeb(sections);
         }
         const c = menuCounts();
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
@@ -6809,7 +6847,7 @@ const TVC_App = (function () {
         const setupVer = vessel && typeof TVC_AdminRegistry !== 'undefined'
             ? TVC_AdminRegistry.formatVesselSetupVersion(vessel.deploy)
             : (company?.deploy?.setup_version || '—');
-        const webPortal = typeof TVC_Config !== 'undefined' && TVC_Config.isWebAdminPortal?.();
+        const webPortal = isWebPortal();
         const deployWorkflow = webPortal ? '' : `
             <p class="spare-sync-note muted">Workflow: <button type="button" class="btn-linkish" onclick="TVC_App.openAdminSopModal()">Contract SOP checklist</button>
                 · <button type="button" class="btn-linkish" onclick="TVC_App.openAdminDeliverModal()">Deliver files</button>
