@@ -55,6 +55,34 @@ const TVC_Config = (function () {
         return embed ? `${base}/?embed=1` : `${base}/`;
     }
 
+    function isWebAdminPortal() {
+        return isWebDeploy();
+    }
+
+    /** Admin menu on web — hide internal TVC-only tools (Electron Admin SKU keeps full menu). */
+    function filterAdminMenuSections(sections) {
+        if (!isWebAdminPortal()) return sections;
+        return sections.map(section => {
+            if (section.key === 'commercial') {
+                return {
+                    ...section,
+                    items: (section.items || []).filter(it =>
+                        String(it.action || '').includes('openAdminDeliverModal')
+                    ),
+                };
+            }
+            if (section.key === 'admin') {
+                return {
+                    ...section,
+                    items: (section.items || []).filter(it =>
+                        String(it.action || '').includes('openAdminRegistryHub')
+                    ),
+                };
+            }
+            return section;
+        }).filter(s => (s.items || []).length > 0);
+    }
+
     function isWebSuperHqUser(user) {
         if (!isWebDeploy() || !user) return false;
         const uname = String(user.username || '').trim().toLowerCase();
@@ -119,6 +147,8 @@ const TVC_Config = (function () {
         MAIN_SITE_ORIGIN,
         isElectron,
         isWebDeploy,
+        isWebAdminPortal,
+        filterAdminMenuSections,
         isEmbedded,
         getPmsAppUrl,
         isWebSuperHqUser,

@@ -3078,7 +3078,7 @@ const TVC_App = (function () {
     function menuModel() {
         if (state.user && TVC_RBAC.isAdminAccount?.(state.user)) {
             const st = typeof TVC_AdminRegistry !== 'undefined' ? TVC_AdminRegistry.stats() : { companies: 0, vessels: 0 };
-            return [
+            const sections = [
                 {
                     key: 'commercial',
                     tone: 'daily',
@@ -3142,6 +3142,10 @@ const TVC_App = (function () {
                     ],
                 },
             ];
+            if (typeof TVC_Config !== 'undefined' && TVC_Config.filterAdminMenuSections) {
+                return TVC_Config.filterAdminMenuSections(sections);
+            }
+            return sections;
         }
         const c = menuCounts();
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
@@ -6805,6 +6809,26 @@ const TVC_App = (function () {
         const setupVer = vessel && typeof TVC_AdminRegistry !== 'undefined'
             ? TVC_AdminRegistry.formatVesselSetupVersion(vessel.deploy)
             : (company?.deploy?.setup_version || '—');
+        const webPortal = typeof TVC_Config !== 'undefined' && TVC_Config.isWebAdminPortal?.();
+        const deployWorkflow = webPortal ? '' : `
+            <p class="spare-sync-note muted">Workflow: <button type="button" class="btn-linkish" onclick="TVC_App.openAdminSopModal()">Contract SOP checklist</button>
+                · <button type="button" class="btn-linkish" onclick="TVC_App.openAdminDeliverModal()">Deliver files</button>
+                · <button type="button" class="btn-linkish" onclick="TVC_App.openAdminRegistryHub()">Registry</button></p>
+            <div class="admin-deploy-workflow">
+                <div class="admin-deploy-path">
+                    <strong>범용 App Update</strong>
+                    <p class="spare-sync-note muted">기존 pool · 프로그램만 교체 (MR/License 불필요)</p>
+                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminAppUpdateModal()">Export pool App Update…</button>
+                </div>
+                <div class="admin-deploy-path">
+                    <strong>범용 Setup · 선사용 App Update</strong>
+                    <p class="spare-sync-note muted">신규 선사·선박 → Setup · 선박 추가 → Company App Update + HQ license</p>
+                    <div class="admin-deploy-path-actions">
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminRegistryHub()">Company &amp; Vessel Registry</button>
+                        <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminDeliverModal()">Deliver files…</button>
+                    </div>
+                </div>
+            </div>`;
         return renderSectionCard('Selected contract', `
             ${labBanner}
             <p class="spare-sync-note muted">Registry: ${st.companies} companies · ${st.vessels} vessels (scales to 100+). Search/select in the left list.</p>
@@ -6827,24 +6851,7 @@ const TVC_App = (function () {
                         <td style="padding:4px 8px">${esc(vesselVer)}</td></tr>
                 </tbody>
             </table>
-            <p class="spare-sync-note muted">Workflow: <button type="button" class="btn-linkish" onclick="TVC_App.openAdminSopModal()">Contract SOP checklist</button>
-                · <button type="button" class="btn-linkish" onclick="TVC_App.openAdminDeliverModal()">Deliver files</button>
-                · <button type="button" class="btn-linkish" onclick="TVC_App.openAdminRegistryHub()">Registry</button></p>
-            <div class="admin-deploy-workflow">
-                <div class="admin-deploy-path">
-                    <strong>범용 App Update</strong>
-                    <p class="spare-sync-note muted">기존 pool · 프로그램만 교체 (MR/License 불필요)</p>
-                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminAppUpdateModal()">Export pool App Update…</button>
-                </div>
-                <div class="admin-deploy-path">
-                    <strong>범용 Setup · 선사용 App Update</strong>
-                    <p class="spare-sync-note muted">신규 선사·선박 → Setup · 선박 추가 → Company App Update + HQ license</p>
-                    <div class="admin-deploy-path-actions">
-                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminRegistryHub()">Company &amp; Vessel Registry</button>
-                        <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminDeliverModal()">Deliver files…</button>
-                    </div>
-                </div>
-            </div>
+            ${deployWorkflow}
         `, { className: 'tvc-section-admin-selected' });
     }
 
