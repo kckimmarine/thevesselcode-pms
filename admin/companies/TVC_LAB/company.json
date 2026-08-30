@@ -13,7 +13,11 @@
     "term_months": 0,
     "fee_note": "Internal — not a customer contract"
   },
-  "deploy": {},
+  "deploy": {
+    "app_version": "1.0.6",
+    "app_updated_at": "2026-08-26",
+    "license_issued_at": "2026-08-26"
+  },
   "vessels": [
     "LAB_SHIP"
   ]

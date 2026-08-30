@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated_at": "2026-08-21",
+  "updated_at": "2026-08-26",
   "companies": [
     {
       "company_id": "TVC_LAB",
@@ -15,13 +15,31 @@
           "code": "LAB",
           "imo_no": "9999999",
           "delivery": "2026-01-01",
-          "status": "active"
+          "status": "active",
+          "deploy": {
+            "app_version": {
+              "VESSEL_MASTER": "1.0.6",
+              "VESSEL_ENGINE": "1.0.6",
+              "VESSEL_DECK": "1.0.6"
+            },
+            "app_updated_at": {
+              "VESSEL_MASTER": "2026-08-26",
+              "VESSEL_ENGINE": "2026-08-26",
+              "VESSEL_DECK": "2026-08-26"
+            },
+            "license_issued_at": "2026-08-26"
+          }
         }
       ],
       "contract": {
         "start_date": "",
         "term_months": 0,
         "fee_note": "Internal — not a customer contract"
+      },
+      "deploy": {
+        "app_version": "1.0.6",
+        "app_updated_at": "2026-08-26",
+        "license_issued_at": "2026-08-26"
       }
     },
     {
@@ -45,11 +63,11 @@
               "VESSEL_DECK": "1.0.6"
             },
             "app_updated_at": {
-              "VESSEL_MASTER": "2026-08-23",
-              "VESSEL_ENGINE": "2026-08-23",
-              "VESSEL_DECK": "2026-08-23"
+              "VESSEL_MASTER": "2026-08-26",
+              "VESSEL_ENGINE": "2026-08-26",
+              "VESSEL_DECK": "2026-08-26"
             },
-            "license_issued_at": "2026-08-19"
+            "license_issued_at": "2026-08-26"
           }
         },
         {
@@ -79,8 +97,8 @@
       ],
       "deploy": {
         "app_version": "1.0.6",
-        "app_updated_at": "2026-08-23",
-        "license_issued_at": "2026-08-18"
+        "app_updated_at": "2026-08-26",
+        "license_issued_at": "2026-08-26"
       }
     }
   ]
