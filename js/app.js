@@ -7715,10 +7715,6 @@ const TVC_App = (function () {
             _adminSetupExport.vesselId = vessels[0]?.vessel_id || null;
         }
         ensureAdminSetupExportSkus();
-        ADMIN_VESSEL_SETUP_SKUS.forEach(sku => {
-            const hit = _adminSetupExport.sourceSetups.some(s => s.sku === sku);
-            if (!hit && _adminSetupExport.skus[sku]) _adminSetupExport.skus[sku] = false;
-        });
         const selectedSkus = adminSetupExportSelectedSkus();
         const sourceNote = source.configured
             ? `<span class="muted">Setup folder: ${esc(source.path || '')}</span>`
@@ -7729,8 +7725,8 @@ const TVC_App = (function () {
         const skuChecks = ADMIN_VESSEL_SETUP_SKUS.map(sku => {
             const hit = _adminSetupExport.sourceSetups.find(s => s.sku === sku);
             const checked = _adminSetupExport.skus[sku] ? ' checked' : '';
-            const disabled = hit ? '' : ' disabled';
-            return `<label class="admin-setup-sku-check"><input type="checkbox"${checked}${disabled}
+            const missingNote = hit ? '' : ' title="Setup.exe not in dist folder yet"';
+            return `<label class="admin-setup-sku-check${hit ? '' : ' muted'}"><input type="checkbox"${checked}${missingNote}
                 onchange="TVC_App.adminSetupExportToggleSku('${escAttr(sku)}', this.checked)"> ${esc(sku)}</label>`;
         }).join('');
         const setupStatus = selectedSkus.length
