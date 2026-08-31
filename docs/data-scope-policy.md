@@ -86,6 +86,7 @@
 | **B** | On `ship/push` (online): parse ZIP → upsert cloud DB + keep ZIP in Storage |
 | **C** | HQ/Admin REST: `GET /api/sync/cloud/stats`, `GET /api/sync/cloud/records` (+ optional `SYNC_CLOUD_READ_KEY`) |
 | **D** | Admin: read-all API + support console (vessel/company filter) |
+| **D** | HQ cloud → IndexedDB mirror (`TVC_CloudMirror`) on login, vessel select, HQ pull, manual button |
 | **E** | Ship **Restore**: cloud snapshot → `HQ_TO_SHIP` full or staged package |
 
 Until Phase C–E ship, **operational requirement is met only if HQ imports every vessel export** into one HQ installation (or one HQ PC per company with disciplined imports).
@@ -110,6 +111,8 @@ Setup: `npm run setup-supabase-ingest` then `npm run verify-sync-ingest`. Ingest
 Headers: `X-Tvc-Account-Type` (`HQ` \| `ADMIN`), `X-Tvc-Company-Id` (HQ required), optional `X-Tvc-Cloud-Read-Key` if `SYNC_CLOUD_READ_KEY` is set on Vercel.
 
 Verify: `npm run verify-sync-cloud`
+
+**Phase D (implemented):** `js/services/cloudMirror.js` merges cloud `sync_records` into HQ IndexedDB via `TVC_Sync.mergePayload`. Triggers: HQ login (throttled), Ship List vessel select, after online HQ pull, Menu → Export/Import → **Mirror from cloud DB**.
 
 ---
 

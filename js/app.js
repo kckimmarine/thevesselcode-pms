@@ -1192,6 +1192,16 @@ const TVC_App = (function () {
         renderCaptainViewDashboard();
         if (isHq) await populateShipHeader(state.user);
         showApp();
+        if (isHq && state.selectedVesselId && typeof TVC_CloudMirror !== 'undefined') {
+            TVC_CloudMirror.maybeMirrorSelectedVessel(state.user, state.selectedVesselId)
+                .then(async (r) => {
+                    if (r && !r.skipped && r.ok) {
+                        await loadData();
+                        rerenderCurrentTab();
+                    }
+                })
+                .catch(() => {});
+        }
         try { TVC_Config?.applyEmbedChrome?.(); } catch (_) {}
         switchTab('menu');
     }
@@ -3384,7 +3394,30 @@ const TVC_App = (function () {
                 <p class="spare-sync-note"><strong>Cloud DB</strong> — ingested sync mirror (HQ / Admin)</p>
                 <p id="menuCloudDataStatus" class="spare-sync-note muted">Open this dialog while online to load cloud summary.</p>
                 <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferRefreshCloudData()">Refresh cloud summary</button>
+                <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferMirrorFromCloud()">Mirror from cloud DB</button>
             </div>`;
+    }
+
+    async function menuXferMirrorFromCloud() {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !TVC_RBAC.isHqAccount(user) || typeof TVC_CloudMirror === 'undefined') return;
+        const vesselId = state.selectedVesselId || user.vessel_id;
+        if (!vesselId) {
+            await TVC_Dialog.alert('Select a vessel in Ship List before mirroring from cloud.');
+            return;
+        }
+        try {
+            await TVC_Dialog.alert('Mirroring cloud DB into local HQ storage…\n(V-SAT links may take several minutes.)');
+            const result = await TVC_CloudMirror.mirrorVesselFromCloud(user, { vesselId, force: true });
+            await refreshAfterImport({ export_meta: { vessel_id: vesselId, direction: 'CLOUD_MIRROR' } });
+            await menuXferRefreshCloudData();
+            const storeHint = Object.entries(result.stores || {}).map(([k, n]) => `${k}: ${n}`).join(' · ');
+            await TVC_Dialog.alert(
+                `Cloud mirror complete.\nVessel: ${result.vessel_id}\nRecords: ${result.record_count}${storeHint ? `\n${storeHint}` : ''}`,
+            );
+        } catch (e) {
+            await TVC_Dialog.alert(`Cloud mirror failed: ${e.message || e}`);
+        }
     }
 
     async function menuXferRefreshCloudData() {
@@ -3439,6 +3472,12 @@ const TVC_App = (function () {
                 ? getAppDepartment()
                 : undefined;
             const result = await TVC_OnlineSync.syncNow(user, direction, { vesselId, dept });
+            if (result.status === 'OK' && direction === 'HQ_PULL' && isHq
+                && typeof TVC_CloudMirror !== 'undefined' && vesselId) {
+                try {
+                    await TVC_CloudMirror.mirrorVesselFromCloud(user, { vesselId, force: true });
+                } catch (_) { /* ZIP import already applied; cloud mirror is best-effort superset */ }
+            }
             if (result.status === 'OK' && (isHq || direction === 'SHIP_PULL')) {
                 await loadData();
                 rerenderCurrentTab();
@@ -9130,6 +9169,16 @@ const TVC_App = (function () {
         await loadData();
         renderFleetList();
         rerenderCurrentTab();
+        if (state.user && typeof TVC_CloudMirror !== 'undefined') {
+            TVC_CloudMirror.maybeMirrorSelectedVessel(state.user, id)
+                .then(async (r) => {
+                    if (r && !r.skipped && r.ok) {
+                        await loadData();
+                        rerenderCurrentTab();
+                    }
+                })
+                .catch(() => {});
+        }
     }
 
     function renderMainMenu() {
@@ -17690,6 +17739,7 @@ const TVC_App = (function () {
         menuXferApplyAppUpdate,
         menuXferTryOnlineSync,
         menuXferRefreshCloudData,
+        menuXferMirrorFromCloud,
         menuXferExportDefect, menuXferExportPostpone, menuXferExportWorkPermit, menuXferExportMonthly, onMenuXferImportFile,
         menuXferOpenCaseSelect, menuXferOpenMonthlySelect,
         menuXferCaseSetPeriod, menuXferClearCasePeriodAndFilters, menuXferCaseSetSearch,
