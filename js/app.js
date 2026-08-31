@@ -3261,7 +3261,7 @@ const TVC_App = (function () {
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: hqMonthlyItems },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
-            if (isSuperHq && TVC_RBAC.isAdminAccount?.(state.user)) {
+            if (isSuperHq && (TVC_RBAC.isAdminAccount?.(state.user) || TVC_RBAC.isPms21Account?.(state.user))) {
                 sections.push(...filterAdminMenuForWeb(superHqAdminMenuSections()));
             }
             return sections;
@@ -7875,6 +7875,119 @@ const TVC_App = (function () {
         }
     }
 
+    function adminSetupMasterVesselOpts() {
+        const vesselId = String(_adminSetupExport.vesselId || '').trim();
+        if (!vesselId) {
+            throw Object.assign(new Error('Select a vessel first.'), { code: 'VESSEL_REQUIRED' });
+        }
+        return { vesselId, selectedVesselId: vesselId };
+    }
+
+    async function adminSetupMasterSummary(vesselId) {
+        const vid = String(vesselId || '').trim();
+        if (!vid) {
+            return { engineJobs: 0, deckJobs: 0, totalJobs: 0, pmsGroups: 0, spareParts: 0, spareGroups: 0 };
+        }
+        const filter = typeof TVC_MasterVesselScope !== 'undefined'
+            ? rows => TVC_MasterVesselScope.filterRows(rows, vid)
+            : rows => (rows || []).filter(r => !r?.vessel_id || r.vessel_id === vid);
+        const jobs = filter(await TVC_DB.getAll('maintenance_jobs').catch(() => []));
+        const pmsGroups = filter(await TVC_DB.getAll('maintenance_groups').catch(() => []));
+        const spareParts = filter(await TVC_DB.getAll('spare_parts').catch(() => []));
+        const spareGroups = filter(await TVC_DB.getAll('spare_groups').catch(() => []));
+        const engineJobs = jobs.filter(j => String(j.department || '').toUpperCase() === 'ENGINE').length;
+        const deckJobs = jobs.filter(j => String(j.department || '').toUpperCase() === 'DECK').length;
+        return {
+            engineJobs,
+            deckJobs,
+            totalJobs: jobs.length,
+            pmsGroups: pmsGroups.length,
+            spareParts: spareParts.length,
+            spareGroups: spareGroups.length,
+        };
+    }
+
+    function adminSetupMasterStatusLine(summary) {
+        if (!summary.totalJobs && !summary.spareParts) {
+            return 'No PMS/SPARE Master data for this vessel yet. Import Master Excel before export.';
+        }
+        const pms = summary.totalJobs
+            ? `PMS ${summary.totalJobs} jobs (Engine ${summary.engineJobs} · Deck ${summary.deckJobs}) · ${summary.pmsGroups} groups`
+            : 'PMS — not imported';
+        const spare = summary.spareParts
+            ? `SPARE ${summary.spareParts} parts · ${summary.spareGroups} groups`
+            : 'SPARE — not imported';
+        return `${pms} · ${spare} — included in Setup ZIP export.`;
+    }
+
+    async function adminSetupImportPmsMasterExcel(file) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !canPmsMasterExcel()) { await TVC_Dialog.alert(pmsMasterExcelDeniedMessage()); return; }
+        if (!file) return;
+        if (typeof TVC_PmsMasterExcel === 'undefined') { await TVC_Dialog.alert('PMS Master Import is not available.'); return; }
+        const vesselId = adminSetupMasterVesselOpts().vesselId;
+        if (!await TVC_Dialog.confirm({ message: `Import PMS Master Excel for vessel?\n\n${file.name}\nVessel: ${vesselId}\n\nENGINE and DECK sheets in the file will be applied when present.\n\nContinue?` })) return;
+        const results = [];
+        for (const department of ['ENGINE', 'DECK']) {
+            try {
+                const r = await TVC_PmsMasterExcel.importFromFile(file, user, { department, ...adminSetupMasterVesselOpts() });
+                results.push({ department, ...r });
+            } catch (e) {
+                const msg = String(e.message || e);
+                if (/Jobs sheet has no/i.test(msg)) continue;
+                throw e;
+            }
+        }
+        if (!results.length) throw new Error('No ENGINE or DECK data found in this PMS Master file.');
+        await refreshAll();
+        const lines = results.map(r => `${r.department}: ${r.jobs || 0} jobs (new ${r.created || 0}, updated ${r.updated || 0})`);
+        await TVC_Dialog.alert(`PMS Master Import complete.\nVessel: ${vesselId}\n\n${lines.join('\n')}`);
+        await renderAdminSetupExportModal();
+    }
+
+    async function adminSetupImportSpareMasterExcel(file) {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !canSpareMasterExcel()) { await TVC_Dialog.alert(spareMasterExcelDeniedMessage()); return; }
+        if (!file) return;
+        if (typeof TVC_SpareMasterExcel === 'undefined') { await TVC_Dialog.alert('SPARE Master Import is not available.'); return; }
+        const vesselId = adminSetupMasterVesselOpts().vesselId;
+        if (!await TVC_Dialog.confirm({ message: `Import SPARE Master Excel for vessel?\n\n${file.name}\nVessel: ${vesselId}\n\nENGINE and DECK sheets in the file will be applied when present.\n\nContinue?` })) return;
+        const results = [];
+        for (const department of ['ENGINE', 'DECK']) {
+            try {
+                const r = await TVC_SpareMasterExcel.importFromFile(file, user, { department, simplifyCodes: true, ...adminSetupMasterVesselOpts() });
+                if ((r.parts || 0) > 0 || (r.groups || 0) > 0 || (r.equipment || 0) > 0) {
+                    results.push({ department, ...r });
+                }
+            } catch (e) {
+                const msg = String(e.message || e);
+                if (/Spare Parts sheet not found/i.test(msg)) throw e;
+                continue;
+            }
+        }
+        if (!results.length) throw new Error('No ENGINE or DECK data found in this SPARE Master file.');
+        if (typeof TVC_SpareMenu?.reloadSparesCache === 'function') await TVC_SpareMenu.reloadSparesCache({ force: true });
+        if (typeof TVC_SpareMenu?.reloadSpareGroupsCache === 'function') await TVC_SpareMenu.reloadSpareGroupsCache();
+        await refreshAll();
+        const lines = results.map(r => `${r.department}: ${r.parts || 0} parts (new ${r.created || 0}, updated ${r.updated || 0})`);
+        await TVC_Dialog.alert(`SPARE Master Import complete.\nVessel: ${vesselId}\n\n${lines.join('\n')}`);
+        await renderAdminSetupExportModal();
+    }
+
+    async function adminSetupTriggerPmsMasterImport() {
+        if (!canPmsMasterExcel()) { await TVC_Dialog.alert(pmsMasterExcelDeniedMessage()); return; }
+        if (!_adminSetupExport.vesselId) { await TVC_Dialog.alert('Select a vessel first.'); return; }
+        if (!await confirmMasterExcelPassword('import PMS Master')) return;
+        document.getElementById('adminSetupPmsMasterFile')?.click();
+    }
+
+    async function adminSetupTriggerSpareMasterImport() {
+        if (!canSpareMasterExcel()) { await TVC_Dialog.alert(spareMasterExcelDeniedMessage()); return; }
+        if (!_adminSetupExport.vesselId) { await TVC_Dialog.alert('Select a vessel first.'); return; }
+        if (!await confirmMasterExcelPassword('import SPARE Master')) return;
+        document.getElementById('adminSetupSpareMasterFile')?.click();
+    }
+
     const _adminSetupExport = {
         companyId: null,
         vesselId: null,
@@ -7955,6 +8068,22 @@ const TVC_App = (function () {
                 return `${esc(sku)}: <strong>${esc(hit.filename)}</strong> (${(hit.bytes / (1024 * 1024)).toFixed(1)} MB)`;
             }).join('<br>')
             : 'Select at least one SKU to export.';
+        const canSetupMaster = !!(state.user && TVC_RBAC.canMasterExcelAccount?.(state.user));
+        const masterSummary = canSetupMaster ? await adminSetupMasterSummary(_adminSetupExport.vesselId) : null;
+        const masterStatusLine = masterSummary ? adminSetupMasterStatusLine(masterSummary) : '';
+        const masterImportBlock = canSetupMaster ? `
+            <div class="admin-setup-master-row">
+                <span class="spare-sync-note" style="display:block;margin-bottom:6px">Vessel Master Data</span>
+                <div class="admin-setup-master-btns">
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminSetupTriggerPmsMasterImport()"${_adminSetupExport.vesselId ? '' : ' disabled title="Select a vessel first"'}>📥 PMS Master Import</button>
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminSetupTriggerSpareMasterImport()"${_adminSetupExport.vesselId ? '' : ' disabled title="Select a vessel first"'}>📥 SPARE Master Import</button>
+                </div>
+                <p class="spare-sync-note muted admin-setup-master-status">${esc(masterStatusLine)}</p>
+                <input type="file" id="adminSetupPmsMasterFile" accept=".xlsx" class="hidden"
+                    onchange="TVC_App.adminSetupImportPmsMasterExcel(this.files[0]); this.value='';">
+                <input type="file" id="adminSetupSpareMasterFile" accept=".xlsx" class="hidden"
+                    onchange="TVC_App.adminSetupImportSpareMasterExcel(this.files[0]); this.value='';">
+            </div>` : '';
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminSetupExportModal()">×</button>
             <h3 class="spare-sync-title">Universal Setup.exe</h3>
@@ -7977,6 +8106,7 @@ const TVC_App = (function () {
                 <div class="admin-setup-sku-checks">${skuChecks}</div>
             </label>
             <p class="spare-sync-note muted" style="margin:8px 0">${setupStatus}</p>
+            ${masterImportBlock}
             <label class="spare-sync-note" style="display:block;margin:8px 0">
                 App version
                 <input type="text" value="${escAttr(_adminSetupExport.appVersion)}" style="width:100%;margin-top:4px"
@@ -7996,7 +8126,7 @@ const TVC_App = (function () {
     }
 
     async function openAdminSetupExportModal() {
-        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
+        if (!state.user || !(TVC_RBAC.isAdminAccount?.(state.user) || TVC_RBAC.canMasterExcelAccount?.(state.user))) return;
         if (typeof TVC_SetupExport === 'undefined') {
             await TVC_Dialog.alert('Setup export module not loaded.');
             return;
@@ -8071,6 +8201,7 @@ const TVC_App = (function () {
 
     function adminSetupExportSetVessel(id) {
         _adminSetupExport.vesselId = String(id || '').trim() || null;
+        renderAdminSetupExportModal();
     }
 
     function adminSetupExportToggleSku(sku, on) {
@@ -8117,6 +8248,13 @@ const TVC_App = (function () {
             if (missing.length) {
                 throw new Error(missing.map(sku => `${sku}: Setup.exe not found.`).join('\n'));
             }
+            const masterSummary = await adminSetupMasterSummary(vesselId);
+            if (!masterSummary.totalJobs && !masterSummary.spareParts) {
+                const proceed = await TVC_Dialog.confirm({
+                    message: 'No PMS/SPARE Master data for this vessel.\n\nExport Setup ZIP without Master Data?',
+                });
+                if (!proceed) return;
+            }
             const { blob, filename, manifest } = await TVC_SetupExport.buildZip(user, {
                 companyId,
                 vesselId,
@@ -8136,7 +8274,7 @@ const TVC_App = (function () {
                 })));
             }
             await TVC_Dialog.alert(
-                `Setup exported.\n${filename}\n\nCompany: ${manifest.company_name}\nVessel: ${vesselId}\nSKUs: ${selectedSkus.join(', ')}\n\n1. Install Setup on vessel PC\n2. Export machine request JSON\n3. Administration → Seat License\n4. Import seat license on vessel PC`
+                `Setup exported.\n${filename}\n\nCompany: ${manifest.company_name}\nVessel: ${vesselId}\nSKUs: ${selectedSkus.join(', ')}${manifest.master_data?.pms || manifest.master_data?.spare ? `\n\nMaster data:\n${manifest.master_data?.pms ? `  PMS — ${manifest.master_data.pms.maintenance_jobs} jobs` : ''}${manifest.master_data?.spare ? `\n  SPARE — ${manifest.master_data.spare.spare_parts} parts` : ''}` : ''}\n\n1. Install Setup on vessel PC\n2. Export machine request JSON\n3. Administration → Seat License\n4. Import seat license on vessel PC\n5. Restore Master Data from master/ folder in ZIP if needed`
             );
             closeAdminSetupExportModal();
         } catch (e) {
@@ -17819,6 +17957,8 @@ const TVC_App = (function () {
         adminSetupExportPickFolder, adminSetupExportSetCompany, adminSetupExportSetVessel, adminSetupExportToggleSku,
         adminSetupExportSetVersion,
         adminSetupExportSetNotes, adminSetupExportSetRecordDeploy, adminSetupExportRun,
+        adminSetupTriggerPmsMasterImport, adminSetupTriggerSpareMasterImport,
+        adminSetupImportPmsMasterExcel, adminSetupImportSpareMasterExcel,
         adminAppUpdatePickFolder, adminAppUpdateSetVersion, adminAppUpdateSetNotes,
         adminAppUpdateSetRecordDeploy, adminAppUpdateSetRecordPool, adminAppUpdateToggleSku, adminAppUpdateRun,
         saveAdminCompanyForm, saveAdminVesselForm, deactivateAdminCompany, deactivateAdminVessel,

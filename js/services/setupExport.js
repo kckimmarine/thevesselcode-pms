@@ -37,8 +37,47 @@ const TVC_SetupExport = (function () {
         return sanitizeSetupFilename(`TVC-PMS ${role || sku}${verTag} Setup.exe`);
     }
 
-    function isAdminUser(user) {
-        return !!(user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isAdminAccount?.(user));
+    function canSetupHandoffUser(user) {
+        if (!user || typeof TVC_RBAC === 'undefined') return false;
+        return !!(TVC_RBAC.isAdminAccount?.(user) || TVC_RBAC.isPms21Account?.(user));
+    }
+
+    function summarizeMasterPayload(payload) {
+        const stores = payload?.stores || {};
+        return {
+            vessel_id: String(payload?.vessel_id || '').trim(),
+            exported_at: payload?.exported_at || '',
+            maintenance_jobs: (stores.maintenance_jobs || []).length,
+            maintenance_groups: (stores.maintenance_groups || []).length,
+            ship_components: (stores.ship_components || []).length,
+            spare_parts: (stores.spare_parts || []).length,
+            spare_groups: (stores.spare_groups || []).length,
+        };
+    }
+
+    async function appendVesselMasterData(zip, user, vesselId, manifest) {
+        if (!vesselId || typeof TVC_MasterBackup === 'undefined' || !TVC_MasterBackup.buildPayload) {
+            manifest.master_data = null;
+            return;
+        }
+        const master = { pms: null, spare: null };
+        try {
+            const pmsPayload = await TVC_MasterBackup.buildPayload(TVC_MasterBackup.SCOPE.PMS, user, { vesselId });
+            const pmsInner = new JSZip();
+            pmsInner.file('tvc_master_backup.json', JSON.stringify(pmsPayload, null, 2));
+            pmsInner.file('README.txt', `PMS Master backup for ${vesselId}\nRestore via Menu → Database Backup & Restore → Restore.`);
+            zip.file('master/tvc_pms_master.zip', await pmsInner.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }));
+            master.pms = summarizeMasterPayload(pmsPayload);
+        } catch (_) { /* noop */ }
+        try {
+            const sparePayload = await TVC_MasterBackup.buildPayload(TVC_MasterBackup.SCOPE.SPARE, user, { vesselId });
+            const spareInner = new JSZip();
+            spareInner.file('tvc_master_backup.json', JSON.stringify(sparePayload, null, 2));
+            spareInner.file('README.txt', `SPARE Master backup for ${vesselId}\nRestore via SPARE → Database Backup & Restore → Restore.`);
+            zip.file('master/tvc_spare_master.zip', await spareInner.generateAsync({ type: 'uint8array', compression: 'DEFLATE' }));
+            master.spare = summarizeMasterPayload(sparePayload);
+        } catch (_) { /* noop */ }
+        manifest.master_data = master;
     }
 
     async function fetchPackageVersion() {
@@ -147,8 +186,8 @@ const TVC_SetupExport = (function () {
     }
 
     async function buildZip(user, opts = {}) {
-        if (!isAdminUser(user)) {
-            throw Object.assign(new Error('Setup export is Admin Mode (tvc) only.'), { code: 'FORBIDDEN' });
+        if (!canSetupHandoffUser(user)) {
+            throw Object.assign(new Error('Setup export requires admin or pms-21.'), { code: 'FORBIDDEN' });
         }
         if (typeof JSZip === 'undefined') throw new Error('JSZip is not loaded.');
         const companyId = String(opts.companyId || '').trim();
@@ -203,11 +242,22 @@ const TVC_SetupExport = (function () {
             name: v.name,
             imo_no: v.imo_no,
         }));
+        await appendVesselMasterData(zip, user, primaryVesselId, manifest);
         zip.file(JSON_NAME, JSON.stringify(manifest, null, 2));
+        const masterLines = [];
+        if (manifest.master_data?.pms) {
+            const p = manifest.master_data.pms;
+            masterLines.push(`  - PMS: ${p.maintenance_jobs} jobs · ${p.maintenance_groups} groups · ${p.ship_components} equipment`);
+        }
+        if (manifest.master_data?.spare) {
+            const s = manifest.master_data.spare;
+            masterLines.push(`  - SPARE: ${s.spare_parts} parts · ${s.spare_groups} groups`);
+        }
         zip.file('README.txt', [
             'TVC-PMS Setup Handoff (Path B — Universal HQ + Vessel)',
             '',
             `Company: ${manifest.company_name} (${manifest.company_id})`,
+            `Vessel: ${primaryVesselId || '—'}`,
             `App version: ${manifest.app_version}`,
             '',
             'Prerequisite: vessel contract info registered in Admin registry before export.',
@@ -216,10 +266,14 @@ const TVC_SetupExport = (function () {
             '2. Export machine request JSON from each installation.',
             '3. TVC Admin → Issue seat license (select company + vessel for vessel SKUs).',
             '4. Import seat license on each PC.',
+            '5. Restore vessel Master Data from master/tvc_pms_master.zip and master/tvc_spare_master.zip (Menu/SPARE → Database Backup & Restore).',
             '',
             'Setups in this package:',
             ...setups.map(s => `  - ${s.sku}: ${s.filename}`),
-        ].join('\r\n'));
+            masterLines.length ? '' : null,
+            masterLines.length ? 'Master data in this package:' : null,
+            ...masterLines,
+        ].filter(line => line !== null).join('\r\n'));
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         const safeCo = companyId.replace(/[^\w.-]+/g, '_');
         const filename = `tvc_setup_handoff_${safeCo}_${appVersion}_${new Date().toISOString().slice(0, 10)}.zip`;
@@ -228,7 +282,7 @@ const TVC_SetupExport = (function () {
 
     return {
         HANDOFF_SKUS,
-        isAdminUser,
+        canSetupHandoffUser,
         getSourceStatus,
         ensureSource,
         pickSourceFolder,

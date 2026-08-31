@@ -411,6 +411,7 @@ const TVC_MasterBackup = (function () {
         SCOPE,
         scopeLabel,
         storesFor,
+        buildPayload,
         exportBackup,
         restoreBackup,
         parseBackupFile,
