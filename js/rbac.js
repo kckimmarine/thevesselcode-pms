@@ -231,18 +231,23 @@ const TVC_RBAC = (function () {
     function isShipAccount(user) { return user?.account_type === AccountType.SHIP; }
     /** Company HQ account (superintendent) — Ship List scoped to that company. */
     function isCompanyHqAccount(user) { return user?.account_type === AccountType.HQ; }
-    /** TVC super-admin — all registered companies/vessels + registry tools (HQ Mode, not separate Admin Mode). */
+    /** TVC super-admin / fleet-wide HQ — all registered companies/vessels (HQ Mode). */
     function isSuperHqAccount(user) {
         return user?.account_type === AccountType.ADMIN;
     }
-    /** HQ Mode session: company HQ superintendent or TVC super-admin. */
+    /** HQ Mode session: company HQ superintendent or TVC super-admin / fleet-wide viewer. */
     function isHqAccount(user) {
         if (!user) return false;
         return user.account_type === AccountType.HQ || user.account_type === AccountType.ADMIN;
     }
-    /** Registry / deliver tool gate — same as isSuperHqAccount (legacy name: isAdminAccount). */
+    const ADMIN_TOOL_USERNAMES = new Set(['admin', 'tvc']);
+    /** Registry / Setup / License tools — admin + tvc only (not pms-21 fleet viewer). */
     function isAdminAccount(user) {
-        return isSuperHqAccount(user);
+        if (!user || user.account_type !== AccountType.ADMIN) return false;
+        return ADMIN_TOOL_USERNAMES.has(String(user.username || '').trim().toLowerCase());
+    }
+    function isPms21Account(user) {
+        return String(user?.username || '').trim().toLowerCase() === 'pms-21';
     }
     function hqActingRole(user) {
         if (isHqAccount(user) && user.account_type === AccountType.ADMIN) return Role.HQ_SUPERVISOR;
@@ -661,7 +666,7 @@ const TVC_RBAC = (function () {
         AccountType, Role, Department, ReportStatus, Action,
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForWorkReport, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
-        isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isCompanyHqAccount, isHqSku, isApprover,
+        isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isPms21Account, isCompanyHqAccount, isHqSku, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
         normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,

@@ -219,6 +219,25 @@ const TVC_AdminRegistry = (function () {
         return _cache;
     }
 
+    /** Reload registry.json when server updated_at changes (HQ Admin live sync). */
+    async function reloadIfChanged() {
+        const prevUpdated = String(_cache?.updated_at || '').trim();
+        try {
+            const res = await fetch(REGISTRY_URL, { cache: 'no-store' });
+            if (!res.ok) return false;
+            const data = await res.json();
+            const nextUpdated = String(data.updated_at || '').trim();
+            if (_cache && nextUpdated && nextUpdated === prevUpdated) return false;
+            _cache = normalize(data);
+            applyPilotSelectionIfDeprecated();
+            if (!isElectronAdmin()) saveLocalCache();
+            return true;
+        } catch (e) {
+            console.warn('[TVC_AdminRegistry] reloadIfChanged', e);
+            return false;
+        }
+    }
+
     function isElectronAdmin() {
         return typeof window !== 'undefined' && !!window.tvcElectron?.saveAdminRegistry;
     }
@@ -801,6 +820,7 @@ const TVC_AdminRegistry = (function () {
 
     return {
         load,
+        reloadIfChanged,
         get,
         listCompanies,
         listVessels,

@@ -1205,14 +1205,48 @@ const TVC_App = (function () {
                         await loadData();
                         rerenderCurrentTab();
                     }
+                    if (typeof TVC_HqLiveSync !== 'undefined') {
+                        await TVC_HqLiveSync.syncWatermark(state.user, state.selectedVesselId);
+                    }
                 })
                 .catch(() => {});
         }
+        if (isHq) startHqLiveSync();
         try { TVC_Config?.applyEmbedChrome?.(); } catch (_) {}
         switchTab('menu');
     }
 
-    // ── View shell ───────────────────────────────────────────────────
+    function startHqLiveSync() {
+        if (!state.user || !TVC_RBAC.isHqAccount(state.user)) return;
+        if (typeof TVC_HqLiveSync === 'undefined') return;
+        TVC_HqLiveSync.start(state.user, {
+            getSelectedVesselId: () => state.selectedVesselId,
+            onRefresh: async () => {
+                await loadData();
+                rerenderCurrentTab();
+                if (state.currentTab === 'menu') {
+                    renderFleetList();
+                    TVC_OutstandingTasks?.render();
+                }
+            },
+            onRegistryChanged: async () => {
+                if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
+                    TVC_Fleet.syncFromAdminRegistry();
+                }
+                state.fleet = TVC_Fleet.getVisible(state.user);
+                renderFleetList();
+                renderMainMenu();
+                if (typeof TVC_AccountProvisioning !== 'undefined') {
+                    await TVC_AccountProvisioning.syncRegistryToUsers();
+                }
+            },
+        });
+    }
+
+    function stopHqLiveSync() {
+        if (typeof TVC_HqLiveSync !== 'undefined') TVC_HqLiveSync.stop();
+    }
+
     function showLogin() {
         document.getElementById('appShell')?.classList.add('hidden');
         document.getElementById('loginScreen')?.classList.remove('hidden');
@@ -1299,6 +1333,7 @@ const TVC_App = (function () {
         if (!user) return '—';
         const uname = String(user.username || '').trim().toLowerCase();
         if (uname === 'admin') return 'ADMIN';
+        if (uname === 'pms-21') return 'PMS-21';
         if (uname === 'tvc') {
             const companyId = resolveTvcAdminCompanyId(user);
             return companyId || '—';
@@ -3226,7 +3261,7 @@ const TVC_App = (function () {
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: hqMonthlyItems },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
-            if (isSuperHq) {
+            if (isSuperHq && TVC_RBAC.isAdminAccount?.(state.user)) {
                 sections.push(...filterAdminMenuForWeb(superHqAdminMenuSections()));
             }
             return sections;
@@ -3473,6 +3508,9 @@ const TVC_App = (function () {
         try {
             await TVC_Dialog.alert('Mirroring cloud DB into local HQ storage…\n(V-SAT links may take several minutes.)');
             const result = await TVC_CloudMirror.mirrorVesselFromCloud(user, { vesselId, force: true });
+            if (typeof TVC_HqLiveSync !== 'undefined') {
+                await TVC_HqLiveSync.syncWatermark(user, vesselId);
+            }
             await refreshAfterImport({ export_meta: { vessel_id: vesselId, direction: 'CLOUD_MIRROR' } });
             await menuXferRefreshCloudData();
             const storeHint = Object.entries(result.stores || {}).map(([k, n]) => `${k}: ${n}`).join(' · ');
@@ -3540,6 +3578,9 @@ const TVC_App = (function () {
                 && typeof TVC_CloudMirror !== 'undefined' && vesselId) {
                 try {
                     await TVC_CloudMirror.mirrorVesselFromCloud(user, { vesselId, force: true });
+                    if (typeof TVC_HqLiveSync !== 'undefined') {
+                        await TVC_HqLiveSync.syncWatermark(user, vesselId);
+                    }
                 } catch (_) { /* ZIP import already applied; cloud mirror is best-effort superset */ }
             }
             if (result.status === 'OK' && (isHq || direction === 'SHIP_PULL')) {
@@ -6929,11 +6970,12 @@ const TVC_App = (function () {
         if (!mainHost) return;
         const f = state.user ? TVC_Space.getUiFeatures(state.user) : {};
         const isSuperHq = TVC_RBAC.isSuperHqAccount?.(state.user);
+        const showAdminTools = TVC_RBAC.isAdminAccount?.(state.user);
         const cols = menuModel();
-        const opsCols = isSuperHq
+        const opsCols = showAdminTools
             ? cols.filter(s => s.key !== 'administration')
             : cols;
-        const adminCols = isSuperHq
+        const adminCols = showAdminTools
             ? cols.filter(s => s.key === 'administration')
             : [];
         const spareFlow = f.showSpareTab && typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.renderSpareWorkFlowCard
@@ -9275,6 +9317,9 @@ const TVC_App = (function () {
                     if (r && !r.skipped && r.ok) {
                         await loadData();
                         rerenderCurrentTab();
+                    }
+                    if (typeof TVC_HqLiveSync !== 'undefined') {
+                        await TVC_HqLiveSync.syncWatermark(state.user, id);
                     }
                 })
                 .catch(() => {});
@@ -17102,6 +17147,7 @@ const TVC_App = (function () {
     }
 
     function handleLogout() {
+        stopHqLiveSync();
         TVC_Auth.logout();
         state.user = null;
         setLoginBusy(false);

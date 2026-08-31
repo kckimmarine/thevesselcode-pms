@@ -260,7 +260,7 @@ const TVC_Space = (function () {
             base.showSpareTab = true;
             base.showDataXfer = true;
             base.showOnlineSync = true;
-            base.showAppUpdateAdmin = true;
+            base.showAppUpdateAdmin = !!TVC_RBAC.isAdminAccount?.(user);
             base.showAppUpdateImport = true;
             return base;
         }
@@ -338,6 +338,8 @@ const TVC_Space = (function () {
 
     function getModeBadge(user) {
         if (!user) return '—';
+        if (TVC_RBAC.isAdminAccount?.(user)) return 'HQ Admin';
+        if (TVC_RBAC.isPms21Account?.(user)) return 'HQ Mode';
         if (TVC_RBAC.isSuperHqAccount?.(user)) return 'HQ Admin';
         if (TVC_RBAC.isHqAccount?.(user)) return 'HQ Mode';
         if (TVC_RBAC.isHqAccount(user)) return 'HQ Mode';
