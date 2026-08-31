@@ -114,11 +114,30 @@ function registerPrintPreviewIpc() {
             if (lastPrintPreviewWindow === win) lastPrintPreviewWindow = null;
         });
 
-        const dataUrl = `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-        await win.loadURL(dataUrl);
+        const tmpFile = path.join(
+            app.getPath('temp'),
+            `tvc-print-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.html`,
+        );
+        fs.writeFileSync(tmpFile, html, 'utf8');
+        const cleanupTmp = () => {
+            try { fs.unlinkSync(tmpFile); } catch (_) { /* noop */ }
+        };
+        win.on('closed', cleanupTmp);
+
+        await new Promise((resolve, reject) => {
+            win.webContents.once('did-finish-load', resolve);
+            win.webContents.once('did-fail-load', (_e, code, desc) => {
+                cleanupTmp();
+                reject(new Error(desc || `Print preview failed to load (${code}).`));
+            });
+            win.loadFile(tmpFile).catch((err) => {
+                cleanupTmp();
+                reject(err);
+            });
+        });
 
         if (autoPrint) {
-            await new Promise(r => setTimeout(r, 450));
+            await new Promise(r => setTimeout(r, 250));
             return printWebContents(win.webContents);
         }
         return { ok: true };

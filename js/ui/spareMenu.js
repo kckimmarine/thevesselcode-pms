@@ -20668,8 +20668,52 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         modal.classList.toggle('is-consume-list-window', isConsumedLogWindow());
     }
 
+    function wrPrintAppCssHref() {
+        try {
+            if (typeof location !== 'undefined' && location.href) {
+                const u = new URL('css/app.css', location.href);
+                u.searchParams.set('v', '20260811-consume-type-print');
+                return u.href;
+            }
+        } catch (_) { /* noop */ }
+        if (typeof TVC_Config !== 'undefined' && TVC_Config.isElectron?.()) {
+            return 'tvc://localhost/css/app.css?v=20260811-consume-type-print';
+        }
+        return 'css/app.css?v=20260811-consume-type-print';
+    }
+
+    function schedulePrintWindow(w, delayMs = 450) {
+        const run = () => {
+            setTimeout(() => {
+                try { w.print(); } catch (_) { /* noop */ }
+            }, delayMs);
+        };
+        if (w.document?.readyState === 'complete') run();
+        else w.addEventListener('load', run, { once: true });
+    }
+
     function openLegacyPrintWindow(html, { print = false } = {}) {
         const features = 'width=980,height=760,menubar=no,toolbar=no,location=no,status=no';
+        let blobUrl = '';
+        try {
+            blobUrl = URL.createObjectURL(new Blob([html], { type: 'text/html;charset=utf-8' }));
+        } catch (_) { /* noop */ }
+        if (blobUrl) {
+            const w = window.open(blobUrl, '_blank', features);
+            if (w) {
+                const cleanup = () => {
+                    try { URL.revokeObjectURL(blobUrl); } catch (_) { /* noop */ }
+                };
+                w.addEventListener('load', () => {
+                    w.focus();
+                    if (print) schedulePrintWindow(w);
+                    else setTimeout(cleanup, 1500);
+                }, { once: true });
+                w.addEventListener('beforeunload', cleanup, { once: true });
+                return w;
+            }
+            try { URL.revokeObjectURL(blobUrl); } catch (_) { /* noop */ }
+        }
         const w = window.open('', '_blank', features);
         if (!w) {
             TVC_Dialog?.alert?.('Pop-up blocked. Allow pop-ups to print or preview.');
@@ -20679,22 +20723,22 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         w.document.write(html);
         w.document.close();
         w.focus();
-        if (print) {
-            w.addEventListener('load', () => {
-                setTimeout(() => { try { w.print(); } catch (_) {} }, 350);
-            });
-        }
+        if (print) schedulePrintWindow(w);
         return w;
     }
 
     function openWrReportPrintWindow(title, bodyHtml, { print = false, appCss = false } = {}) {
+        if (!String(bodyHtml || '').trim()) {
+            TVC_Dialog?.alert?.('Nothing to print — report content is empty.');
+            return null;
+        }
         const toolbar = `<div class="wr-print-toolbar no-print">
             <button type="button" class="btn-green" onclick="(window.tvcPrintPreview&amp;&amp;window.tvcPrintPreview.print())||window.print()">Print</button>
             <button type="button" onclick="window.close()">Close</button>
         </div>`;
         const hint = `<p class="wr-print-hint no-print">Review the report below — this window is the print preview. Then click <b>Print</b>.</p>`;
         const appCssLink = appCss
-            ? `<link rel="stylesheet" href="css/app.css?v=20260811-consume-type-print">`
+            ? `<link rel="stylesheet" href="${escAttr(wrPrintAppCssHref())}">`
             : '';
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TVC — ${esc(title)}</title>
             ${appCssLink}<style>${wrReportPrintStyles()}</style></head><body>${toolbar}${hint}${bodyHtml}</body></html>`;

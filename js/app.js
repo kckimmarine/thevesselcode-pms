@@ -14420,7 +14420,10 @@ const TVC_App = (function () {
 
     function openWorkReportPrint({ print = false } = {}) {
         const doc = buildWorkReportPrintBody();
-        if (!doc) return;
+        if (!doc) {
+            TVC_Dialog.alert('Nothing to print — report data is not available.');
+            return;
+        }
         TVC_SpareMenu.openWrReportPrintWindow(doc.title, doc.html, { print, appCss: !!doc.appCss });
     }
 
