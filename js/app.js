@@ -7092,19 +7092,20 @@ const TVC_App = (function () {
         state._adminRegView = 'hub';
     }
 
-    function renderAdminRegistryView() {
-        if (state._adminRegView === 'credentials') renderAdminRegistryCredentials();
-        else renderAdminRegistryHub();
-    }
-
-    function adminRegistryOpenCredentials() {
-        state._adminRegView = 'credentials';
-        renderAdminRegistryCredentials();
-    }
-
-    function adminRegistryBackToHub() {
-        state._adminRegView = 'hub';
-        renderAdminRegistryHub();
+    function adminRegistryLoginFields(login, isEdit, { suggest = '' } = {}) {
+        const username = login?.username || '';
+        const pwdPlaceholder = isEdit && login?.password_plain
+            ? 'Enter new password to change'
+            : (isEdit && login ? 'Enter new password to change' : 'Min 4 characters');
+        return `
+            <label>ID
+                <input name="login_username" type="text"${isEdit ? ' readonly class="wr-ro"' : ''}
+                    placeholder="Web login ID"
+                    value="${escAttr(isEdit ? username : suggest)}"></label>
+            <label>Password
+                <input name="login_password" type="text" autocomplete="new-password"
+                    placeholder="${pwdPlaceholder}"
+                    value="${escAttr(isEdit ? (login?.password_plain || '') : '')}"></label>`;
     }
 
     async function recordAdminDeployAndSave(deployOptsOrList, { silent = true } = {}) {
@@ -7216,66 +7217,6 @@ const TVC_App = (function () {
             </label>
             ${company ? `<p class="spare-sync-note muted">Status: company <strong>${esc(company.status)}</strong>${vessel ? ` · vessel <strong>${esc(vessel.status)}</strong>` : ''}</p>` : ''}
             <div class="modal-actions admin-registry-form-actions">
-                <button type="button" class="btn btn-sm" onclick="TVC_App.adminRegistryOpenCredentials()"${company ? '' : ' disabled'}>ID / PSWD</button>
-                <button type="button" class="btn" onclick="TVC_App.closeAdminRegistryModal()">Close</button>
-            </div>`;
-    }
-
-    function renderAdminRegistryCredentials() {
-        const host = document.getElementById('adminRegistryBody');
-        if (!host || typeof TVC_AdminRegistry === 'undefined') return;
-        state._adminRegView = 'credentials';
-        const companyId = state.selectedAdminCompanyId;
-        const vesselId = state.selectedAdminVesselId;
-        const company = companyId ? TVC_AdminRegistry.getCompany(companyId) : null;
-        const vessel = companyId && vesselId ? TVC_AdminRegistry.getVessel(companyId, vesselId) : null;
-        const hqLogin = company?.hq_login;
-        const masterLogin = vessel?.master_login;
-        const hqSuggest = company && typeof TVC_AccountProvisioning !== 'undefined'
-            ? TVC_AccountProvisioning.suggestCompanyHqUsername(company.company_id, company.contact_email)
-            : '';
-        const masterSuggest = company && vessel && typeof TVC_AccountProvisioning !== 'undefined'
-            ? TVC_AccountProvisioning.suggestVesselMasterUsername(company.company_id, vessel.vessel_id)
-            : '';
-        host.innerHTML = `
-            <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
-            <h3 class="spare-sync-title">Company &amp; Vessel — ID / Password</h3>
-            <p class="spare-sync-hint muted">Selected: <strong>${esc(company ? `${company.name} (${company.company_id})` : '—')}</strong>${vessel ? ` · <strong>${esc(vessel.name)}</strong>` : ''}</p>
-            <section class="admin-account-panel" style="margin:16px 0;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc">
-                <h4 style="margin:0 0 8px;color:var(--navy)">Company HQ login (web)</h4>
-                <p class="spare-sync-note muted" style="margin:0 0 8px">선사 본사 HQ Mode · Department 불필요${hqLogin?.updated_at ? ` · updated ${esc(hqLogin.updated_at)}` : ''}</p>
-                <label class="spare-sync-note" style="display:block;margin:8px 0">Username (email)
-                    <input id="adminHqUsername" class="admin-company-select" style="margin-top:4px;width:100%" type="email"
-                        value="${escAttr(hqLogin?.username || hqSuggest || '')}" placeholder="company_hq@thevesselcode.com" ${company ? '' : ' disabled'}></label>
-                <label class="spare-sync-note" style="display:block;margin:8px 0">Password
-                    <input id="adminHqPassword" class="admin-company-select" style="margin-top:4px;width:100%" type="text"
-                        value="${escAttr(hqLogin?.password_plain || '')}" autocomplete="new-password"
-                        placeholder="${hqLogin ? 'Enter new password to change' : 'Min 4 characters'}" ${company ? '' : ' disabled'}></label>
-                <div class="admin-deploy-path-actions" style="margin-top:8px">
-                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminSuggestCompanyHqLogin()" ${company ? '' : ' disabled'}>Suggest ID</button>
-                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminGenerateCompanyHqPassword()" ${company ? '' : ' disabled'}>Generate password</button>
-                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminSaveCompanyHqLogin()" ${company ? '' : ' disabled'}>Save HQ login</button>
-                </div>
-            </section>
-            <section class="admin-account-panel" style="margin:16px 0;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff">
-                <h4 style="margin:0 0 8px;color:var(--navy)">Vessel Master login</h4>
-                <p class="spare-sync-note muted" style="margin:0 0 8px">선박 Master Hub (Captain) · Department <strong>Master</strong>${masterLogin?.updated_at ? ` · updated ${esc(masterLogin.updated_at)}` : ''}</p>
-                <label class="spare-sync-note" style="display:block;margin:8px 0">Username
-                    <input id="adminMasterUsername" class="admin-company-select" style="margin-top:4px;width:100%" type="text"
-                        value="${escAttr(masterLogin?.username || masterSuggest || '')}" placeholder="vessel_master@thevesselcode.com" ${vessel ? '' : ' disabled'}></label>
-                <label class="spare-sync-note" style="display:block;margin:8px 0">Password
-                    <input id="adminMasterPassword" class="admin-company-select" style="margin-top:4px;width:100%" type="text"
-                        value="${escAttr(masterLogin?.password_plain || '')}" autocomplete="new-password"
-                        placeholder="${masterLogin ? 'Enter new password to change' : 'Min 4 characters'}" ${vessel ? '' : ' disabled'}></label>
-                <div class="admin-deploy-path-actions" style="margin-top:8px">
-                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminSuggestVesselMasterLogin()" ${vessel ? '' : ' disabled'}>Suggest ID</button>
-                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminGenerateVesselMasterPassword()" ${vessel ? '' : ' disabled'}>Generate password</button>
-                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminSaveVesselMasterLogin()" ${vessel ? '' : ' disabled'}>Save Master login</button>
-                </div>
-                <p class="spare-sync-note muted" style="margin:8px 0 0">Engine / Deck 계정은 선박 PC seat license · Setup.exe로 전달 (ZIP 동기화).</p>
-            </section>
-            <div class="modal-actions admin-registry-form-actions">
-                <button type="button" class="btn" onclick="TVC_App.adminRegistryBackToHub()">Back</button>
                 <button type="button" class="btn" onclick="TVC_App.closeAdminRegistryModal()">Close</button>
             </div>`;
     }
@@ -7298,7 +7239,7 @@ const TVC_App = (function () {
         if (typeof TVC_AdminRegistry !== 'undefined') {
             TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, null);
         }
-        renderAdminRegistryView();
+        renderAdminRegistryHub();
         renderMainMenu();
     }
 
@@ -7307,7 +7248,7 @@ const TVC_App = (function () {
         if (typeof TVC_AdminRegistry !== 'undefined') {
             TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
         }
-        renderAdminRegistryView();
+        renderAdminRegistryHub();
         renderMainMenu();
     }
 
@@ -7329,84 +7270,6 @@ const TVC_App = (function () {
     function openAdminVesselFormFromHub(mode) {
         state._adminRegFromHub = true;
         openAdminVesselForm(mode);
-    }
-
-    function adminSuggestCompanyHqLogin() {
-        const company = state.selectedAdminCompanyId && typeof TVC_AdminRegistry !== 'undefined'
-            ? TVC_AdminRegistry.getCompany(state.selectedAdminCompanyId)
-            : null;
-        if (!company || typeof TVC_AccountProvisioning === 'undefined') return;
-        const el = document.getElementById('adminHqUsername');
-        if (el) el.value = TVC_AccountProvisioning.suggestCompanyHqUsername(company.company_id, company.contact_email);
-    }
-
-    function adminGenerateCompanyHqPassword() {
-        if (typeof TVC_AccountProvisioning === 'undefined') return;
-        const el = document.getElementById('adminHqPassword');
-        if (el) el.value = TVC_AccountProvisioning.generatePassword(8);
-    }
-
-    async function adminSaveCompanyHqLogin() {
-        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
-        const companyId = state.selectedAdminCompanyId;
-        if (!companyId || typeof TVC_AccountProvisioning === 'undefined') return;
-        const username = document.getElementById('adminHqUsername')?.value || '';
-        const password = document.getElementById('adminHqPassword')?.value || '';
-        const company = TVC_AdminRegistry.getCompany(companyId);
-        try {
-            await TVC_AccountProvisioning.saveCompanyHqLogin(companyId, {
-                username,
-                password,
-                display_name: `${company?.name || companyId} HQ`,
-            });
-            await TVC_AdminRegistry.save();
-            if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
-                TVC_Fleet.syncFromAdminRegistry();
-            }
-            renderAdminRegistryView();
-            renderMainMenu();
-        } catch (e) {
-            await TVC_Dialog.alert(e.message || String(e));
-        }
-    }
-
-    function adminSuggestVesselMasterLogin() {
-        const companyId = state.selectedAdminCompanyId;
-        const vesselId = state.selectedAdminVesselId;
-        if (!companyId || !vesselId || typeof TVC_AccountProvisioning === 'undefined') return;
-        const el = document.getElementById('adminMasterUsername');
-        if (el) el.value = TVC_AccountProvisioning.suggestVesselMasterUsername(companyId, vesselId);
-    }
-
-    function adminGenerateVesselMasterPassword() {
-        if (typeof TVC_AccountProvisioning === 'undefined') return;
-        const el = document.getElementById('adminMasterPassword');
-        if (el) el.value = TVC_AccountProvisioning.generatePassword(8);
-    }
-
-    async function adminSaveVesselMasterLogin() {
-        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
-        const companyId = state.selectedAdminCompanyId;
-        const vesselId = state.selectedAdminVesselId;
-        if (!companyId || !vesselId || typeof TVC_AccountProvisioning === 'undefined') return;
-        const username = document.getElementById('adminMasterUsername')?.value || '';
-        const password = document.getElementById('adminMasterPassword')?.value || '';
-        const vessel = TVC_AdminRegistry.getVessel(companyId, vesselId);
-        try {
-            await TVC_AccountProvisioning.saveVesselMasterLogin(companyId, vesselId, {
-                username,
-                password,
-                display_name: `${vessel?.name || vesselId} Master`,
-            });
-            await TVC_AdminRegistry.save();
-            if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
-                TVC_Fleet.syncFromAdminRegistry();
-            }
-            renderAdminRegistryView();
-            renderMainMenu();
-        } catch (e) {
-            await TVC_Dialog.alert(e.message || String(e));
-        }
     }
 
     function renderAdminDeliverModal() {
@@ -8563,6 +8426,9 @@ const TVC_App = (function () {
             return;
         }
         const hqSku = company?.hq_sku || 'HQ_OFFICE';
+        const hqSuggest = !isEdit && typeof TVC_AccountProvisioning !== 'undefined'
+            ? TVC_AccountProvisioning.suggestCompanyHqUsername(company?.company_id || '', company?.contact_email || '')
+            : '';
         host.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">${isEdit ? 'Edit company' : 'Add company'}</h3>
@@ -8573,6 +8439,7 @@ const TVC_App = (function () {
                         placeholder="e.g. DAEMYUNG" value="${escAttr(company?.company_id || '')}">
                 </label>
                 <label>Status<select name="status">${adminStatusOptions(company?.status || 'active')}</select></label>
+                ${adminRegistryLoginFields(company?.hq_login, isEdit, { suggest: hqSuggest })}
                 <label class="span2">Name (KR)
                     <input name="name" required placeholder="e.g. 대명상선" value="${escAttr(company?.name || '')}">
                 </label>
@@ -8631,6 +8498,10 @@ const TVC_App = (function () {
         }
         const companyOpts = companies.map(c =>
             `<option value="${escAttr(c.company_id)}"${c.company_id === (companyId || companies[0]?.company_id) ? ' selected' : ''}>${esc(c.name)} (${esc(c.company_id)})</option>`).join('');
+        const selCompanyId = companyId || companies[0]?.company_id || '';
+        const masterSuggest = !isEdit && selCompanyId && typeof TVC_AccountProvisioning !== 'undefined'
+            ? TVC_AccountProvisioning.suggestVesselMasterUsername(selCompanyId, vessel?.vessel_id || '')
+            : '';
         host.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">${isEdit ? 'Edit vessel' : 'Add vessel'}</h3>
@@ -8642,6 +8513,7 @@ const TVC_App = (function () {
                         placeholder="e.g. INCHEON CHEMI" value="${escAttr(vessel?.vessel_id || '')}">
                 </label>
                 <label>Status<select name="status">${adminStatusOptions(vessel?.status || 'active')}</select></label>
+                ${adminRegistryLoginFields(vessel?.master_login, isEdit, { suggest: masterSuggest })}
                 <label class="span2">Name
                     <input name="name" required value="${escAttr(vessel?.name || '')}">
                 </label>
@@ -8728,6 +8600,30 @@ const TVC_App = (function () {
             const company = TVC_AdminRegistry.upsertCompany(input);
             state.selectedAdminCompanyId = company.company_id;
             TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
+            const loginUsername = String(fd.get('login_username') || '').trim();
+            const loginPassword = String(fd.get('login_password') || '').trim();
+            if (typeof TVC_AccountProvisioning !== 'undefined') {
+                if (isEdit) {
+                    if (loginPassword) {
+                        const username = loginUsername || company.hq_login?.username;
+                        if (!username) throw new Error('HQ web login ID is required to change password.');
+                        await TVC_AccountProvisioning.saveCompanyHqLogin(company.company_id, {
+                            username,
+                            password: loginPassword,
+                            display_name: `${company.name} HQ`,
+                        });
+                    }
+                } else if (loginUsername || loginPassword) {
+                    if (!loginUsername || loginPassword.length < 4) {
+                        throw new Error('Web login requires ID and password (min 4 characters).');
+                    }
+                    await TVC_AccountProvisioning.saveCompanyHqLogin(company.company_id, {
+                        username: loginUsername,
+                        password: loginPassword,
+                        display_name: `${company.name} HQ`,
+                    });
+                }
+            }
             await persistAdminRegistry();
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
@@ -8757,6 +8653,30 @@ const TVC_App = (function () {
             state.selectedAdminCompanyId = companyId;
             state.selectedAdminVesselId = vessel.vessel_id;
             TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
+            const loginUsername = String(fd.get('login_username') || '').trim();
+            const loginPassword = String(fd.get('login_password') || '').trim();
+            if (typeof TVC_AccountProvisioning !== 'undefined') {
+                if (isEdit) {
+                    if (loginPassword) {
+                        const username = loginUsername || vessel.master_login?.username;
+                        if (!username) throw new Error('Master login ID is required to change password.');
+                        await TVC_AccountProvisioning.saveVesselMasterLogin(companyId, vessel.vessel_id, {
+                            username,
+                            password: loginPassword,
+                            display_name: `${vessel.name} Master`,
+                        });
+                    }
+                } else if (loginUsername || loginPassword) {
+                    if (!loginUsername || loginPassword.length < 4) {
+                        throw new Error('Web login requires ID and password (min 4 characters).');
+                    }
+                    await TVC_AccountProvisioning.saveVesselMasterLogin(companyId, vessel.vessel_id, {
+                        username: loginUsername,
+                        password: loginPassword,
+                        display_name: `${vessel.name} Master`,
+                    });
+                }
+            }
             await persistAdminRegistry();
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
@@ -17556,10 +17476,7 @@ const TVC_App = (function () {
         openVesselDocsModal, uploadVesselDocsAttachment, removeVesselDocsAttachment,
         setAdminSearch, selectAdminCompany, selectAdminVessel,
         openAdminCompanyForm, openAdminVesselForm, closeAdminRegistryModal,
-        openAdminRegistryHub, adminRegistryOpenCredentials, adminRegistryBackToHub,
-        adminRegistryHubSelectCompany, adminRegistryHubSelectVessel,
-        adminSuggestCompanyHqLogin, adminGenerateCompanyHqPassword, adminSaveCompanyHqLogin,
-        adminSuggestVesselMasterLogin, adminGenerateVesselMasterPassword, adminSaveVesselMasterLogin,
+        openAdminRegistryHub, adminRegistryHubSelectCompany, adminRegistryHubSelectVessel,
         adminRegistryCancelForm, openAdminCompanyFormFromHub, openAdminVesselFormFromHub,
         openAdminDeliverModal, closeAdminDeliverModal,
         adminDeliverOpenSetup, adminDeliverOpenPoolUpdate, adminDeliverOpenCompanyUpdate, adminDeliverOpenSeatLicense,
