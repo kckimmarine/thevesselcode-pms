@@ -7872,6 +7872,7 @@ const TVC_App = (function () {
         }
         _adminSetupExport.sourcePath = source.path || null;
         _adminSetupExport.sourceSetups = source.setups || [];
+        if (source.appVersion) _adminSetupExport.appVersion = source.appVersion;
         if (!_adminSetupExport.companyId && state.selectedAdminCompanyId) {
             _adminSetupExport.companyId = state.selectedAdminCompanyId;
         }
@@ -7886,12 +7887,18 @@ const TVC_App = (function () {
         }
         ensureAdminSetupExportSkus();
         const selectedSkus = adminSetupExportSelectedSkus();
+        const isElectron = !!(typeof TVC_Config !== 'undefined' && TVC_Config.isElectron?.());
         const sourceNote = source.configured
-            ? `<span class="muted">Setup folder: ${esc(source.path || '')}</span>`
-            : `<span class="muted">Electron Admin required. Run <code>npm run dist</code>, then select the <code>dist</code> folder.</span>`;
+            ? `<span class="muted">Setup source: ${esc(source.path || '')}${source.appVersion ? ` · v${esc(source.appVersion)}` : ''} (auto-detected)</span>`
+            : (source.message
+                ? `<span class="muted">${esc(source.message)}</span>`
+                : (isElectron
+                    ? `<span class="muted">Run <code>npm run dist</code>, then click Export Setup ZIP (dist/ is detected automatically).</span>`
+                    : `<span class="muted">Upload Setup.exe to <code>/downloads/</code> for the current app version, then click Export Setup ZIP.</span>`));
         const hasAllFiles = selectedSkus.length > 0
             && selectedSkus.every(sku => _adminSetupExport.sourceSetups.some(s => s.sku === sku));
-        const canExport = source.configured && _adminSetupExport.companyId && _adminSetupExport.vesselId && hasAllFiles;
+        const canExport = _adminSetupExport.companyId && _adminSetupExport.vesselId && selectedSkus.length > 0
+            && (hasAllFiles || !source.configured);
         const skuChecks = ADMIN_VESSEL_SETUP_SKUS.map(sku => {
             const hit = _adminSetupExport.sourceSetups.find(s => s.sku === sku);
             const checked = _adminSetupExport.skus[sku] ? ' checked' : '';
@@ -7911,9 +7918,7 @@ const TVC_App = (function () {
             <h3 class="spare-sync-title">Universal Setup.exe</h3>
             <p class="spare-sync-hint muted">Registry에 등록된 Company / Vessel / SKU에 맞는 범용 Setup.exe를 내보냅니다. 설치 후 <strong>Seat License</strong> Import로 활성화합니다.</p>
             <p class="spare-sync-note">${sourceNote}</p>
-            <div class="spare-sync-actions" style="margin:8px 0">
-                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.adminSetupExportPickFolder()">Select dist folder…</button>
-            </div>
+            ${isElectron ? `<p class="spare-sync-note muted" style="margin:4px 0"><button type="button" class="btn-linkish" onclick="TVC_App.adminSetupExportPickFolder()">Choose a different folder…</button></p>` : ''}
             <label class="spare-sync-note" style="display:block;margin:12px 0">Select Company
                 <select class="admin-company-select" style="margin-top:4px;width:100%"
                     onchange="TVC_App.adminSetupExportSetCompany(this.value);TVC_App.renderAdminSetupExportModal()">
@@ -8063,6 +8068,13 @@ const TVC_App = (function () {
             if (!companyId) throw new Error('Select a company.');
             if (!vesselId) throw new Error('Select a vessel.');
             if (!selectedSkus.length) throw new Error('Select at least one SKU.');
+            const source = await TVC_SetupExport.ensureSource();
+            _adminSetupExport.sourceSetups = source.setups || [];
+            if (source.appVersion) _adminSetupExport.appVersion = source.appVersion;
+            const missing = selectedSkus.filter(sku => !_adminSetupExport.sourceSetups.some(s => s.sku === sku));
+            if (missing.length) {
+                throw new Error(missing.map(sku => `${sku}: Setup.exe not found.`).join('\n'));
+            }
             const { blob, filename, manifest } = await TVC_SetupExport.buildZip(user, {
                 companyId,
                 vesselId,

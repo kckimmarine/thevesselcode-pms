@@ -41,24 +41,88 @@ const TVC_SetupExport = (function () {
         return !!(user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isAdminAccount?.(user));
     }
 
-    async function getSourceStatus() {
-        if (!window.tvcElectron?.getSetupsSource) {
-            return { configured: false, path: null, setups: [], message: 'Setup export requires Electron Admin Mode.' };
+    async function fetchPackageVersion() {
+        try {
+            const r = await fetch('/package.json', { cache: 'no-store' });
+            if (!r.ok) return '';
+            const pkg = await r.json();
+            return String(pkg.version || '').trim();
+        } catch (_) {
+            return '';
         }
-        const r = await window.tvcElectron.getSetupsSource();
-        if (!r?.ok) throw new Error(r?.error || 'Could not read setups folder.');
-        return r;
+    }
+
+    async function probeWebSetup(sku, version) {
+        const filename = `TVC-PMS-${sku}-${version}-Setup.exe`;
+        const url = `/downloads/${encodeURIComponent(filename)}`;
+        try {
+            const r = await fetch(url, { method: 'HEAD', cache: 'no-store' });
+            if (!r.ok) return null;
+            const bytes = parseInt(r.headers.get('content-length') || '0', 10) || 0;
+            return { sku, filename, url, bytes, web: true };
+        } catch (_) {
+            return null;
+        }
+    }
+
+    async function getWebSourceStatus() {
+        const appVersion = await fetchPackageVersion();
+        if (!appVersion) {
+            return {
+                configured: false,
+                path: null,
+                setups: [],
+                appVersion: '',
+                message: 'Could not read app version from package.json.',
+            };
+        }
+        const setups = [];
+        for (const sku of HANDOFF_SKUS) {
+            const hit = await probeWebSetup(sku, appVersion);
+            if (hit) setups.push(hit);
+        }
+        return {
+            configured: setups.length > 0,
+            path: setups.length ? '/downloads/' : null,
+            setups,
+            appVersion,
+            autoDetected: true,
+            message: setups.length
+                ? null
+                : `No Setup.exe in /downloads/ for v${appVersion}. Upload TVC-PMS-*-${appVersion}-Setup.exe to the server downloads folder.`,
+        };
+    }
+
+    async function getSourceStatus() {
+        if (window.tvcElectron?.getSetupsSource) {
+            const r = await window.tvcElectron.getSetupsSource();
+            if (!r?.ok) throw new Error(r?.error || 'Could not read setups folder.');
+            return r;
+        }
+        return getWebSourceStatus();
+    }
+
+    async function ensureSource() {
+        return getSourceStatus();
     }
 
     async function pickSourceFolder() {
         if (!window.tvcElectron?.pickSetupsSourceFolder) {
-            throw new Error('Setup export requires Electron Admin Mode.');
+            throw new Error('Manual folder selection requires Electron Admin Mode.');
         }
         return window.tvcElectron.pickSetupsSourceFolder();
     }
 
-    async function readSetupBytes(filename) {
-        const r = await window.tvcElectron.readSetupFile({ filename });
+    async function readSetupBytes(metaOrFilename) {
+        const meta = typeof metaOrFilename === 'object' && metaOrFilename
+            ? metaOrFilename
+            : { filename: metaOrFilename };
+        if (meta.url) {
+            const r = await fetch(meta.url, { cache: 'no-store' });
+            if (!r.ok) throw new Error(`Could not download ${meta.filename || meta.url}.`);
+            return new Uint8Array(await r.arrayBuffer());
+        }
+        const r = await window.tvcElectron.readSetupFile({ filename: meta.filename });
         if (!r?.ok) throw new Error(r?.error || 'Could not read Setup file.');
         return new Uint8Array(r.bytes || []);
     }
@@ -95,7 +159,11 @@ const TVC_SetupExport = (function () {
         const appVersion = String(opts.appVersion || '').trim();
         if (!appVersion) throw new Error('App version is required (e.g. 1.0.0).');
         const selectedSkus = Array.isArray(opts.skus) ? opts.skus : HANDOFF_SKUS;
-        const sourceSetups = Array.isArray(opts.sourceSetups) ? opts.sourceSetups : [];
+        let sourceSetups = Array.isArray(opts.sourceSetups) ? opts.sourceSetups : [];
+        if (!sourceSetups.length) {
+            const source = await ensureSource();
+            sourceSetups = source.setups || [];
+        }
         const bySku = new Map(sourceSetups.map(s => [s.sku, s]));
         const vessels = typeof TVC_AdminRegistry !== 'undefined'
             ? TVC_AdminRegistry.listVessels({ companyId, includeInactive: false })
@@ -107,13 +175,16 @@ const TVC_SetupExport = (function () {
         for (const sku of selectedSkus) {
             const meta = bySku.get(sku);
             if (!meta?.filename) continue;
-            const buf = await readSetupBytes(meta.filename);
+            const buf = await readSetupBytes(meta);
             const name = handoffSetupFilename(sku, companyId, primaryVesselId, appVersion);
             zip.file(SETUPS_DIR + name, buf);
             setups.push({ sku, filename: name, bytes: buf.byteLength, source: meta.filename });
         }
         if (!setups.length) {
-            throw new Error('No Setup.exe files found. Run npm run dist, then set the dist folder in Admin.');
+            const hint = window.tvcElectron?.getSetupsSource
+                ? 'Run npm run dist in the project, then retry Export Setup ZIP.'
+                : 'Upload Setup.exe files to /downloads/ on the server, then retry.';
+            throw new Error(`No Setup.exe files found. ${hint}`);
         }
         const manifest = normalizeManifest({
             app_version: appVersion,
@@ -159,6 +230,7 @@ const TVC_SetupExport = (function () {
         HANDOFF_SKUS,
         isAdminUser,
         getSourceStatus,
+        ensureSource,
         pickSourceFolder,
         buildZip,
     };

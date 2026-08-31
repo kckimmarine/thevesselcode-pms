@@ -270,13 +270,94 @@ const SETUP_SKU_RES = {
     VESSEL_DECK: /VESSEL_DECK/i,
 };
 
-function resolveSetupsSourceDir(settings) {
+function parseSetupSemver(filename) {
+    const m = String(filename || '').match(/-(\d+\.\d+\.\d+)-Setup\.exe$/i);
+    return m ? m[1] : '';
+}
+
+function compareSemver(a, b) {
+    const pa = String(a || '').split('.').map(n => parseInt(n, 10) || 0);
+    const pb = String(b || '').split('.').map(n => parseInt(n, 10) || 0);
+    for (let i = 0; i < 3; i++) {
+        const d = (pa[i] || 0) - (pb[i] || 0);
+        if (d) return d;
+    }
+    return 0;
+}
+
+function listLatestSetupFiles(dir, preferredVersion) {
+    const all = listSetupFiles(dir);
+    if (!all.length) return [];
+    const pref = String(preferredVersion || readPackageVersion(appRoot()) || '').trim();
+    const bySku = new Map();
+    for (const s of all) {
+        const ver = parseSetupSemver(s.filename);
+        const prev = bySku.get(s.sku);
+        if (!prev) {
+            bySku.set(s.sku, s);
+            continue;
+        }
+        const prevVer = parseSetupSemver(prev.filename);
+        if (pref) {
+            if (ver === pref && prevVer !== pref) bySku.set(s.sku, s);
+            else if (prevVer === pref) continue;
+            else if (compareSemver(ver, prevVer) > 0) bySku.set(s.sku, s);
+        } else if (compareSemver(ver, prevVer) > 0) {
+            bySku.set(s.sku, s);
+        }
+    }
+    return [...bySku.values()];
+}
+
+function candidateSetupsSourceDirs(settings) {
+    const root = appRoot();
+    const candidates = [];
+    const configured = String(settings?.setupsSourceDir || '').trim();
+    if (configured) candidates.push(configured);
+    candidates.push(path.join(root, 'dist'));
+    if (app.isPackaged) {
+        candidates.push(path.join(path.dirname(process.execPath), 'dist'));
+        candidates.push(path.join(app.getPath('documents'), 'thevesselcode-pms', 'dist'));
+    } else {
+        candidates.push(path.join(process.cwd(), 'dist'));
+    }
+    const seen = new Set();
+    return candidates.filter(d => {
+        const n = path.normalize(d);
+        if (seen.has(n)) return false;
+        seen.add(n);
+        return fs.existsSync(n);
+    });
+}
+
+function resolveSetupsSource(settings) {
     const s = settings || readSettings();
-    const configured = String(s.setupsSourceDir || '').trim();
-    if (configured && fs.existsSync(configured)) return configured;
-    const devDist = path.join(appRoot(), 'dist');
-    if (fs.existsSync(devDist)) return devDist;
-    return null;
+    const preferredVersion = readPackageVersion(appRoot());
+    const candidates = candidateSetupsSourceDirs(s);
+    let bestDir = null;
+    let bestSetups = [];
+    let bestScore = -1;
+    for (const dir of candidates) {
+        const setups = listLatestSetupFiles(dir, preferredVersion);
+        const score = setups.length;
+        if (score > bestScore) {
+            bestScore = score;
+            bestDir = dir;
+            bestSetups = setups;
+        }
+    }
+    if (bestDir && bestScore > 0 && String(s.setupsSourceDir || '').trim() !== bestDir) {
+        s.setupsSourceDir = bestDir;
+        writeSettings(s);
+    }
+    const appVersion = preferredVersion
+        || parseSetupSemver(bestSetups[0]?.filename)
+        || '';
+    return { dir: bestDir, setups: bestSetups, appVersion };
+}
+
+function resolveSetupsSourceDir(settings) {
+    return resolveSetupsSource(settings).dir;
 }
 
 function listSetupFiles(dir) {
@@ -363,7 +444,7 @@ function gatherReleaseArtifacts(root) {
     const version = readPackageVersion(root);
     const distDir = path.join(root, 'dist');
     const releaseDir = path.join(root, 'release');
-    const setups = listSetupFiles(distDir).filter(s => !version || s.filename.includes(`-${version}-`));
+    const setups = listLatestSetupFiles(distDir, version);
     const appUpdateZip = findAppUpdateZip(distDir, version);
     const handoff = findHandoffFile(releaseDir, version);
     let config = null;
@@ -546,15 +627,23 @@ function registerSetupExportIpc() {
     ipcMain.handle('tvc:get-setups-source', () => {
         try {
             if (!isAdminModeSku()) return { ok: false, error: 'Admin Mode only.' };
-            const dir = resolveSetupsSourceDir(readSettings());
-            if (!dir) {
-                return { ok: true, configured: false, path: null, setups: [] };
+            const resolved = resolveSetupsSource(readSettings());
+            if (!resolved.dir) {
+                return {
+                    ok: true,
+                    configured: false,
+                    path: null,
+                    setups: [],
+                    appVersion: resolved.appVersion || readPackageVersion(appRoot()) || '',
+                };
             }
             return {
                 ok: true,
-                configured: true,
-                path: dir,
-                setups: listSetupFiles(dir),
+                configured: resolved.setups.length > 0,
+                path: resolved.dir,
+                setups: resolved.setups,
+                appVersion: resolved.appVersion || '',
+                autoDetected: true,
             };
         } catch (e) {
             return { ok: false, error: e.message || String(e) };
