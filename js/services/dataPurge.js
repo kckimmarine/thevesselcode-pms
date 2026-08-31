@@ -1,7 +1,11 @@
 /* 일회성·버전별 데이터 정리 — 구 vessel_id 및 PMS Sync 이력 제거 */
 const TVC_DataPurge = (function () {
     const LEGACY_VESSEL_ID = 'DM_CHEMICAL_01';
+    const LEGACY_PILOT_VESSEL_ID = 'INCHEON CHEMI';
     const PILOT_VESSEL_ID = typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'TVC No1';
+    const MASTER_STORES = typeof TVC_MasterVesselScope !== 'undefined'
+        ? TVC_MasterVesselScope.MASTER_STORES
+        : ['maintenance_jobs', 'maintenance_groups', 'spare_groups', 'ship_components', 'spare_parts'];
     const PURGE_VERSION = '20260707_legacy_sync';
 
     const SYNC_AUDIT_RE = /📦\s*\[Export|📥\s*\[Import|\[Export\/|\[Import\/|PMS Sync|Sync Package/i;
@@ -280,6 +284,41 @@ const TVC_DataPurge = (function () {
         return summary;
     }
 
+    /** INCHEON CHEMI → TVC No1: PMS & SPARE master rows + vessel meta (one-time). */
+    async function migrateIncheonChemiMasterToTvcNo1Once() {
+        const KEY = 'master_vessel_migrate_version';
+        const VER = '20260831-incheon-to-tvcno1';
+        const done = await TVC_DB.getMeta(KEY).catch(() => null);
+        if (done === VER) return { skipped: true };
+
+        const counts = {};
+        for (const store of MASTER_STORES) {
+            let n = 0;
+            const rows = await TVC_DB.getAll(store).catch(() => []);
+            for (const row of rows) {
+                if (!row) continue;
+                const vid = String(row.vessel_id || '').trim();
+                if (vid === LEGACY_PILOT_VESSEL_ID || !vid) {
+                    row.vessel_id = PILOT_VESSEL_ID;
+                    await TVC_DB.put(store, row);
+                    n++;
+                }
+            }
+            counts[store] = n;
+        }
+
+        try {
+            const vesselMeta = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID);
+            if (!vesselMeta || vesselMeta === LEGACY_PILOT_VESSEL_ID) {
+                await TVC_DB.setMeta(TVC_META_KEYS.VESSEL_ID, PILOT_VESSEL_ID);
+            }
+        } catch (_) {}
+
+        await TVC_DB.setMeta(KEY, VER);
+        console.info('[TVC_DataPurge] INCHEON CHEMI master → TVC No1', counts);
+        return counts;
+    }
+
     /** 구 DM_CHEMICAL_01 태그·PMS Import/Export 이력 전부 삭제 (HQ·선박 공통) */
     async function run() {
         const done = await TVC_DB.getMeta('data_purge_version').catch(() => null);
@@ -299,6 +338,16 @@ const TVC_DataPurge = (function () {
         try { await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, ''); } catch (_) {}
 
         purgeLegacyLocalStorage();
+        try {
+            if (localStorage.getItem('tvc_admin_selected_company') === 'DAEMYUNG'
+                || localStorage.getItem('tvc_admin_selected_company') === 'TVC_LAB') {
+                localStorage.setItem('tvc_admin_selected_company', 'TVC');
+            }
+            if (localStorage.getItem('tvc_admin_selected_vessel') === 'INCHEON CHEMI'
+                || localStorage.getItem('tvc_admin_selected_vessel') === 'LAB_SHIP') {
+                localStorage.setItem('tvc_admin_selected_vessel', PILOT_VESSEL_ID);
+            }
+        } catch (_) {}
         await TVC_DB.setMeta('data_purge_version', PURGE_VERSION);
 
         const summary = { syncHistory, auditLogs, legacyRows };
@@ -306,5 +355,5 @@ const TVC_DataPurge = (function () {
         return summary;
     }
 
-    return { run, purgeAllRequisitionsOnce, purgeAllReportsForTestingOnce, purgeBuggyListDataOnce, repairReportJobRefs, repairReportJobRefsOnce, repairReportJobRefsInRows, PURGE_VERSION, LEGACY_VESSEL_ID };
+    return { run, migrateIncheonChemiMasterToTvcNo1Once, purgeAllRequisitionsOnce, purgeAllReportsForTestingOnce, purgeBuggyListDataOnce, repairReportJobRefs, repairReportJobRefsOnce, repairReportJobRefsInRows, PURGE_VERSION, LEGACY_VESSEL_ID };
 })();

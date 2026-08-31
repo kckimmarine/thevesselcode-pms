@@ -155,6 +155,19 @@ function registerAdminRegistryIpc() {
                 fs.writeFileSync(abs, JSON.stringify(data, null, 2) + '\n', 'utf8');
                 written.push(rel);
             }
+            const companyIds = new Set(
+                (Array.isArray(bundle?.registry?.companies) ? bundle.registry.companies : [])
+                    .map(c => String(c?.company_id || '').trim())
+                    .filter(Boolean),
+            );
+            const companiesDir = path.join(adminDir, 'companies');
+            if (fs.existsSync(companiesDir)) {
+                for (const name of fs.readdirSync(companiesDir)) {
+                    if (!companyIds.has(name)) {
+                        fs.rmSync(path.join(companiesDir, name), { recursive: true, force: true });
+                    }
+                }
+            }
             return { ok: true, written, adminDir };
         } catch (e) {
             return { ok: false, error: e.message || String(e) };

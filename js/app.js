@@ -257,6 +257,7 @@ const TVC_App = (function () {
             if (sync.migrated) console.info('[SPICS] syncOnBoot migrated', sync.migrated, '/', sync.total);
         } catch (e) { console.warn('[SPICS] syncOnBoot', e); }
         try { await TVC_DataPurge.run(); } catch (e) { console.warn('[TVC_DataPurge]', e); }
+        try { await TVC_DataPurge.migrateIncheonChemiMasterToTvcNo1Once(); } catch (e) { console.warn('[TVC_DataPurge] master migrate', e); }
         try {
             const reqPurge = await TVC_DataPurge.purgeAllRequisitionsOnce();
             if (reqPurge?.requisitions) {
@@ -6796,7 +6797,7 @@ const TVC_App = (function () {
         html += companies.map(c => {
             const off = c.status === 'inactive' ? ' (inactive)' : '';
             const lab = (typeof TVC_AdminRegistry !== 'undefined' && TVC_AdminRegistry.isTvcLabCompany(c.company_id))
-                ? ' — TVC Lab' : '';
+                ? ' — Lab' : '';
             return `<option value="${escAttr(c.company_id)}"${c.company_id === sel ? ' selected' : ''}>${esc(c.company_id)}${esc(lab)}${esc(off)}</option>`;
         }).join('');
         return html;
@@ -7820,14 +7821,14 @@ const TVC_App = (function () {
     }
 
     function selectTvcLabInList() {
-        const lab = typeof TVC_AdminRegistry !== 'undefined'
-            ? TVC_AdminRegistry.getTvcLabDefaults()
-            : { companyId: 'TVC_LAB', vesselId: 'LAB_SHIP' };
-        state.adminCompanyFilter = lab.companyId;
-        state.selectedAdminCompanyId = lab.companyId;
-        state.selectedAdminVesselId = lab.vesselId;
+        const pilot = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.getPilotDefaults()
+            : { companyId: 'TVC', vesselId: 'TVC No1' };
+        state.adminCompanyFilter = pilot.companyId;
+        state.selectedAdminCompanyId = pilot.companyId;
+        state.selectedAdminVesselId = pilot.vesselId;
         if (typeof TVC_AdminRegistry !== 'undefined') {
-            TVC_AdminRegistry.setSelected(lab.companyId, lab.vesselId);
+            TVC_AdminRegistry.setSelected(pilot.companyId, pilot.vesselId);
         }
         closeAdminCommercialModal();
         renderMainMenu();
@@ -7986,7 +7987,7 @@ const TVC_App = (function () {
             </label>
             ${adminSetupExportVesselPreviewHtml(companyId)}
             <p class="spare-sync-note muted">allowedVesselIds (${allowedIds.length}): ${allowedIds.length ? esc(allowedIds.join(', ')) : '— none — register vessels first'}</p>
-            ` : `<p class="spare-sync-note">Pool: ${poolCompanies.length} companies · ${poolVesselCount} active vessels (TVC_LAB 제외)</p>`}
+            ` : `<p class="spare-sync-note">Pool: ${poolCompanies.length} companies · ${poolVesselCount} active vessels</p>`}
             <p class="spare-sync-note">${sourceNote}</p>
             <div class="spare-sync-actions" style="margin:8px 0">
                 <button type="button" class="btn spare-sync-btn" onclick="TVC_App.adminAppUpdatePickFolder()">Select dist folder…</button>
@@ -8478,7 +8479,7 @@ const TVC_App = (function () {
                     <select name="company_code" required>${companyCodeOpts}</select></label>
                 ${adminRegistryLoginFields(company?.hq_login, isEdit, { suggest: hqSuggest })}
                 <label class="span2">Name (KR)
-                    <input name="name" required placeholder="e.g. 대명상선" value="${escAttr(company?.name || '')}">
+                    <input name="name" required placeholder="e.g. The Vessel Code" value="${escAttr(company?.name || '')}">
                 </label>
                 <label class="span2">Name (EN)
                     <input name="name_en" placeholder="e.g. The Vessel Code" value="${escAttr(company?.name_en || '')}">

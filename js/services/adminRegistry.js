@@ -3,12 +3,14 @@ const TVC_AdminRegistry = (function () {
     const REGISTRY_URL = 'admin/registry.json';
     const LS_COMPANY = 'tvc_admin_selected_company';
     const LS_VESSEL = 'tvc_admin_selected_vessel';
-    const LS_REGISTRY_CACHE = 'tvc_admin_registry_cache_v1';
+    const LS_REGISTRY_CACHE = 'tvc_admin_registry_cache_v2';
     const STATUS_OPTS = ['active', 'inactive'];
     const HQ_SKU_OPTS = ['HQ_OFFICE'];
     const VESSEL_SKUS = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
-    const TVC_LAB_COMPANY_ID = 'TVC_LAB';
-    const TVC_LAB_VESSEL_ID = 'LAB_SHIP';
+    const PILOT_COMPANY_ID = 'TVC';
+    const PILOT_VESSEL_ID = 'TVC No1';
+    /** Removed from admin UI — stripped on load (incl. stale localStorage cache). */
+    const DEPRECATED_COMPANY_IDS = new Set(['DAEMYUNG', 'TVC_LAB']);
     const REG_CODE_MIN = 1;
     const REG_CODE_MAX = 200;
 
@@ -146,19 +148,32 @@ const TVC_AdminRegistry = (function () {
     }
 
     function isTvcLabCompany(companyId) {
-        return cleanId(companyId) === TVC_LAB_COMPANY_ID;
+        return false;
+    }
+
+    function getPilotDefaults() {
+        return { companyId: PILOT_COMPANY_ID, vesselId: PILOT_VESSEL_ID };
     }
 
     function getTvcLabDefaults() {
-        return { companyId: TVC_LAB_COMPANY_ID, vesselId: TVC_LAB_VESSEL_ID };
+        return getPilotDefaults();
+    }
+
+    function applyPilotSelectionIfDeprecated() {
+        const sel = getSelected();
+        if (DEPRECATED_COMPANY_IDS.has(sel.companyId)) {
+            setSelected(PILOT_COMPANY_ID, PILOT_VESSEL_ID);
+        }
     }
 
     async function load() {
+        try { localStorage.removeItem('tvc_admin_registry_cache_v1'); } catch (_) {}
         if (!isElectronAdmin()) {
             try {
                 const local = localStorage.getItem(LS_REGISTRY_CACHE);
                 if (local) {
                     _cache = normalize(JSON.parse(local));
+                    applyPilotSelectionIfDeprecated();
                     return _cache;
                 }
             } catch (e) {
@@ -169,6 +184,7 @@ const TVC_AdminRegistry = (function () {
         if (!res.ok) throw new Error(`Admin registry load failed (${res.status})`);
         const data = await res.json();
         _cache = normalize(data);
+        applyPilotSelectionIfDeprecated();
         return _cache;
     }
 
@@ -226,7 +242,7 @@ const TVC_AdminRegistry = (function () {
                 master_login: normalizeLoginAccount(v.master_login),
             };
             }),
-        })).filter(c => c.company_id);
+        })).filter(c => c.company_id && !DEPRECATED_COMPANY_IDS.has(c.company_id));
         return {
             version: data.version || 1,
             updated_at: data.updated_at || '',
@@ -782,9 +798,12 @@ const TVC_AdminRegistry = (function () {
         STATUS_OPTS,
         HQ_SKU_OPTS,
         VESSEL_SKUS,
-        TVC_LAB_COMPANY_ID,
-        TVC_LAB_VESSEL_ID,
+        TVC_LAB_COMPANY_ID: PILOT_COMPANY_ID,
+        TVC_LAB_VESSEL_ID: PILOT_VESSEL_ID,
+        PILOT_COMPANY_ID,
+        PILOT_VESSEL_ID,
         isTvcLabCompany,
+        getPilotDefaults,
         getTvcLabDefaults,
         parseRegCode,
         normalizeRegCode,

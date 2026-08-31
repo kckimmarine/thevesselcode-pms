@@ -1,48 +1,7 @@
 {
-  "version": 1,
+  "version": 2,
   "updated_at": "2026-08-31",
   "companies": [
-    {
-      "company_id": "TVC_LAB",
-      "company_code": "2",
-      "name": "TVC 내부 QA",
-      "name_en": "TVC Lab",
-      "status": "active",
-      "hq_sku": "HQ_OFFICE",
-      "vessels": [
-        {
-          "vessel_id": "LAB_SHIP",
-          "name": "LAB_SHIP",
-          "code": "1",
-          "imo_no": "9999999",
-          "delivery": "2026-01-01",
-          "status": "active",
-          "deploy": {
-            "app_version": {
-              "VESSEL_MASTER": "1.0.6",
-              "VESSEL_ENGINE": "1.0.6",
-              "VESSEL_DECK": "1.0.6"
-            },
-            "app_updated_at": {
-              "VESSEL_MASTER": "2026-08-26",
-              "VESSEL_ENGINE": "2026-08-26",
-              "VESSEL_DECK": "2026-08-26"
-            },
-            "license_issued_at": "2026-08-26"
-          }
-        }
-      ],
-      "contract": {
-        "start_date": "",
-        "term_months": 0,
-        "fee_note": "Internal — not a customer contract"
-      },
-      "deploy": {
-        "app_version": "1.0.6",
-        "app_updated_at": "2026-08-26",
-        "license_issued_at": "2026-08-26"
-      }
-    },
     {
       "company_id": "TVC",
       "company_code": "1",
