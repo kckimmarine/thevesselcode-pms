@@ -25,7 +25,8 @@ async function handler(req, res) {
         const status = code === 'BAD_REQUEST' ? 400
             : code === 'NOT_FOUND' ? 404
                 : code === 'NOT_CONFIGURED' ? 501
-                    : 500;
+                    : code === 'PILOT_VESSEL_ONLY' ? 403
+                        : 500;
         return res.status(status).json({
             error: code,
             message: e.message || String(e),

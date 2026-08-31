@@ -1,5 +1,8 @@
 -- THE VESSEL CODE — Supabase schema (paste into SQL Editor)
 -- Demo MVP: companies, vessels, user profiles + RLS
+--
+-- Online sync pilot (INCHEON CHEMI only): use deploy/supabase-sync-pilot-incheon-chemi.sql
+-- Full fleet seed below is for future HQ demo; do not run vessel inserts if pilot-only sync is desired.
 
 CREATE TABLE IF NOT EXISTS companies (
   id TEXT PRIMARY KEY,

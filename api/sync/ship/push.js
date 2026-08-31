@@ -40,7 +40,7 @@ async function handler(req, res) {
         return res.status(200).json(result);
     } catch (e) {
         const code = e.code || 'SYNC_PUSH_FAILED';
-        const status = code === 'BAD_REQUEST' ? 400 : code === 'NOT_CONFIGURED' ? 501 : 500;
+        const status = code === 'BAD_REQUEST' ? 400 : code === 'NOT_CONFIGURED' ? 501 : code === 'PILOT_VESSEL_ONLY' ? 403 : 500;
         return res.status(status).json({
             error: code,
             message: e.message || String(e),

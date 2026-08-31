@@ -33,6 +33,7 @@
     "test:seat-license": "node scripts/test-seat-activation-flow.mjs VESSEL_ENGINE",
     "dist:sku": "node scripts/build-one-sku.mjs",
     "verify-all": "node scripts/verify-rbac.mjs && node scripts/verify-sync-vessel.mjs && node scripts/verify-license.mjs",
+    "verify-online-sync": "node scripts/verify-online-sync-api.mjs",
     "test-pms-master-roundtrip": "node scripts/test-pms-master-roundtrip.mjs",
     "test-electron-four-modes": "node scripts/test-electron-four-modes.mjs",
     "test-reported-by-sync": "node scripts/test-reported-by-sync.mjs",

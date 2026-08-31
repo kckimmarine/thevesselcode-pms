@@ -30,6 +30,18 @@ function sanitizePathPart(value, fallback = 'UNKNOWN') {
     return String(value || fallback).trim().replace(/[^a-zA-Z0-9._\- ]/g, '_').slice(0, 120) || fallback;
 }
 
+/** When SYNC_PILOT_VESSEL_ID is set on Vercel, block sync for any other vessel. */
+function assertPilotVessel(vesselId) {
+    const pilot = String(process.env.SYNC_PILOT_VESSEL_ID || '').trim();
+    if (!pilot) return;
+    const vid = String(vesselId || '').trim();
+    if (vid !== pilot) {
+        const err = new Error(`Online sync pilot is limited to vessel "${pilot}". Requested: "${vid}".`);
+        err.code = 'PILOT_VESSEL_ONLY';
+        throw err;
+    }
+}
+
 function storagePath({ companyId, vesselId, direction, filename }) {
     const ts = Date.now();
     const safeName = sanitizePathPart(filename, 'package.zip');
@@ -70,6 +82,7 @@ async function uploadPackage({
         err.code = 'BAD_REQUEST';
         throw err;
     }
+    assertPilotVessel(vid);
 
     const cid = await resolveCompanyId(supabase, vid, companyId);
     const path = storagePath({ companyId: cid, vesselId: vid, direction, filename });
@@ -126,6 +139,7 @@ async function pullLatestPackage(vesselId, direction = 'SHIP_TO_HQ') {
         err.code = 'BAD_REQUEST';
         throw err;
     }
+    assertPilotVessel(vid);
 
     const { data: rows, error } = await supabase
         .from('sync_packages')
