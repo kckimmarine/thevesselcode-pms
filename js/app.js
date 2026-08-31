@@ -6749,8 +6749,22 @@ const TVC_App = (function () {
         return `<nav class="spare-flow-panel menu-flow-panel" aria-label="Maintenance workflow">${colHtml}</nav>`;
     }
 
-    function renderMenuCards(host) {
-        if (!host) return;
+    function renderAdministrationSidebar(adminCols, f) {
+        if (!adminCols.length) return '';
+        return adminCols.map(col => {
+            const items = col.items
+                .map(it => renderMenuFlowItem(it, f, {}))
+                .filter(Boolean)
+                .join('');
+            return `<aside class="fleet-list-panel hq-administration-panel">
+                <div class="fleet-list-head">${esc(col.title)}</div>
+                <div class="hq-administration-body">${items}</div>
+            </aside>`;
+        }).join('');
+    }
+
+    function renderMenuCards(mainHost, adminHost) {
+        if (!mainHost) return;
         const f = state.user ? TVC_Space.getUiFeatures(state.user) : {};
         const isSuperHq = TVC_RBAC.isSuperHqAccount?.(state.user);
         const cols = menuModel();
@@ -6763,13 +6777,14 @@ const TVC_App = (function () {
         const spareFlow = f.showSpareTab && typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.renderSpareWorkFlowCard
             ? TVC_SpareMenu.renderSpareWorkFlowCard()
             : '';
-        let html = renderSectionCard('PMS Work Flow', renderMenuFlowPanel(opsCols, f), {
+        mainHost.innerHTML = renderSectionCard('PMS Work Flow', renderMenuFlowPanel(opsCols, f), {
             className: 'tvc-section-pms-flow',
-        });
-        if (adminCols.length) {
-            html += `<div class="tvc-admin-menu-grid">${renderMenuFlowPanel(adminCols, f)}</div>`;
+        }) + spareFlow;
+        if (adminHost) {
+            const adminHtml = renderAdministrationSidebar(adminCols, f);
+            adminHost.innerHTML = adminHtml;
+            adminHost.classList.toggle('hidden', !adminHtml);
         }
-        host.innerHTML = html + spareFlow;
     }
 
     const ADMIN_COMPANY_FILTER_ALL = '__ALL__';
@@ -9031,8 +9046,7 @@ const TVC_App = (function () {
         const sidebarCards = document.getElementById('cmaxsCardsSidebar');
         const mainCards = document.getElementById('cmaxsCards');
         document.getElementById('menuMainCol')?.classList.remove('hidden');
-        renderMenuCards(mainCards);
-        if (sidebarCards) sidebarCards.innerHTML = '';
+        renderMenuCards(mainCards, sidebarCards);
         TVC_OutstandingTasks.render();
     }
 

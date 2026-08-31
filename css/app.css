@@ -413,6 +413,31 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     display: flex; flex-direction: column; gap: 16px; min-width: 0; align-self: start;
 }
 .hq-left-col.hidden { display: none !important; }
+.hq-administration-host {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    min-width: 0;
+    width: 100%;
+}
+.hq-administration-host.hidden { display: none !important; }
+.hq-administration-panel .hq-administration-body {
+    padding: 8px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.hq-administration-panel .spare-flow-note {
+    margin: 0;
+    padding: 2px 2px 6px;
+    font-size: 11px;
+    color: #718096;
+}
+.hq-administration-panel .spare-flow-item {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: left;
+}
 .hq-menu-cards { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .hq-menu-cards .work-card { min-width: 0; }
 .hq-menu-cards .wc-title { word-break: keep-all; overflow-wrap: break-word; }
