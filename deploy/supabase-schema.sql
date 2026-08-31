@@ -55,3 +55,35 @@ CREATE POLICY "profiles_self_or_admin" ON user_profiles FOR SELECT USING (
 -- After creating Auth users in Supabase Dashboard, insert profiles:
 -- dm_user@thevesselcode.com  → HQ, company_id = DAEMYUNG
 -- admin@thevesselcode.com    → ADMIN, company_id = null
+
+-- Cloud sync storage metadata (ZIP packages: Master→HQ, HQ→Ship)
+CREATE TABLE IF NOT EXISTS sync_packages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id TEXT NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+  vessel_id TEXT NOT NULL REFERENCES vessels(id) ON DELETE CASCADE,
+  direction TEXT NOT NULL CHECK (direction IN ('SHIP_TO_HQ', 'HQ_TO_SHIP', 'STATION_TO_HUB')),
+  storage_path TEXT NOT NULL,
+  filename TEXT,
+  file_size BIGINT,
+  exported_by TEXT,
+  record_count INT DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'READY' CHECK (status IN ('READY', 'IMPORTED', 'ARCHIVED')),
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS sync_packages_vessel_dir_idx
+  ON sync_packages (vessel_id, direction, created_at DESC);
+
+ALTER TABLE sync_packages ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "sync_packages_company_or_admin" ON sync_packages FOR SELECT USING (
+  company_id = (auth.jwt() -> 'user_metadata' ->> 'company_id')
+  OR (auth.jwt() -> 'user_metadata' ->> 'account_type') = 'ADMIN'
+);
+
+CREATE POLICY "sync_packages_insert_ship" ON sync_packages FOR INSERT WITH CHECK (
+  (auth.jwt() -> 'user_metadata' ->> 'account_type') IN ('ADMIN', 'HQ', 'SHIP')
+);
+
+-- Supabase Storage: create bucket `tvc-sync-packages` (private)
+-- Path pattern: {company_id}/{vessel_id}/{direction}/{timestamp}_{filename}

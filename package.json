@@ -45,6 +45,7 @@
   },
   "license": "ISC",
   "dependencies": {
+    "@supabase/supabase-js": "^2.112.4",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
     "uuid": "^14.0.0",

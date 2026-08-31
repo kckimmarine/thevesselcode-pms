@@ -1114,15 +1114,13 @@ const TVC_App = (function () {
     async function onLogin(user) {
         const role = user.role || TVC_RBAC.resolveUserRole(user);
         state.user = role && role !== user.role ? { ...user, role } : user;
-        const webAdminToHq = isWebPortal() && TVC_RBAC.isAdminAccount?.(state.user);
-        // 데이터 공간(Space) 분리: HQ와 선박(Vessel)은 서로의 실시간 데이터를 보지 못하며, 오직 Export/Import(ZIP)로만 동기화된다.
-        const isAdmin = TVC_RBAC.isAdminAccount?.(state.user) && !webAdminToHq;
-        const isHq = !isAdmin && (TVC_RBAC.isHqAccount(state.user) || webAdminToHq);
-        state.space = isAdmin ? 'ADMIN' : (isHq ? 'HQ' : 'SHIP');
+        const isSuperHq = TVC_RBAC.isSuperHqAccount?.(state.user);
+        const isHq = TVC_RBAC.isHqAccount(state.user);
+        // HQ ↔ Ship data stays isolated until Export/Import (ZIP or cloud sync storage).
+        state.space = isHq ? 'HQ' : 'SHIP';
+        state.isSuperHq = isSuperHq;
         state.station = state.user.station || null;
-        if (isAdmin) {
-            state.department = null;
-        } else if (isHq) {
+        if (isHq) {
             const savedDept = localStorage.getItem('tvc_hq_dept_view');
             state.department = (savedDept === 'ENGINE' || savedDept === 'DECK') ? savedDept : 'DECK';
         } else {
@@ -1135,41 +1133,38 @@ const TVC_App = (function () {
         state.spareSelectedGroupKey = null;
         state.search = '';
         updateUserBar(state.user);
-        // HQ는 선박 선택을 먼저 확정해야 선박별 Run-hour scope / 데이터 필터가 올바르게 적용됨
-        if (isAdmin) {
-            TVC_PMS.setSpace('SHIP');
-            state.jobs = [];
-            state.components = [];
-            state.groups = [];
-            state.spareGroups = [];
-            state.adminSearch = '';
-            state.adminCompanyFilter = '';
-            try {
-                await TVC_AdminRegistry.load();
-                const sel = TVC_AdminRegistry.getSelected();
-                const lab = TVC_AdminRegistry.getTvcLabDefaults();
-                if (sel.companyId) {
-                    state.selectedAdminCompanyId = sel.companyId;
-                    state.selectedAdminVesselId = sel.vesselId || null;
-                    state.adminCompanyFilter = sel.companyId;
-                } else {
-                    state.adminCompanyFilter = lab.companyId;
-                    state.selectedAdminCompanyId = lab.companyId;
-                    state.selectedAdminVesselId = lab.vesselId;
-                    TVC_AdminRegistry.setSelected(lab.companyId, lab.vesselId);
+        if (isHq) {
+            if (isSuperHq) {
+                state.adminSearch = state.adminSearch || '';
+                try {
+                    await TVC_AdminRegistry.load();
+                    const sel = TVC_AdminRegistry.getSelected();
+                    if (sel.companyId) {
+                        state.selectedAdminCompanyId = sel.companyId;
+                        state.selectedAdminVesselId = sel.vesselId || null;
+                        state.adminCompanyFilter = sel.companyId;
+                    } else {
+                        state.adminCompanyFilter = ADMIN_COMPANY_FILTER_ALL;
+                        state.selectedAdminCompanyId = null;
+                        state.selectedAdminVesselId = null;
+                    }
+                    if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
+                        TVC_Fleet.syncFromAdminRegistry();
+                    }
+                } catch (e) {
+                    console.warn('[TVC_AdminRegistry]', e);
+                    await TVC_Dialog.alert('Admin registry (admin/registry.json) load failed.\n' + (e.message || e));
                 }
-            } catch (e) {
-                console.warn('[TVC_AdminRegistry]', e);
-                await TVC_Dialog.alert('Admin registry (admin/registry.json) load failed.\n' + (e.message || e));
             }
-        } else if (isHq) {
             await TVC_Fleet.ensureFleet();
             state.fleet = TVC_Fleet.getVisible(state.user);
             let sel = TVC_Fleet.getSelectedId();
             if (!state.fleet.some(v => v.id === sel)) sel = state.fleet[0]?.id || null;
             state.selectedVesselId = sel;
             if (sel) TVC_Fleet.select(sel);
-            if (TVC_RBAC.isCompanyHqAccount?.(state.user)) {
+            if (isSuperHq) {
+                state.fleetCompanyFilter = state.fleetCompanyFilter || ADMIN_COMPANY_FILTER_ALL;
+            } else if (TVC_RBAC.isCompanyHqAccount?.(state.user)) {
                 state.fleetCompanyFilter = String(state.user.company_id || TVC_Fleet.licenseCompanyId()).trim();
             } else {
                 state.fleetCompanyFilter = ADMIN_COMPANY_FILTER_ALL;
@@ -1184,11 +1179,6 @@ const TVC_App = (function () {
         renderDeptToggles(state.user);
         renderCaptainViewDashboard();
         if (isHq) await populateShipHeader(state.user);
-        if (isAdmin) {
-            setText('cmaxsShipName', 'THE VESSEL CODE — Admin');
-            setText('cmaxsShipCode', 'ADMIN');
-            setText('cmaxsShipDelivery', '—');
-        }
         showApp();
         try { TVC_Config?.applyEmbedChrome?.(); } catch (_) {}
         switchTab('menu');
@@ -1270,8 +1260,8 @@ const TVC_App = (function () {
     function updateUserBar(user) {
         const badge = typeof TVC_Space !== 'undefined'
             ? TVC_Space.getModeBadge(user)
-            : (TVC_RBAC.isAdminAccount?.(user)
-                ? 'Admin Mode'
+            : (TVC_RBAC.isSuperHqAccount?.(user)
+                ? 'HQ Admin'
                 : (TVC_RBAC.isHqAccount(user)
                     ? 'HQ Mode'
                     : (user.department === 'DECK' ? 'Vessel Mode - Deck'
@@ -1281,12 +1271,15 @@ const TVC_App = (function () {
         document.querySelectorAll('.userBadgeEl').forEach(el => el.textContent = badge);
         document.querySelectorAll('.userNameEl').forEach(el => el.textContent = title);
         document.querySelectorAll('.userVesselEl').forEach(el => {
-            if (TVC_RBAC.isAdminAccount?.(user)) { el.textContent = 'TVC Admin'; return; }
+            if (TVC_RBAC.isSuperHqAccount?.(user)) {
+                el.textContent = 'All companies';
+                return;
+            }
             if (!user.vessel_id) { el.textContent = 'Head Office'; return; }
             const v = TVC_Fleet.resolveById(user.vessel_id);
             el.textContent = v ? `Vessel: ${v.name} (${v.id})` : `Vessel: ${user.vessel_id}`;
         });
-        if (!TVC_RBAC.isAdminAccount?.(user)) populateShipHeader(user);
+        if (TVC_RBAC.isHqAccount(user)) populateShipHeader(user);
         syncWindowTitle(user);
     }
 
@@ -1328,7 +1321,6 @@ const TVC_App = (function () {
 
     function applyRoleUi(user) {
         const f = typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(user) : TVC_RBAC.getUiFeatures(user);
-        const isAdmin = !!TVC_RBAC.isAdminAccount?.(user);
         document.querySelectorAll('[data-feature]').forEach(el => {
             if (el.classList.contains('tab-pane')) return;
             el.classList.toggle('hidden', !f[el.dataset.feature]);
@@ -1339,15 +1331,12 @@ const TVC_App = (function () {
                 btn.classList.remove('hidden');
                 return;
             }
-            btn.classList.toggle('hidden', isAdmin);
+            const feat = btn.dataset.feature;
+            btn.classList.toggle('hidden', !!(feat && !f[feat]));
         });
         const dash = document.getElementById('captainViewDashboard');
-        if (dash) dash.classList.toggle('hidden', !f.showCaptainDashboard || isAdmin);
+        if (dash) dash.classList.toggle('hidden', !f.showCaptainDashboard);
         syncPlanGroupTreeUi();
-        if (isAdmin && state.currentTab !== 'menu') {
-            switchTab('menu');
-            return;
-        }
         if (!f.showSpareTab && state.currentTab === 'spare') {
             switchTab('menu');
             return;
@@ -3116,77 +3105,78 @@ const TVC_App = (function () {
         return f.showRunningHours !== false;
     }
 
+    function superHqAdminMenuSections() {
+        const st = typeof TVC_AdminRegistry !== 'undefined' ? TVC_AdminRegistry.stats() : { companies: 0, vessels: 0 };
+        return [
+            {
+                key: 'commercial',
+                tone: 'daily',
+                title: 'Commercial — TVC delivers',
+                items: [
+                    {
+                        label: 'Deliver: Setup · App Update (pool / company) · Seat license',
+                        textOnly: true,
+                    },
+                    {
+                        label: 'Deliver files & license (3종 + MR → License → Import)',
+                        tag: 'A',
+                        action: 'TVC_App.openAdminDeliverModal()',
+                    },
+                    {
+                        label: 'Release (Dev — Build & Export Setup + App Update)',
+                        tag: 'Dev',
+                        action: 'TVC_App.openAdminReleaseModal()',
+                    },
+                    {
+                        label: 'Commercial core & TVC Lab guide (상용화 · 내부 QA)',
+                        tag: 'A',
+                        action: 'TVC_App.openAdminCommercialModal()',
+                    },
+                ],
+            },
+            {
+                key: 'admin',
+                tone: 'necessary',
+                title: 'Contract registry',
+                items: [
+                    {
+                        label: `Registry · ${st.companies} companies · ${st.vessels} vessels · Company: No Select / All / ID`,
+                        textOnly: true,
+                    },
+                    {
+                        label: 'Select TVC_LAB (internal QA ship list)',
+                        tag: 'B',
+                        action: 'TVC_App.selectTvcLabInList()',
+                    },
+                    {
+                        label: 'Company & Vessel Registry (Select · Add · Modify · Set inactive)',
+                        tag: 'B',
+                        action: 'TVC_App.openAdminRegistryHub()',
+                    },
+                    {
+                        label: 'Contract SOP checklist (신규 / 선박추가 / 계약종료)',
+                        tag: 'B',
+                        action: 'TVC_App.openAdminSopModal()',
+                    },
+                    {
+                        label: 'Print contract draft (선사·선박 → 계약서 초안)',
+                        tag: 'B',
+                        action: 'TVC_App.adminPrintContractDraft()',
+                    },
+                    {
+                        label: 'Print contract registry (계약 선사·선박 목록)',
+                        tag: 'B',
+                        action: 'TVC_App.openAdminPrintRegistryModal()',
+                    },
+                ],
+            },
+        ];
+    }
+
     function menuModel() {
-        if (state.user && TVC_RBAC.isAdminAccount?.(state.user)) {
-            const st = typeof TVC_AdminRegistry !== 'undefined' ? TVC_AdminRegistry.stats() : { companies: 0, vessels: 0 };
-            const sections = [
-                {
-                    key: 'commercial',
-                    tone: 'daily',
-                    title: 'Commercial — TVC delivers',
-                    items: [
-                        {
-                            label: 'Deliver: Setup · App Update (pool / company) · Seat license',
-                            textOnly: true,
-                        },
-                        {
-                            label: 'Deliver files & license (3종 + MR → License → Import)',
-                            tag: 'A',
-                            action: 'TVC_App.openAdminDeliverModal()',
-                        },
-                        {
-                            label: 'Release (Dev — Build & Export Setup + App Update)',
-                            tag: 'Dev',
-                            action: 'TVC_App.openAdminReleaseModal()',
-                        },
-                        {
-                            label: 'Commercial core & TVC Lab guide (상용화 · 내부 QA)',
-                            tag: 'A',
-                            action: 'TVC_App.openAdminCommercialModal()',
-                        },
-                    ],
-                },
-                {
-                    key: 'admin',
-                    tone: 'necessary',
-                    title: 'Contract registry',
-                    items: [
-                        {
-                            label: `Registry · ${st.companies} companies · ${st.vessels} vessels · Company: No Select / All / ID`,
-                            textOnly: true,
-                        },
-                        {
-                            label: 'Select TVC_LAB (internal QA ship list)',
-                            tag: 'B',
-                            action: 'TVC_App.selectTvcLabInList()',
-                        },
-                        {
-                            label: 'Company & Vessel Registry (Select · Add · Modify · Set inactive)',
-                            tag: 'B',
-                            action: 'TVC_App.openAdminRegistryHub()',
-                        },
-                        {
-                            label: 'Contract SOP checklist (신규 / 선박추가 / 계약종료)',
-                            tag: 'B',
-                            action: 'TVC_App.openAdminSopModal()',
-                        },
-                        {
-                            label: 'Print contract draft (선사·선박 → 계약서 초안)',
-                            tag: 'B',
-                            action: 'TVC_App.adminPrintContractDraft()',
-                        },
-                        {
-                            label: 'Print contract registry (계약 선사·선박 목록)',
-                            tag: 'B',
-                            action: 'TVC_App.openAdminPrintRegistryModal()',
-                        },
-                    ],
-                },
-            ];
-            return filterAdminMenuForWeb(sections);
-        }
         const c = menuCounts();
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
+        const isSuperHq = state.user && TVC_RBAC.isSuperHqAccount?.(state.user);
         const isMaster = state.user && TVC_Space.isCaptainHub(state.user);
 
         const shipDailyItems = [
@@ -3203,11 +3193,15 @@ const TVC_App = (function () {
             const hqMonthlyItems = [
                 ...(runningHoursMenuVisible() ? [{ label: 'Check Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" }] : []),
             ];
-        return [
+            const sections = [
                 { key: 'daily', tone: 'daily', title: 'Routine Tasks', items: hqDailyItems },
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: hqMonthlyItems },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
+            if (isSuperHq) {
+                sections.push(...filterAdminMenuForWeb(superHqAdminMenuSections()));
+            }
+            return sections;
         }
 
         const shipMonthly = shipMonthlyReportItems();
@@ -3376,10 +3370,20 @@ const TVC_App = (function () {
         if (!user || typeof TVC_OnlineSync === 'undefined') return;
         try {
             const vesselId = TVC_RBAC.isHqAccount(user) ? state.selectedVesselId : undefined;
+            if (direction === 'HQ_PULL' && !vesselId) {
+                await TVC_Dialog.alert('Select a vessel in Ship List before online pull.');
+                return;
+            }
+            const busyMsg = direction === 'HQ_PULL'
+                ? 'Pulling latest package from cloud…\n(V-sat links may take several minutes.)'
+                : 'Building report and uploading to cloud…\n(V-sat links may take several minutes.)';
+            await TVC_Dialog.alert(busyMsg);
             const result = await TVC_OnlineSync.syncNow(user, direction, { vesselId });
-            await TVC_Dialog.alert(result.message || (result.status === 'SCAFFOLD'
-                ? 'Online sync is scaffolded — use offline ZIP for now.'
-                : 'Online sync request completed.'));
+            if (result.status === 'OK' && TVC_RBAC.isHqAccount(user)) {
+                await loadData();
+                rerenderCurrentTab();
+            }
+            await TVC_Dialog.alert(result.message || 'Online sync completed.');
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
         }
@@ -6773,18 +6777,24 @@ const TVC_App = (function () {
     function renderMenuCards(host) {
         if (!host) return;
         const f = state.user ? TVC_Space.getUiFeatures(state.user) : {};
-        if (TVC_RBAC.isAdminAccount?.(state.user)) {
-            const cols = menuModel();
-            host.innerHTML = renderAdminHomePanel()
-                + `<div class="tvc-admin-menu-grid">${renderMenuFlowPanel(cols, f)}</div>`;
-            return;
-        }
+        const isSuperHq = TVC_RBAC.isSuperHqAccount?.(state.user);
+        const cols = menuModel();
+        const opsCols = isSuperHq
+            ? cols.filter(s => s.key !== 'commercial' && s.key !== 'admin')
+            : cols;
+        const adminCols = isSuperHq
+            ? cols.filter(s => s.key === 'commercial' || s.key === 'admin')
+            : [];
         const spareFlow = f.showSpareTab && typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.renderSpareWorkFlowCard
             ? TVC_SpareMenu.renderSpareWorkFlowCard()
             : '';
-        host.innerHTML = renderSectionCard('PMS Work Flow', renderMenuFlowPanel(menuModel(), f), {
+        let html = renderSectionCard('PMS Work Flow', renderMenuFlowPanel(opsCols, f), {
             className: 'tvc-section-pms-flow',
-        }) + spareFlow;
+        });
+        if (adminCols.length) {
+            html += `<div class="tvc-admin-menu-grid">${renderMenuFlowPanel(adminCols, f)}</div>`;
+        }
+        host.innerHTML = html + spareFlow;
     }
 
     const ADMIN_COMPANY_FILTER_ALL = '__ALL__';
@@ -8635,11 +8645,7 @@ const TVC_App = (function () {
         const hqCol = document.getElementById('hqLeftCol');
         const body = document.getElementById('fleetTableBody');
         if (!body) return;
-        const isAdmin = state.user && TVC_RBAC.isAdminAccount?.(state.user);
-        if (isAdmin) {
-            renderAdminContractList();
-            return;
-        }
+        const isSuperHq = state.user && TVC_RBAC.isSuperHqAccount?.(state.user);
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
         hqCol?.classList.toggle('hidden', !isHq);
         document.getElementById('cmaxsMenuBody')?.classList.toggle('hq-mode', isHq);
@@ -8655,10 +8661,12 @@ const TVC_App = (function () {
 
         const companySelect = document.getElementById('adminCompanySelect');
         if (companySelect) {
-            const scoped = TVC_RBAC.isCompanyHqAccount?.(state.user);
+            const scoped = TVC_RBAC.isCompanyHqAccount?.(state.user) && !isSuperHq;
             if (scoped && !state.fleetCompanyFilter) state.fleetCompanyFilter = hqFleetCompanyId(state.user);
             if (!scoped && !state.fleetCompanyFilter) state.fleetCompanyFilter = ADMIN_COMPANY_FILTER_ALL;
-            companySelect.innerHTML = hqFleetCompanySelectOptions(state.user, state.fleetCompanyFilter);
+            companySelect.innerHTML = isSuperHq
+                ? adminCompanySelectOptions(state.fleetCompanyFilter)
+                : hqFleetCompanySelectOptions(state.user, state.fleetCompanyFilter);
             companySelect.disabled = !!scoped;
             companySelect.title = scoped ? 'This HQ account is limited to the licensed company.' : '';
             companySelect.onchange = () => TVC_App.setFleetCompanyFilter(companySelect.value);
@@ -8892,12 +8900,7 @@ const TVC_App = (function () {
         document.getElementById('menuMainCol')?.classList.remove('hidden');
         renderMenuCards(mainCards);
         if (sidebarCards) sidebarCards.innerHTML = '';
-        if (TVC_RBAC.isAdminAccount?.(state.user)) {
-            const ot = document.getElementById('outstandingTasksPanel');
-            if (ot) ot.innerHTML = '';
-        } else {
-            TVC_OutstandingTasks.render();
-        }
+        TVC_OutstandingTasks.render();
     }
 
     function setHistView(view) {

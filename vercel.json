@@ -2,7 +2,7 @@
   "version": 2,
   "name": "thevesselcode-pms",
   "rewrites": [
-    { "source": "/((?!vendor|js|css|icons|data|admin|downloads|bluehost|manifest.json|service-worker.js|package.json).*)", "destination": "/index.html" }
+        { "source": "/((?!vendor|js|css|icons|data|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

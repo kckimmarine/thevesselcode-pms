@@ -8,6 +8,9 @@ const TVC_Config = (function () {
     const PMS_APP_ORIGIN = 'https://app.thevesselcode.com';
     const MAIN_SITE_ORIGIN = 'https://thevesselcode.com';
 
+    /** Production sync API — Vercel serverless or custom backend. Falls back to localStorage override. */
+    const SYNC_API_BASE_URL = 'https://app.thevesselcode.com';
+
     /** Vessel Setup.exe — upload to /downloads/ on Vercel or use GitHub Release URL. */
     const VESSEL_SETUP_DOWNLOAD_URL = '/downloads/TVC-PMS-HQ_OFFICE-Setup.exe';
 
@@ -59,7 +62,7 @@ const TVC_Config = (function () {
         return isWebDeploy();
     }
 
-    /** Admin menu on web — hide internal TVC-only tools (Electron Admin SKU keeps full menu). */
+    /** Admin menu on web — hide dev-only build tools; keep registry & deliver on web HQ Admin. */
     function filterAdminMenuSections(sections) {
         if (!isWebAdminPortal()) return sections;
         return sections.map(section => {
@@ -67,20 +70,12 @@ const TVC_Config = (function () {
                 return {
                     ...section,
                     items: (section.items || []).filter(it =>
-                        String(it.action || '').includes('openAdminDeliverModal')
-                    ),
-                };
-            }
-            if (section.key === 'admin') {
-                return {
-                    ...section,
-                    items: (section.items || []).filter(it =>
-                        String(it.action || '').includes('openAdminRegistryHub')
+                        !String(it.action || '').includes('openAdminReleaseModal')
                     ),
                 };
             }
             return section;
-        }).filter(s => (s.items || []).length > 0);
+        });
     }
 
     function isWebSuperHqUser(user) {
@@ -142,6 +137,7 @@ const TVC_Config = (function () {
     return {
         SUPABASE_URL,
         SUPABASE_ANON_KEY,
+        SYNC_API_BASE_URL,
         VESSEL_SETUP_DOWNLOAD_URL,
         PMS_APP_ORIGIN,
         MAIN_SITE_ORIGIN,

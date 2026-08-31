@@ -1066,7 +1066,7 @@ const TVC_Sync = (function () {
     }
 
 
-    async function exportCompanyZip(user) {
+    async function buildCompanyZipBlob(user, opts = {}) {
         if (typeof TVC_Space !== 'undefined') TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.COMPANY_EXPORT);
         TVC_RBAC.assert(user, TVC_RBAC.Action.EXPORT_SHIP_SYNC);
 
@@ -1119,27 +1119,35 @@ const TVC_Sync = (function () {
 
         const filename = `${vesselId}_COMPANY_REPORT_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
-        await TVC_FileExport.save(blob, filename);
-
-        await markExported(merged, user, 'SHIP_TO_HQ');
-        await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
-        await TVC_DB.put('audit_logs', {
-            timestamp: new Date().toLocaleString(),
-            log: `📦 [Export/SHIP_TO_HQ/ALL] ${filename}`,
-            sync_status: 'SYNCED',
-        });
         const recordCount = Object.values(merged).reduce((sum, rows) => sum + (rows?.length || 0), 0);
+
+        if (!opts.skipMarkExported) {
+            await markExported(merged, user, 'SHIP_TO_HQ');
+            await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
+            await TVC_DB.put('audit_logs', {
+                timestamp: new Date().toLocaleString(),
+                log: `📦 [Export/SHIP_TO_HQ/ALL] ${filename}`,
+                sync_status: 'SYNCED',
+            });
+        }
+
+        return { blob, filename, payload, vessel_id: vesselId, company_id: companyId, record_count: recordCount };
+    }
+
+    async function exportCompanyZip(user) {
+        const built = await buildCompanyZipBlob(user);
+        await TVC_FileExport.save(built.blob, built.filename);
         await recordSyncHistory({
             type: 'EXPORT',
             direction: 'SHIP_TO_HQ',
             department: 'ALL',
-            vessel_id: vesselId,
-            filename,
-            record_count: recordCount,
+            vessel_id: built.vessel_id,
+            filename: built.filename,
+            record_count: built.record_count,
             status: 'SUCCESS',
             space: spaceOf(user),
         });
-        return payload;
+        return built.payload;
     }
 
     async function importPayload(user, payload, file, opts = {}) {
@@ -1194,7 +1202,7 @@ const TVC_Sync = (function () {
     }
 
     return {
-        exportZip, exportCompanyZip, importZip, importPayload, collectDelta, collectMonthlySnapshot, collectCaseReview, mergePayload,
+        exportZip, exportCompanyZip, buildCompanyZipBlob, importZip, importPayload, collectDelta, collectMonthlySnapshot, collectCaseReview, mergePayload,
         getHistory, recordSyncHistory, isSpareSyncHistoryRow, isPmsSyncHistoryRow,
         validateImportVesselId, validateImportPackageScope, resolveFileDepartment,
         resolveActiveImportDepartment, resolveExpectedVesselId,

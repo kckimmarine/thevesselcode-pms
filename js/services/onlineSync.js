@@ -1,14 +1,17 @@
-/** THE VESSEL CODE — Online sync scaffold (Master ↔ HQ)
- *  Offline ZIP remains the primary/default transfer path.
- *  When a sync API is configured and the browser is online, Master/HQ can push/pull packages. */
+/** THE VESSEL CODE — Online sync (Master ↔ HQ via cloud storage)
+ *  Offline ZIP remains the fallback. V-sat/FBB: large uploads OK — use long timeout. */
 const TVC_OnlineSync = (function () {
     const META_KEY = 'sync_api_base_url';
-    const DEFAULT_TIMEOUT_MS = 30000;
+    const DEFAULT_TIMEOUT_MS = 180000;
 
     function getApiBaseUrl() {
         try {
             const fromMeta = localStorage.getItem(META_KEY);
             if (fromMeta && String(fromMeta).trim()) return String(fromMeta).trim().replace(/\/+$/, '');
+        } catch (_) {}
+        try {
+            const cfg = typeof TVC_Config !== 'undefined' ? TVC_Config.SYNC_API_BASE_URL : '';
+            if (cfg && String(cfg).trim()) return String(cfg).trim().replace(/\/+$/, '');
         } catch (_) {}
         return null;
     }
@@ -23,56 +26,57 @@ const TVC_OnlineSync = (function () {
 
     function statusMessage() {
         if (!isConfigured()) {
-            return 'Online sync is not configured. Use offline ZIP (email) or set sync API URL in admin settings.';
+            return 'Online sync API URL is not set. Use offline ZIP or configure sync in Settings.';
         }
         if (!navigator.onLine) {
             return 'Browser is offline. Use offline ZIP transfer.';
         }
-        return 'Online sync is available.';
+        return 'Online sync is available (cloud storage).';
     }
 
-    async function fetchJson(path, opts = {}) {
+    async function apiFetch(path, opts = {}) {
         const base = getApiBaseUrl();
         if (!base) throw new Error('Sync API URL is not configured.');
+        const timeoutMs = opts.timeoutMs || DEFAULT_TIMEOUT_MS;
         const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-        const timer = controller ? setTimeout(() => controller.abort(), DEFAULT_TIMEOUT_MS) : null;
+        const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
         try {
             const res = await fetch(`${base}${path}`, {
                 method: opts.method || 'GET',
-                headers: {
-                    Accept: 'application/json',
-                    ...(opts.headers || {}),
-                },
+                headers: opts.headers || {},
                 body: opts.body,
                 signal: controller?.signal,
             });
-            if (!res.ok) {
-                const text = await res.text().catch(() => '');
-                throw new Error(`Sync API ${res.status}: ${text || res.statusText}`);
-            }
             const ct = res.headers.get('content-type') || '';
-            if (ct.includes('application/json')) return res.json();
-            return { ok: true, raw: await res.text() };
+            const isJson = ct.includes('application/json');
+            const payload = isJson ? await res.json().catch(() => ({})) : { raw: await res.text() };
+            if (!res.ok) {
+                const msg = payload?.message || payload?.error || res.statusText || `HTTP ${res.status}`;
+                throw new Error(`Sync API ${res.status}: ${msg}`);
+            }
+            return payload;
         } finally {
             if (timer) clearTimeout(timer);
         }
     }
 
-    /** Master — push aggregated SHIP_TO_HQ package (scaffold: API must accept multipart/form-data) */
+    /** Master — push aggregated SHIP_TO_HQ package (application/zip body). */
     async function pushShipToHq(user, blob, meta = {}) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.EXPORT_SHIP_SYNC);
         if (typeof TVC_Space !== 'undefined') TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.COMPANY_EXPORT);
         if (!isAvailable()) throw new Error(statusMessage());
 
-        const form = new FormData();
-        form.append('package', blob, meta.filename || 'ship_sync.zip');
-        form.append('vessel_id', meta.vessel_id || user.vessel_id || '');
-        form.append('direction', 'SHIP_TO_HQ');
-        form.append('exported_by', user.username || '');
-
-        const result = await fetchJson('/api/sync/ship/push', {
+        const result = await apiFetch('/api/sync/ship/push', {
             method: 'POST',
-            body: form,
+            headers: {
+                'Content-Type': 'application/zip',
+                'X-Vessel-Id': meta.vessel_id || user.vessel_id || '',
+                'X-Company-Id': meta.company_id || '',
+                'X-Filename': meta.filename || 'ship_sync.zip',
+                'X-Exported-By': user.username || '',
+                'X-Record-Count': String(meta.record_count || 0),
+            },
+            body: blob,
         });
 
         await TVC_Sync.recordSyncHistory({
@@ -89,7 +93,7 @@ const TVC_OnlineSync = (function () {
         return result;
     }
 
-    /** HQ — pull latest ship package for selected vessel (scaffold) */
+    /** HQ — pull latest ship package metadata + signed download URL. */
     async function pullShipFromVessel(user, vesselId) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
         if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ account required.');
@@ -97,36 +101,50 @@ const TVC_OnlineSync = (function () {
         const vid = String(vesselId || '').trim();
         if (!vid) throw new Error('Select a vessel before online sync.');
 
-        const result = await fetchJson(`/api/sync/hq/pull?vessel_id=${encodeURIComponent(vid)}`);
+        return apiFetch(`/api/sync/hq/pull?vessel_id=${encodeURIComponent(vid)}&direction=SHIP_TO_HQ`);
+    }
+
+    /** HQ — download pulled package and import into IndexedDB. */
+    async function importPulledPackage(user, meta) {
+        const url = meta?.download_url;
+        if (!url) throw new Error('Pull response has no download_url.');
+        const zipRes = await fetch(url);
+        if (!zipRes.ok) throw new Error(`Download failed: ${zipRes.status}`);
+        const blob = await zipRes.blob();
+        const filename = meta.filename || 'online_pull.zip';
+        const file = new File([blob], filename, { type: 'application/zip' });
+        await TVC_Sync.importZip(user, file, null);
         await TVC_Sync.recordSyncHistory({
             type: 'IMPORT',
             direction: 'SHIP_TO_HQ',
             department: 'ALL',
-            vessel_id: vid,
-            filename: '(online pull)',
-            record_count: result?.record_count || 0,
+            vessel_id: meta.vessel_id || '—',
+            filename,
+            record_count: meta.record_count || 0,
             status: 'SUCCESS',
             space: 'HQ',
             channel: 'ONLINE',
         });
-        return result;
+        return { filename, vessel_id: meta.vessel_id };
     }
 
-    /** HQ — push HQ_TO_SHIP feedback (scaffold) */
+    /** HQ — push HQ_TO_SHIP feedback package. */
     async function pushHqFeedback(user, blob, meta = {}) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.EXPORT_HQ_FEEDBACK);
         if (!isAvailable()) throw new Error(statusMessage());
 
-        const form = new FormData();
-        form.append('package', blob, meta.filename || 'hq_feedback.zip');
-        form.append('vessel_id', meta.vessel_id || '');
-        form.append('direction', 'HQ_TO_SHIP');
-        form.append('department', meta.department || 'ALL');
-        form.append('exported_by', user.username || '');
-
-        const result = await fetchJson('/api/sync/hq/push', {
+        const result = await apiFetch('/api/sync/hq/push', {
             method: 'POST',
-            body: form,
+            headers: {
+                'Content-Type': 'application/zip',
+                'X-Vessel-Id': meta.vessel_id || '',
+                'X-Company-Id': meta.company_id || '',
+                'X-Filename': meta.filename || 'hq_feedback.zip',
+                'X-Exported-By': user.username || '',
+                'X-Record-Count': String(meta.record_count || 0),
+                'X-Direction': 'HQ_TO_SHIP',
+            },
+            body: blob,
         });
 
         await TVC_Sync.recordSyncHistory({
@@ -143,17 +161,55 @@ const TVC_OnlineSync = (function () {
         return result;
     }
 
-    /** Unified entry — returns scaffold status until backend is deployed */
+    /** Unified entry — Master push or HQ pull+import. */
     async function syncNow(user, direction, opts = {}) {
         if (!isAvailable()) {
-            return { channel: 'OFFLINE', message: statusMessage() };
+            return { channel: 'OFFLINE', status: 'OFFLINE', message: statusMessage() };
         }
+
+        if (direction === 'SHIP_TO_HQ') {
+            if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
+                throw new Error('Online push to HQ is available from Master Hub (Captain) only.');
+            }
+            if (typeof TVC_Sync.buildCompanyZipBlob !== 'function') {
+                throw new Error('Sync export module is not loaded.');
+            }
+            const built = await TVC_Sync.buildCompanyZipBlob(user);
+            const pushResult = await pushShipToHq(user, built.blob, {
+                filename: built.filename,
+                vessel_id: built.vessel_id,
+                company_id: built.company_id,
+                record_count: built.record_count,
+            });
+            return {
+                channel: 'ONLINE',
+                status: 'OK',
+                direction,
+                message: `Uploaded ${built.filename} to cloud sync storage.`,
+                vessel_id: built.vessel_id,
+                package_id: pushResult?.package_id || null,
+            };
+        }
+
+        if (direction === 'HQ_PULL') {
+            const vesselId = opts.vesselId;
+            const meta = await pullShipFromVessel(user, vesselId);
+            const imported = await importPulledPackage(user, meta);
+            return {
+                channel: 'ONLINE',
+                status: 'OK',
+                direction,
+                message: `Imported ${imported.filename} from cloud sync storage.`,
+                vessel_id: imported.vessel_id,
+                package_id: meta.package_id || null,
+            };
+        }
+
         return {
             channel: 'ONLINE',
+            status: 'UNSUPPORTED',
             direction,
-            status: 'SCAFFOLD',
-            message: 'Online sync API is configured but backend endpoints (/api/sync/*) are not yet deployed in this offline PMS build. Continue using offline ZIP.',
-            vesselId: opts.vesselId || null,
+            message: `Unsupported online sync direction: ${direction}`,
         };
     }
 
@@ -165,6 +221,7 @@ const TVC_OnlineSync = (function () {
         statusMessage,
         pushShipToHq,
         pullShipFromVessel,
+        importPulledPackage,
         pushHqFeedback,
         syncNow,
     };

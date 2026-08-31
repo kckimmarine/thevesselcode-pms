@@ -121,9 +121,10 @@ const TVC_Fleet = (function () {
         return String(vessel?.company_id || COMPANY_ID).trim() || COMPANY_ID;
     }
 
-    /** HQ superintendent — license company + allowedVesselIds only. Admin-on-HQ sees full fleet. */
+    /** HQ superintendent — license company + allowedVesselIds. Super-admin sees full fleet. */
     function getVisible(user) {
         const all = getAll();
+        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSuperHqAccount?.(user)) return all;
         const companyScoped = !!(user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isCompanyHqAccount?.(user));
         if (!companyScoped) return all;
         const companyId = String(user.company_id || licenseCompanyId()).trim() || COMPANY_ID;
@@ -224,9 +225,30 @@ const TVC_Fleet = (function () {
         return getAll();
     }
 
+    /** Super HQ — admin/registry.json vessels → Ship List (all companies). */
+    function syncFromAdminRegistry() {
+        if (typeof TVC_AdminRegistry === 'undefined') return getAll();
+        const rows = TVC_AdminRegistry.listVessels({ includeInactive: false });
+        for (const r of rows) {
+            const id = String(r.vessel_id || '').trim();
+            if (!id) continue;
+            const prev = getAll().find(v => v.id === id) || DEFAULT_FLEET.find(v => v.id === id);
+            upsert({
+                ...(prev || {}),
+                id,
+                name: String(r.name || prev?.name || id).trim(),
+                code: String(r.code || prev?.code || '—').trim() || '—',
+                imo_no: String(r.imo_no || prev?.imo_no || '—').trim() || '—',
+                delivery: String(r.delivery || prev?.delivery || '—').trim().slice(0, 10) || '—',
+                company_id: String(r.company_id || prev?.company_id || licenseCompanyId()).trim() || licenseCompanyId(),
+            });
+        }
+        return getAll();
+    }
+
     return {
         ensureFleet, getAll, getVisible, listCompanyIds, getSelected, getSelectedId, select, upsert, remove, resolveById,
-        syncFromAllowedVesselIds, syncFromRegistryVessels, vesselCompanyId, licenseCompanyId,
+        syncFromAllowedVesselIds, syncFromRegistryVessels, syncFromAdminRegistry, vesselCompanyId, licenseCompanyId,
         COMPANY_ID, PILOT_VESSEL_ID, LEGACY_VESSEL_ID, DEFAULT_FLEET,
     };
 })();

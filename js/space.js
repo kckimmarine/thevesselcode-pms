@@ -254,16 +254,14 @@ const TVC_Space = (function () {
     function getUiFeatures(user) {
         const base = { ...TVC_RBAC.getUiFeatures(user) };
         if (!user) return base;
-        if (TVC_RBAC.isAdminAccount?.(user)) {
+        if (TVC_RBAC.isSuperHqAccount?.(user)) {
+            base.showRunningHours = true;
+            base.canEditRunningHours = true;
+            base.showSpareTab = true;
             base.showDataXfer = true;
+            base.showOnlineSync = true;
             base.showAppUpdateAdmin = true;
-            base.showOnlineSync = false;
-            base.showSpareTab = false;
-            base.showRunningHours = false;
-            base.showUpdateWorkPlan = false;
-            base.showModifyOriginalPlan = false;
-            base.canEditRunningHours = false;
-            base.showCaptainDashboard = false;
+            base.showAppUpdateImport = true;
             return base;
         }
         if (TVC_RBAC.isHqAccount(user)) {
@@ -340,7 +338,8 @@ const TVC_Space = (function () {
 
     function getModeBadge(user) {
         if (!user) return '—';
-        if (TVC_RBAC.isAdminAccount?.(user)) return 'Admin Mode';
+        if (TVC_RBAC.isSuperHqAccount?.(user)) return 'HQ Admin';
+        if (TVC_RBAC.isHqAccount?.(user)) return 'HQ Mode';
         if (TVC_RBAC.isHqAccount(user)) return 'HQ Mode';
         if (isCaptainHub(user)) return 'Vessel Mode - Master';
         const station = getStation(user);
