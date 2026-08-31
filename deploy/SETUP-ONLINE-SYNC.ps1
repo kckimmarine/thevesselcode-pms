@@ -35,7 +35,9 @@ Write-Host "    SYNC_PILOT_VESSEL_ID      = $PilotVessel"
 Write-Host '  Then Redeploy the latest production deployment.'
 Write-Host ''
 
-Write-Host 'Step 5 — Verify API' -ForegroundColor Green
+Write-Host 'Automated setup (after deploy/.env.deploy.local is filled):'
+Write-Host '  npm run setup-online-sync'
+Write-Host ''
 Write-Host '  npm run verify-online-sync'
 Write-Host '  Expected when configured with no packages yet: HTTP 404 NOT_FOUND for INCHEON CHEMI'
 Write-Host ''

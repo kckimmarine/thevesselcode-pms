@@ -11,14 +11,12 @@ const TVC_Fleet = (function () {
     /** 초기 Fleet — HQ 등록 선박 (company: DAEMYUNG) */
     const DEFAULT_FLEET = [
         { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '1', company_code: '1', imo_no: '9297711', delivery: '2003-09-18', company_id: COMPANY_ID },
-        { id: 'QUARTERBACK J', name: 'QUARTERBACK J', code: '2', company_code: '1', imo_no: '9264879', delivery: '2003-01-29', company_id: COMPANY_ID },
-        { id: 'GOLDSTAR SHINE', name: 'GOLDSTAR SHINE', code: '3', company_code: '1', imo_no: '9279707', delivery: '2004-09-27', company_id: COMPANY_ID },
-        { id: 'VALIANT', name: 'VALIANT', code: '4', company_code: '1', imo_no: '9274288', delivery: '2005-01-20', company_id: COMPANY_ID },
     ];
 
     /** 예전 테스트 Fleet — HQ 목록에서 제거 */
     const DEPRECATED_VESSEL_IDS = new Set([
         'TEST_V01', 'TEST_V02', 'TEST_V03', 'TEST_V04', 'TEST_V05', 'TEST_V06',
+        'QUARTERBACK J', 'GOLDSTAR SHINE', 'VALIANT',
     ]);
 
     const FLEET_ORDER = DEFAULT_FLEET.map(v => v.id);

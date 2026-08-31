@@ -6,9 +6,6 @@ const COMPANY_ID = 'DAEMYUNG';
 const PILOT_VESSEL_ID = 'INCHEON CHEMI';
 const HQ_ALLOWED_VESSEL_IDS = [
     'INCHEON CHEMI',
-    'QUARTERBACK J',
-    'GOLDSTAR SHINE',
-    'VALIANT',
 ];
 
 const SKUS = {

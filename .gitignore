@@ -25,3 +25,6 @@ build/electron-builder/
 # Local Admin release archives (Setup / App Update ZIP); keep folder via .gitkeep
 admin/releases/**
 !admin/releases/.gitkeep
+
+# Deploy secrets (Supabase / Vercel tokens — never commit)
+deploy/.env.deploy.local
