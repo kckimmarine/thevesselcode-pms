@@ -8581,11 +8581,11 @@ const TVC_App = (function () {
                 <label class="span2">Notes
                     <textarea name="notes" rows="2" placeholder="Optional contract notes">${esc(company?.notes || '')}</textarea>
                 </label>
-                <div class="orig-job-actions admin-registry-form-actions span2">
-                    <button type="submit" class="btn btn-green">Save</button>
-                    <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
-                </div>
-            </form>`;
+            </form>
+            <div class="modal-actions admin-registry-form-actions">
+                <button type="submit" form="adminCompanyForm" class="btn btn-green">Save</button>
+                <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
+            </div>`;
         state._adminRegForm = { type: 'company', mode };
     }
 
@@ -8628,11 +8628,11 @@ const TVC_App = (function () {
                 <label class="span2">Notes
                     <textarea name="notes" rows="2" placeholder="Optional">${esc(vessel?.notes || '')}</textarea>
                 </label>
-                <div class="orig-job-actions admin-registry-form-actions span2">
-                    <button type="submit" class="btn btn-green">Save</button>
-                    <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
-                </div>
-            </form>`;
+            </form>
+            <div class="modal-actions admin-registry-form-actions">
+                <button type="submit" form="adminVesselForm" class="btn btn-green">Save</button>
+                <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
+            </div>`;
         state._adminRegForm = { type: 'vessel', mode };
     }
 
