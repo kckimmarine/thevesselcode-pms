@@ -100,7 +100,8 @@ const TVC_SetupExport = (function () {
         const vessels = typeof TVC_AdminRegistry !== 'undefined'
             ? TVC_AdminRegistry.listVessels({ companyId, includeInactive: false })
             : [];
-        const primaryVesselId = vessels[0]?.vessel_id || vessels[0]?.name || '';
+        const primaryVesselId = String(opts.vesselId || '').trim()
+            || vessels[0]?.vessel_id || vessels[0]?.name || '';
         const zip = new JSZip();
         const setups = [];
         for (const sku of selectedSkus) {
@@ -123,7 +124,10 @@ const TVC_SetupExport = (function () {
             exported_at: new Date().toISOString(),
             exported_by: user.username || 'tvc',
         });
-        manifest.vessels = vessels.map(v => ({
+        manifest.vessels = (opts.vesselId
+            ? vessels.filter(v => v.vessel_id === opts.vesselId)
+            : vessels
+        ).map(v => ({
             vessel_id: v.vessel_id,
             name: v.name,
             imo_no: v.imo_no,

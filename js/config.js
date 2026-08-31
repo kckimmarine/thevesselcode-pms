@@ -62,20 +62,9 @@ const TVC_Config = (function () {
         return isWebDeploy();
     }
 
-    /** Admin menu on web — hide dev-only build tools; keep registry & deliver on web HQ Admin. */
+    /** Admin menu on web — full Administration box on web HQ Admin. */
     function filterAdminMenuSections(sections) {
-        if (!isWebAdminPortal()) return sections;
-        return sections.map(section => {
-            if (section.key === 'commercial') {
-                return {
-                    ...section,
-                    items: (section.items || []).filter(it =>
-                        !String(it.action || '').includes('openAdminReleaseModal')
-                    ),
-                };
-            }
-            return section;
-        });
+        return sections;
     }
 
     function isWebSuperHqUser(user) {
