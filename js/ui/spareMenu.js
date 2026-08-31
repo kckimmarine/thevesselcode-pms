@@ -20327,6 +20327,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             @media print {
                 .no-print { display: none !important; }
                 body { padding: 0; }
+                body > .wr-print-page { display: block !important; visibility: visible !important; }
                 .wr-print-page { margin-bottom: 0; }
                 .df-print-shell.df-modal-inner { border: none; border-radius: 0; }
             }`;
@@ -20737,11 +20738,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             <button type="button" onclick="window.close()">Close</button>
         </div>`;
         const hint = `<p class="wr-print-hint no-print">Review the report below — this window is the print preview. Then click <b>Print</b>.</p>`;
-        const appCssLink = appCss
-            ? `<link rel="stylesheet" href="${escAttr(wrPrintAppCssHref())}">`
-            : '';
         const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>TVC — ${esc(title)}</title>
-            ${appCssLink}<style>${wrReportPrintStyles()}</style></head><body>${toolbar}${hint}${bodyHtml}</body></html>`;
+            <style>${wrReportPrintStyles()}</style></head><body>${toolbar}${hint}${bodyHtml}</body></html>`;
 
         const openLegacy = () => openLegacyPrintWindow(html, { print });
 

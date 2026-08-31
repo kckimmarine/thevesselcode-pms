@@ -14415,7 +14415,7 @@ const TVC_App = (function () {
             })}${page2Inner}`;
             page2Html = TVC_SpareMenu.renderWrPrintShell(title, '2', page2Body, tone);
         }
-        return { title, html: page1Html + page2Html, appCss: true };
+        return { title, html: page1Html + page2Html, appCss: false };
     }
 
     function openWorkReportPrint({ print = false } = {}) {

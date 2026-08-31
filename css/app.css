@@ -8076,7 +8076,7 @@ label.spare-file-pick input[type=file] { display: none; }
     width: min(1400px, 96vw);
 }
 @media print {
-    body > *:not(#spareReqWorkModal) {
+    body:has(#spareReqWorkModal) > *:not(#spareReqWorkModal) {
         display: none !important;
     }
     #spareReqWorkModal {
