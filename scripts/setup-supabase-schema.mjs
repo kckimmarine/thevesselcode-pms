@@ -48,7 +48,7 @@ async function seedViaRest(env) {
         id: 'TVC No1',
         company_id: 'TVC',
         name: 'TVC No1',
-        imo_no: '9297711',
+        imo_no: '9999999',
         delivery: '2003-09-18',
     }]);
     console.log('Seeded companies + vessels (TVC No1 only) via REST.');

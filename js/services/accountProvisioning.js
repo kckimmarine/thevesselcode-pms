@@ -7,8 +7,7 @@ const TVC_AccountProvisioning = (function () {
     function suggestCompanyHqUsername(companyId, contactEmail) {
         const email = String(contactEmail || '').trim().toLowerCase();
         if (email.includes('@')) return email;
-        const slug = slugId(companyId).toLowerCase();
-        return slug ? `${slug}_hq@thevesselcode.com` : '';
+        return slugId(companyId).toLowerCase();
     }
 
     function suggestVesselMasterUsername(companyId, vesselId) {

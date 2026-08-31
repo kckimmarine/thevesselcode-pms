@@ -11,6 +11,37 @@ const TVC_AdminRegistry = (function () {
     const PILOT_VESSEL_ID = 'TVC No1';
     /** Removed from admin UI — stripped on load (incl. stale localStorage cache). */
     const DEPRECATED_COMPANY_IDS = new Set(['DAEMYUNG', 'TVC_LAB']);
+    /** Pilot registry — template for Add company / Add vessel forms. */
+    const REGISTRY_REFERENCE = Object.freeze({
+        label: 'TVC pilot',
+        company: {
+            company_id: 'TVC',
+            company_code: '1',
+            hq_username: 'tvc',
+            hq_password: 'tvc1234',
+        },
+        vessel: {
+            vessel_id: 'TVC No1',
+            code: '1',
+            imo_no: '9999999',
+        },
+    });
+
+    function registryReferenceHintHtml(scope = 'all') {
+        const r = REGISTRY_REFERENCE;
+        const parts = [];
+        if (scope === 'all' || scope === 'company') {
+            parts.push(`Company Code <code>${r.company.company_code}</code>`);
+            parts.push(`HQ ID <code>${r.company.hq_username}</code>`);
+            parts.push(`Password <code>${r.company.hq_password}</code>`);
+        }
+        if (scope === 'all' || scope === 'vessel') {
+            parts.push(`Vessel Code <code>${r.vessel.code}</code>`);
+            parts.push(`IMO <code>${r.vessel.imo_no}</code>`);
+        }
+        return `<p class="spare-sync-note muted admin-registry-ref">Reference (${r.label}): ${parts.join(' · ')} · See <code>admin/registry-reference.json</code></p>`;
+    }
+
     const REG_CODE_MIN = 1;
     const REG_CODE_MAX = 200;
 
@@ -813,6 +844,8 @@ const TVC_AdminRegistry = (function () {
         regCodeSelectOptions,
         REG_CODE_MIN,
         REG_CODE_MAX,
+        REGISTRY_REFERENCE,
+        registryReferenceHintHtml,
     };
 })();
 

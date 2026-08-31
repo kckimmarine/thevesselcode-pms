@@ -120,10 +120,9 @@ Pilot `DAEMYUNG` → **inactive**
 
 ## 5. TVC 내부 ID 대장 (템플릿)
 
-| Company ID | Name (KR) | 계약일 | Vessel ID | Ship name | IMO | 비고 |
-|------------|-----------|--------|-----------|-----------|-----|------|
-| DAEMYUNG | 대명상선 | (출시일) | IMO9297711 | INCHEON CHEMI | 9297711 | 운영 |
-| … | … | … | … | … | … | … |
+| Company ID | Name (KR) | Code | HQ login ID | HQ password | Vessel ID | Code | IMO | 비고 |
+|------------|-----------|------|-------------|-------------|-----------|------|-----|------|
+| TVC | The Vessel Code | 1 | tvc | tvc1234 | TVC No1 | 1 | 9999999 | Pilot · 신규 등록 시 참조 |
 
 ---
 

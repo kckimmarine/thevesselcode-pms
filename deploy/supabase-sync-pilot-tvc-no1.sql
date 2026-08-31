@@ -21,7 +21,7 @@ INSERT INTO companies (id, name) VALUES ('TVC', 'The Vessel Code')
 ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name;
 
 INSERT INTO vessels (id, company_id, name, imo_no, delivery) VALUES
-  ('TVC No1', 'TVC', 'TVC No1', '9297711', '2003-09-18')
+  ('TVC No1', 'TVC', 'TVC No1', '9999999', '2003-09-18')
 ON CONFLICT (id) DO UPDATE SET
   company_id = EXCLUDED.company_id,
   name = EXCLUDED.name,

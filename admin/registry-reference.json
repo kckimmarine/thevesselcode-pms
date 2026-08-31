@@ -1,0 +1,22 @@
+{
+  "label": "TVC pilot — copy this pattern when adding companies/vessels",
+  "company": {
+    "company_id": "TVC",
+    "company_code": "1",
+    "hq_login": {
+      "username": "tvc",
+      "password": "tvc1234"
+    }
+  },
+  "vessel": {
+    "vessel_id": "TVC No1",
+    "code": "1",
+    "imo_no": "9999999"
+  },
+  "notes": [
+    "Company Code: sequential 1, 2, 3… per registry",
+    "HQ login ID: lowercase company slug (e.g. TVC → tvc)",
+    "Vessel Code: sequential 1, 2, 3… within each company",
+    "IMO No: 7 digits (pilot uses 9999999 until real IMO is known)"
+  ]
+}

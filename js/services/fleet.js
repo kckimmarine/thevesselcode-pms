@@ -10,7 +10,7 @@ const TVC_Fleet = (function () {
 
     /** 초기 Fleet — HQ 등록 선박 (company: TVC) */
     const DEFAULT_FLEET = [
-        { id: 'TVC No1', name: 'TVC No1', code: '1', company_code: '1', imo_no: '9297711', delivery: '2003-09-18', company_id: COMPANY_ID },
+        { id: 'TVC No1', name: 'TVC No1', code: '1', company_code: '1', imo_no: '9999999', delivery: '2003-09-18', company_id: COMPANY_ID },
     ];
 
     /** 예전 테스트 Fleet — HQ 목록에서 제거 */

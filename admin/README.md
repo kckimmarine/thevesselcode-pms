@@ -30,4 +30,6 @@ admin/
 3. `npm run dist` → copy Setup / update ZIP into `admin/releases/<version>/` if you want a local archive.
 4. Add/edit companies and vessels in Admin UI (**Add / edit company / vessel**), or edit JSON under `admin/companies/…` if you prefer.
 
+**Pilot reference** (`admin/registry-reference.json`): TVC — Company Code `1`, HQ ID `tvc`, Password `tvc1234`; TVC No1 — Code `1`, IMO `9999999`.
+
 See also: `docs/admin-mode-sop.md`, `docs/admin-registry-id-guide.md`, `docs/tvc-internal-qa.md` (출시 후 Lab·App Update), `docs/admin-mode.md`, `docs/seat-license.md`.

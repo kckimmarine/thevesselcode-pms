@@ -7084,6 +7084,13 @@ const TVC_App = (function () {
         state._adminRegView = 'hub';
     }
 
+    function adminRegistryReferenceHint(scope = 'all') {
+        if (typeof TVC_AdminRegistry?.registryReferenceHintHtml === 'function') {
+            return TVC_AdminRegistry.registryReferenceHintHtml(scope);
+        }
+        return '';
+    }
+
     function adminRegistryLoginFields(login, isEdit, { suggest = '' } = {}) {
         const username = login?.username || '';
         const pwdPlaceholder = isEdit && login?.password_plain
@@ -7092,7 +7099,7 @@ const TVC_App = (function () {
         return `
             <label>ID
                 <input name="login_username" type="text"${isEdit ? ' readonly class="wr-ro"' : ''}
-                    placeholder="Web login ID"
+                    placeholder="e.g. tvc"
                     value="${escAttr(isEdit ? username : suggest)}"></label>
             <label>Password
                 <input name="login_password" type="text" autocomplete="new-password"
@@ -7187,6 +7194,7 @@ const TVC_App = (function () {
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">Company &amp; Vessel Registry</h3>
             <p class="spare-sync-hint muted">Select · Add · Modify · Delete = <strong>Set inactive</strong> (registry files 유지)</p>
+            ${adminRegistryReferenceHint('all')}
             <label class="spare-sync-note admin-registry-field">Company
                 <div class="admin-registry-row">
                     <select class="admin-company-select admin-registry-select"
@@ -8469,6 +8477,7 @@ const TVC_App = (function () {
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">${isEdit ? 'Edit company' : 'Add company'}</h3>
             <p class="spare-sync-hint muted">Saved to <code>admin/registry.json</code> and <code>admin/companies/…/company.json</code>.</p>
+            ${adminRegistryReferenceHint('company')}
             <form class="orig-job-form" id="adminCompanyForm" onsubmit="event.preventDefault();TVC_App.saveAdminCompanyForm()">
                 <label>Company ID
                     <input name="company_id" required ${isEdit ? 'readonly class="wr-ro"' : ''}
@@ -8550,6 +8559,7 @@ const TVC_App = (function () {
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">${isEdit ? 'Edit vessel' : 'Add vessel'}</h3>
             <p class="spare-sync-hint muted">Saved to registry and <code>admin/companies/…/vessels/…/vessel.json</code>.</p>
+            ${adminRegistryReferenceHint('vessel')}
             <form class="orig-job-form" id="adminVesselForm" onsubmit="event.preventDefault();TVC_App.saveAdminVesselForm()">
                 <label class="span2">Company<select name="company_id" ${isEdit ? 'disabled' : ''}>${companyOpts}</select></label>
                 <label>Vessel ID
@@ -8560,7 +8570,7 @@ const TVC_App = (function () {
                 ${adminRegistryLoginFields(vessel?.master_login, isEdit, { suggest: masterSuggest })}
                 <label>Code
                     <select name="code" required>${vesselCodeOpts}</select></label>
-                <label>IMO No<input name="imo_no" placeholder="9297711" value="${escAttr(vessel?.imo_no || '')}"></label>
+                <label>IMO No<input name="imo_no" placeholder="9999999" value="${escAttr(vessel?.imo_no || '')}"></label>
                 <label>Delivery<input name="delivery" type="date" value="${escAttr(vessel?.delivery || '')}"></label>
                 <label class="span2">Notes
                     <textarea name="notes" rows="2" placeholder="Optional">${esc(vessel?.notes || '')}</textarea>

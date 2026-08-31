@@ -9,6 +9,13 @@
   "address": "",
   "contact_name": "",
   "contact_email": "",
+  "hq_login": {
+    "username": "tvc",
+    "password_hash": "724607c86eec90582e68f28578ba3175f2f5e2c0326f3fe91d78edb6988240a1",
+    "password_plain": "tvc1234",
+    "display_name": "TVC HQ",
+    "updated_at": "2026-08-31"
+  },
   "contract": {
     "start_date": "",
     "term_months": 0,
