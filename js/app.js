@@ -9737,24 +9737,23 @@ const TVC_App = (function () {
         return 'You do not have permission to edit the Work Procedure.';
     }
 
-    /** PMS/SPARE Master Excel — plan lock과 무관, ce/co/captain/hq + 부서 토글(DECK|ENGINE) 필수 */
+    /** PMS/SPARE Master Excel — Admin Mode (admin / tvc) only */
     function canPmsMasterExcel() {
         if (!state.user) return false;
-        return TVC_RBAC.canModifyOriginalPlan(state.user);
+        return !!TVC_RBAC.isAdminAccount?.(state.user);
     }
 
     function canSpareMasterExcel() {
         if (!state.user) return false;
-        if (TVC_RBAC.isHqAccount(state.user)) return TVC_RBAC.canModifyOriginalPlan(state.user);
-        return TVC_RBAC.isMaintPlanEditor(state.user) && TVC_RBAC.canModifySpareInventory(state.user);
+        return !!TVC_RBAC.isAdminAccount?.(state.user);
     }
 
     function pmsMasterExcelDeniedMessage() {
-        return 'PMS Master Export · Import requires Chief Engineer, Chief Officer, Captain (Master), or HQ Superintendent.';
+        return 'PMS Master Export · Import is Admin Mode only (admin / tvc).';
     }
 
     function spareMasterExcelDeniedMessage() {
-        return 'SPARE Master Export · Import requires Chief Engineer, Chief Officer, Captain (Master), or HQ Superintendent.';
+        return 'SPARE Master Export · Import is Admin Mode only (admin / tvc).';
     }
 
     function selectedGroupNode() {

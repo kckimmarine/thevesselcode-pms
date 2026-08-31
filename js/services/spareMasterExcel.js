@@ -1153,13 +1153,9 @@ const TVC_SpareMasterExcel = (function () {
     }
 
     async function importFromWorkbook(wb, user, opts = {}) {
-        const canImport = TVC_RBAC.isHqAccount(user)
-            ? TVC_RBAC.canModifyOriginalPlan(user)
-            : (TVC_RBAC.isMaintPlanEditor(user) && TVC_RBAC.canModifySpareInventory(user));
-        if (!canImport) {
-            throw Object.assign(new Error('SPARE Master Import requires Chief Engineer, Chief Officer, Captain (Master), or HQ Superintendent.'), { code: 'PERMISSION_DENIED' });
+        if (!TVC_RBAC.isAdminAccount?.(user)) {
+            throw Object.assign(new Error('SPARE Master Import is Admin Mode only (admin / tvc).'), { code: 'PERMISSION_DENIED' });
         }
-        if (TVC_RBAC.isHqAccount(user)) TVC_RBAC.assertModifyOriginalPlan(user);
         const department = normDept(opts.department);
         const vesselId = await resolveSpareVesselId(user, opts);
 

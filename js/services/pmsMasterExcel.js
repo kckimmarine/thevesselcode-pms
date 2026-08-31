@@ -2094,7 +2094,9 @@ const TVC_PmsMasterExcel = (function () {
     }
 
     async function importFromWorkbook(wb, user, opts = {}) {
-        TVC_RBAC.assertModifyOriginalPlan(user);
+        if (!TVC_RBAC.isAdminAccount?.(user)) {
+            throw Object.assign(new Error('PMS Master Import is Admin Mode only (admin / tvc).'), { code: 'PERMISSION_DENIED' });
+        }
         clearImportWorkReportIndex();
         try {
         const department = normDept(opts.department);
