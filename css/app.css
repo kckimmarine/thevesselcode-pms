@@ -450,6 +450,27 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     user-select: none;
 }
 .admin-setup-sku-check input { margin: 0; }
+.admin-registry-field {
+    display: block;
+    margin: 12px 0;
+}
+.admin-registry-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+.admin-registry-select {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+    margin-top: 0;
+}
+.admin-registry-row-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+}
 .hq-administration-panel .spare-flow-item {
     width: 100%;
     box-sizing: border-box;

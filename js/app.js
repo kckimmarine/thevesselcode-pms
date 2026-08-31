@@ -7187,25 +7187,27 @@ const TVC_App = (function () {
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">Company &amp; Vessel Registry</h3>
             <p class="spare-sync-hint muted">Select · Add · Modify · Delete = <strong>Set inactive</strong> (registry files 유지)</p>
-            <label class="spare-sync-note" style="display:block;margin:12px 0">Company
-                <select class="admin-company-select" style="margin-top:4px;width:100%"
-                    onchange="TVC_App.adminRegistryHubSelectCompany(this.value)">${companyOpts}</select>
+            <label class="spare-sync-note admin-registry-field">Company
+                <div class="admin-registry-row">
+                    <select class="admin-company-select admin-registry-select"
+                        onchange="TVC_App.adminRegistryHubSelectCompany(this.value)">${companyOpts}</select>
+                    <div class="admin-registry-row-actions">
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminCompanyFormFromHub('edit')" ${company ? '' : ' disabled'}>Modify</button>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminCompanyFormFromHub('add')">Add</button>
+                    </div>
+                </div>
             </label>
-            <label class="spare-sync-note" style="display:block;margin:12px 0">Vessel
-                <select class="admin-company-select" style="margin-top:4px;width:100%"
-                    onchange="TVC_App.adminRegistryHubSelectVessel(this.value)">${vesselOpts}</select>
+            <label class="spare-sync-note admin-registry-field">Vessel
+                <div class="admin-registry-row">
+                    <select class="admin-company-select admin-registry-select"
+                        onchange="TVC_App.adminRegistryHubSelectVessel(this.value)">${vesselOpts}</select>
+                    <div class="admin-registry-row-actions">
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselFormFromHub('edit')" ${vessel ? '' : ' disabled'}>Modify</button>
+                        <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselFormFromHub('add')" ${company ? '' : ' disabled'}>Add</button>
+                    </div>
+                </div>
             </label>
             ${company ? `<p class="spare-sync-note muted">Status: company <strong>${esc(company.status)}</strong>${vessel ? ` · vessel <strong>${esc(vessel.status)}</strong>` : ''}</p>` : ''}
-            <div class="admin-deploy-path-actions" style="margin:12px 0">
-                <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminCompanyFormFromHub('add')">Add company</button>
-                <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminCompanyFormFromHub('edit')" ${company ? '' : ' disabled'}>Modify company</button>
-                <button type="button" class="btn btn-red btn-sm" onclick="TVC_App.deactivateAdminCompany()" ${company && company.status !== 'inactive' ? '' : ' disabled'}>Set company inactive</button>
-            </div>
-            <div class="admin-deploy-path-actions" style="margin:12px 0">
-                <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselFormFromHub('add')" ${company ? '' : ' disabled'}>Add vessel</button>
-                <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselFormFromHub('edit')" ${vessel ? '' : ' disabled'}>Modify vessel</button>
-                <button type="button" class="btn btn-red btn-sm" onclick="TVC_App.deactivateAdminVessel()" ${vessel && vessel.status !== 'inactive' ? '' : ' disabled'}>Set vessel inactive</button>
-            </div>
             <section class="admin-account-panel" style="margin:16px 0;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc">
                 <h4 style="margin:0 0 8px;color:var(--navy)">Company HQ login (web)</h4>
                 <p class="spare-sync-note muted" style="margin:0 0 8px">선사 본사 HQ Mode 접속 ID · 비밀번호${hqUser ? ` · 현재 <strong>${esc(hqUser)}</strong>${hqUpdated ? ` (${esc(hqUpdated)})` : ''}` : ''}</p>
