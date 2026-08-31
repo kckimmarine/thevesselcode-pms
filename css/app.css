@@ -1051,6 +1051,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .orig-job-form textarea { min-height: 56px; resize: vertical; }
 .orig-job-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+.admin-registry-form-actions { justify-content: center; }
 .vl-cells { display: flex; align-items: center; font-size: var(--list-item-font); padding: 0 6px; cursor: pointer; height: 100%; }
 .vl-cells:hover { background: #f7fafc; }
 .vl-cells.row-selected { background: rgba(66, 153, 225, 0.35) !important; }

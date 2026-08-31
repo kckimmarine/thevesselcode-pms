@@ -8581,10 +8581,9 @@ const TVC_App = (function () {
                 <label class="span2">Notes
                     <textarea name="notes" rows="2" placeholder="Optional contract notes">${esc(company?.notes || '')}</textarea>
                 </label>
-                <div class="orig-job-actions span2">
+                <div class="orig-job-actions admin-registry-form-actions span2">
+                    <button type="submit" class="btn btn-green">Save</button>
                     <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
-                    ${isEdit ? `<button type="button" class="btn btn-red" onclick="TVC_App.deactivateAdminCompany()">Set inactive</button>` : ''}
-                    <button type="submit" class="btn btn-green">${isEdit ? 'Save company' : 'Add company'}</button>
                 </div>
             </form>`;
         state._adminRegForm = { type: 'company', mode };
@@ -8629,10 +8628,9 @@ const TVC_App = (function () {
                 <label class="span2">Notes
                     <textarea name="notes" rows="2" placeholder="Optional">${esc(vessel?.notes || '')}</textarea>
                 </label>
-                <div class="orig-job-actions span2">
+                <div class="orig-job-actions admin-registry-form-actions span2">
+                    <button type="submit" class="btn btn-green">Save</button>
                     <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
-                    ${isEdit ? `<button type="button" class="btn btn-red" onclick="TVC_App.deactivateAdminVessel()">Set inactive</button>` : ''}
-                    <button type="submit" class="btn btn-green">${isEdit ? 'Save vessel' : 'Add vessel'}</button>
                 </div>
             </form>`;
         state._adminRegForm = { type: 'vessel', mode };
