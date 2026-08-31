@@ -187,6 +187,7 @@ const TVC_Fleet = (function () {
 
     function select(id) {
         if (id) localStorage.setItem(SELECTED_KEY, id);
+        else try { localStorage.removeItem(SELECTED_KEY); } catch (_) {}
     }
 
     function upsert(vessel) {

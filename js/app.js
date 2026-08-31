@@ -110,7 +110,7 @@ const TVC_App = (function () {
         fleet: [],
         fleetView: 'all',       // all | selected
         fleetSearch: '',
-        fleetCompanyFilter: '',
+        fleetCompanyFilter: null,
         selectedVesselId: null,
         // SpareRequest 탭
         spareSelected: {},      // { spare_id: true } 청구 대상 선택
@@ -1170,17 +1170,23 @@ const TVC_App = (function () {
             }
             await TVC_Fleet.ensureFleet();
             state.fleet = TVC_Fleet.getVisible(state.user);
-            let sel = TVC_Fleet.getSelectedId();
-            if (!state.fleet.some(v => v.id === sel)) sel = state.fleet[0]?.id || null;
-            state.selectedVesselId = sel;
-            if (sel) TVC_Fleet.select(sel);
             if (isSuperHq) {
-                state.fleetCompanyFilter = state.fleetCompanyFilter || ADMIN_COMPANY_FILTER_ALL;
+                state.fleetCompanyFilter = state.fleetCompanyFilter ?? ADMIN_COMPANY_FILTER_ALL;
             } else if (TVC_RBAC.isCompanyHqAccount?.(state.user)) {
                 state.fleetCompanyFilter = String(state.user.company_id || TVC_Fleet.licenseCompanyId()).trim();
             } else {
                 state.fleetCompanyFilter = ADMIN_COMPANY_FILTER_ALL;
             }
+            let sel = state.selectedVesselId || TVC_Fleet.getSelectedId();
+            if (!state.fleet.some(v => v.id === sel)) sel = null;
+            if (state.fleetCompanyFilter === '') {
+                sel = null;
+                TVC_Fleet.select(null);
+            } else {
+                if (!sel && state.fleet.length) sel = state.fleet[0]?.id || null;
+                if (sel) TVC_Fleet.select(sel);
+            }
+            state.selectedVesselId = sel;
             TVC_PMS.setSpace('HQ', state.selectedVesselId);
             await loadData();
         } else {
@@ -1279,17 +1285,30 @@ const TVC_App = (function () {
         document.title = suffix ? `${WINDOW_TITLE_BASE} ${suffix}` : WINDOW_TITLE_BASE;
     }
 
+    function resolveTvcAdminCompanyId(user) {
+        const filter = state.fleetCompanyFilter;
+        if (filter && filter !== ADMIN_COMPANY_FILTER_ALL) return String(filter).trim();
+        if (state.selectedVesselId) {
+            const v = TVC_Fleet.resolveById(state.selectedVesselId);
+            if (v) return String(TVC_Fleet.vesselCompanyId(v) || '').trim();
+        }
+        return String(user?.company_id || TVC_Fleet.licenseCompanyId()).trim();
+    }
+
     function getHeaderRegistryUserLabel(user) {
         if (!user) return '—';
+        const uname = String(user.username || '').trim().toLowerCase();
+        if (uname === 'admin') return 'ADMIN';
+        if (uname === 'tvc') {
+            const companyId = resolveTvcAdminCompanyId(user);
+            return companyId || '—';
+        }
         let vessel = null;
         if (TVC_RBAC.isHqAccount(user)) {
             const visible = typeof TVC_Fleet.getVisible === 'function'
                 ? TVC_Fleet.getVisible(user)
                 : (state.fleet || []);
-            vessel = visible.find(v => v.id === state.selectedVesselId)
-                || visible[0]
-                || TVC_Fleet.getSelected?.()
-                || null;
+            vessel = visible.find(v => v.id === state.selectedVesselId) || null;
         } else {
             const vesselId = user.vessel_id || null;
             if (vesselId) vessel = TVC_Fleet.resolveById(vesselId);
@@ -1336,9 +1355,7 @@ const TVC_App = (function () {
             const visible = typeof TVC_Fleet.getVisible === 'function'
                 ? TVC_Fleet.getVisible(user)
                 : (state.fleet || []);
-            vessel = visible.find(v => v.id === state.selectedVesselId)
-                || visible[0]
-                || TVC_Fleet.getSelected();
+            vessel = visible.find(v => v.id === state.selectedVesselId) || null;
         } else {
         let vesselId = user.vessel_id;
         if (!vesselId) { try { vesselId = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID); } catch (_) {} }
@@ -8985,7 +9002,7 @@ const TVC_App = (function () {
         if (companySelect) {
             const scoped = TVC_RBAC.isCompanyHqAccount?.(state.user) && !isSuperHq;
             if (scoped && !state.fleetCompanyFilter) state.fleetCompanyFilter = hqFleetCompanyId(state.user);
-            if (!scoped && !state.fleetCompanyFilter) state.fleetCompanyFilter = ADMIN_COMPANY_FILTER_ALL;
+            if (!scoped && state.fleetCompanyFilter == null) state.fleetCompanyFilter = ADMIN_COMPANY_FILTER_ALL;
             companySelect.innerHTML = isSuperHq
                 ? adminCompanySelectOptions(state.fleetCompanyFilter)
                 : hqFleetCompanySelectOptions(state.user, state.fleetCompanyFilter);
@@ -9002,7 +9019,11 @@ const TVC_App = (function () {
             ? TVC_Fleet.getVisible(state.user)
             : TVC_Fleet.getAll();
         const companyFilter = state.fleetCompanyFilter;
-        if (companyFilter && companyFilter !== ADMIN_COMPANY_FILTER_ALL) {
+        if (companyFilter === '') {
+            state.selectedVesselId = null;
+            TVC_Fleet.select(null);
+            vessels = [];
+        } else if (companyFilter && companyFilter !== ADMIN_COMPANY_FILTER_ALL) {
             vessels = vessels.filter(v => TVC_Fleet.vesselCompanyId(v) === companyFilter);
         }
         const q = (state.fleetSearch || '').toLowerCase();
@@ -9012,7 +9033,7 @@ const TVC_App = (function () {
             (v.code || '').toLowerCase().includes(q) ||
             (TVC_Fleet.vesselCompanyId(v) || '').toLowerCase().includes(q)
         );
-        const companyFilterAll = !companyFilter || companyFilter === ADMIN_COMPANY_FILTER_ALL;
+        const companyFilterAll = companyFilter === ADMIN_COMPANY_FILTER_ALL;
         vessels = sortFleetListRows(vessels, { companyFilterAll });
         state.fleet = vessels;
 
@@ -9195,9 +9216,29 @@ const TVC_App = (function () {
         renderFleetList();
     }
 
-    function setFleetCompanyFilter(value) {
-        state.fleetCompanyFilter = String(value || '');
+    async function setFleetCompanyFilter(value) {
+        state.fleetCompanyFilter = String(value ?? '');
+        if (state.fleetCompanyFilter === '') {
+            state.selectedVesselId = null;
+            TVC_Fleet.select(null);
+            TVC_PMS.setSpace('HQ', null);
+            if (state.user) {
+                updateUserBar(state.user);
+                await populateShipHeader(state.user);
+            }
+            await loadData();
+            renderFleetList();
+            if (state.user) updateUserBar(state.user);
+            rerenderCurrentTab();
+            return;
+        }
         renderFleetList();
+        if (!state.selectedVesselId && state.fleet.length) {
+            await selectVessel(state.fleet[0].id);
+            return;
+        }
+        if (state.user) updateUserBar(state.user);
+        rerenderCurrentTab();
     }
 
     async function selectVessel(id) {

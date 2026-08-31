@@ -351,7 +351,6 @@ const TVC_Space = (function () {
     }
 
     function canSwitchDepartmentView(user) {
-        if (TVC_RBAC.isAdminAccount?.(user)) return false;
         return TVC_RBAC.isHqAccount(user) || isCaptainHub(user);
     }
 
