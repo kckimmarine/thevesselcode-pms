@@ -90,6 +90,7 @@ const TVC_AccountProvisioning = (function () {
         TVC_AdminRegistry.setCompanyHqLogin(companyId, {
             username: uname,
             password_hash: hash,
+            password_plain: pwd,
             display_name: String(display_name || '').trim() || uname,
             updated_at: new Date().toISOString().slice(0, 10),
         });
@@ -107,6 +108,7 @@ const TVC_AccountProvisioning = (function () {
         TVC_AdminRegistry.setVesselMasterLogin(companyId, vesselId, {
             username: uname,
             password_hash: hash,
+            password_plain: pwd,
             display_name: String(display_name || '').trim() || uname,
             updated_at: new Date().toISOString().slice(0, 10),
         });

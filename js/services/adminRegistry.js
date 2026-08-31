@@ -125,9 +125,11 @@ const TVC_AdminRegistry = (function () {
         const username = String(d.username || '').trim();
         const password_hash = String(d.password_hash || '').trim();
         if (!username || !password_hash) return null;
+        const password_plain = String(d.password_plain || '').trim();
         return {
             username,
             password_hash,
+            password_plain,
             display_name: String(d.display_name || '').trim(),
             updated_at: String(d.updated_at || '').trim().slice(0, 10),
         };
@@ -494,6 +496,7 @@ const TVC_AdminRegistry = (function () {
         };
         if (login.display_name) row.display_name = login.display_name;
         if (login.updated_at) row.updated_at = login.updated_at;
+        if (login.password_plain) row.password_plain = login.password_plain;
         return row;
     }
 
