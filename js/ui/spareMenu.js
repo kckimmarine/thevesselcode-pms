@@ -22,8 +22,7 @@ const TVC_SpareMenu = (function () {
     let _txDraft = { type: null, lines: [], search: '', ref: '', note: '' };
     let _txSearchT = null;
     let _hqAssessment = null;
-    let _reqSheet = { reqId: null, step: 3, selectedLineIdx: 0, partSearch: '' };
-    let _reqSheetSearchT = null;
+    let _reqSheet = { reqId: null };
     let _reqWorkDraft = null;
     let vlConsume = null;
     let vlReceive = null;
@@ -3193,6 +3192,46 @@ const TVC_SpareMenu = (function () {
         return !!el.closest('.tvc-date-input-wrap')?.querySelector('#reqWorkReceivedOn');
     }
 
+    /** Meta date fields that stay editable while requisition list view is locked (HQ audit dates, edit mode, etc.). */
+    function reqWorkMetaDateInputEnabled(input) {
+        if (!input?.id) return false;
+        const st = getState();
+        const m = modState(st);
+        if (m.reqWorkPreview || m.reqWorkListDocPreview || m.reqWorkCompleted) return false;
+        const id = input.id;
+        const isHq = isReqListHqUser(st);
+        const listMode = isRequisitionListWindow(m);
+        if (isHq && (id === 'reqWorkAssessedOn' || id === 'reqWorkOrderedOn')) return true;
+        if (id === 'reqWorkReceivedOn' && reqWorkVesselReceivedRcvdOnlyEdit()) return true;
+        if (id === 'reqWorkDelFrom' || id === 'reqWorkDelTo' || id === 'reqWorkMadeOn') {
+            if (!listMode || m.reqWorkListEditing) return true;
+        }
+        return false;
+    }
+
+    function reqWorkMetaDatePickerSiblingKeepEnabled(el) {
+        if (!el?.classList) return false;
+        if (!el.classList.contains('tvc-date-picker-btn') && !el.classList.contains('tvc-date-picker-native')) return false;
+        const input = el.closest('.tvc-date-input-wrap')?.querySelector('input.tvc-date-input');
+        return reqWorkMetaDateInputEnabled(input);
+    }
+
+    function syncReqWorkMetaDatePickers(root) {
+        const scope = root?.querySelector?.('.spare-req-work-meta') || root;
+        if (!scope?.querySelectorAll) return;
+        scope.querySelectorAll('.tvc-date-input-wrap').forEach(wrap => {
+            const input = wrap.querySelector('input.tvc-date-input');
+            if (!reqWorkMetaDateInputEnabled(input)) return;
+            input.removeAttribute('disabled');
+            input.removeAttribute('readonly');
+            input.classList.remove('wr-ro');
+            wrap.querySelectorAll('.tvc-date-picker-btn, .tvc-date-picker-native').forEach(btn => {
+                btn.disabled = false;
+                btn.removeAttribute('disabled');
+            });
+        });
+    }
+
     function enableReqWorkReceivedDatePickerControls(recvOn) {
         if (!recvOn) return;
         unlockReqWorkVesselReceivedMetaField(recvOn);
@@ -3261,6 +3300,17 @@ const TVC_SpareMenu = (function () {
             if (locked && reqWorkVesselReceivedDatePickerSiblingKeepEnabled(el)) {
                 el.disabled = false;
                 el.removeAttribute('disabled');
+                return;
+            }
+            if (reqWorkMetaDatePickerSiblingKeepEnabled(el)) {
+                el.disabled = false;
+                el.removeAttribute('disabled');
+                return;
+            }
+            if (locked && reqWorkMetaDateInputEnabled(el)) {
+                el.removeAttribute('disabled');
+                el.removeAttribute('readonly');
+                el.classList.remove('wr-ro');
                 return;
             }
             if (locked && unlockReqWorkVesselReceivedMetaField(el)) return;
@@ -7623,6 +7673,7 @@ const TVC_SpareMenu = (function () {
         document.querySelectorAll('input[name="reqWorkPriority"]').forEach(radio => {
             radio.checked = radio.value === reqType;
         });
+        syncReqWorkMetaDatePickers(document.getElementById('spareReqWorkBody'));
     }
 
     function syncReqWorkApprovalSection(req) {
@@ -10504,12 +10555,7 @@ const TVC_SpareMenu = (function () {
         if (window.TVC_App?.switchTab && st.currentTab !== 'spare') {
             TVC_App.switchTab('spare');
         }
-        if (!isRequisitionListWindow(m) || !m.reqWorkOpen) {
-            await openRequisitionListWindow();
-        }
-        await loadRequisitionIntoListWindow(reqId);
-        m.reqWorkListEditing = true;
-        await renderReqWorkModal();
+        await openRequisitionInListWindow(reqId, { editing: true });
     }
 
     async function reqListDelete() {
@@ -14417,20 +14463,19 @@ const TVC_SpareMenu = (function () {
     }
 
     async function openNewRequisitionWindow() {
-        await openRequisitionListWindow();
-        await reqWorkSwitchToNew();
+        await openNewRequisition();
     }
 
     function openSpareInventory() {
         if (window.TVC_App?.switchTab) TVC_App.switchTab('spare');
     }
 
-    function viewRequisitionList() {
-        openRequisitionListWindow();
+    async function viewRequisitionList() {
+        await openNewRequisition();
     }
 
     async function openNewRequisition() {
-        await openRequisitionListWindow();
+        await ensureSpareTabForRequisition();
         await reqWorkSwitchToNew();
     }
 
@@ -16446,7 +16491,15 @@ const TVC_SpareMenu = (function () {
             requestAnimationFrame(syncReqWorkHeadLayout);
         });
         syncSpareDateInputs(body);
+        syncReqWorkMetaDatePickers(body);
         syncReqWorkListWindowHeadButtons();
+    }
+
+    async function ensureSpareTabForRequisition() {
+        const st = getState();
+        if (window.TVC_App?.switchTab && st.currentTab !== 'spare' && !stayOnSpareHistoryTab(st)) {
+            TVC_App.switchTab('spare');
+        }
     }
 
     async function startReqWorkSession(createNew = true, opts = {}) {
@@ -16603,7 +16656,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (m.reqWorkListEditing) return;
         if (!isRequisitionListWindow(m) || !m.reqWorkOpen) {
-            await openRequisitionListWindow();
+            await startReqWorkSession(true, { listMode: true, openSelectList: false });
         }
         await clearRequisitionListWindowSelection();
         m.reqWorkFromHistory = false;
@@ -17371,7 +17424,6 @@ const TVC_SpareMenu = (function () {
         const writableOpen = isRequisitionListWindow(m) && m.reqWorkOpen && m.reqWorkListEditing
             && !m.reqWorkPreview && !m.reqWorkCompleted;
         if (!writableOpen) {
-            await openRequisitionListWindow();
             await reqWorkSwitchToNew();
         }
 
@@ -23089,20 +23141,6 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             </div>`;
     }
 
-    // ── Parts Requisition Sheet (CMAXS-SPICS style) ───────────────────
-    function escAttr(s) { return String(s ?? '').replace(/"/g, '&quot;').replace(/'/g, '&#39;'); }
-
-    function partCodeMain(partNo) {
-        const p = String(partNo || '').trim();
-        const i = p.indexOf('-');
-        return i > 0 ? p.slice(0, i) : p;
-    }
-
-    function partCodeSub(partNo) {
-        const parts = String(partNo || '').trim().split('-');
-        return parts.length > 1 ? parts[parts.length - 1] : '';
-    }
-
     async function vesselLabel(vesselId, dept) {
         const fleet = (window.TVC_Fleet && TVC_Fleet.getAll) ? await TVC_Fleet.getAll() : [];
         const v = fleet.find(x => x.id === vesselId);
@@ -23110,127 +23148,26 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         return v ? `${v.name}${d}` : `${vesselId || 'Vessel'}${d}`;
     }
 
-    async function ensureReqSheetDraft(user, vesselId) {
-        const reqs = await TVC_Inventory.listRequisitions(vesselId);
-        const draft = reqs.find(r => r.status === TVC_Inventory.REQ_STATUS.DRAFT);
-        if (draft) return draft;
-        try {
-            return await TVC_Inventory.createRequisition(user, { vesselId, department: user?.department });
-        } catch (e) {
-            if (e.code !== 'EMPTY') throw e;
-        }
-        const today = new Date().toISOString().slice(0, 10);
-        const req = {
-            id: 'REQ-' + Date.now(),
-            schema_version: 1,
-            req_no: await TVC_Inventory.nextReqNo(vesselId),
-            vessel_id: vesselId,
-            department: user?.department || 'ENGINE',
-            status: TVC_Inventory.REQ_STATUS.DRAFT,
-            created_at: new Date().toISOString(),
-            created_by: user?.id || null,
-            creator_name: '',
-            lines: [],
-            code_no: '',
-            remarks: '',
-            priority: 'ROUTINE',
-            dock_use: false,
-            deliver_date_from: today,
-            deliver_date_to: today,
-            deliver_port: '',
-            made_on: '',
-            made_by: '',
-            assessed_on: '',
-            assessed_by: '',
-        };
-        await TVC_Inventory.saveRequisition(req);
-        return req;
-    }
-
-    async function openReqSheetModal() {
-        const { st, vesselId } = await vesselScope();
-        if (window.TVC_RBAC && !TVC_RBAC.can(st.user, TVC_RBAC.Action.CREATE_REQUISITION)) {
-            await TVC_Dialog.alert('You do not have permission to create requisitions.'); return;
-        }
-        try {
-            const req = _reqSheet.reqId
-                ? await TVC_Inventory.getRequisition(_reqSheet.reqId)
-                : await ensureReqSheetDraft(st.user, vesselId);
-            if (!req) throw new Error('REQ_NOT_FOUND');
-            _reqSheet.reqId = req.id;
-            if (!_reqSheet.step) _reqSheet.step = 3;
-            await renderReqSheetModal();
-            showSpicsModal('spareReqSheetModal');
-        } catch (e) { await TVC_Dialog.alert(e.message || e.code || 'Cannot open requisition.'); }
-    }
-
-    function closeReqSheetModal() {
-        closeSpicsModal('spareReqSheetModal');
-        _reqSheet.partSearch = '';
-    }
-
-    function captureReqSheetForm() {
-        const st = getState();
-        const isHq = isReqListHqUser(st);
-        const g = (id) => { const el = document.getElementById(id); return el ? el.value : ''; };
-        _reqSheet.form = {
-            code_no: g('reqCodeNo'),
-            remarks: g('reqRemarks'),
-            deliver_date_from: g('reqDelFrom'),
-            deliver_date_to: g('reqDelTo'),
-            deliver_port: g('reqDelPort'),
-            made_on: g('reqMadeOn'),
-            ...(isHq ? {
-                assessed_on: g('reqAssessedOn'),
-                assessed_by: g('reqAssessedBy'),
-            } : {}),
-        };
-        reqApplyTypeKind(_reqSheet.form, document.querySelector('input[name="reqPriority"]:checked')?.value || 'ROUTINE');
-        _reqSheet.form.made_by = resolveSpareReportedBy(
-            { made_by: _reqSheet.preservedMadeBy || '' },
-            spareInventoryUser(getState())
-        );
-        document.querySelectorAll('[data-req-line][data-req-field="order"]').forEach(el => {
-            const idx = Number(el.dataset.reqLine);
-            if (!Number.isNaN(idx)) _reqSheet.lineOrders = _reqSheet.lineOrders || {}, _reqSheet.lineOrders[idx] = Number(el.value) || 0;
-        });
-    }
-
-    async function saveReqSheetModal() {
-        captureReqSheetForm();
-        const req = await TVC_Inventory.getRequisition(_reqSheet.reqId);
-        if (!req) return;
-        const f = _reqSheet.form || {};
-        Object.assign(req, f);
-        _reqSheet.preservedMadeBy = req.made_by || '';
-        (req.lines || []).forEach((l, i) => {
-            if (_reqSheet.lineOrders && _reqSheet.lineOrders[i] != null) l.qty_requested = _reqSheet.lineOrders[i];
-        });
-        await TVC_Inventory.saveRequisition(req);
-        await syncReportedWaitAndRefreshList();
-        await TVC_Dialog.alert('Requisition saved.');
-        await renderReqSheetModal();
-        render();
-    }
-
+    /** Legacy req-sheet entry points — open unified Spare Parts Requisition window. */
+    async function openReqSheetModal() { await openNewRequisition(); }
+    function closeReqSheetModal() { closeSpicsModal('spareReqSheetModal'); }
+    function captureReqSheetForm() {}
+    async function saveReqSheetModal() { await reqWorkSave(); }
     async function reqSheetSelectReq(reqId) {
         if (reqId === '__new__') { await openNewRequisition(); return; }
-        captureReqSheetForm();
-        const cur = await TVC_Inventory.getRequisition(_reqSheet.reqId);
-        if (cur && _reqSheet.form) {
-            Object.assign(cur, _reqSheet.form);
-            if (_reqSheet.lineOrders) {
-                (cur.lines || []).forEach((l, i) => {
-                    if (_reqSheet.lineOrders[i] != null) l.qty_requested = _reqSheet.lineOrders[i];
-                });
-            }
-            await TVC_Inventory.saveRequisition(cur);
-        }
-        _reqSheet.reqId = reqId;
-        _reqSheet.selectedLineIdx = 0;
-        _reqSheet.lineOrders = null;
-        await renderReqSheetModal();
+        if (reqId) await openRequisitionInListWindow(reqId, { editing: true });
     }
+    async function reqSheetNew() { await openNewRequisition(); }
+    async function reqSheetFillLowStock() {}
+    async function reqSheetAddSpare() {}
+    async function reqSheetRemoveLine() {}
+    function reqSheetSelectLine() {}
+    function reqSheetSetStep() {}
+    async function reqSheetComplete() { await reqWorkSave(); }
+    async function reqSheetExport() { await reqWorkExportExcel(); }
+    function reqSheetPrint() { reqWorkPrint(); }
+    function onReqSheetSearchInput() {}
+    async function renderReqSheetModal() {}
 
     async function buildBlankRequisitionDraft() {
         const { st, vesselId } = await vesselScope();
@@ -23263,41 +23200,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!forceNew && _reqWorkDraft) return _reqWorkDraft;
         _reqWorkDraft = await buildBlankRequisitionDraft();
         _reqSheet.reqId = null;
-        _reqSheet.step = 1;
         return _reqWorkDraft;
-    }
-
-    async function createBlankRequisitionDraft() {
-        const req = await buildBlankRequisitionDraft();
-        await TVC_Inventory.saveRequisition(req);
-        _reqSheet.reqId = req.id;
-        _reqSheet.step = 1;
-        return req;
-    }
-
-    async function reqSheetNew() {
-        captureReqSheetForm();
-        closeReqSheetModal();
-        await openNewRequisition();
-    }
-
-    async function reqSheetFillLowStock() {
-        const { st, vesselId } = await vesselScope();
-        captureReqSheetForm();
-        let req = await TVC_Inventory.getRequisition(_reqSheet.reqId);
-        if (!req) return;
-        const low = (st.spares || []).map(canon).filter(s => TVC_Inventory.isLowStock(s));
-        const existing = new Set((req.lines || []).map(l => l.spare_part_id));
-        low.forEach(s => {
-            if (existing.has(s.id)) return;
-            const raw = (st.spares || []).find(x => x.id === s.id);
-            const qty = TVC_Inventory.recommendedOrderQty(s) || 1;
-            req.lines.push(buildReqLine(raw || s, qty));
-        });
-        Object.assign(req, _reqSheet.form || {});
-        await TVC_Inventory.saveRequisition(req);
-        _reqSheet.step = 2;
-        await renderReqSheetModal();
     }
 
     function buildReqLine(spare, qty) {
@@ -23327,254 +23230,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         };
     }
 
-    function reqSheetSearchHits() {
-        const q = (_reqSheet.partSearch || '').trim().toLowerCase();
-        if (!q) return [];
-        return (getState().spares || []).map(canon).filter(s => {
-            const hay = [partNo(s), s.name, s.universalItemCode, s.universal_code, s.location].join(' ').toLowerCase();
-            return hay.includes(q);
-        }).slice(0, 20);
-    }
-
-    function buildReqSheetHitsHtml() {
-        const hits = reqSheetSearchHits();
-        const q = (_reqSheet.partSearch || '').trim();
-        if (!q) return '';
-        if (!hits.length) return '<p class="muted req-sheet-empty">No search results</p>';
-        return `<div class="req-sheet-hits"><table class="req-sheet-table req-sheet-hits-table"><thead><tr>
-            <th>Part No</th><th>Universal Code</th><th>Description</th><th>Stock</th><th></th>
-        </tr></thead><tbody>${hits.map(s => `<tr class="req-hit-row" onclick="TVC_SpareMenu.reqSheetAddSpare('${escAttr(s.id)}')">
-            <td><strong>${esc(partNo(s))}</strong></td>
-            <td>${esc(s.universalItemCode || s.universal_code || '—')}</td>
-            <td>${esc(s.name)}</td>
-            <td style="text-align:center">${TVC_Inventory.currentStock(s)}</td>
-            <td><span class="pill ok">+ Add</span></td>
-        </tr>`).join('')}</tbody></table></div>`;
-    }
-
-    function onReqSheetSearchInput(v) {
-        _reqSheet.partSearch = v;
-        clearTimeout(_reqSheetSearchT);
-        _reqSheetSearchT = setTimeout(() => {
-            const wrap = document.getElementById('reqSheetHitsWrap');
-            if (wrap) wrap.innerHTML = buildReqSheetHitsHtml();
-        }, 120);
-    }
-
-    async function reqSheetAddSpare(spareId) {
-        captureReqSheetForm();
-        const req = await TVC_Inventory.getRequisition(_reqSheet.reqId);
-        if (!req) return;
-        if ((req.lines || []).some(l => l.spare_part_id === spareId)) { await TVC_Dialog.alert('Part already added.'); return; }
-        const spare = (getState().spares || []).find(s => s.id === spareId);
-        if (!spare) return;
-        req.lines = req.lines || [];
-        req.lines.push(buildReqLine(spare, TVC_Inventory.recommendedOrderQty(canon(spare)) || 1));
-        Object.assign(req, _reqSheet.form || {});
-        await TVC_Inventory.saveRequisition(req);
-        _reqSheet.partSearch = '';
-        _reqSheet.step = 2;
-        await renderReqSheetModal();
-    }
-
-    async function reqSheetRemoveLine(idx) {
-        captureReqSheetForm();
-        const req = await TVC_Inventory.getRequisition(_reqSheet.reqId);
-        if (!req || !req.lines) return;
-        req.lines.splice(idx, 1);
-        Object.assign(req, _reqSheet.form || {});
-        await TVC_Inventory.saveRequisition(req);
-        _reqSheet.selectedLineIdx = Math.max(0, idx - 1);
-        await renderReqSheetModal();
-    }
-
-    function reqSheetSelectLine(idx) {
-        _reqSheet.selectedLineIdx = idx;
-        document.querySelectorAll('.req-line-row').forEach((r, i) => r.classList.toggle('selected', i === idx));
-    }
-
-    function reqSheetSetStep(n) {
-        _reqSheet.step = n;
-        document.querySelectorAll('.req-flow-step').forEach(el => {
-            el.classList.toggle('active', Number(el.dataset.step) === n);
-        });
-    }
-
-    async function reqSheetComplete() {
-        await saveReqSheetModal();
-        _reqSheet.step = 4;
-        await renderReqSheetModal();
-    }
-
-    async function reqSheetExport() {
-        await saveReqSheetModal();
-        try {
-            await exportReq(_reqSheet.reqId);
-        } catch (e) { await TVC_Dialog.alert(e.message || e.code); }
-    }
-
-    function reqSheetPrint() {
-        const area = document.getElementById('reqSheetPrintArea');
-        if (!area) { window.print(); return; }
-        const w = window.open('', '_blank', 'width=900,height=700');
-        if (!w) { window.print(); return; }
-        w.document.write(`<!DOCTYPE html><html><head><title>Parts Requisition</title>
-            <style>body{font-family:Segoe UI,Arial,sans-serif;font-size:12px;padding:16px}
-            table{width:100%;border-collapse:collapse} th,td{border:1px solid #999;padding:4px 6px}
-            th{background:#ddd} h2{text-align:center;color:#003366}</style></head><body>${area.innerHTML}</body></html>`);
-        w.document.close();
-        w.focus();
-        w.print();
-    }
-
-    async function renderReqSheetModal() {
-        const host = document.getElementById('spareReqSheetBody');
-        if (!host) return;
-        const { st, vesselId, isHq } = await vesselScope();
-        const req = await TVC_Inventory.getRequisition(_reqSheet.reqId);
-        if (!req) { host.innerHTML = '<p class="muted">Requisition not found.</p>'; return; }
-        _reqSheet.preservedMadeBy = req.made_by || '';
-        const reportedByVal = resolveSpareReportedBy(req, spareInventoryUser(st));
-        const reqs = await TVC_Inventory.listRequisitions(vesselId);
-        const vesselName = await vesselLabel(vesselId, req.department || st.user?.department);
-        const today = new Date().toISOString().slice(0, 10);
-        const step = _reqSheet.step || 3;
-        const selIdx = _reqSheet.selectedLineIdx || 0;
-
-        const reqOptions = reqs.map(r =>
-            `<option value="${escAttr(r.id)}"${r.id === req.id ? ' selected' : ''}>${esc(r.req_no)} (${esc(r.status)})</option>`
-        ).join('');
-
-        const lines = req.lines || [];
-        const lineRows = lines.length ? lines.map((l, i) => {
-            const spare = (st.spares || []).find(s => s.id === l.spare_part_id);
-            const c = spare ? canon(spare) : null;
-            const crit = (l.is_critical || c?.isCritical) ? '<span class="req-crit" title="Critical">*</span>' : '';
-            const std = l.standard_stock ?? TVC_Inventory.standardStock(c || l);
-            const rob = l.qty_on_hand ?? (spare ? TVC_Inventory.currentStock(spare) : 0);
-            const pipe = c ? sparePipelineCols(c) : null;
-            const awaiting = l.on_order ?? (pipe?.awaiting ?? 0);
-            const needVal = l.qty_required ?? (pipe?.need != null ? pipe.need : Math.max(0, (Number(std) || 0) - rob - awaiting));
-            const needDisplay = needVal == null ? '—' : needVal;
-            const selected = i === selIdx ? ' selected' : '';
-            return `<tr class="req-line-row${selected}" onclick="TVC_SpareMenu.reqSheetSelectLine(${i})">
-                <td class="req-col-icon">${crit}</td>
-                <td>${esc(partCodeMain(l.part_no))}</td>
-                <td>${esc(partCodeSub(l.part_no))}</td>
-                <td>${esc(l.equipment || c?.location || '—')}</td>
-                <td class="req-col-parts">${esc(l.name)}</td>
-                <td class="req-col-icon">${crit}</td>
-                <td style="text-align:center">${std}</td>
-                <td style="text-align:center">${rob}</td>
-                <td style="text-align:center">${awaiting}</td>
-                <td style="text-align:center">${needDisplay}</td>
-                <td style="text-align:center"><input type="number" min="0" step="1" class="req-order-qty"
-                    data-req-line="${i}" data-req-field="order" value="${l.qty_requested ?? (needVal ?? '')}"
-                    onclick="event.stopPropagation()"></td>
-                <td><button type="button" class="btn btn-sm btn-red" onclick="event.stopPropagation();TVC_SpareMenu.reqSheetRemoveLine(${i})">×</button></td>
-            </tr>`;
-        }).join('') : `<tr><td colspan="12" class="muted" style="text-align:center;padding:20px">
-            No requisition lines — add via search below or <a href="#" onclick="TVC_SpareMenu.reqSheetFillLowStock();return false">Add low stock automatically</a>
-        </td></tr>`;
-
-        const flowStep = (n, label) =>
-            `<span class="req-flow-step${step === n ? ' active' : ''}" data-step="${n}" onclick="TVC_SpareMenu.reqSheetSetStep(${n})">${label}</span>`;
-
-        const reqType = reqListTypeKind(req);
-        const evalRo = isHq ? '' : ' readonly disabled tabindex="-1"';
-        const evalRoClass = isHq ? '' : ' wr-ro';
-        host.innerHTML = `
-        <div class="req-sheet" id="reqSheetPrintArea">
-            <div class="req-sheet-titlebar">
-                <button type="button" class="modal-x req-sheet-close" onclick="TVC_SpareMenu.closeReqSheetModal()">×</button>
-                <span class="req-vessel-name">${esc(vesselName)}</span>
-                <span class="req-sheet-title">- Parts Requisition -</span>
-                <span class="req-sheet-toolbar">
-                    <button type="button" class="req-tool-btn" onclick="TVC_SpareMenu.reqSheetPrint()">Print</button>
-                    <button type="button" class="req-tool-btn" onclick="TVC_SpareMenu.reqSheetPrint()">Preview</button>
-                    <button type="button" class="req-tool-btn" onclick="TVC_SpareMenu.closeReqSheetModal()">Menu</button>
-                </span>
-            </div>
-            <div class="req-sheet-form">
-                <div class="req-form-row">
-                    <label>Code No.<select id="reqCodeNo">
-                        <option value=""${!req.code_no ? ' selected' : ''}>—</option>
-                        <option value="ENGINE"${req.code_no === 'ENGINE' ? ' selected' : ''}>ENGINE</option>
-                        <option value="DECK"${req.code_no === 'DECK' ? ' selected' : ''}>DECK</option>
-                        <option value="ELECT"${req.code_no === 'ELECT' ? ' selected' : ''}>ELECT</option>
-                    </select></label>
-                    <label>Requisition No.<select id="reqSelectNo" onchange="TVC_SpareMenu.reqSheetSelectReq(this.value)">
-                        <option value="__new__">New Requisition</option>${reqOptions}
-                    </select></label>
-                    <label class="req-reqno-display">No. <strong>${esc(req.req_no)}</strong></label>
-                </div>
-                <div class="req-form-row req-form-remarks">
-                    <label>Remarks<textarea id="reqRemarks" rows="3">${esc(req.remarks || '')}</textarea></label>
-                </div>
-                <div class="req-form-row req-form-mid">
-                    <div class="req-priority">
-                        <label><input type="radio" name="reqPriority" value="URGENT"${reqType === 'URGENT' ? ' checked' : ''}> Urgent</label>
-                        <label><input type="radio" name="reqPriority" value="ROUTINE"${reqType === 'ROUTINE' ? ' checked' : ''}> Routine</label>
-                        <label><input type="radio" name="reqPriority" value="DOCK"${reqType === 'DOCK' ? ' checked' : ''}> Dock Use</label>
-                    </div>
-                    <label>Delivered Date
-                        <span class="req-date-range">
-                            <input type="text" id="reqDelFrom" class="tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.deliver_date_from || today))}">
-                            <span>~</span>
-                            <input type="text" id="reqDelTo" class="tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.deliver_date_to || today))}">
-                        </span>
-                    </label>
-                    <label>Delivered Port<input type="text" id="reqDelPort" value="${esc(req.deliver_port || '')}"></label>
-                </div>
-                <div class="req-form-row req-form-track">
-                    <label>Requested Date<input type="text" id="reqMadeOn" class="tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.made_on || ''))}"></label>
-                    <label>by<input type="text" id="reqMadeBy" class="wr-ro" value="${esc(reportedByVal)}" readonly disabled tabindex="-1"></label>
-                    <label>Evaluated Date<input type="text" id="reqAssessedOn" class="tvc-date-input${evalRoClass}" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(fmtSpareDate(req.assessed_on || ''))}"${evalRo}></label>
-                    <label>by<input type="text" id="reqAssessedBy" class="${isHq ? '' : 'wr-ro'}" value="${esc(req.assessed_by || '')}" placeholder="Superintendent"${evalRo}></label>
-                </div>
-            </div>
-            <div class="req-flow-bar">
-                ${flowStep(1, 'Select Requisition No.')}
-                <span class="req-flow-arrow">⇒</span>
-                ${flowStep(2, 'Select REQD Parts')}
-                <span class="req-flow-arrow">⇒</span>
-                ${flowStep(3, 'Input Order Qty.')}
-                <span class="req-flow-arrow">⇒</span>
-                ${flowStep(4, 'Complete')}
-            </div>
-            <div class="req-sheet-add">
-                <label class="req-add-label">Search REQD Parts (Part No / Name / Universal Code)</label>
-                <input type="search" id="reqSheetSearch" class="req-sheet-search" placeholder="e.g. gasket, 01-001, U_ENG_001"
-                    value="${esc(_reqSheet.partSearch || '')}" oninput="TVC_SpareMenu.onReqSheetSearchInput(this.value)">
-                <div id="reqSheetHitsWrap">${buildReqSheetHitsHtml()}</div>
-                <div class="req-sheet-add-actions">
-                    <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqSheetFillLowStock()">Add low stock automatically</button>
-                    <button type="button" class="btn btn-sm" onclick="TVC_SpareMenu.reqSheetNew()">+ New Requisition</button>
-                </div>
-            </div>
-            <div class="req-table-scroll">
-                <table class="req-sheet-table req-sheet-parts">
-                    <thead><tr>
-                        <th></th><th>Code</th><th></th><th>Equipment</th><th>Parts</th><th></th>
-                        <th title="${SPARE_COL_STD_TITLE}">${SPARE_COL_STD}</th><th title="${SPARE_COL_ROB_TITLE}">${SPARE_COL_ROB}</th><th title="${SPARE_COL_WAIT_TITLE}">${SPARE_COL_WAIT}</th><th title="${SPARE_COL_NEED_TITLE}">${SPARE_COL_NEED}</th><th>Order</th><th></th>
-                    </tr></thead>
-                    <tbody>${lineRows}</tbody>
-                </table>
-            </div>
-            <div class="req-sheet-actions">
-                <button type="button" class="btn btn-green" onclick="TVC_SpareMenu.saveReqSheetModal()">💾 Save</button>
-                <button type="button" class="btn" onclick="TVC_SpareMenu.reqSheetExport()">⬇ Data Export</button>
-                <button type="button" class="btn btn-green" onclick="TVC_SpareMenu.reqSheetComplete()">✓ Complete</button>
-                <button type="button" class="btn" onclick="TVC_SpareMenu.closeReqSheetModal()">Close</button>
-            </div>
-        </div>`;
-
-        const sel = document.getElementById('reqSelectNo');
-        if (sel) sel.value = req.id;
-    }
-
     function exportRequisitionData() {
-        viewRequisitionList();
+        openNewRequisition();
     }
     function resolveWrJobHeader(st, job) {
         if (!job) {
