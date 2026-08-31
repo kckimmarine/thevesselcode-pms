@@ -76,7 +76,7 @@ const TVC_Config = (function () {
     function isWebSuperHqUser(user) {
         if (!isWebDeploy() || !user) return false;
         const uname = String(user.username || '').trim().toLowerCase();
-        return uname === 'admin' || uname === 'tvc';
+        return uname === 'admin' || uname === 'pms-21';
     }
 
     function isSupabaseConfigured() {

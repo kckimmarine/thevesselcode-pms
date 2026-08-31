@@ -91,7 +91,7 @@ const TVC_RBAC = (function () {
         'engineer': 'Engineer',
         'ce': 'Chief engineer',
         'hq': 'Superintendent',
-        'tvc': 'TVC Admin',
+        'tvc': 'Ship Owner (Pilot)',
     };
 
     const ROLE_PERMISSIONS = {
@@ -231,27 +231,36 @@ const TVC_RBAC = (function () {
     function isShipAccount(user) { return user?.account_type === AccountType.SHIP; }
     /** Company HQ account (superintendent) — Ship List scoped to that company. */
     function isCompanyHqAccount(user) { return user?.account_type === AccountType.HQ; }
-    /** TVC super-admin / fleet-wide HQ — all registered companies/vessels (HQ Mode). */
-    function isSuperHqAccount(user) {
-        return user?.account_type === AccountType.ADMIN;
-    }
     /** HQ Mode session: company HQ superintendent or TVC super-admin / fleet-wide viewer. */
     function isHqAccount(user) {
         if (!user) return false;
         return user.account_type === AccountType.HQ || user.account_type === AccountType.ADMIN;
     }
-    const ADMIN_TOOL_USERNAMES = new Set(['admin', 'tvc']);
-    /** Registry / Setup / License tools — admin + tvc only (not pms-21 fleet viewer). */
+    const ADMIN_TOOL_USERNAMES = new Set(['admin']);
+    /** TVC internal administrator — Registry, License, full fleet admin. */
     function isAdminAccount(user) {
         if (!user || user.account_type !== AccountType.ADMIN) return false;
         return ADMIN_TOOL_USERNAMES.has(String(user.username || '').trim().toLowerCase());
     }
+    /** Pilot ship-owner HQ (tvc) — company-scoped superintendent, not TVC admin. */
+    function isTvcPilotAccount(user) {
+        return String(user?.username || '').trim().toLowerCase() === 'tvc';
+    }
+    /** Repair partner (pms-21) — fleet-wide monitoring with admin, not registry/license. */
     function isPms21Account(user) {
         return String(user?.username || '').trim().toLowerCase() === 'pms-21';
     }
-    /** PMS/SPARE Master Excel Export · Import — admin, tvc, pms-21 */
+    function isFleetMonitorAccount(user) {
+        return isPms21Account(user);
+    }
+    /** Fleet-wide HQ view — admin + repair partner only (not pilot ship owner). */
+    function isSuperHqAccount(user) {
+        if (!user) return false;
+        return isAdminAccount(user) || isFleetMonitorAccount(user);
+    }
+    /** PMS/SPARE Master Excel Export · Import — admin + repair partner */
     function canMasterExcelAccount(user) {
-        return isAdminAccount(user) || isPms21Account(user);
+        return isAdminAccount(user) || isFleetMonitorAccount(user);
     }
     function hqActingRole(user) {
         if (isHqAccount(user) && user.account_type === AccountType.ADMIN) return Role.HQ_SUPERVISOR;
@@ -454,8 +463,9 @@ const TVC_RBAC = (function () {
         officer: Role.SHIP_OFFICER,
         engineer: Role.SHIP_OFFICER,
         hq: Role.HQ_SUPERVISOR,
-        tvc: Role.TVC_ADMIN,
+        tvc: Role.HQ_SUPERVISOR,
         admin: Role.TVC_ADMIN,
+        'pms-21': Role.HQ_SUPERVISOR,
     };
 
     function resolveUserRole(user) {
@@ -670,7 +680,7 @@ const TVC_RBAC = (function () {
         AccountType, Role, Department, ReportStatus, Action,
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForWorkReport, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
-        isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isPms21Account, canMasterExcelAccount, isCompanyHqAccount, isHqSku, isApprover,
+        isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isTvcPilotAccount, isPms21Account, isFleetMonitorAccount, canMasterExcelAccount, isCompanyHqAccount, isHqSku, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
         normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,

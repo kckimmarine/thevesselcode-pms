@@ -3236,6 +3236,20 @@ const TVC_App = (function () {
         ];
     }
 
+    /** Repair partner (pms-21) — fleet monitor tools, no registry/license. */
+    function fleetMonitorMenuSections() {
+        return [{
+            key: 'administration',
+            tone: 'necessary',
+            title: 'Partner Tools',
+            items: [{
+                label: 'Universal Setup.exe…',
+                tag: '1',
+                action: 'TVC_App.openAdminUniversalSetupModal()',
+            }],
+        }];
+    }
+
     function menuModel() {
         const c = menuCounts();
         const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
@@ -3261,8 +3275,10 @@ const TVC_App = (function () {
                 { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: hqMonthlyItems },
                 { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: necessaryItems },
             ];
-            if (isSuperHq && (TVC_RBAC.isAdminAccount?.(state.user) || TVC_RBAC.isPms21Account?.(state.user))) {
+            if (TVC_RBAC.isAdminAccount?.(state.user)) {
                 sections.push(...filterAdminMenuForWeb(superHqAdminMenuSections()));
+            } else if (TVC_RBAC.isFleetMonitorAccount?.(state.user)) {
+                sections.push(...filterAdminMenuForWeb(fleetMonitorMenuSections()));
             }
             return sections;
         }
@@ -4993,6 +5009,14 @@ const TVC_App = (function () {
             sort1: row.item_sort1 || first.sort1 || '',
             sort2: row.item_sort2 || first.sort2 || '',
         };
+    }
+
+    function workPermitIsBatch(row) {
+        return (row?.job_items || []).length > 1;
+    }
+
+    function histBatchTagHtml(title) {
+        return `<span class="pill ok" title="${escAttr(title)}">B</span> `;
     }
 
     function menuXferWorkPermitExportRows() {
@@ -9951,7 +9975,7 @@ const TVC_App = (function () {
         return 'You do not have permission to edit the Work Procedure.';
     }
 
-    /** PMS/SPARE Master Excel — admin / tvc / pms-21 */
+    /** PMS/SPARE Master Excel — admin / pms-21 (repair partner) */
     function canPmsMasterExcel() {
         if (!state.user) return false;
         return !!TVC_RBAC.canMasterExcelAccount?.(state.user);
@@ -9963,11 +9987,11 @@ const TVC_App = (function () {
     }
 
     function pmsMasterExcelDeniedMessage() {
-        return 'PMS Master Export · Import requires admin, tvc, or pms-21.';
+        return 'PMS Master Export · Import requires admin or pms-21.';
     }
 
     function spareMasterExcelDeniedMessage() {
-        return 'SPARE Master Export · Import requires admin, tvc, or pms-21.';
+        return 'SPARE Master Export · Import requires admin or pms-21.';
     }
 
     function selectedGroupNode() {
@@ -13307,12 +13331,13 @@ const TVC_App = (function () {
                 const chk = canCheck
                     ? `<input type="checkbox" class="hist-chk-input"${checked ? ' checked' : ''}>`
                     : `<input type="checkbox" disabled title="${escAttr(histCheckDisabledTitle(entry))}">`;
+                const batchTag = workPermitIsBatch(row) ? histBatchTagHtml('Work Permit (multi-job)') : '';
                 return `<tr class="hist-row${sel}" data-hist-key="${escAttr(rowKey)}" onclick="TVC_App.selectHistRow('${escAttr(rowKey)}', event)" ondblclick="TVC_App.openWorkPermitFromHistory('${escAttr(row.id)}')">
                 <td class="hist-chk" onclick="event.stopPropagation()">${chk}</td>
                 ${histTypeCell(entry)}
                 <td class="hist-file">${esc(fileNo || '—')}</td>
                 ${histCriticalCell(entry)}
-                <td class="hist-code">${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
+                <td class="hist-code">${batchTag}${cols.jobCode ? `<strong>${esc(cols.jobCode)}</strong>` : '—'}</td>
                 <td class="hist-sort1">${histCellHtml(cols.sort1 || job?.item_sort1)}</td>
                 <td class="hist-sort2">${histCellHtml(cols.sort2 || job?.item_sort2)}</td>
                 <td class="hist-date">${esc(dt || '—')}</td>
@@ -17159,11 +17184,12 @@ const TVC_App = (function () {
                 const fileNo = String(row?.file_no || '').trim() || '—';
                 const dt = formatCmaxsHistDate(listReportedDateStr(row));
                 const st = TVC_WorkPermit.listWorkflowStatus(row);
+                const batch = workPermitIsBatch(row) ? 'B ' : '';
                 return `<tr>
                 <td>W</td>
                 <td>${esc(fileNo)}</td>
                 <td>${esc(printHistCriticalMark(entry))}</td>
-                <td>${esc(cols.jobCode || '—')}</td>
+                <td>${esc(batch + (cols.jobCode || '—'))}</td>
                 <td>${esc(cols.sort1 || job?.item_sort1 || '')}</td>
                 <td>${esc(cols.sort2 || job?.item_sort2 || '')}</td>
                 <td>${esc(dt || '—')}</td>

@@ -2,7 +2,7 @@
 const TVC_Auth = (function () {
     const SESSION_KEY = 'tvc_session_v2';
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 13;
+    const USERS_SEED_VERSION = 14;
 
     const DEFAULT_USERS = [
         // Deck part
@@ -17,9 +17,11 @@ const TVC_Auth = (function () {
         // Web HQ pilot (thevesselcode.com)
         { id: 'user-dm-hq', username: 'dm_user@thevesselcode.com', display_name: 'TVC HQ (Pilot)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
         // THE VESSEL CODE — Admin Mode (app updates only)
-        { id: 'user-tvc', username: 'tvc', display_name: 'TVC Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null },
+        // Pilot ship owner — company-scoped HQ superintendent (TVC No1)
+        { id: 'user-tvc', username: 'tvc', display_name: 'TVC Pilot (Ship Owner)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
         { id: 'user-tvc-admin', username: 'admin', display_name: 'TVC Super Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null, seed_password: 'kimkc9363#@' },
-        { id: 'user-pms-21', username: 'pms-21', display_name: 'PMS-21', account_type: 'ADMIN', role: 'PMS_21', department: null, vessel_id: null, seed_password: 'pms-21' },
+        // Repair partner — fleet-wide monitoring with TVC admin
+        { id: 'user-pms-21', username: 'pms-21', display_name: 'PMS-21 (Repair Partner)', account_type: 'ADMIN', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, seed_password: 'pms-21' },
     ];
 
     const DEPRECATED_USERNAMES = ['admin@thevesselcode.com'];
@@ -181,7 +183,7 @@ const TVC_Auth = (function () {
                 return {
                     ok: false,
                     error: user.account_type === 'ADMIN'
-                        ? 'TVC Admin (tvc) accounts must sign in without selecting a Department.'
+                        ? 'Admin accounts must sign in without selecting a Department.'
                         : 'Superintendent (hq) accounts must sign in without selecting a Department.',
                 };
             }
