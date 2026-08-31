@@ -311,6 +311,7 @@ module.exports = {
     isReady,
     getAdminClient,
     readRawBody,
+    assertPilotVessel,
     uploadPackage,
     pullLatestPackage,
     markPackageImported,
