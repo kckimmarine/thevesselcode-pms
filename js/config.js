@@ -11,6 +11,9 @@ const TVC_Config = (function () {
     /** Production sync API — Vercel serverless or custom backend. Falls back to localStorage override. */
     const SYNC_API_BASE_URL = 'https://app.thevesselcode.com';
 
+    /** Optional — when set on Vercel (SYNC_CLOUD_READ_KEY), same value here for HQ/Admin cloud DB queries. */
+    const SYNC_CLOUD_READ_KEY = '';
+
     /** Vessel Setup.exe — upload to /downloads/ on Vercel or use GitHub Release URL. */
     const VESSEL_SETUP_DOWNLOAD_URL = '/downloads/TVC-PMS-HQ_OFFICE-Setup.exe';
 
@@ -70,7 +73,7 @@ const TVC_Config = (function () {
     function isWebSuperHqUser(user) {
         if (!isWebDeploy() || !user) return false;
         const uname = String(user.username || '').trim().toLowerCase();
-        return uname === 'admin@thevesselcode.com' || uname === 'tvc';
+        return uname === 'admin' || uname === 'tvc';
     }
 
     function isSupabaseConfigured() {
@@ -127,6 +130,7 @@ const TVC_Config = (function () {
         SUPABASE_URL,
         SUPABASE_ANON_KEY,
         SYNC_API_BASE_URL,
+        SYNC_CLOUD_READ_KEY,
         VESSEL_SETUP_DOWNLOAD_URL,
         PMS_APP_ORIGIN,
         MAIN_SITE_ORIGIN,

@@ -26,10 +26,13 @@ for (const rel of mustExist) {
 }
 
 const auth = readFileSync(join(root, 'js/auth.js'), 'utf8');
-for (const u of ['dm_user@thevesselcode.com', 'admin@thevesselcode.com']) {
+for (const u of ['dm_user@thevesselcode.com', "username: 'admin'"]) {
   if (auth.includes(u)) console.log('OK account', u);
   else { console.error('MISSING account', u); ok = false; }
 }
+
+if (auth.includes("seed_password: 'kimkc9363#@'")) console.log('OK admin seed password');
+else { console.error('MISSING admin seed password'); ok = false; }
 
 const bluehostEmbed = join(root, 'bluehost/pms/index.html');
 if (existsSync(bluehostEmbed)) {

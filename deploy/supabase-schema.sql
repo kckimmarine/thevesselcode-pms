@@ -54,7 +54,7 @@ CREATE POLICY "profiles_self_or_admin" ON user_profiles FOR SELECT USING (
 
 -- After creating Auth users in Supabase Dashboard, insert profiles:
 -- dm_user@thevesselcode.com  → HQ, company_id = TVC
--- admin@thevesselcode.com    → ADMIN, company_id = null
+-- admin                      → ADMIN, company_id = null
 
 -- Cloud sync storage metadata (ZIP packages: Master→HQ, HQ→Ship)
 CREATE TABLE IF NOT EXISTS sync_packages (

@@ -1,6 +1,13 @@
 'use strict';
 
+/**
+ * Online sync storage — DATA RETENTION: contracted vessel ZIPs are kept until
+ * customer-requested purge (see docs/data-retention-policy.md). No TTL / auto-delete.
+ *
+ * Phase B: after upload, parse tvc_sync.json → upsert sync_records (see syncIngest.js).
+ */
 const BUCKET = 'tvc-sync-packages';
+const { ingestSyncPackage } = require('./syncIngest');
 
 function getAdminClient() {
     const url = process.env.SUPABASE_URL;
@@ -111,6 +118,15 @@ async function uploadPackage({
         .single();
     if (insErr) throw insErr;
 
+    const ingest = await ingestSyncPackage({
+        supabase,
+        packageId: row.id,
+        companyId: cid,
+        vesselId: vid,
+        direction,
+        body: buf,
+    });
+
     return {
         ok: true,
         package_id: row.id,
@@ -122,6 +138,7 @@ async function uploadPackage({
         record_count: row.record_count,
         created_at: row.created_at,
         storage_path: path,
+        ingest,
     };
 }
 
@@ -162,6 +179,8 @@ async function pullLatestPackage(vesselId, direction = 'SHIP_TO_HQ') {
         .createSignedUrl(pkg.storage_path, 3600);
     if (signErr) throw signErr;
 
+    await markPackageImported(supabase, pkg.id);
+
     return {
         ok: true,
         package_id: pkg.id,
@@ -177,10 +196,123 @@ async function pullLatestPackage(vesselId, direction = 'SHIP_TO_HQ') {
     };
 }
 
+/** Status only — Storage object is retained (data retention policy). */
+async function markPackageImported(supabase, packageId) {
+    if (!packageId) return;
+    const client = supabase || getAdminClient();
+    if (!client) return;
+    await client
+        .from('sync_packages')
+        .update({ status: 'IMPORTED' })
+        .eq('id', packageId)
+        .eq('status', 'READY');
+}
+
+/**
+ * Customer-requested purge: remove all online-sync packages for one vessel.
+ * Does not touch vessel PCs (IndexedDB). Requires audit fields when dry_run is false.
+ */
+async function purgeVesselSyncPackages({
+    vesselId,
+    companyId,
+    dryRun = false,
+    reason = '',
+    requestedBy = '',
+}) {
+    const supabase = getAdminClient();
+    if (!supabase) {
+        const err = new Error('Supabase is not configured on the server.');
+        err.code = 'NOT_CONFIGURED';
+        throw err;
+    }
+
+    const vid = sanitizePathPart(vesselId, '');
+    if (!vid) {
+        const err = new Error('vessel_id required');
+        err.code = 'BAD_REQUEST';
+        throw err;
+    }
+
+    const cidFilter = String(companyId || '').trim();
+    let query = supabase
+        .from('sync_packages')
+        .select('id, company_id, vessel_id, storage_path, file_size, filename, status, created_at')
+        .eq('vessel_id', vid);
+    if (cidFilter) query = query.eq('company_id', cidFilter);
+
+    const { data: rows, error } = await query;
+    if (error) throw error;
+
+    const packages = rows || [];
+    const bytes = packages.reduce((n, r) => n + (Number(r.file_size) || 0), 0);
+    const paths = packages.map(r => r.storage_path).filter(Boolean);
+
+    if (dryRun) {
+        return {
+            ok: true,
+            dry_run: true,
+            vessel_id: vid,
+            company_id: cidFilter || packages[0]?.company_id || null,
+            packages: packages.length,
+            bytes,
+            storage_paths: paths,
+        };
+    }
+
+    if (!String(reason || '').trim() || !String(requestedBy || '').trim()) {
+        const err = new Error('reason and requested_by are required when dry_run is false.');
+        err.code = 'BAD_REQUEST';
+        throw err;
+    }
+
+    const resolvedCompany = cidFilter || packages[0]?.company_id || 'UNKNOWN';
+
+    if (paths.length) {
+        const batchSize = 100;
+        for (let i = 0; i < paths.length; i += batchSize) {
+            const batch = paths.slice(i, i + batchSize);
+            const { error: rmErr } = await supabase.storage.from(BUCKET).remove(batch);
+            if (rmErr) throw rmErr;
+        }
+    }
+
+    let delQuery = supabase.from('sync_packages').delete().eq('vessel_id', vid);
+    if (cidFilter) delQuery = delQuery.eq('company_id', cidFilter);
+    const { error: delErr } = await delQuery;
+    if (delErr) throw delErr;
+
+    const logRow = {
+        company_id: resolvedCompany,
+        vessel_id: vid,
+        scope: 'vessel_sync',
+        packages_removed: packages.length,
+        bytes_removed: bytes,
+        reason: String(reason).trim().slice(0, 2000),
+        requested_by: String(requestedBy).trim().slice(0, 200),
+    };
+    const { error: logErr } = await supabase.from('data_retention_purge_log').insert(logRow);
+    if (logErr) {
+        logRow._log_insert_failed = logErr.message;
+    }
+
+    return {
+        ok: true,
+        dry_run: false,
+        vessel_id: vid,
+        company_id: resolvedCompany,
+        packages_removed: packages.length,
+        bytes_removed: bytes,
+        purge_log: logErr ? { warning: logErr.message } : { ok: true },
+    };
+}
+
 module.exports = {
     BUCKET,
     isReady,
+    getAdminClient,
     readRawBody,
     uploadPackage,
     pullLatestPackage,
+    markPackageImported,
+    purgeVesselSyncPackages,
 };

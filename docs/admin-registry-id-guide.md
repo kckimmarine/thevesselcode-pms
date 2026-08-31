@@ -128,6 +128,8 @@ Pilot `DAEMYUNG` → **inactive**
 
 ## 6. 관련 문서
 
+- Data retention (계약 선박): [`data-retention-policy.md`](data-retention-policy.md)
+- Data scope (선사 HQ / TVC Admin): [`data-scope-policy.md`](data-scope-policy.md)
 - 운영 SOP: [`admin-mode-sop.md`](admin-mode-sop.md)
 - Registry 구조: [`../admin/README.md`](../admin/README.md)
 - Seat license: [`seat-license.md`](seat-license.md)

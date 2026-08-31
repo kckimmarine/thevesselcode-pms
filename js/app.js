@@ -1269,6 +1269,31 @@ const TVC_App = (function () {
         document.title = suffix ? `${WINDOW_TITLE_BASE} ${suffix}` : WINDOW_TITLE_BASE;
     }
 
+    function getHeaderRegistryUserLabel(user) {
+        if (!user) return '—';
+        let vessel = null;
+        if (TVC_RBAC.isHqAccount(user)) {
+            const visible = typeof TVC_Fleet.getVisible === 'function'
+                ? TVC_Fleet.getVisible(user)
+                : (state.fleet || []);
+            vessel = visible.find(v => v.id === state.selectedVesselId)
+                || visible[0]
+                || TVC_Fleet.getSelected?.()
+                || null;
+        } else {
+            const vesselId = user.vessel_id || null;
+            if (vesselId) vessel = TVC_Fleet.resolveById(vesselId);
+        }
+        const companyId = vessel
+            ? TVC_Fleet.vesselCompanyId(vessel)
+            : String(user.company_id || TVC_Fleet.licenseCompanyId()).trim();
+        const vesselId = vessel?.id || user.vessel_id || null;
+        if (companyId && vesselId) return `${companyId} · ${vesselId}`;
+        if (companyId) return companyId;
+        if (vesselId) return vesselId;
+        return '—';
+    }
+
     function updateUserBar(user) {
         const badge = typeof TVC_Space !== 'undefined'
             ? TVC_Space.getModeBadge(user)
@@ -1279,7 +1304,7 @@ const TVC_App = (function () {
                     : (user.department === 'DECK' ? 'Vessel Mode - Deck'
                         : user.department === 'ENGINE' ? 'Vessel Mode - Engine'
                             : 'Vessel Mode')));
-        const title = TVC_RBAC.getAccountTitle(user.username);
+        const title = getHeaderRegistryUserLabel(user);
         document.querySelectorAll('.userBadgeEl').forEach(el => el.textContent = badge);
         document.querySelectorAll('.userNameEl').forEach(el => el.textContent = title);
         document.querySelectorAll('.userVesselEl').forEach(el => {
@@ -3347,7 +3372,50 @@ const TVC_App = (function () {
                 <p class="spare-sync-note muted">V-SAT: online sync OK (may take several minutes). FBB / low bandwidth: use Export/Import ZIP.</p>
                 <div class="spare-sync-actions menu-xfer-online-actions">${btnHtml}
                 </div>
+                ${menuXferCloudDataHtml(user)}
             </div>`;
+    }
+
+    function menuXferCloudDataHtml(user) {
+        if (!TVC_RBAC.isHqAccount(user) || typeof TVC_OnlineSync === 'undefined') return '';
+        if (!TVC_OnlineSync.isConfigured()) return '';
+        return `
+            <div id="menuCloudDataPanel" class="menu-xfer-cloud">
+                <p class="spare-sync-note"><strong>Cloud DB</strong> — ingested sync mirror (HQ / Admin)</p>
+                <p id="menuCloudDataStatus" class="spare-sync-note muted">Open this dialog while online to load cloud summary.</p>
+                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferRefreshCloudData()">Refresh cloud summary</button>
+            </div>`;
+    }
+
+    async function menuXferRefreshCloudData() {
+        const user = TVC_Auth.getCurrentUser();
+        const el = document.getElementById('menuCloudDataStatus');
+        if (!user || !el || typeof TVC_OnlineSync === 'undefined') return;
+        if (!TVC_RBAC.isHqAccount(user)) return;
+        el.textContent = 'Loading cloud record summary…';
+        try {
+            const vesselId = state.selectedVesselId || user.vessel_id || undefined;
+            let companyId;
+            if (user.account_type === 'ADMIN' && state.fleetCompanyFilter
+                && state.fleetCompanyFilter !== ADMIN_COMPANY_FILTER_ALL) {
+                companyId = state.fleetCompanyFilter;
+            }
+            const stats = await TVC_OnlineSync.fetchCloudStats(user, { vesselId, companyId });
+            const storeLines = Object.entries(stats.stores || {})
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 8)
+                .map(([name, count]) => `${name}: ${count}`)
+                .join(' · ');
+            const scope = stats.scope || {};
+            const ingest = stats.ingest || {};
+            el.textContent = [
+                `Scope: ${scope.company_id || 'all companies'}${scope.vessel_id ? ` · ${scope.vessel_id}` : ''}`,
+                `Records: ${stats.total_records || 0}${storeLines ? ` (${storeLines})` : ''}`,
+                ingest.last_ingested_at ? `Last ingest: ${String(ingest.last_ingested_at).slice(0, 19).replace('T', ' ')}` : 'Last ingest: —',
+            ].join('\n');
+        } catch (e) {
+            el.textContent = `Cloud summary failed: ${e.message || e}`;
+        }
     }
 
     async function menuXferTryOnlineSync(direction) {
@@ -5362,6 +5430,7 @@ const TVC_App = (function () {
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickMode('import')">Import (ZIP)</button>
                 </div>
                 ${menuXferOnlineSyncHtml(state.user)}`;
+            setTimeout(() => { menuXferRefreshCloudData().catch(() => {}); }, 0);
         } else if (step === 'export-app-update') {
             content = menuXferAppUpdateExportHtml();
         } else if (step === 'import-app-update-preview') {
@@ -9054,7 +9123,10 @@ const TVC_App = (function () {
         TVC_Fleet.select(id);
         // 선택 선박에 맞춰 Run-hour scope 재설정 + 데이터 재로드 → 그 선박의 Import된 정보만 표시
         TVC_PMS.setSpace('HQ', id);
-        if (state.user) await populateShipHeader(state.user);
+        if (state.user) {
+            updateUserBar(state.user);
+            await populateShipHeader(state.user);
+        }
         await loadData();
         renderFleetList();
         rerenderCurrentTab();
@@ -17617,6 +17689,7 @@ const TVC_App = (function () {
         menuXferAppUpdatePickSetup, menuXferAppUpdateOnSetupFile, menuXferConfirmAppUpdateExport,
         menuXferApplyAppUpdate,
         menuXferTryOnlineSync,
+        menuXferRefreshCloudData,
         menuXferExportDefect, menuXferExportPostpone, menuXferExportWorkPermit, menuXferExportMonthly, onMenuXferImportFile,
         menuXferOpenCaseSelect, menuXferOpenMonthlySelect,
         menuXferCaseSetPeriod, menuXferClearCasePeriodAndFilters, menuXferCaseSetSearch,

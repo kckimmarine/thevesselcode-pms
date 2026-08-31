@@ -446,6 +446,7 @@ const TVC_RBAC = (function () {
         engineer: Role.SHIP_OFFICER,
         hq: Role.HQ_SUPERVISOR,
         tvc: Role.TVC_ADMIN,
+        admin: Role.TVC_ADMIN,
     };
 
     function resolveUserRole(user) {

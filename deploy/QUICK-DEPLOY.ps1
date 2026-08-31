@@ -25,7 +25,7 @@ Write-Host "5. Setup.exe: copy dist/*.exe to downloads/ then git push"
 Write-Host ""
 Write-Host "Local preview NOW: double-click START-WEB-DEMO.bat"
 Write-Host "  dm_user@thevesselcode.com / 0000  (TVC HQ)"
-Write-Host "  admin@thevesselcode.com / 0000    (Super Admin, all fleet)"
+Write-Host "  admin / (Super Admin — password in js/auth.js seed_password)"
 Write-Host ""
 
 if (Get-Command npx -ErrorAction SilentlyContinue) {

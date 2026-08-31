@@ -6,8 +6,8 @@ echo  THE VESSEL CODE — Web HQ Demo
 echo  ----------------------------------------
 echo   URL: http://localhost:3000/?web=1
 echo.
-echo   Daemyung HQ : dm_user@thevesselcode.com / 0000
-echo   Super Admin : admin@thevesselcode.com / 0000
+echo   TVC HQ      : dm_user@thevesselcode.com / 0000
+echo   Super Admin : admin / (see auth.js seed_password)
 echo   Local embed test: http://localhost:3000/?web=1^&embed=1
 echo   Bluehost PMS tab : upload bluehost/pms/index.html -^> thevesselcode.com/pms/
 echo.

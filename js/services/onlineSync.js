@@ -311,12 +311,70 @@ const TVC_OnlineSync = (function () {
         };
     }
 
+    function cloudQueryHeaders(user) {
+        const headers = {};
+        const accountType = String(user?.account_type || '').trim().toUpperCase();
+        if (accountType) headers['X-Tvc-Account-Type'] = accountType;
+        const companyId = String(user?.company_id || '').trim();
+        if (companyId) headers['X-Tvc-Company-Id'] = companyId;
+        try {
+            const key = typeof TVC_Config !== 'undefined' ? TVC_Config.SYNC_CLOUD_READ_KEY : '';
+            if (key && String(key).trim()) headers['X-Tvc-Cloud-Read-Key'] = String(key).trim();
+        } catch (_) {}
+        return headers;
+    }
+
+    function resolveCloudCompanyId(user, vesselId) {
+        if (user?.company_id) return String(user.company_id).trim();
+        if (vesselId && typeof TVC_Fleet !== 'undefined') {
+            const v = TVC_Fleet.resolveById(vesselId);
+            if (v) return TVC_Fleet.vesselCompanyId(v);
+        }
+        if (typeof TVC_Fleet !== 'undefined') return TVC_Fleet.licenseCompanyId();
+        return 'TVC';
+    }
+
+    /** Phase C — cloud DB summary (HQ: company scope; Admin: all or filtered). */
+    async function fetchCloudStats(user, opts = {}) {
+        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!isAvailable()) throw new Error(statusMessage());
+        const vesselId = String(opts.vesselId || user.vessel_id || '').trim();
+        const companyId = resolveCloudCompanyId(user, vesselId);
+        const params = new URLSearchParams();
+        if (companyId && user.account_type !== 'ADMIN') params.set('company_id', companyId);
+        else if (opts.companyId || companyId) params.set('company_id', String(opts.companyId || companyId));
+        if (vesselId) params.set('vessel_id', vesselId);
+        return apiFetch(`/api/sync/cloud/stats?${params}`, { headers: cloudQueryHeaders(user) });
+    }
+
+    /** Phase C — paginated sync_records from cloud DB. */
+    async function fetchCloudRecords(user, opts = {}) {
+        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!isAvailable()) throw new Error(statusMessage());
+        const vesselId = String(opts.vesselId || user.vessel_id || '').trim();
+        const companyId = resolveCloudCompanyId(user, vesselId);
+        const params = new URLSearchParams();
+        if (companyId && user.account_type !== 'ADMIN') params.set('company_id', companyId);
+        else if (opts.companyId || companyId) params.set('company_id', String(opts.companyId || companyId));
+        if (vesselId) params.set('vessel_id', vesselId);
+        if (opts.storeName) params.set('store_name', opts.storeName);
+        if (opts.recordKey) params.set('record_key', opts.recordKey);
+        if (opts.metaKey) params.set('meta_key', opts.metaKey);
+        if (opts.limit != null) params.set('limit', String(opts.limit));
+        if (opts.offset != null) params.set('offset', String(opts.offset));
+        return apiFetch(`/api/sync/cloud/records?${params}`, { headers: cloudQueryHeaders(user) });
+    }
+
     return {
         META_KEY,
         getApiBaseUrl,
         isConfigured,
         isAvailable,
         statusMessage,
+        cloudQueryHeaders,
+        resolveCloudCompanyId,
+        fetchCloudStats,
+        fetchCloudRecords,
         pushShipToHq,
         pullShipFromVessel,
         pullHqFeedback,

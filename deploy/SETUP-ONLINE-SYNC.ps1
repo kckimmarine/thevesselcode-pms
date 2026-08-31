@@ -18,6 +18,8 @@ Write-Host ''
 Write-Host 'Step 2 — SQL (TVC No1 only)' -ForegroundColor Green
 Write-Host '  SQL Editor -> paste and run:'
 Write-Host "  deploy\supabase-sync-pilot-tvc-no1.sql"
+Write-Host '  Ingest tables (HQ/Admin cloud DB): deploy\supabase-sync-ingest.sql'
+Write-Host '  Or: npm run setup-supabase-ingest'
 Write-Host '  Existing DB (was INCHEON CHEMI): deploy\supabase-migrate-daemyung-to-tvc.sql'
 Write-Host ''
 
@@ -49,6 +51,12 @@ Write-Host '  HQ (dm_user@thevesselcode.com / 0000): select TVC No1 -> Pull from
 Write-Host '  HQ: review -> Push reply to vessel (online)'
 Write-Host '  Master: Pull HQ reply (online)'
 Write-Host '  FBB / low bandwidth: continue using Export/Import ZIP.'
+Write-Host ''
+Write-Host 'Step 7 — Data retention (contract vessels)' -ForegroundColor Green
+Write-Host '  docs\data-retention-policy.md'
+Write-Host '  SQL once: deploy\supabase-data-retention-purge-log.sql'
+Write-Host '  Vercel (optional): ADMIN_DATA_PURGE_KEY for POST /api/admin/purge-vessel-sync'
+Write-Host '  CLI: npm run purge-vessel-sync -- --vessel "TVC No1" --company TVC'
 Write-Host ''
 
 $runVerify = Read-Host 'Run verify-online-sync now? (y/N)'

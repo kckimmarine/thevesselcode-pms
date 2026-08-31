@@ -32,4 +32,6 @@ admin/
 
 **Pilot reference** (`admin/registry-reference.json`): TVC — Company Code `1`, HQ ID `tvc`, Password `tvc1234`; TVC No1 — Code `1`, IMO `9999999`.
 
+**Data retention:** [`docs/data-retention-policy.md`](../docs/data-retention-policy.md) — online sync ZIPs kept until customer deletion request; purge via `npm run purge-vessel-sync`.
+
 See also: `docs/admin-mode-sop.md`, `docs/admin-registry-id-guide.md`, `docs/tvc-internal-qa.md` (출시 후 Lab·App Update), `docs/admin-mode.md`, `docs/seat-license.md`.

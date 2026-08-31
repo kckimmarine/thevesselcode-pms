@@ -2,7 +2,7 @@
 const TVC_Auth = (function () {
     const SESSION_KEY = 'tvc_session_v2';
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 11;
+    const USERS_SEED_VERSION = 12;
 
     const DEFAULT_USERS = [
         // Deck part
@@ -18,8 +18,10 @@ const TVC_Auth = (function () {
         { id: 'user-dm-hq', username: 'dm_user@thevesselcode.com', display_name: 'TVC HQ (Pilot)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
         // THE VESSEL CODE — Admin Mode (app updates only)
         { id: 'user-tvc', username: 'tvc', display_name: 'TVC Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null },
-        { id: 'user-tvc-admin', username: 'admin@thevesselcode.com', display_name: 'TVC Super Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null },
+        { id: 'user-tvc-admin', username: 'admin', display_name: 'TVC Super Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null, seed_password: 'kimkc9363#@' },
     ];
+
+    const DEPRECATED_USERNAMES = ['admin@thevesselcode.com'];
 
     const PBKDF2_SALT = 'tvc-pms-salt-v2';
     const PBKDF2_ITER = 100000;
@@ -65,21 +67,29 @@ const TVC_Auth = (function () {
         }
 
         const existing = await TVC_DB.getAll('users');
-        const hash = await hashPassword(DEMO_PASSWORD);
+        const demoHash = await hashPassword(DEMO_PASSWORD);
         // 데모 계정은 항상 최신 role/username 으로 동기화 (IndexedDB 캐시 불일치 방지)
         for (const u of DEFAULT_USERS) {
+            const { seed_password: seedPassword, ...fields } = u;
             const prev = existing.find(x => x.id === u.id)
                 || existing.find(x => x.username === u.username);
+            const password_hash = seedPassword
+                ? await hashPassword(seedPassword)
+                : demoHash;
             await TVC_DB.put('users', {
                 ...(prev || {}),
-                ...u,
-                password_hash: hash,
+                ...fields,
+                password_hash,
                 is_active: true,
             });
         }
         // 동일 username 중복 레코드 제거 (예: chief@dm01 → ce 마이그레이션 잔여)
         const fresh = await TVC_DB.getAll('users');
         for (const row of fresh) {
+            if (DEPRECATED_USERNAMES.includes(row.username)) {
+                await TVC_DB.del('users', row.id);
+                continue;
+            }
             const tpl = DEFAULT_USERS.find(d => d.username === row.username);
             if (tpl && row.id !== tpl.id) await TVC_DB.del('users', row.id);
         }
