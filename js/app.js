@@ -403,6 +403,14 @@ const TVC_App = (function () {
                 }
             } catch (e) { console.warn('[TVC] license vessel pin', e); }
             await TVC_Auth.initUsers();
+            try {
+                if (typeof TVC_AdminRegistry !== 'undefined') {
+                    await TVC_AdminRegistry.load();
+                    if (typeof TVC_AccountProvisioning !== 'undefined') {
+                        await TVC_AccountProvisioning.syncRegistryToUsers();
+                    }
+                }
+            } catch (e) { console.warn('[TVC] provisioned accounts sync', e); }
 
             ['loginUser', 'loginPass', 'loginDept'].forEach(id => {
                 document.getElementById(id)?.addEventListener('keydown', e => {
@@ -1150,6 +1158,9 @@ const TVC_App = (function () {
                     }
                     if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
                         TVC_Fleet.syncFromAdminRegistry();
+                    }
+                    if (typeof TVC_AccountProvisioning !== 'undefined') {
+                        await TVC_AccountProvisioning.syncRegistryToUsers();
                     }
                 } catch (e) {
                     console.warn('[TVC_AdminRegistry]', e);
@@ -7177,6 +7188,16 @@ const TVC_App = (function () {
         const vesselId = state.selectedAdminVesselId;
         const company = companyId ? TVC_AdminRegistry.getCompany(companyId) : null;
         const vessel = companyId && vesselId ? TVC_AdminRegistry.getVessel(companyId, vesselId) : null;
+        const hqUser = company?.hq_login?.username || '';
+        const hqUpdated = company?.hq_login?.updated_at || '';
+        const masterUser = vessel?.master_login?.username || '';
+        const masterUpdated = vessel?.master_login?.updated_at || '';
+        const hqSuggest = company && typeof TVC_AccountProvisioning !== 'undefined'
+            ? TVC_AccountProvisioning.suggestCompanyHqUsername(company.company_id, company.contact_email)
+            : '';
+        const masterSuggest = company && vessel && typeof TVC_AccountProvisioning !== 'undefined'
+            ? TVC_AccountProvisioning.suggestVesselMasterUsername(company.company_id, vessel.vessel_id)
+            : '';
         const companyOpts = companies.map(c =>
             `<option value="${escAttr(c.company_id)}"${c.company_id === companyId ? ' selected' : ''}>${esc(c.name)} (${esc(c.company_id)})${c.status === 'inactive' ? ' [inactive]' : ''}</option>`
         ).join('') || '<option value="">—</option>';
@@ -7206,6 +7227,37 @@ const TVC_App = (function () {
                 <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminVesselFormFromHub('edit')" ${vessel ? '' : ' disabled'}>Modify vessel</button>
                 <button type="button" class="btn btn-red btn-sm" onclick="TVC_App.deactivateAdminVessel()" ${vessel && vessel.status !== 'inactive' ? '' : ' disabled'}>Set vessel inactive</button>
             </div>
+            <section class="admin-account-panel" style="margin:16px 0;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#f8fafc">
+                <h4 style="margin:0 0 8px;color:var(--navy)">Company HQ login (web)</h4>
+                <p class="spare-sync-note muted" style="margin:0 0 8px">선사 본사 HQ Mode 접속 ID · 비밀번호${hqUser ? ` · 현재 <strong>${esc(hqUser)}</strong>${hqUpdated ? ` (${esc(hqUpdated)})` : ''}` : ''}</p>
+                <label class="spare-sync-note" style="display:block;margin:8px 0">Username (email)
+                    <input id="adminHqUsername" class="admin-company-select" style="margin-top:4px;width:100%" type="email"
+                        value="${escAttr(hqUser || hqSuggest || '')}" placeholder="company_hq@thevesselcode.com" ${company ? '' : ' disabled'}></label>
+                <label class="spare-sync-note" style="display:block;margin:8px 0">Password
+                    <input id="adminHqPassword" class="admin-company-select" style="margin-top:4px;width:100%" type="text"
+                        autocomplete="new-password" placeholder="Min 4 characters" ${company ? '' : ' disabled'}></label>
+                <div class="admin-deploy-path-actions" style="margin-top:8px">
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminSuggestCompanyHqLogin()" ${company ? '' : ' disabled'}>Suggest ID</button>
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminGenerateCompanyHqPassword()" ${company ? '' : ' disabled'}>Generate password</button>
+                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminSaveCompanyHqLogin()" ${company ? '' : ' disabled'}>Save HQ login</button>
+                </div>
+            </section>
+            <section class="admin-account-panel" style="margin:16px 0;padding:12px;border:1px solid #e2e8f0;border-radius:10px;background:#fff">
+                <h4 style="margin:0 0 8px;color:var(--navy)">Vessel Master login</h4>
+                <p class="spare-sync-note muted" style="margin:0 0 8px">선박 Master Hub (Captain) ID · 비밀번호${masterUser ? ` · 현재 <strong>${esc(masterUser)}</strong>${masterUpdated ? ` (${esc(masterUpdated)})` : ''}` : ''}</p>
+                <label class="spare-sync-note" style="display:block;margin:8px 0">Username
+                    <input id="adminMasterUsername" class="admin-company-select" style="margin-top:4px;width:100%" type="text"
+                        value="${escAttr(masterUser || masterSuggest || '')}" placeholder="vessel_master@thevesselcode.com" ${vessel ? '' : ' disabled'}></label>
+                <label class="spare-sync-note" style="display:block;margin:8px 0">Password
+                    <input id="adminMasterPassword" class="admin-company-select" style="margin-top:4px;width:100%" type="text"
+                        autocomplete="new-password" placeholder="Min 4 characters" ${vessel ? '' : ' disabled'}></label>
+                <div class="admin-deploy-path-actions" style="margin-top:8px">
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminSuggestVesselMasterLogin()" ${vessel ? '' : ' disabled'}>Suggest ID</button>
+                    <button type="button" class="btn btn-sm" onclick="TVC_App.adminGenerateVesselMasterPassword()" ${vessel ? '' : ' disabled'}>Generate password</button>
+                    <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminSaveVesselMasterLogin()" ${vessel ? '' : ' disabled'}>Save Master login</button>
+                </div>
+                <p class="spare-sync-note muted" style="margin:8px 0 0">Engine / Deck 계정은 선박 PC seat license · Setup.exe로 전달 (ZIP 동기화).</p>
+            </section>
             <div class="modal-actions spare-sync-footer">
                 <button type="button" class="btn" onclick="TVC_App.closeAdminRegistryModal()">Close</button>
             </div>`;
@@ -7259,6 +7311,98 @@ const TVC_App = (function () {
     function openAdminVesselFormFromHub(mode) {
         state._adminRegFromHub = true;
         openAdminVesselForm(mode);
+    }
+
+    function adminSuggestCompanyHqLogin() {
+        const company = state.selectedAdminCompanyId && typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.getCompany(state.selectedAdminCompanyId)
+            : null;
+        if (!company || typeof TVC_AccountProvisioning === 'undefined') return;
+        const el = document.getElementById('adminHqUsername');
+        if (el) el.value = TVC_AccountProvisioning.suggestCompanyHqUsername(company.company_id, company.contact_email);
+    }
+
+    function adminGenerateCompanyHqPassword() {
+        if (typeof TVC_AccountProvisioning === 'undefined') return;
+        const el = document.getElementById('adminHqPassword');
+        if (el) el.value = TVC_AccountProvisioning.generatePassword(8);
+    }
+
+    async function adminSaveCompanyHqLogin() {
+        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
+        const companyId = state.selectedAdminCompanyId;
+        if (!companyId || typeof TVC_AccountProvisioning === 'undefined') return;
+        const username = document.getElementById('adminHqUsername')?.value || '';
+        const password = document.getElementById('adminHqPassword')?.value || '';
+        const company = TVC_AdminRegistry.getCompany(companyId);
+        try {
+            const saved = await TVC_AccountProvisioning.saveCompanyHqLogin(companyId, {
+                username,
+                password,
+                display_name: `${company?.name || companyId} HQ`,
+            });
+            const result = await TVC_AdminRegistry.save();
+            if (result.fallback) {
+                await TVC_Dialog.alert(`${result.message}\n\nHQ login is saved in memory. Download the registry bundle and commit admin/ for web deploy.`);
+            } else {
+                await TVC_AdminRegistry.load();
+                await TVC_AccountProvisioning.syncRegistryToUsers();
+            }
+            await TVC_Dialog.alert({
+                message: `HQ login saved.\n\nUsername: ${saved.username}\nPassword: ${saved.password}\n\nCopy these credentials for the shipping company.`,
+                kind: 'success',
+            });
+            renderAdminRegistryHub();
+            renderMainMenu();
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
+    }
+
+    function adminSuggestVesselMasterLogin() {
+        const companyId = state.selectedAdminCompanyId;
+        const vesselId = state.selectedAdminVesselId;
+        if (!companyId || !vesselId || typeof TVC_AccountProvisioning === 'undefined') return;
+        const el = document.getElementById('adminMasterUsername');
+        if (el) el.value = TVC_AccountProvisioning.suggestVesselMasterUsername(companyId, vesselId);
+    }
+
+    function adminGenerateVesselMasterPassword() {
+        if (typeof TVC_AccountProvisioning === 'undefined') return;
+        const el = document.getElementById('adminMasterPassword');
+        if (el) el.value = TVC_AccountProvisioning.generatePassword(8);
+    }
+
+    async function adminSaveVesselMasterLogin() {
+        if (!state.user || !TVC_RBAC.isAdminAccount?.(state.user)) return;
+        const companyId = state.selectedAdminCompanyId;
+        const vesselId = state.selectedAdminVesselId;
+        if (!companyId || !vesselId || typeof TVC_AccountProvisioning === 'undefined') return;
+        const username = document.getElementById('adminMasterUsername')?.value || '';
+        const password = document.getElementById('adminMasterPassword')?.value || '';
+        const vessel = TVC_AdminRegistry.getVessel(companyId, vesselId);
+        try {
+            const saved = await TVC_AccountProvisioning.saveVesselMasterLogin(companyId, vesselId, {
+                username,
+                password,
+                display_name: `${vessel?.name || vesselId} Master`,
+            });
+            const result = await TVC_AdminRegistry.save();
+            if (result.fallback) {
+                await TVC_Dialog.alert(`${result.message}\n\nMaster login is saved in memory. Download the registry bundle and commit admin/ for web deploy.`);
+            } else {
+                await TVC_AdminRegistry.load();
+                await TVC_AccountProvisioning.syncRegistryToUsers();
+            }
+            await TVC_Dialog.alert({
+                message: `Master login saved.\n\nUsername: ${saved.username}\nPassword: ${saved.password}\n\nUse on VESSEL_MASTER (Captain login mode).`,
+                kind: 'success',
+            });
+            renderAdminRegistryHub();
+            renderMainMenu();
+        } catch (e) {
+            await TVC_Dialog.alert(e.message || String(e));
+        }
     }
 
     function renderAdminDeliverModal() {
@@ -17363,6 +17507,8 @@ const TVC_App = (function () {
         setAdminSearch, selectAdminCompany, selectAdminVessel,
         openAdminCompanyForm, openAdminVesselForm, closeAdminRegistryModal,
         openAdminRegistryHub, adminRegistryHubSelectCompany, adminRegistryHubSelectVessel,
+        adminSuggestCompanyHqLogin, adminGenerateCompanyHqPassword, adminSaveCompanyHqLogin,
+        adminSuggestVesselMasterLogin, adminGenerateVesselMasterPassword, adminSaveVesselMasterLogin,
         adminRegistryCancelForm, openAdminCompanyFormFromHub, openAdminVesselFormFromHub,
         openAdminDeliverModal, closeAdminDeliverModal,
         adminDeliverOpenSetup, adminDeliverOpenPoolUpdate, adminDeliverOpenCompanyUpdate, adminDeliverOpenSeatLicense,

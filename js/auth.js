@@ -83,12 +83,30 @@ const TVC_Auth = (function () {
             const tpl = DEFAULT_USERS.find(d => d.username === row.username);
             if (tpl && row.id !== tpl.id) await TVC_DB.del('users', row.id);
         }
-        for (const row of fresh) {
-            if (row.username?.includes('@') && !DEFAULT_USERS.some(d => d.username === row.username)) {
-                await TVC_DB.put('users', { ...row, is_active: false });
-            }
-        }
         try { await TVC_DB.setMeta('users_seed_version', USERS_SEED_VERSION); } catch (_) {}
+    }
+
+    async function upsertProvisionedUser(record) {
+        const username = String(record?.username || '').trim();
+        if (!username || !record?.password_hash) {
+            throw new Error('Provisioned user requires username and password_hash.');
+        }
+        const existing = await TVC_DB.getAll('users');
+        const prev = existing.find(u => u.id === record.id)
+            || existing.find(u => u.username === username);
+        const id = prev?.id || record.id || `prov-${username.replace(/[^a-zA-Z0-9._-]+/g, '_')}`;
+        await TVC_DB.put('users', {
+            ...(prev || {}),
+            ...record,
+            id,
+            username,
+            is_active: record.is_active !== false,
+        });
+        return id;
+    }
+
+    async function hashPasswordForProvision(password) {
+        return hashPassword(password);
     }
 
     async function refreshSessionFromDb() {
@@ -228,5 +246,5 @@ const TVC_Auth = (function () {
         return user;
     }
 
-    return { initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, changePassword, DEMO_PASSWORD, DEFAULT_USERS };
+    return { initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, changePassword, upsertProvisionedUser, hashPasswordForProvision, DEMO_PASSWORD, DEFAULT_USERS };
 })();

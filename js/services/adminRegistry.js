@@ -99,6 +99,19 @@ const TVC_AdminRegistry = (function () {
         return _cache;
     }
 
+    function normalizeLoginAccount(raw) {
+        const d = raw && typeof raw === 'object' ? raw : {};
+        const username = String(d.username || '').trim();
+        const password_hash = String(d.password_hash || '').trim();
+        if (!username || !password_hash) return null;
+        return {
+            username,
+            password_hash,
+            display_name: String(d.display_name || '').trim(),
+            updated_at: String(d.updated_at || '').trim().slice(0, 10),
+        };
+    }
+
     function normalize(data) {
         const companies = (data.companies || []).map(c => ({
             company_id: cleanId(c.company_id),
@@ -112,6 +125,7 @@ const TVC_AdminRegistry = (function () {
             contact_email: String(c.contact_email || '').trim(),
             contract: normalizeContract(c.contract),
             deploy: normalizeDeploy(c.deploy, { isVessel: false }),
+            hq_login: normalizeLoginAccount(c.hq_login),
             vessels: (c.vessels || []).map(v => ({
                 vessel_id: cleanId(v.vessel_id || v.id),
                 name: String(v.name || v.vessel_id || '').trim(),
@@ -122,6 +136,7 @@ const TVC_AdminRegistry = (function () {
                 company_id: cleanId(c.company_id),
                 notes: String(v.notes || '').trim(),
                 deploy: normalizeDeploy(v.deploy, { isVessel: true }),
+                master_login: normalizeLoginAccount(v.master_login),
             })),
         })).filter(c => c.company_id);
         return {
@@ -384,6 +399,7 @@ const TVC_AdminRegistry = (function () {
             if (!next.contract.start_date) next.contract.start_date = prev.contract?.start_date || '';
             if (!next.contract.term_months) next.contract.term_months = prev.contract?.term_months || 0;
             if (!next.contract.fee_note) next.contract.fee_note = prev.contract?.fee_note || '';
+            next.hq_login = prev.hq_login || null;
             _cache.companies[idx] = next;
         } else {
             _cache.companies.push({ ...next, vessels: [] });
@@ -418,6 +434,7 @@ const TVC_AdminRegistry = (function () {
             if (idx < 0) throw new Error(`Vessel "${vesselId}" not found.`);
             if (!next.notes) next.notes = vessels[idx].notes || '';
             next.deploy = vessels[idx].deploy || next.deploy;
+            next.master_login = vessels[idx].master_login || null;
             vessels[idx] = next;
         } else {
             vessels.push(next);
@@ -425,6 +442,37 @@ const TVC_AdminRegistry = (function () {
         company.vessels = vessels;
         _cache.updated_at = todayIso();
         return next;
+    }
+
+    function setCompanyHqLogin(companyId, login) {
+        assertLoaded();
+        const company = getCompany(companyId);
+        if (!company) throw new Error(`Company "${companyId}" not found.`);
+        company.hq_login = normalizeLoginAccount(login);
+        if (!company.hq_login) throw new Error('Invalid HQ login.');
+        _cache.updated_at = todayIso();
+        return company.hq_login;
+    }
+
+    function setVesselMasterLogin(companyId, vesselId, login) {
+        assertLoaded();
+        const vessel = getVessel(companyId, vesselId);
+        if (!vessel) throw new Error(`Vessel "${vesselId}" not found.`);
+        vessel.master_login = normalizeLoginAccount(login);
+        if (!vessel.master_login) throw new Error('Invalid Master login.');
+        _cache.updated_at = todayIso();
+        return vessel.master_login;
+    }
+
+    function serializeLoginAccount(login) {
+        if (!login?.username || !login?.password_hash) return null;
+        const row = {
+            username: login.username,
+            password_hash: login.password_hash,
+        };
+        if (login.display_name) row.display_name = login.display_name;
+        if (login.updated_at) row.updated_at = login.updated_at;
+        return row;
     }
 
     function setCompanyStatus(companyId, status) {
@@ -502,6 +550,8 @@ const TVC_AdminRegistry = (function () {
                         };
                         const vd = serializeVesselDeploy(v.deploy);
                         if (vd) vr.deploy = vd;
+                        const ml = serializeLoginAccount(v.master_login);
+                        if (ml) vr.master_login = ml;
                         return vr;
                     }),
                 };
@@ -512,6 +562,8 @@ const TVC_AdminRegistry = (function () {
                 if (contract.start_date || contract.term_months || contract.fee_note) row.contract = contract;
                 const cd = serializeCompanyDeploy(c.deploy);
                 if (cd) row.deploy = cd;
+                const hl = serializeLoginAccount(c.hq_login);
+                if (hl) row.hq_login = hl;
                 return row;
             }),
         };
@@ -534,10 +586,10 @@ const TVC_AdminRegistry = (function () {
                     vessels: (c.vessels || []).map(v => v.vessel_id),
                 },
             });
+            const hqLogin = serializeLoginAccount(c.hq_login);
+            if (hqLogin) files[files.length - 1].data.hq_login = hqLogin;
             for (const v of c.vessels || []) {
-                files.push({
-                    relPath: pathJoin('companies', c.company_id, 'vessels', v.vessel_id, 'vessel.json'),
-                    data: {
+                const vesselData = {
                         vessel_id: v.vessel_id,
                         name: v.name,
                         company_id: c.company_id,
@@ -548,7 +600,12 @@ const TVC_AdminRegistry = (function () {
                         vessel_skus: [],
                         notes: v.notes || '',
                         deploy: serializeVesselDeploy(v.deploy) || {},
-                    },
+                };
+                const masterLogin = serializeLoginAccount(v.master_login);
+                if (masterLogin) vesselData.master_login = masterLogin;
+                files.push({
+                    relPath: pathJoin('companies', c.company_id, 'vessels', v.vessel_id, 'vessel.json'),
+                    data: vesselData,
                 });
             }
         }
@@ -596,6 +653,9 @@ const TVC_AdminRegistry = (function () {
         getSelected,
         setSelected,
         stats,
+        setCompanyHqLogin,
+        setVesselMasterLogin,
+        serializeLoginAccount,
         upsertCompany,
         upsertVessel,
         setCompanyStatus,
