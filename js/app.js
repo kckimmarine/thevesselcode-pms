@@ -9,7 +9,7 @@ const TVC_App = (function () {
     let _wrSpareSearchT = null;
     let _planRowRefreshTimer = null;
     let _planRowLastTap = { id: null, t: 0 };
-    let _menuXfer = { step: 'mode' };
+    let _menuXfer = { step: 'channel', channel: null };
     let _menuHistCategory = 'case'; // case | monthly
 
     function repSt(r) { return TVC_RBAC.normalizeReportStatus(r?.status, !!r?.is_locked); }
@@ -3363,7 +3363,8 @@ const TVC_App = (function () {
 
     function resetMenuXfer() {
         _menuXfer = {
-            step: 'mode',
+            step: 'channel',
+            channel: null,
             importType: null, // case | monthly | vesselProfile | appUpdate
         };
         const body = document.getElementById('menuXferBody');
@@ -3409,9 +3410,17 @@ const TVC_App = (function () {
         return 'Default transfer: offline ZIP.';
     }
 
-    function menuXferOnlineSyncHtml(user) {
+    function menuXferOnlineAvailable(user) {
         const f = typeof TVC_Space !== 'undefined' ? TVC_Space.getUiFeatures(user) : {};
-        if (!f.showOnlineSync || typeof TVC_OnlineSync === 'undefined') return '';
+        if (!f.showOnlineSync || typeof TVC_OnlineSync === 'undefined') return false;
+        return TVC_RBAC.isHqAccount(user)
+            || (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user));
+    }
+
+    function menuXferOnlineHomeHtml(user) {
+        if (!menuXferOnlineAvailable(user)) {
+            return '<p class="spare-sync-note muted">Online sync is not available for this account.</p>';
+        }
         const online = TVC_OnlineSync.isAvailable();
         const msg = TVC_OnlineSync.statusMessage();
         const isHq = TVC_RBAC.isHqAccount(user);
@@ -3424,32 +3433,25 @@ const TVC_App = (function () {
             buttons.push({ dir: 'SHIP_TO_HQ', label: 'Push to HQ (online)' });
             buttons.push({ dir: 'SHIP_PULL', label: 'Pull HQ reply (online)' });
         }
-        if (!buttons.length) return '';
         const btnHtml = buttons.map(b => `
                 <button type="button" class="btn spare-sync-btn menu-xfer-online-btn${online ? '' : ' disabled'}"${online ? '' : ' disabled'}
                     onclick="TVC_App.menuXferTryOnlineSync('${escAttr(b.dir)}')">${esc(b.label)}</button>`).join('');
         return `
             <div class="menu-xfer-online${online ? '' : ' menu-xfer-online-disabled'}">
                 <p class="spare-sync-note muted">${esc(msg)}</p>
-                <p class="spare-sync-note muted">V-SAT: online sync OK (may take several minutes). FBB / low bandwidth: use Export/Import ZIP.</p>
+                <p class="spare-sync-note muted">V-SAT: online sync OK (may take several minutes). FBB / low bandwidth: use Offline → Export/Import ZIP.</p>
                 <div class="spare-sync-actions menu-xfer-online-actions">${btnHtml}
                 </div>
-                ${menuXferCloudDataHtml(user)}
             </div>`;
     }
 
+    /** @deprecated Cloud DB panel removed from Data Export & Import UI */
+    function menuXferOnlineSyncHtml(user) {
+        return menuXferOnlineHomeHtml(user);
+    }
+
     function menuXferCloudDataHtml(user) {
-        if (!TVC_RBAC.isHqAccount(user) || typeof TVC_OnlineSync === 'undefined') return '';
-        if (!TVC_OnlineSync.isConfigured()) return '';
-        return `
-            <div id="menuCloudDataPanel" class="menu-xfer-cloud">
-                <p class="spare-sync-note"><strong>Cloud DB</strong> — ingested sync mirror (HQ / Admin)</p>
-                <p id="menuCloudDataStatus" class="spare-sync-note muted">Open this dialog while online to load cloud summary.</p>
-                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferRefreshCloudData()">Refresh cloud summary</button>
-                <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferMirrorFromCloud()">Mirror from cloud DB</button>
-                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPublishCloudRestore()">Publish restore to vessel</button>
-                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferDownloadCloudRestore()">Download restore ZIP</button>
-            </div>`;
+        return '';
     }
 
     async function menuXferPublishCloudRestore() {
@@ -5554,7 +5556,7 @@ const TVC_App = (function () {
     function renderMenuXferModal() {
         const body = document.getElementById('menuXferBody');
         if (!body) return;
-        const step = _menuXfer.step || 'mode';
+        const step = _menuXfer.step || 'channel';
         const modalBox = document.querySelector('#menuXferModal .modal-box');
         if (modalBox) {
             modalBox.classList.toggle('menu-xfer-wide', step === 'export-case-select'
@@ -5564,7 +5566,18 @@ const TVC_App = (function () {
                 || step === 'export-monthly-select');
         }
         let content = '';
-        if (step === 'mode') {
+        if (step === 'channel') {
+            const hint = menuXferDefaultChannelHint(state.user);
+            const onlineAvail = menuXferOnlineAvailable(state.user);
+            content = `
+                <p class="spare-sync-hint">Choose offline ZIP transfer or online sync.</p>
+                <p class="spare-sync-note muted">${esc(hint)}</p>
+                <div class="spare-sync-actions menu-xfer-channel-actions">
+                    <button type="button" class="btn btn-green spare-sync-btn menu-xfer-channel-btn" onclick="TVC_App.menuXferPickChannel('offline')">Offline</button>
+                    <button type="button" class="btn spare-sync-btn menu-xfer-channel-btn" onclick="TVC_App.menuXferPickChannel('online')"${onlineAvail ? '' : ' disabled title="Online sync not available for this account"'}>Online</button>
+                </div>
+                <p class="spare-sync-note muted" style="margin-top:10px">Offline — Export/Import ZIP · Online — V-SAT pull/push (HQ / Master)</p>`;
+        } else if (step === 'offline-home') {
             const hint = menuXferDefaultChannelHint(state.user);
             content = `
                 <p class="spare-sync-hint">Choose whether to send data out or bring data in.</p>
@@ -5572,9 +5585,9 @@ const TVC_App = (function () {
                 <div class="spare-sync-actions">
                     <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferPickMode('export')">Export (ZIP)</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPickMode('import')">Import (ZIP)</button>
-                </div>
-                ${menuXferOnlineSyncHtml(state.user)}`;
-            setTimeout(() => { menuXferRefreshCloudData().catch(() => {}); }, 0);
+                </div>`;
+        } else if (step === 'online-home') {
+            content = menuXferOnlineHomeHtml(state.user);
         } else if (step === 'export-app-update') {
             content = menuXferAppUpdateExportHtml();
         } else if (step === 'import-app-update-preview') {
@@ -5633,10 +5646,12 @@ const TVC_App = (function () {
                         ${importType ? '' : ' disabled title="Select import type first"'}>Open file…</button>
                 </div>`;
         }
-        const backBtn = step !== 'mode'
+        const backBtn = step !== 'channel'
             ? `<button type="button" class="btn btn-sm spare-sync-back" onclick="TVC_App.menuXferBack()">← Back</button>`
             : '';
-        const stepLabel = step === 'mode' ? '1. Export or Import'
+        const stepLabel = step === 'channel' ? '1. Offline or Online'
+            : step === 'offline-home' ? '2. Export or Import (Offline ZIP)'
+            : step === 'online-home' ? '2. Online sync'
             : step === 'export-app-update' ? 'Admin — App Update package'
             : step === 'export-type' ? '2. Export — report type'
                 : step === 'export-case-ready' ? '3. Export — Case Report'
@@ -5694,7 +5709,19 @@ const TVC_App = (function () {
         resetMenuXfer();
     }
 
+    function menuXferPickChannel(channel) {
+        const ch = channel === 'online' ? 'online' : 'offline';
+        if (ch === 'online' && !menuXferOnlineAvailable(state.user)) {
+            TVC_Dialog.alert('Online sync is not available for this account.');
+            return;
+        }
+        _menuXfer.channel = ch;
+        _menuXfer.step = ch === 'online' ? 'online-home' : 'offline-home';
+        renderMenuXferModal();
+    }
+
     function menuXferPickMode(mode) {
+        _menuXfer.channel = 'offline';
         _menuXfer.mode = mode;
         _menuXfer.step = mode === 'export' ? 'export-type' : 'import';
         if (mode === 'import') _menuXfer.importType = null;
@@ -5720,10 +5747,14 @@ const TVC_App = (function () {
         } else if (_menuXfer.step === 'export-app-update') {
             _menuXfer.step = 'export-type';
         } else if (_menuXfer.step === 'export-type' || _menuXfer.step === 'import') {
-            _menuXfer.step = 'mode';
+            _menuXfer.step = 'offline-home';
+            _menuXfer.channel = 'offline';
             _menuXfer.importType = null;
             delete _menuXfer.vesselProfilePending;
             delete _menuXfer.appUpdatePending;
+        } else if (_menuXfer.step === 'offline-home' || _menuXfer.step === 'online-home') {
+            _menuXfer.step = 'channel';
+            _menuXfer.channel = null;
         }
         renderMenuXferModal();
     }
@@ -18013,7 +18044,7 @@ const TVC_App = (function () {
         doSubmit, doExecute, doApprove, doConfirm,
         handleLogin, handleLogout, handleExport, handleImport, handleHubImport, handleDefectImport, handlePostponeImport, handleWorkPermitImport,
         urgentExportDefect, exportDefectCompletion, loadSeedFile,
-        openMenuXferMenu, closeMenuXferMenu, menuXferPickMode, menuXferBack, menuXferTriggerImport,
+        openMenuXferMenu, closeMenuXferMenu, menuXferPickChannel, menuXferPickMode, menuXferBack, menuXferTriggerImport,
         menuXferSelectImportType, menuXferPickExportType,
         menuXferConfirmCaseExport, menuXferConfirmCaseExportAll,
         menuXferConfirmMonthlyExport,

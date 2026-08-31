@@ -8396,9 +8396,17 @@ label.spare-file-pick input[type=file] { display: none; }
     margin-bottom: 8px;
 }
 .menu-xfer-online {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #e2e8f0;
+    margin-top: 0;
+    padding-top: 0;
+    border-top: none;
+}
+.menu-xfer-channel-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+.menu-xfer-channel-actions .menu-xfer-channel-btn {
+    min-width: 140px;
 }
 .menu-xfer-online-disabled .menu-xfer-online-btn {
     opacity: 0.55;
