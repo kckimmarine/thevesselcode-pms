@@ -3395,7 +3395,54 @@ const TVC_App = (function () {
                 <p id="menuCloudDataStatus" class="spare-sync-note muted">Open this dialog while online to load cloud summary.</p>
                 <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferRefreshCloudData()">Refresh cloud summary</button>
                 <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferMirrorFromCloud()">Mirror from cloud DB</button>
+                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferPublishCloudRestore()">Publish restore to vessel</button>
+                <button type="button" class="btn spare-sync-btn" onclick="TVC_App.menuXferDownloadCloudRestore()">Download restore ZIP</button>
             </div>`;
+    }
+
+    async function menuXferPublishCloudRestore() {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !TVC_RBAC.isHqAccount(user) || typeof TVC_CloudRestore === 'undefined') return;
+        const vesselId = state.selectedVesselId || user.vessel_id;
+        if (!vesselId) {
+            await TVC_Dialog.alert('Select a vessel in Ship List before publishing cloud restore.');
+            return;
+        }
+        const ok = await TVC_Dialog.confirm(
+            `Publish cloud restore for ${vesselId}?\n\n`
+            + 'This uploads a full HQ_TO_SHIP package from cloud DB.\n'
+            + 'On vessel Master Hub: Pull HQ reply (online) or Import the downloaded ZIP.',
+        );
+        if (!ok) return;
+        try {
+            await TVC_Dialog.alert('Building restore package from cloud DB…');
+            const result = await TVC_CloudRestore.publishRestoreToVessel(user, { vesselId, department: 'ALL' });
+            await TVC_Dialog.alert(
+                `Restore package published.\n`
+                + `Vessel: ${result.vessel_id}\n`
+                + `Records: ${result.record_count}\n\n`
+                + `${result.ship_pull_hint || 'On vessel: Pull HQ reply (online).'}`,
+            );
+        } catch (e) {
+            await TVC_Dialog.alert(`Cloud restore publish failed: ${e.message || e}`);
+        }
+    }
+
+    async function menuXferDownloadCloudRestore() {
+        const user = TVC_Auth.getCurrentUser();
+        if (!user || !TVC_RBAC.isHqAccount(user) || typeof TVC_CloudRestore === 'undefined') return;
+        const vesselId = state.selectedVesselId || user.vessel_id;
+        if (!vesselId) {
+            await TVC_Dialog.alert('Select a vessel in Ship List before downloading cloud restore.');
+            return;
+        }
+        try {
+            await TVC_Dialog.alert('Downloading cloud restore ZIP…');
+            const result = await TVC_CloudRestore.downloadRestoreZip(user, { vesselId, department: 'ALL' });
+            await TVC_Dialog.alert(`Saved ${result.filename}\nImport on vessel Master Hub (Import ZIP).`);
+        } catch (e) {
+            await TVC_Dialog.alert(`Cloud restore download failed: ${e.message || e}`);
+        }
     }
 
     async function menuXferMirrorFromCloud() {
@@ -17740,6 +17787,8 @@ const TVC_App = (function () {
         menuXferTryOnlineSync,
         menuXferRefreshCloudData,
         menuXferMirrorFromCloud,
+        menuXferPublishCloudRestore,
+        menuXferDownloadCloudRestore,
         menuXferExportDefect, menuXferExportPostpone, menuXferExportWorkPermit, menuXferExportMonthly, onMenuXferImportFile,
         menuXferOpenCaseSelect, menuXferOpenMonthlySelect,
         menuXferCaseSetPeriod, menuXferClearCasePeriodAndFilters, menuXferCaseSetSearch,

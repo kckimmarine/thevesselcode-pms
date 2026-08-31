@@ -697,6 +697,10 @@ const TVC_Sync = (function () {
         const scope = validateImportPackageScope(user, file, payload, { department: dept, allowHubMerge: isHubMerge });
         dept = dept || scope.fileDept || fileDept || user.department;
 
+        const isCloudRestore = payload.export_meta?.package_type === 'CLOUD_RESTORE'
+            && fileDirection === 'HQ_TO_SHIP';
+        if (isCloudRestore) dept = 'ALL';
+
         if (isHubMerge) {
             if (fileDirection && fileDirection !== 'STATION_TO_HUB' && fileDirection !== 'SHIP_TO_HQ') {
                 throw new Error('Captain Hub can merge Station Export (STATION_TO_HUB) packages only.');
@@ -707,11 +711,13 @@ const TVC_Sync = (function () {
             }
         }
 
-        if (!dept) throw new Error('Select a department to import (DECK / ENGINE).');
+        if (!dept && !isCloudRestore) throw new Error('Select a department to import (DECK / ENGINE).');
         const accessDept = typeof TVC_Space !== 'undefined' && user?.station && !isHubMerge
             ? TVC_Space.canAccessDepartment(user, dept)
             : TVC_RBAC.canAccessDepartment(user, dept);
-        if (!accessDept && !isHubMerge) throw new Error(`This account cannot import ${dept} department data.`);
+        if (!accessDept && !isHubMerge && !(isCloudRestore && dept === 'ALL')) {
+            throw new Error(`This account cannot import ${dept} department data.`);
+        }
 
         const importVesselId = payload.export_meta?.vessel_id || null;
         const failImport = async (err) => {

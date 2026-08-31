@@ -38,6 +38,7 @@
     "setup-supabase-ingest": "node scripts/setup-supabase-ingest.mjs",
     "verify-sync-ingest": "node scripts/verify-sync-ingest.mjs",
     "verify-sync-cloud": "node scripts/verify-sync-cloud-api.mjs",
+    "verify-sync-cloud-restore": "node scripts/verify-sync-cloud-restore.mjs",
     "purge-vessel-sync": "node scripts/purge-vessel-sync-data.mjs",
     "test-pms-master-roundtrip": "node scripts/test-pms-master-roundtrip.mjs",
     "test-electron-four-modes": "node scripts/test-electron-four-modes.mjs",

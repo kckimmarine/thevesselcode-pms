@@ -14,6 +14,9 @@ const TVC_Config = (function () {
     /** Optional — when set on Vercel (SYNC_CLOUD_READ_KEY), same value here for HQ/Admin cloud DB queries. */
     const SYNC_CLOUD_READ_KEY = '';
 
+    /** Optional — when set on Vercel (SYNC_CLOUD_RESTORE_KEY), same value for cloud restore publish/download. */
+    const SYNC_CLOUD_RESTORE_KEY = '';
+
     /** Vessel Setup.exe — upload to /downloads/ on Vercel or use GitHub Release URL. */
     const VESSEL_SETUP_DOWNLOAD_URL = '/downloads/TVC-PMS-HQ_OFFICE-Setup.exe';
 
@@ -131,6 +134,7 @@ const TVC_Config = (function () {
         SUPABASE_ANON_KEY,
         SYNC_API_BASE_URL,
         SYNC_CLOUD_READ_KEY,
+        SYNC_CLOUD_RESTORE_KEY,
         VESSEL_SETUP_DOWNLOAD_URL,
         PMS_APP_ORIGIN,
         MAIN_SITE_ORIGIN,

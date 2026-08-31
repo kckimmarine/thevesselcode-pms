@@ -87,7 +87,7 @@
 | **C** | HQ/Admin REST: `GET /api/sync/cloud/stats`, `GET /api/sync/cloud/records` (+ optional `SYNC_CLOUD_READ_KEY`) |
 | **D** | Admin: read-all API + support console (vessel/company filter) |
 | **D** | HQ cloud → IndexedDB mirror (`TVC_CloudMirror`) on login, vessel select, HQ pull, manual button |
-| **E** | Ship **Restore**: cloud snapshot → `HQ_TO_SHIP` full or staged package |
+| **E** | Cloud restore → `HQ_TO_SHIP` (`POST/GET /api/sync/cloud/restore`, `package_type: CLOUD_RESTORE`) |
 
 Until Phase C–E ship, **operational requirement is met only if HQ imports every vessel export** into one HQ installation (or one HQ PC per company with disciplined imports).
 
@@ -113,6 +113,10 @@ Headers: `X-Tvc-Account-Type` (`HQ` \| `ADMIN`), `X-Tvc-Company-Id` (HQ required
 Verify: `npm run verify-sync-cloud`
 
 **Phase D (implemented):** `js/services/cloudMirror.js` merges cloud `sync_records` into HQ IndexedDB via `TVC_Sync.mergePayload`. Triggers: HQ login (throttled), Ship List vessel select, after online HQ pull, Menu → Export/Import → **Mirror from cloud DB**.
+
+**Phase E (implemented):** `api/sync/cloud/restore` builds full-vessel `HQ_TO_SHIP` ZIP from cloud DB. HQ Menu → **Publish restore to vessel** (online pull) or **Download restore ZIP** (FBB). Ship imports with `package_type: CLOUD_RESTORE` (all departments, `mergeDept: null`).
+
+Verify: `npm run verify-sync-cloud-restore`
 
 ---
 
