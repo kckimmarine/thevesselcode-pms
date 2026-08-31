@@ -1,8 +1,8 @@
 /** THE VESSEL CODE — Online sync (Master ↔ HQ via cloud storage)
- *  Offline ZIP remains the fallback. V-sat/FBB: large uploads OK — use long timeout. */
+ *  Offline ZIP remains the fallback for FBB. V-SAT: long timeout (up to 10 min). */
 const TVC_OnlineSync = (function () {
     const META_KEY = 'sync_api_base_url';
-    const DEFAULT_TIMEOUT_MS = 180000;
+    const DEFAULT_TIMEOUT_MS = 600000;
 
     function getApiBaseUrl() {
         try {
@@ -31,7 +31,7 @@ const TVC_OnlineSync = (function () {
         if (!navigator.onLine) {
             return 'Browser is offline. Use offline ZIP transfer.';
         }
-        return 'Online sync is available (cloud storage).';
+        return 'Online sync is available (cloud storage). V-SAT links may take several minutes.';
     }
 
     async function apiFetch(path, opts = {}) {
@@ -104,7 +104,20 @@ const TVC_OnlineSync = (function () {
         return apiFetch(`/api/sync/hq/pull?vessel_id=${encodeURIComponent(vid)}&direction=SHIP_TO_HQ`);
     }
 
-    /** HQ — download pulled package and import into IndexedDB. */
+    /** Master — pull latest HQ_TO_SHIP feedback package metadata + signed download URL. */
+    async function pullHqFeedback(user, vesselId) {
+        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
+        if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
+            throw new Error('Online pull from HQ is available from Master Hub (Captain) only.');
+        }
+        if (!isAvailable()) throw new Error(statusMessage());
+        const vid = String(vesselId || user.vessel_id || '').trim();
+        if (!vid) throw new Error('Vessel ID is missing.');
+
+        return apiFetch(`/api/sync/ship/pull?vessel_id=${encodeURIComponent(vid)}&direction=HQ_TO_SHIP`);
+    }
+
+    /** HQ — download pulled ship package and import into IndexedDB. */
     async function importPulledPackage(user, meta) {
         const url = meta?.download_url;
         if (!url) throw new Error('Pull response has no download_url.');
@@ -123,6 +136,30 @@ const TVC_OnlineSync = (function () {
             record_count: meta.record_count || 0,
             status: 'SUCCESS',
             space: 'HQ',
+            channel: 'ONLINE',
+        });
+        return { filename, vessel_id: meta.vessel_id };
+    }
+
+    /** Master — download HQ feedback package and import into IndexedDB. */
+    async function importHqFeedbackPackage(user, meta) {
+        const url = meta?.download_url;
+        if (!url) throw new Error('Pull response has no download_url.');
+        const zipRes = await fetch(url);
+        if (!zipRes.ok) throw new Error(`Download failed: ${zipRes.status}`);
+        const blob = await zipRes.blob();
+        const filename = meta.filename || 'online_hq_pull.zip';
+        const file = new File([blob], filename, { type: 'application/zip' });
+        await TVC_Sync.importZip(user, file, null);
+        await TVC_Sync.recordSyncHistory({
+            type: 'IMPORT',
+            direction: 'HQ_TO_SHIP',
+            department: meta.department || 'ALL',
+            vessel_id: meta.vessel_id || '—',
+            filename,
+            record_count: meta.record_count || 0,
+            status: 'SUCCESS',
+            space: 'SHIP',
             channel: 'ONLINE',
         });
         return { filename, vessel_id: meta.vessel_id };
@@ -161,7 +198,17 @@ const TVC_OnlineSync = (function () {
         return result;
     }
 
-    /** Unified entry — Master push or HQ pull+import. */
+    function resolveSyncDept(user, opts = {}) {
+        const fromOpt = String(opts.dept || '').trim().toUpperCase();
+        if (fromOpt === 'DECK' || fromOpt === 'ENGINE') return fromOpt;
+        if (typeof TVC_Sync?.resolveActiveImportDepartment === 'function') {
+            const fromApp = TVC_Sync.resolveActiveImportDepartment(user);
+            if (fromApp === 'DECK' || fromApp === 'ENGINE') return fromApp;
+        }
+        return null;
+    }
+
+    /** Unified entry — Master ↔ HQ online sync. */
     async function syncNow(user, direction, opts = {}) {
         if (!isAvailable()) {
             return { channel: 'OFFLINE', status: 'OFFLINE', message: statusMessage() };
@@ -205,6 +252,57 @@ const TVC_OnlineSync = (function () {
             };
         }
 
+        if (direction === 'HQ_PUSH') {
+            if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ account required.');
+            const vesselId = opts.vesselId;
+            if (!vesselId) throw new Error('Select a vessel in Ship List before online push.');
+            const dept = resolveSyncDept(user, opts);
+            if (!dept) throw new Error('Select Deck or Engine toggle before pushing HQ reply online.');
+            if (typeof TVC_Sync.buildExportZipBlob !== 'function') {
+                throw new Error('Sync export module is not loaded.');
+            }
+            const built = await TVC_Sync.buildExportZipBlob(user, 'HQ_TO_SHIP', dept, {
+                expectedVesselId: vesselId,
+            });
+            const pushResult = await pushHqFeedback(user, built.blob, {
+                filename: built.filename,
+                vessel_id: built.vessel_id,
+                company_id: built.company_id,
+                record_count: built.record_count,
+                department: dept,
+            });
+            if (typeof TVC_Sync.finalizeZipExport === 'function') {
+                await TVC_Sync.finalizeZipExport(user, 'HQ_TO_SHIP', dept, built.delta, built, {
+                    skipSyncHistory: true,
+                });
+            }
+            return {
+                channel: 'ONLINE',
+                status: 'OK',
+                direction,
+                message: `Uploaded HQ reply ${built.filename} to cloud sync storage.`,
+                vessel_id: built.vessel_id,
+                package_id: pushResult?.package_id || null,
+            };
+        }
+
+        if (direction === 'SHIP_PULL') {
+            if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
+                throw new Error('Online pull from HQ is available from Master Hub (Captain) only.');
+            }
+            const vesselId = opts.vesselId || user.vessel_id;
+            const meta = await pullHqFeedback(user, vesselId);
+            const imported = await importHqFeedbackPackage(user, meta);
+            return {
+                channel: 'ONLINE',
+                status: 'OK',
+                direction,
+                message: `Imported HQ reply ${imported.filename} from cloud sync storage.`,
+                vessel_id: imported.vessel_id,
+                package_id: meta.package_id || null,
+            };
+        }
+
         return {
             channel: 'ONLINE',
             status: 'UNSUPPORTED',
@@ -221,7 +319,9 @@ const TVC_OnlineSync = (function () {
         statusMessage,
         pushShipToHq,
         pullShipFromVessel,
+        pullHqFeedback,
         importPulledPackage,
+        importHqFeedbackPackage,
         pushHqFeedback,
         syncNow,
     };

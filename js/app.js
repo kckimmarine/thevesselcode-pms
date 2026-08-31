@@ -3296,11 +3296,7 @@ const TVC_App = (function () {
     ];
 
     function menuImportTypesForUser(user) {
-        const isAdmin = !!(user && TVC_RBAC.isAdminAccount?.(user));
-        return MENU_IMPORT_TYPES.filter(t => {
-            if (isAdmin) return t.key === 'appUpdate';
-            return t.key === 'case' || t.key === 'monthly';
-        });
+        return MENU_IMPORT_TYPES.filter(t => t.key === 'case' || t.key === 'monthly');
     }
 
     function menuXferStationContext(user) {
@@ -3317,10 +3313,10 @@ const TVC_App = (function () {
             return 'Export Monthly Report ZIP → Master (or HQ direct, same dept). Import HQ reply here — Engine/Deck only, no cross-dept.';
         }
         if (ctx === 'master') {
-            return 'Import station ZIP → Export to HQ. After HQ reply Import, Export again → Engine/Deck station (CE/C/O). Match the Deck/Engine toggle.';
+            return 'Import station ZIP → Export to HQ. After HQ reply Import, Export again → Engine/Deck station (CE/C/O). Match the Deck/Engine toggle. Online: Push to HQ / Pull HQ reply (V-SAT). FBB: use ZIP.';
         }
         if (ctx === 'hq') {
-            return 'Import vessel ZIP (station export or Master report). Engine/Deck toggle must match file. HQ reply → Master or station direct.';
+            return 'Import vessel ZIP (station export or Master report). Engine/Deck toggle must match file. HQ reply → Master or station direct. Online: Pull from vessel / Push reply (V-SAT). FBB: use ZIP.';
         }
         return 'Default transfer: offline ZIP.';
     }
@@ -3330,13 +3326,26 @@ const TVC_App = (function () {
         if (!f.showOnlineSync || typeof TVC_OnlineSync === 'undefined') return '';
         const online = TVC_OnlineSync.isAvailable();
         const msg = TVC_OnlineSync.statusMessage();
-        const dir = TVC_RBAC.isHqAccount(user) ? 'HQ_PULL' : 'SHIP_TO_HQ';
-        const label = TVC_RBAC.isHqAccount(user) ? 'Pull from vessel (online)' : 'Push to HQ (online)';
+        const isHq = TVC_RBAC.isHqAccount(user);
+        const isMaster = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
+        const buttons = [];
+        if (isHq) {
+            buttons.push({ dir: 'HQ_PULL', label: 'Pull from vessel (online)' });
+            buttons.push({ dir: 'HQ_PUSH', label: 'Push reply to vessel (online)' });
+        } else if (isMaster) {
+            buttons.push({ dir: 'SHIP_TO_HQ', label: 'Push to HQ (online)' });
+            buttons.push({ dir: 'SHIP_PULL', label: 'Pull HQ reply (online)' });
+        }
+        if (!buttons.length) return '';
+        const btnHtml = buttons.map(b => `
+                <button type="button" class="btn spare-sync-btn menu-xfer-online-btn${online ? '' : ' disabled'}"${online ? '' : ' disabled'}
+                    onclick="TVC_App.menuXferTryOnlineSync('${escAttr(b.dir)}')">${esc(b.label)}</button>`).join('');
         return `
             <div class="menu-xfer-online${online ? '' : ' menu-xfer-online-disabled'}">
                 <p class="spare-sync-note muted">${esc(msg)}</p>
-                <button type="button" class="btn spare-sync-btn${online ? '' : ' disabled'}"${online ? '' : ' disabled'}
-                    onclick="TVC_App.menuXferTryOnlineSync('${escAttr(dir)}')">${esc(label)}</button>
+                <p class="spare-sync-note muted">V-SAT: online sync OK (may take several minutes). FBB / low bandwidth: use Export/Import ZIP.</p>
+                <div class="spare-sync-actions menu-xfer-online-actions">${btnHtml}
+                </div>
             </div>`;
     }
 
@@ -3344,17 +3353,24 @@ const TVC_App = (function () {
         const user = TVC_Auth.getCurrentUser();
         if (!user || typeof TVC_OnlineSync === 'undefined') return;
         try {
-            const vesselId = TVC_RBAC.isHqAccount(user) ? state.selectedVesselId : undefined;
-            if (direction === 'HQ_PULL' && !vesselId) {
-                await TVC_Dialog.alert('Select a vessel in Ship List before online pull.');
+            const isHq = TVC_RBAC.isHqAccount(user);
+            const vesselId = isHq ? state.selectedVesselId : undefined;
+            if ((direction === 'HQ_PULL' || direction === 'HQ_PUSH') && !vesselId) {
+                await TVC_Dialog.alert('Select a vessel in Ship List before online sync.');
                 return;
             }
-            const busyMsg = direction === 'HQ_PULL'
-                ? 'Pulling latest package from cloud…\n(V-sat links may take several minutes.)'
-                : 'Building report and uploading to cloud…\n(V-sat links may take several minutes.)';
-            await TVC_Dialog.alert(busyMsg);
-            const result = await TVC_OnlineSync.syncNow(user, direction, { vesselId });
-            if (result.status === 'OK' && TVC_RBAC.isHqAccount(user)) {
+            const busyByDir = {
+                HQ_PULL: 'Pulling latest vessel report from cloud…\n(V-SAT links may take several minutes.)',
+                HQ_PUSH: 'Building HQ reply and uploading to cloud…\n(V-SAT links may take several minutes.)',
+                SHIP_TO_HQ: 'Building report and uploading to cloud…\n(V-SAT links may take several minutes.)',
+                SHIP_PULL: 'Pulling latest HQ reply from cloud…\n(V-SAT links may take several minutes.)',
+            };
+            await TVC_Dialog.alert(busyByDir[direction] || 'Online sync in progress…');
+            const dept = (direction === 'HQ_PUSH' && typeof getAppDepartment === 'function')
+                ? getAppDepartment()
+                : undefined;
+            const result = await TVC_OnlineSync.syncNow(user, direction, { vesselId, dept });
+            if (result.status === 'OK' && (isHq || direction === 'SHIP_PULL')) {
                 await loadData();
                 rerenderCurrentTab();
             }
@@ -5454,28 +5470,6 @@ const TVC_App = (function () {
             return;
         }
         resetMenuXfer();
-        if (TVC_RBAC.isAdminAccount?.(state.user)) {
-            _menuXfer.step = 'export-app-update';
-            _menuXfer.mode = 'export';
-            _menuXfer.appUpdateSkus = {
-                HQ_OFFICE: true,
-                VESSEL_ENGINE: true,
-                VESSEL_DECK: true,
-                VESSEL_MASTER: false,
-            };
-            _menuXfer.appUpdateFiles = {};
-            _menuXfer.appUpdateCompanyId = state.selectedAdminCompanyId || null;
-            _menuXfer.appUpdateRecordDeploy = true;
-            try {
-                if (typeof TVC_AppUpdate?.resolveAppVersion === 'function') {
-                    _menuXfer.appUpdateVersion = await TVC_AppUpdate.resolveAppVersion();
-                } else {
-                    _menuXfer.appUpdateVersion = await resolveAppVersion();
-                }
-            } catch (_) {
-                _menuXfer.appUpdateVersion = '1.0.6';
-            }
-        }
         renderMenuXferModal();
         showModal('menuXferModal');
     }
@@ -5488,11 +5482,7 @@ const TVC_App = (function () {
 
     function menuXferPickMode(mode) {
         _menuXfer.mode = mode;
-        if (TVC_RBAC.isAdminAccount?.(state.user) && mode === 'export') {
-            _menuXfer.step = 'export-app-update';
-        } else {
-            _menuXfer.step = mode === 'export' ? 'export-type' : 'import';
-        }
+        _menuXfer.step = mode === 'export' ? 'export-type' : 'import';
         if (mode === 'import') _menuXfer.importType = null;
         renderMenuXferModal();
     }
@@ -5514,8 +5504,7 @@ const TVC_App = (function () {
             delete _menuXfer.vesselProfilePending;
             delete _menuXfer.appUpdatePending;
         } else if (_menuXfer.step === 'export-app-update') {
-            if (TVC_RBAC.isAdminAccount?.(state.user)) return;
-            _menuXfer.step = 'mode';
+            _menuXfer.step = 'export-type';
         } else if (_menuXfer.step === 'export-type' || _menuXfer.step === 'import') {
             _menuXfer.step = 'mode';
             _menuXfer.importType = null;

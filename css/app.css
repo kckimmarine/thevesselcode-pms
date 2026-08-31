@@ -8378,6 +8378,17 @@ label.spare-file-pick input[type=file] { display: none; }
     gap: 8px;
     margin-bottom: 8px;
 }
+.menu-xfer-online {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #e2e8f0;
+}
+.menu-xfer-online-disabled .menu-xfer-online-btn {
+    opacity: 0.55;
+}
+.menu-xfer-online-actions .menu-xfer-online-btn {
+    width: 100%;
+}
 .spare-sync-btn {
     width: 100%;
     justify-content: center;

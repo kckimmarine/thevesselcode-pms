@@ -428,7 +428,7 @@ const TVC_Sync = (function () {
         };
     }
 
-    async function exportZip(user, direction, dept, opts = {}) {
+    async function buildExportZipBlob(user, direction, dept, opts = {}) {
         const hubRelayHqReply = direction === 'HQ_TO_SHIP'
             && typeof TVC_Space !== 'undefined'
             && TVC_Space.isCaptainHub(user)
@@ -470,7 +470,9 @@ const TVC_Sync = (function () {
         if (opts.caseReview && recordCount === 0) {
             throw new Error('No Case Reports to export.');
         }
-        const vesselId = (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user.vessel_id || 'UNKNOWN';
+        const isHq = TVC_RBAC.isHqAccount(user);
+        const vesselId = await resolveExpectedVesselId(user, isHq, opts.expectedVesselId);
+        if (!vesselId) throw new Error('Vessel ID is missing. Select a vessel first.');
         const companyId = licensedCompanyId();
         const lic = assertLicenseForPackage(vesselId, companyId);
         if (!lic.ok) throw new Error(lic.error || 'License does not allow this export.');
@@ -546,33 +548,55 @@ const TVC_Sync = (function () {
             const prefix = direction === 'STATION_TO_HUB' ? `${vesselId}_${stationId || dept}_STATION` : `${vesselId}_${dept}_PMS_EXPORT`;
             filename = `${prefix}_${exportDate}.zip`;
         }
-        await TVC_FileExport.save(blob, filename);
 
+        return {
+            blob,
+            filename,
+            payload,
+            delta,
+            record_count: recordCount,
+            vessel_id: vesselId,
+            company_id: companyId,
+            department: dept,
+            station_id: stationId,
+            hubRelayHqReply,
+        };
+    }
+
+    async function finalizeZipExport(user, direction, dept, delta, built, opts = {}) {
         if (!opts.skipMarkExported) await markExported(delta, user, direction);
         await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
-            log: `📦 [Export/${direction}/${dept}] ${filename}`,
+            log: `📦 [Export/${direction}/${dept}] ${built.filename}`,
             sync_status: 'SYNCED',
         });
+        if (opts.skipSyncHistory) return;
         await recordSyncHistory({
             type: 'EXPORT',
             direction,
             department: dept,
-            vessel_id: vesselId,
-            filename,
-            record_count: recordCount,
+            vessel_id: built.vessel_id,
+            filename: built.filename,
+            record_count: built.record_count,
             status: 'SUCCESS',
             space: spaceOf(user),
-            station_id: stationId || null,
+            station_id: built.station_id || null,
             package_type: opts.caseReview ? 'CASE' : (opts.monthlyExport ? 'MONTHLY' : undefined),
+            channel: opts.channel || undefined,
             peer: opts.monthlyExport || opts.caseReview
-                ? (hubRelayHqReply ? 'Station' : 'Master/HQ')
+                ? (built.hubRelayHqReply ? 'Station' : 'Master/HQ')
                 : (direction === 'STATION_TO_HUB'
                     ? 'Master'
                     : (direction === 'SHIP_TO_HQ' || direction === 'HQ_TO_SHIP' ? 'Company' : null)),
         });
-        return payload;
+    }
+
+    async function exportZip(user, direction, dept, opts = {}) {
+        const built = await buildExportZipBlob(user, direction, dept, opts);
+        await TVC_FileExport.save(built.blob, built.filename);
+        await finalizeZipExport(user, direction, dept, built.delta, built, opts);
+        return built.payload;
     }
 
     async function recordSyncHistory(entry) {
@@ -1202,7 +1226,7 @@ const TVC_Sync = (function () {
     }
 
     return {
-        exportZip, exportCompanyZip, buildCompanyZipBlob, importZip, importPayload, collectDelta, collectMonthlySnapshot, collectCaseReview, mergePayload,
+        exportZip, exportCompanyZip, buildCompanyZipBlob, buildExportZipBlob, finalizeZipExport, importZip, importPayload, collectDelta, collectMonthlySnapshot, collectCaseReview, mergePayload,
         getHistory, recordSyncHistory, isSpareSyncHistoryRow, isPmsSyncHistoryRow,
         validateImportVesselId, validateImportPackageScope, resolveFileDepartment,
         resolveActiveImportDepartment, resolveExpectedVesselId,
