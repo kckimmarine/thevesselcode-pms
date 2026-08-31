@@ -7098,10 +7098,11 @@ const TVC_App = (function () {
         if (!valid.length) return;
         try {
             for (const d of valid) TVC_AdminRegistry.recordDeploy(d);
-            const result = await TVC_AdminRegistry.save();
-            await TVC_AdminRegistry.load();
+            await TVC_AdminRegistry.save();
+            if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
+                TVC_Fleet.syncFromAdminRegistry();
+            }
             renderMainMenu();
-            if (!silent && result.fallback) await TVC_Dialog.alert(result.message);
         } catch (e) {
             if (!silent) await TVC_Dialog.alert(e.message || String(e));
         }
@@ -7323,12 +7324,11 @@ const TVC_App = (function () {
                 display_name: `${company?.name || companyId} HQ`,
             });
             const result = await TVC_AdminRegistry.save();
-            if (result.fallback) {
-                await TVC_Dialog.alert(`${result.message}\n\nHQ login is saved in memory. Download the registry bundle and commit admin/ for web deploy.`);
-            } else {
-                await TVC_AdminRegistry.load();
-                await TVC_AccountProvisioning.syncRegistryToUsers();
+            await TVC_AccountProvisioning.syncRegistryToUsers();
+            if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
+                TVC_Fleet.syncFromAdminRegistry();
             }
+            if (!result.local) await TVC_AdminRegistry.load();
             await TVC_Dialog.alert({
                 message: `HQ login saved.\n\nUsername: ${saved.username}\nPassword: ${saved.password}\n\nCopy these credentials for the shipping company.`,
                 kind: 'success',
@@ -7369,12 +7369,11 @@ const TVC_App = (function () {
                 display_name: `${vessel?.name || vesselId} Master`,
             });
             const result = await TVC_AdminRegistry.save();
-            if (result.fallback) {
-                await TVC_Dialog.alert(`${result.message}\n\nMaster login is saved in memory. Download the registry bundle and commit admin/ for web deploy.`);
-            } else {
-                await TVC_AdminRegistry.load();
-                await TVC_AccountProvisioning.syncRegistryToUsers();
+            await TVC_AccountProvisioning.syncRegistryToUsers();
+            if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
+                TVC_Fleet.syncFromAdminRegistry();
             }
+            if (!result.local) await TVC_AdminRegistry.load();
             await TVC_Dialog.alert({
                 message: `Master login saved.\n\nUsername: ${saved.username}\nPassword: ${saved.password}\n\nUse on VESSEL_MASTER (Captain login mode).`,
                 kind: 'success',
@@ -8660,21 +8659,23 @@ const TVC_App = (function () {
         showModal('adminRegistryModal');
     }
 
-    async function persistAdminRegistry(successMessage) {
-        const result = await TVC_AdminRegistry.save();
-        if (result.fallback) {
-            await TVC_Dialog.alert(result.message);
-        } else {
-            await TVC_AdminRegistry.load();
-            if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
-                TVC_Fleet.syncFromAdminRegistry();
-            }
-            if (typeof TVC_AccountProvisioning !== 'undefined') {
-                await TVC_AccountProvisioning.syncRegistryToUsers();
-            }
-            await TVC_Dialog.success(successMessage || 'Registry saved.');
+    async function persistAdminRegistry() {
+        await TVC_AdminRegistry.save();
+        if (typeof TVC_Fleet.syncFromAdminRegistry === 'function') {
+            TVC_Fleet.syncFromAdminRegistry();
         }
-        closeAdminRegistryModal();
+        if (typeof TVC_AccountProvisioning !== 'undefined') {
+            await TVC_AccountProvisioning.syncRegistryToUsers();
+        }
+        const fromHub = state._adminRegFromHub;
+        state._adminRegForm = null;
+        if (fromHub) {
+            state._adminRegFromHub = false;
+            renderAdminRegistryHub();
+            showModal('adminRegistryModal');
+        } else {
+            closeAdminRegistryModal();
+        }
         renderMainMenu();
     }
 
@@ -8702,7 +8703,7 @@ const TVC_App = (function () {
             const company = TVC_AdminRegistry.upsertCompany(input);
             state.selectedAdminCompanyId = company.company_id;
             TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
-            await persistAdminRegistry(isEdit ? 'Company updated.' : 'Company added.');
+            await persistAdminRegistry();
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
         }
@@ -8731,7 +8732,7 @@ const TVC_App = (function () {
             state.selectedAdminCompanyId = companyId;
             state.selectedAdminVesselId = vessel.vessel_id;
             TVC_AdminRegistry.setSelected(state.selectedAdminCompanyId, state.selectedAdminVesselId);
-            await persistAdminRegistry(isEdit ? 'Vessel updated.' : 'Vessel added.');
+            await persistAdminRegistry();
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
         }
@@ -8746,7 +8747,7 @@ const TVC_App = (function () {
         })) return;
         try {
             TVC_AdminRegistry.setCompanyStatus(id, 'inactive');
-            await persistAdminRegistry('Company set to inactive.');
+            await persistAdminRegistry();
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
         }
@@ -8762,7 +8763,7 @@ const TVC_App = (function () {
         })) return;
         try {
             TVC_AdminRegistry.setVesselStatus(cid, vid, 'inactive');
-            await persistAdminRegistry('Vessel set to inactive.');
+            await persistAdminRegistry();
         } catch (e) {
             await TVC_Dialog.alert(e.message || String(e));
         }

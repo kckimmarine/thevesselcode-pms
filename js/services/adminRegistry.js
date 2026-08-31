@@ -3,6 +3,7 @@ const TVC_AdminRegistry = (function () {
     const REGISTRY_URL = 'admin/registry.json';
     const LS_COMPANY = 'tvc_admin_selected_company';
     const LS_VESSEL = 'tvc_admin_selected_vessel';
+    const LS_REGISTRY_CACHE = 'tvc_admin_registry_cache_v1';
     const STATUS_OPTS = ['active', 'inactive'];
     const HQ_SKU_OPTS = ['HQ_OFFICE'];
     const VESSEL_SKUS = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
@@ -92,11 +93,31 @@ const TVC_AdminRegistry = (function () {
     }
 
     async function load() {
+        if (!isElectronAdmin()) {
+            try {
+                const local = localStorage.getItem(LS_REGISTRY_CACHE);
+                if (local) {
+                    _cache = normalize(JSON.parse(local));
+                    return _cache;
+                }
+            } catch (e) {
+                console.warn('[TVC_AdminRegistry] local cache read failed', e);
+            }
+        }
         const res = await fetch(REGISTRY_URL, { cache: 'no-store' });
         if (!res.ok) throw new Error(`Admin registry load failed (${res.status})`);
         const data = await res.json();
         _cache = normalize(data);
         return _cache;
+    }
+
+    function isElectronAdmin() {
+        return typeof window !== 'undefined' && !!window.tvcElectron?.saveAdminRegistry;
+    }
+
+    function saveLocalCache() {
+        if (!_cache) throw new Error('Registry not loaded.');
+        localStorage.setItem(LS_REGISTRY_CACHE, JSON.stringify(_cache));
     }
 
     function normalizeLoginAccount(raw) {
@@ -170,6 +191,7 @@ const TVC_AdminRegistry = (function () {
         let rows = [];
         for (const c of _cache?.companies || []) {
             if (companyId && c.company_id !== companyId) continue;
+            if (!includeInactive && c.status === 'inactive') continue;
             for (const v of c.vessels || []) {
                 if (!includeInactive && v.status === 'inactive') continue;
                 rows.push({
@@ -618,17 +640,18 @@ const TVC_AdminRegistry = (function () {
 
     async function save() {
         const bundle = buildPersistBundle();
-        if (typeof window !== 'undefined' && window.tvcElectron?.saveAdminRegistry) {
+        if (isElectronAdmin()) {
             const result = await window.tvcElectron.saveAdminRegistry(bundle);
             if (!result?.ok) throw new Error(result?.error || result?.message || 'Save failed.');
             return result;
         }
+        saveLocalCache();
+        return { ok: true, local: true };
+    }
+
+    function exportRegistryBundleDownload() {
+        const bundle = buildPersistBundle();
         downloadBundleFallback(bundle);
-        return {
-            ok: true,
-            fallback: true,
-            message: 'Registry bundle downloaded. Use npm run electron:admin to save directly to admin/.',
-        };
     }
 
     function downloadBundleFallback(bundle) {
@@ -666,6 +689,8 @@ const TVC_AdminRegistry = (function () {
         formatVesselSetupVersion,
         buildPersistBundle,
         save,
+        exportRegistryBundleDownload,
+        isElectronAdmin,
         validateCompanyInput,
         validateVesselInput,
         STATUS_OPTS,

@@ -121,19 +121,40 @@ const TVC_Fleet = (function () {
         return String(vessel?.company_id || COMPANY_ID).trim() || COMPANY_ID;
     }
 
-    /** HQ superintendent — license company + allowedVesselIds. Super-admin sees full fleet. */
+    /** HQ superintendent — license company + allowedVesselIds. Super-admin sees registry-active fleet. */
     function getVisible(user) {
         const all = getAll();
-        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSuperHqAccount?.(user)) return all;
+        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSuperHqAccount?.(user)) {
+            if (typeof TVC_AdminRegistry !== 'undefined') {
+                try {
+                    const activeRows = TVC_AdminRegistry.listVessels({ includeInactive: false });
+                    if (activeRows.length) {
+                        const activeIds = new Set(activeRows.map(r => String(r.vessel_id || '').trim()).filter(Boolean));
+                        return all.filter(v => activeIds.has(v.id));
+                    }
+                } catch (_) { /* registry not loaded */ }
+            }
+            return all;
+        }
         const companyScoped = !!(user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isCompanyHqAccount?.(user));
         if (!companyScoped) return all;
         const companyId = String(user.company_id || licenseCompanyId()).trim() || COMPANY_ID;
         const allowed = licenseAllowedVesselIds();
-        return all.filter(v => {
+        let rows = all.filter(v => {
             if (vesselCompanyId(v) !== companyId) return false;
             if (allowed.length && !allowed.includes(v.id)) return false;
             return true;
         });
+        if (typeof TVC_AdminRegistry !== 'undefined') {
+            try {
+                const activeRows = TVC_AdminRegistry.listVessels({ companyId, includeInactive: false });
+                if (activeRows.length) {
+                    const activeIds = new Set(activeRows.map(r => String(r.vessel_id || '').trim()).filter(Boolean));
+                    rows = rows.filter(v => activeIds.has(v.id));
+                }
+            } catch (_) { /* ignore */ }
+        }
+        return rows;
     }
 
     function listCompanyIds(user) {
@@ -228,8 +249,15 @@ const TVC_Fleet = (function () {
     /** Super HQ — admin/registry.json vessels → Ship List (all companies). */
     function syncFromAdminRegistry() {
         if (typeof TVC_AdminRegistry === 'undefined') return getAll();
-        const rows = TVC_AdminRegistry.listVessels({ includeInactive: false });
-        for (const r of rows) {
+        const activeRows = TVC_AdminRegistry.listVessels({ includeInactive: false });
+        const activeIds = new Set(activeRows.map(r => String(r.vessel_id || '').trim()).filter(Boolean));
+        const allRegistryRows = TVC_AdminRegistry.listVessels({ includeInactive: true });
+        for (const r of allRegistryRows) {
+            const id = String(r.vessel_id || '').trim();
+            if (!id || activeIds.has(id)) continue;
+            remove(id);
+        }
+        for (const r of activeRows) {
             const id = String(r.vessel_id || '').trim();
             if (!id) continue;
             const prev = getAll().find(v => v.id === id) || DEFAULT_FLEET.find(v => v.id === id);
