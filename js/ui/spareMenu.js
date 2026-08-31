@@ -22788,20 +22788,78 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         return { consumed, requisitions };
     }
 
+    /** Spare History — local cache, requisition line snapshot, or req-work list row */
+    function resolveSpareForItemHistory(st, spareId) {
+        const key = reqWorkSpareIdKey(spareId);
+        if (!key) return null;
+        const cached = (st.spares || []).map(canon).find(s => reqWorkSameSpareId(s.id, key));
+        if (cached) return cached;
+        const m = modState(st);
+        if (m.reqWorkOpen) {
+            for (const s of filteredReqWorkSpares(st)) {
+                if (reqWorkSameSpareId(s.id, key)) return canon(s);
+            }
+            const req = getReqWorkSession();
+            for (const line of normalizeReqLines(req?.lines)) {
+                const lineSpare = spareForReqLine(st, line);
+                if (reqWorkSameSpareId(lineSpare.id, key) || reqLineSpareKey(line) === key) {
+                    return canon(lineSpare);
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Inventory / requisition history queries — prefer persisted spare_part_id on req line */
+    function spareItemHistoryDataId(st, spareId) {
+        const key = reqWorkSpareIdKey(spareId);
+        const m = modState(st);
+        if (m.reqWorkOpen) {
+            const req = getReqWorkSession();
+            for (const line of normalizeReqLines(req?.lines)) {
+                const lineSpare = spareForReqLine(st, line);
+                if (!reqWorkSameSpareId(lineSpare.id, key) && reqLineSpareKey(line) !== key) continue;
+                const sid = reqWorkSpareIdKey(line.spare_part_id);
+                if (sid && !sid.startsWith('line-')) return sid;
+                break;
+            }
+        }
+        const spare = resolveSpareForItemHistory(st, spareId);
+        return reqWorkSpareIdKey(spare?.id || spareId);
+    }
+
+    async function spareItemHistoryVesselId(st) {
+        const m = modState(st);
+        const reqVid = _reqWorkDraft?.vessel_id || getReqWorkSession()?.vessel_id;
+        if (m.reqWorkOpen && reqVid) return reqVid;
+        const { vesselId } = await vesselScope();
+        return vesselId;
+    }
+
     async function openSpareItemHistory(spareId, tab) {
         const st = getState();
-        const spare = (st.spares || []).map(canon).find(s => String(s.id) === String(spareId));
+        const m = modState(st);
+        const reqVid = _reqWorkDraft?.vessel_id || getReqWorkSession()?.vessel_id;
+        if (m.reqWorkOpen && reqVid) {
+            await reloadSparesCache({ vesselId: reqVid });
+        }
+        let spare = resolveSpareForItemHistory(st, spareId);
+        if (!spare && reqVid) {
+            await reloadSparesCache({ vesselId: reqVid, force: true });
+            spare = resolveSpareForItemHistory(getState(), spareId);
+        }
         if (!spare) {
             await TVC_Dialog.alert('Spare part not found.');
             return;
         }
-        setFocusedSpareId(st, spareId);
+        const resolvedId = reqWorkSpareIdKey(spare.id);
+        setFocusedSpareId(st, resolvedId);
         syncSpareItemHistoryBtns();
-        if (_shSpareId !== spareId) {
+        if (_shSpareId !== resolvedId) {
             _shTab = 'note';
             _shEditing = false;
         }
-        _shSpareId = spareId;
+        _shSpareId = resolvedId;
         if (tab === 'received') tab = 'consumed';
         if (tab) _shTab = tab;
         await renderSpareItemHistoryModal(true);
@@ -23039,7 +23097,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!host || !_shSpareId) return;
         if (_shTab === 'received') _shTab = 'consumed';
         const st = getState();
-        const spare = (st.spares || []).map(canon).find(s => String(s.id) === String(_shSpareId));
+        const spare = resolveSpareForItemHistory(st, _shSpareId);
         if (!spare || !_shHistoryData) {
             renderSpareItemHistoryModal(false);
             return;
@@ -23052,16 +23110,17 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!host || !_shSpareId) return;
         if (_shTab === 'received') _shTab = 'consumed';
         const st = getState();
-        const spare = (st.spares || []).map(canon).find(s => String(s.id) === String(_shSpareId));
+        const spare = resolveSpareForItemHistory(st, _shSpareId);
         if (!spare) {
             host.innerHTML = '<p class="muted">Spare part not found.</p>';
             return;
         }
-        const { vesselId } = await vesselScope();
-        const cacheKey = `${vesselId}:${_shSpareId}`;
+        const vesselId = await spareItemHistoryVesselId(st);
+        const dataId = spareItemHistoryDataId(st, _shSpareId);
+        const cacheKey = `${vesselId}:${dataId}`;
         if (forceReload || _shHistoryCacheKey !== cacheKey || !_shHistoryData) {
             host.innerHTML = '<p class="muted">Loading history…</p>';
-            _shHistoryData = await loadSpareItemHistoryData(_shSpareId, vesselId);
+            _shHistoryData = await loadSpareItemHistoryData(dataId, vesselId);
             _shHistoryCacheKey = cacheKey;
         }
         paintSpareItemHistoryModal(host, st, spare, _shHistoryData);
