@@ -7776,7 +7776,7 @@ const TVC_App = (function () {
     const _adminSetupExport = {
         companyId: null,
         vesselId: null,
-        sku: 'VESSEL_MASTER',
+        skus: { VESSEL_MASTER: true, VESSEL_ENGINE: false, VESSEL_DECK: false },
         appVersion: '1.0.6',
         notes: '',
         sourceSetups: [],
@@ -7784,11 +7784,22 @@ const TVC_App = (function () {
         recordDeploy: true,
     };
 
-    const ADMIN_VESSEL_SETUP_SKUS = [
-        { value: 'VESSEL_MASTER', label: 'MASTER' },
-        { value: 'VESSEL_ENGINE', label: 'ENGINE' },
-        { value: 'VESSEL_DECK', label: 'DECK' },
-    ];
+    const ADMIN_VESSEL_SETUP_SKUS = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+
+    function adminSetupExportSelectedSkus() {
+        const picked = _adminSetupExport.skus || {};
+        return ADMIN_VESSEL_SETUP_SKUS.filter(sku => picked[sku]);
+    }
+
+    function ensureAdminSetupExportSkus() {
+        if (!_adminSetupExport.skus || !Object.keys(_adminSetupExport.skus).length) {
+            _adminSetupExport.skus = {
+                VESSEL_MASTER: true,
+                VESSEL_ENGINE: false,
+                VESSEL_DECK: false,
+            };
+        }
+    }
 
     async function renderAdminSetupExportModal() {
         const body = document.getElementById('adminSetupExportBody');
@@ -7813,15 +7824,32 @@ const TVC_App = (function () {
         if (!vessels.some(v => v.vessel_id === _adminSetupExport.vesselId)) {
             _adminSetupExport.vesselId = vessels[0]?.vessel_id || null;
         }
-        const sku = _adminSetupExport.sku || 'VESSEL_MASTER';
-        const hit = _adminSetupExport.sourceSetups.find(s => s.sku === sku);
+        ensureAdminSetupExportSkus();
+        ADMIN_VESSEL_SETUP_SKUS.forEach(sku => {
+            const hit = _adminSetupExport.sourceSetups.some(s => s.sku === sku);
+            if (!hit && _adminSetupExport.skus[sku]) _adminSetupExport.skus[sku] = false;
+        });
+        const selectedSkus = adminSetupExportSelectedSkus();
         const sourceNote = source.configured
             ? `<span class="muted">Setup folder: ${esc(source.path || '')}</span>`
             : `<span class="muted">Electron Admin required. Run <code>npm run dist</code>, then select the <code>dist</code> folder.</span>`;
-        const canExport = source.configured && _adminSetupExport.companyId && _adminSetupExport.vesselId && hit;
-        const skuOpts = ADMIN_VESSEL_SETUP_SKUS.map(o =>
-            `<option value="${escAttr(o.value)}"${o.value === sku ? ' selected' : ''}>${esc(o.label)}</option>`
-        ).join('');
+        const hasAllFiles = selectedSkus.length > 0
+            && selectedSkus.every(sku => _adminSetupExport.sourceSetups.some(s => s.sku === sku));
+        const canExport = source.configured && _adminSetupExport.companyId && _adminSetupExport.vesselId && hasAllFiles;
+        const skuChecks = ADMIN_VESSEL_SETUP_SKUS.map(sku => {
+            const hit = _adminSetupExport.sourceSetups.find(s => s.sku === sku);
+            const checked = _adminSetupExport.skus[sku] ? ' checked' : '';
+            const disabled = hit ? '' : ' disabled';
+            return `<label class="admin-setup-sku-check"><input type="checkbox"${checked}${disabled}
+                onchange="TVC_App.adminSetupExportToggleSku('${escAttr(sku)}', this.checked)"> ${esc(sku)}</label>`;
+        }).join('');
+        const setupStatus = selectedSkus.length
+            ? selectedSkus.map(sku => {
+                const hit = _adminSetupExport.sourceSetups.find(s => s.sku === sku);
+                if (!hit) return `${esc(sku)}: Setup.exe not found in dist folder.`;
+                return `${esc(sku)}: <strong>${esc(hit.filename)}</strong> (${(hit.bytes / (1024 * 1024)).toFixed(1)} MB)`;
+            }).join('<br>')
+            : 'Select at least one SKU to export.';
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminSetupExportModal()">×</button>
             <h3 class="spare-sync-title">Universal Setup.exe</h3>
@@ -7843,14 +7871,9 @@ const TVC_App = (function () {
                 </select>
             </label>
             <label class="spare-sync-note" style="display:block;margin:12px 0">Select SKU
-                <select class="admin-company-select" style="margin-top:4px;width:100%"
-                    onchange="TVC_App.adminSetupExportSetSku(this.value);TVC_App.renderAdminSetupExportModal()">
-                    ${skuOpts}
-                </select>
+                <div class="admin-setup-sku-checks">${skuChecks}</div>
             </label>
-            <p class="spare-sync-note muted" style="margin:8px 0">${hit
-                ? `Setup file: <strong>${esc(hit.filename)}</strong> (${(hit.bytes / (1024 * 1024)).toFixed(1)} MB)`
-                : 'Selected SKU Setup.exe not found in dist folder.'}</p>
+            <p class="spare-sync-note muted" style="margin:8px 0">${setupStatus}</p>
             <label class="spare-sync-note" style="display:block;margin:8px 0">
                 App version
                 <input type="text" value="${escAttr(_adminSetupExport.appVersion)}" style="width:100%;margin-top:4px"
@@ -7884,7 +7907,7 @@ const TVC_App = (function () {
         }
         _adminSetupExport.companyId = state.selectedAdminCompanyId || null;
         _adminSetupExport.vesselId = state.selectedAdminVesselId || null;
-        if (!_adminSetupExport.sku) _adminSetupExport.sku = 'VESSEL_MASTER';
+        ensureAdminSetupExportSkus();
         await renderAdminSetupExportModal();
         showModal('adminSetupExportModal');
     }
@@ -7947,8 +7970,10 @@ const TVC_App = (function () {
         _adminSetupExport.vesselId = String(id || '').trim() || null;
     }
 
-    function adminSetupExportSetSku(sku) {
-        _adminSetupExport.sku = String(sku || '').trim() || 'VESSEL_MASTER';
+    function adminSetupExportToggleSku(sku, on) {
+        _adminSetupExport.skus = _adminSetupExport.skus || {};
+        _adminSetupExport.skus[sku] = !!on;
+        renderAdminSetupExportModal();
     }
 
     function adminSetupExportSetVersion(v) {
@@ -7961,11 +7986,6 @@ const TVC_App = (function () {
 
     function adminSetupExportSetRecordDeploy(on) {
         _adminSetupExport.recordDeploy = !!on;
-    }
-
-    function adminSetupExportToggleSku(sku, on) {
-        _adminSetupExport.skus = _adminSetupExport.skus || {};
-        _adminSetupExport.skus[sku] = !!on;
     }
 
     async function adminSetupExportPickFolder() {
@@ -7983,29 +8003,30 @@ const TVC_App = (function () {
         try {
             const companyId = _adminSetupExport.companyId;
             const vesselId = _adminSetupExport.vesselId;
-            const sku = _adminSetupExport.sku || 'VESSEL_MASTER';
+            const selectedSkus = adminSetupExportSelectedSkus();
             if (!companyId) throw new Error('Select a company.');
             if (!vesselId) throw new Error('Select a vessel.');
+            if (!selectedSkus.length) throw new Error('Select at least one SKU.');
             const { blob, filename, manifest } = await TVC_SetupExport.buildZip(user, {
                 companyId,
                 vesselId,
                 appVersion: _adminSetupExport.appVersion,
                 notes: _adminSetupExport.notes,
-                skus: [sku],
+                skus: selectedSkus,
                 sourceSetups: _adminSetupExport.sourceSetups,
             });
             await TVC_FileExport.save(blob, filename);
             if (_adminSetupExport.recordDeploy !== false) {
-                await recordAdminDeployAndSave({
+                await recordAdminDeployAndSave(selectedSkus.map(sku => ({
                     companyId,
                     vesselId,
                     kind: 'setup',
                     sku,
                     appVersion: _adminSetupExport.appVersion,
-                });
+                })));
             }
             await TVC_Dialog.alert(
-                `Setup exported.\n${filename}\n\nCompany: ${manifest.company_name}\nVessel: ${vesselId}\nSKU: ${sku}\n\n1. Install Setup on vessel PC\n2. Export machine request JSON\n3. Administration → Seat License\n4. Import seat license on vessel PC`
+                `Setup exported.\n${filename}\n\nCompany: ${manifest.company_name}\nVessel: ${vesselId}\nSKUs: ${selectedSkus.join(', ')}\n\n1. Install Setup on vessel PC\n2. Export machine request JSON\n3. Administration → Seat License\n4. Import seat license on vessel PC`
             );
             closeAdminSetupExportModal();
         } catch (e) {
@@ -17532,7 +17553,7 @@ const TVC_App = (function () {
         adminPrintContractDraft,
         openAdminPrintRegistryModal, closeAdminPrintRegistryModal,
         adminPrintRegistrySetCompany, adminPrintRegistrySetIncludeInactive, adminPrintRegistryRun,
-        adminSetupExportPickFolder, adminSetupExportSetCompany, adminSetupExportSetVessel, adminSetupExportSetSku,
+        adminSetupExportPickFolder, adminSetupExportSetCompany, adminSetupExportSetVessel, adminSetupExportToggleSku,
         adminSetupExportSetVersion,
         adminSetupExportSetNotes, adminSetupExportSetRecordDeploy, adminSetupExportRun,
         adminAppUpdatePickFolder, adminAppUpdateSetVersion, adminAppUpdateSetNotes,
