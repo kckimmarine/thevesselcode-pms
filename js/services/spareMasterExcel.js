@@ -1153,8 +1153,8 @@ const TVC_SpareMasterExcel = (function () {
     }
 
     async function importFromWorkbook(wb, user, opts = {}) {
-        if (!TVC_RBAC.isAdminAccount?.(user)) {
-            throw Object.assign(new Error('SPARE Master Import is Admin Mode only (admin / tvc).'), { code: 'PERMISSION_DENIED' });
+        if (!TVC_RBAC.canMasterExcelAccount?.(user)) {
+            throw Object.assign(new Error('SPARE Master Import requires admin, tvc, or pms-21.'), { code: 'PERMISSION_DENIED' });
         }
         const department = normDept(opts.department);
         const vesselId = await resolveSpareVesselId(user, opts);

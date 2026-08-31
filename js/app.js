@@ -9782,23 +9782,23 @@ const TVC_App = (function () {
         return 'You do not have permission to edit the Work Procedure.';
     }
 
-    /** PMS/SPARE Master Excel — Admin Mode (admin / tvc) only */
+    /** PMS/SPARE Master Excel — admin / tvc / pms-21 */
     function canPmsMasterExcel() {
         if (!state.user) return false;
-        return !!TVC_RBAC.isAdminAccount?.(state.user);
+        return !!TVC_RBAC.canMasterExcelAccount?.(state.user);
     }
 
     function canSpareMasterExcel() {
         if (!state.user) return false;
-        return !!TVC_RBAC.isAdminAccount?.(state.user);
+        return !!TVC_RBAC.canMasterExcelAccount?.(state.user);
     }
 
     function pmsMasterExcelDeniedMessage() {
-        return 'PMS Master Export · Import is Admin Mode only (admin / tvc).';
+        return 'PMS Master Export · Import requires admin, tvc, or pms-21.';
     }
 
     function spareMasterExcelDeniedMessage() {
-        return 'SPARE Master Export · Import is Admin Mode only (admin / tvc).';
+        return 'SPARE Master Export · Import requires admin, tvc, or pms-21.';
     }
 
     function selectedGroupNode() {

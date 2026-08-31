@@ -249,6 +249,10 @@ const TVC_RBAC = (function () {
     function isPms21Account(user) {
         return String(user?.username || '').trim().toLowerCase() === 'pms-21';
     }
+    /** PMS/SPARE Master Excel Export · Import — admin, tvc, pms-21 */
+    function canMasterExcelAccount(user) {
+        return isAdminAccount(user) || isPms21Account(user);
+    }
     function hqActingRole(user) {
         if (isHqAccount(user) && user.account_type === AccountType.ADMIN) return Role.HQ_SUPERVISOR;
         return resolveUserRole(user) || user?.role || null;
@@ -666,7 +670,7 @@ const TVC_RBAC = (function () {
         AccountType, Role, Department, ReportStatus, Action,
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForWorkReport, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
-        isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isPms21Account, isCompanyHqAccount, isHqSku, isApprover,
+        isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isPms21Account, canMasterExcelAccount, isCompanyHqAccount, isHqSku, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
         normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,
