@@ -8440,6 +8440,18 @@ const TVC_App = (function () {
         });
     }
 
+    function adminRegistryFormActions(isEdit, { saveFormId, onDelete }) {
+        const deleteBtn = isEdit && onDelete
+            ? `<button type="button" class="btn btn-red" onclick="${onDelete}">Delete</button>`
+            : '';
+        return `
+            <div class="modal-actions admin-registry-form-actions">
+                <button type="submit" form="${escAttr(saveFormId)}" class="btn btn-green">Save</button>
+                ${deleteBtn}
+                <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
+            </div>`;
+    }
+
     function adminStatusOptions(selected) {
         const opts = TVC_AdminRegistry?.STATUS_OPTS || ['active', 'inactive'];
         return opts.map(s =>
@@ -8512,10 +8524,10 @@ const TVC_App = (function () {
                     <textarea name="notes" rows="2" placeholder="Optional contract notes">${esc(company?.notes || '')}</textarea>
                 </label>
             </form>
-            <div class="modal-actions admin-registry-form-actions">
-                <button type="submit" form="adminCompanyForm" class="btn btn-green">Save</button>
-                <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
-            </div>`;
+            ${adminRegistryFormActions(isEdit, {
+                saveFormId: 'adminCompanyForm',
+                onDelete: 'TVC_App.deactivateAdminCompany()',
+            })}`;
         state._adminRegForm = { type: 'company', mode };
     }
 
@@ -8568,10 +8580,10 @@ const TVC_App = (function () {
                     <textarea name="notes" rows="2" placeholder="Optional">${esc(vessel?.notes || '')}</textarea>
                 </label>
             </form>
-            <div class="modal-actions admin-registry-form-actions">
-                <button type="submit" form="adminVesselForm" class="btn btn-green">Save</button>
-                <button type="button" class="btn" onclick="TVC_App.adminRegistryCancelForm()">Cancel</button>
-            </div>`;
+            ${adminRegistryFormActions(isEdit, {
+                saveFormId: 'adminVesselForm',
+                onDelete: 'TVC_App.deactivateAdminVessel()',
+            })}`;
         state._adminRegForm = { type: 'vessel', mode };
     }
 
@@ -8731,8 +8743,8 @@ const TVC_App = (function () {
         const id = state.selectedAdminCompanyId;
         if (!id) return;
         if (!await TVC_Dialog.confirm({
-            message: `Set company "${id}" to inactive?\n\nIt stays in registry files but is hidden from active lists.`,
-            kind: 'warning',
+            message: `Delete company "${id}"?\n\nSets status to inactive. Registry files are kept but it is hidden from active lists.`,
+            kind: 'delete',
         })) return;
         try {
             TVC_AdminRegistry.setCompanyStatus(id, 'inactive');
@@ -8747,8 +8759,8 @@ const TVC_App = (function () {
         const vid = state.selectedAdminVesselId;
         if (!cid || !vid) return;
         if (!await TVC_Dialog.confirm({
-            message: `Set vessel "${vid}" to inactive?\n\nIt stays in registry files but is hidden from active contract lists.`,
-            kind: 'warning',
+            message: `Delete vessel "${vid}"?\n\nSets status to inactive. Registry files are kept but it is hidden from active lists.`,
+            kind: 'delete',
         })) return;
         try {
             TVC_AdminRegistry.setVesselStatus(cid, vid, 'inactive');
