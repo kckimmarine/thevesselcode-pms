@@ -1288,7 +1288,7 @@ const TVC_App = (function () {
             }
             if (!user.vessel_id) { el.textContent = 'Head Office'; return; }
             const v = TVC_Fleet.resolveById(user.vessel_id);
-            el.textContent = v ? `Vessel: ${v.name} (${v.id})` : `Vessel: ${user.vessel_id}`;
+            el.textContent = v ? `Vessel: ${v.id}` : `Vessel: ${user.vessel_id}`;
         });
         if (TVC_RBAC.isHqAccount(user)) populateShipHeader(user);
         syncWindowTitle(user);
@@ -1318,7 +1318,7 @@ const TVC_App = (function () {
             }
         }
         if (vessel) {
-            setText('cmaxsShipName', vessel.name);
+            setText('cmaxsShipName', vessel.id);
             setText('cmaxsShipCode', vessel.imo_no || vessel.code || '—');
             setText('cmaxsShipDelivery', vessel.delivery || '—');
         } else {
@@ -5694,7 +5694,7 @@ const TVC_App = (function () {
         const setups = (m.setups || []).map(s => `<li>${esc(s.sku)} — ${esc(s.filename)}</li>`).join('') || '<li>—</li>';
         const isCompany = m.delivery_mode === 'company';
         const vesselLines = (m.registry_vessels || []).map(v =>
-            `<li>${esc(v.vessel_id)} — ${esc(v.name || '')}</li>`
+            `<li>${esc(v.vessel_id)}</li>`
         ).join('') || (m.allowed_vessel_ids || []).map(id => `<li>${esc(id)}</li>`).join('');
         return `
             <p class="spare-sync-hint">App Update <strong>v${esc(m.app_version || '—')}</strong>${isCompany ? ` · <strong>${esc(m.company_name || m.company_id || '')}</strong>` : ' · pool'}</p>
@@ -6878,7 +6878,7 @@ const TVC_App = (function () {
                     <tr><th style="text-align:left;padding:4px 8px">HQ app version</th>
                         <td style="padding:4px 8px">${esc(hqVer)}</td></tr>
                     <tr><th style="text-align:left;padding:4px 8px">Vessel</th>
-                        <td style="padding:4px 8px">${esc(vessel ? vessel.name : '—')}</td></tr>
+                        <td style="padding:4px 8px">${esc(vessel ? vessel.vessel_id : '—')}</td></tr>
                     <tr><th style="text-align:left;padding:4px 8px">IMO</th>
                         <td style="padding:4px 8px">${esc(vessel?.imo_no || '—')}</td></tr>
                     <tr><th style="text-align:left;padding:4px 8px">Delivery</th>
@@ -6903,7 +6903,7 @@ const TVC_App = (function () {
         table.classList.add('fleet-table--with-company');
     }
 
-    const ADMIN_FLEET_TABLE_HEAD = '<th>No</th><th>Company ID</th><th>Ship\'s Name</th><th>IMO No</th><th>Delivery</th><th class="fleet-cell-ver">Version</th><th class="fleet-cell-docs">Docs</th>';
+    const ADMIN_FLEET_TABLE_HEAD = '<th>No</th><th>Company ID</th><th>Vessel ID</th><th>IMO No</th><th>Delivery</th><th class="fleet-cell-ver">Version</th><th class="fleet-cell-docs">Docs</th>';
     const ADMIN_FLEET_COLSPAN = 7;
 
     function vesselDocsRecordId(companyId, vesselId) {
@@ -6997,7 +6997,7 @@ const TVC_App = (function () {
 
         const search = document.getElementById('fleetSearch');
         if (search) {
-            search.placeholder = 'Search ship name / IMO No…';
+            search.placeholder = 'Search vessel ID / IMO No…';
             search.oninput = () => TVC_App.setAdminSearch(search.value);
             if (search.value !== (state.adminSearch || '')) search.value = state.adminSearch || '';
         }
@@ -7018,7 +7018,7 @@ const TVC_App = (function () {
             return;
         }
 
-        const rows = typeof TVC_AdminRegistry !== 'undefined'
+        let rows = typeof TVC_AdminRegistry !== 'undefined'
             ? TVC_AdminRegistry.listVessels({
                 search: state.adminSearch || '',
                 companyId: listCompanyId,
@@ -7030,6 +7030,8 @@ const TVC_App = (function () {
             refreshSearchClearUi(document.getElementById('fleetListPanel') || document);
             return;
         }
+        const listAllCompanies = listCompanyId === ADMIN_COMPANY_FILTER_ALL;
+        rows = sortFleetListRows(rows, { companyFilterAll: listAllCompanies });
         body.innerHTML = rows.map((v, i) => {
             const sel = v.vessel_id === state.selectedAdminVesselId
                 && v.company_id === state.selectedAdminCompanyId ? ' selected' : '';
@@ -7040,7 +7042,7 @@ const TVC_App = (function () {
             return `<tr class="fleet-row${sel}" onclick="TVC_App.selectAdminVessel('${escAttr(v.company_id)}','${escAttr(v.vessel_id)}')">
                 <td>${i + 1}</td>
                 <td>${esc(v.company_id || '—')}</td>
-                <td><strong>${esc(v.name)}</strong>${inactive}</td>
+                <td><strong>${esc(v.vessel_id)}</strong>${inactive}</td>
                 <td>${esc(v.imo_no || '—')}</td>
                 <td>${esc(v.delivery || '—')}</td>
                 <td class="fleet-cell-ver">${esc(appVer)}</td>
@@ -7160,7 +7162,7 @@ const TVC_App = (function () {
     function adminRegistryManifestVessels(companyId) {
         return adminRegistryActiveVesselRows(companyId).map(v => ({
             vessel_id: v.vessel_id,
-            name: v.name,
+            name: v.vessel_id,
             code: v.code,
             imo_no: v.imo_no,
             delivery: v.delivery,
@@ -7189,7 +7191,7 @@ const TVC_App = (function () {
             `<option value="${escAttr(c.company_id)}"${c.company_id === companyId ? ' selected' : ''}>${esc(c.name)} (${esc(c.company_id)})${c.status === 'inactive' ? ' [inactive]' : ''}</option>`
         ).join('') || '<option value="">—</option>';
         const vesselOpts = vessels.map(v =>
-            `<option value="${escAttr(v.vessel_id)}"${v.vessel_id === vesselId ? ' selected' : ''}>${esc(v.name)}${v.status === 'inactive' ? ' [inactive]' : ''}</option>`
+            `<option value="${escAttr(v.vessel_id)}"${v.vessel_id === vesselId ? ' selected' : ''}>${esc(v.vessel_id)}${v.status === 'inactive' ? ' [inactive]' : ''}</option>`
         ).join('') || '<option value="">—</option>';
         host.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
@@ -7349,7 +7351,7 @@ const TVC_App = (function () {
         }
         const rows = vessels.map(v => `<tr>
             <td style="padding:4px 8px">${esc(v.vessel_id || '—')}</td>
-            <td style="padding:4px 8px">${esc(v.name || '—')}</td>
+            <td style="padding:4px 8px">${esc(v.vessel_id || '—')}</td>
             <td style="padding:4px 8px">${esc(v.imo_no || '—')}</td>
             <td style="padding:4px 8px" class="muted">${esc(typeof TVC_AdminRegistry.formatVesselSetupVersion === 'function'
                 ? TVC_AdminRegistry.formatVesselSetupVersion(v.deploy) : '—')}</td>
@@ -7494,7 +7496,7 @@ const TVC_App = (function () {
             ? TVC_AdminRegistry.listVessels({ companyId, includeInactive: false })
             : [];
         return vessels.map(v =>
-            `<option value="${escAttr(v.vessel_id)}"${v.vessel_id === selectedId ? ' selected' : ''}>${esc(v.name)}</option>`
+            `<option value="${escAttr(v.vessel_id)}"${v.vessel_id === selectedId ? ' selected' : ''}>${esc(v.vessel_id)}</option>`
         ).join('') || '<option value="">—</option>';
     }
 
@@ -8408,6 +8410,36 @@ const TVC_App = (function () {
         }
     }
 
+    function enrichFleetRowCompanyCode(v) {
+        if (v.company_code) return v;
+        const cid = typeof TVC_Fleet !== 'undefined'
+            ? TVC_Fleet.vesselCompanyId(v)
+            : String(v.company_id || '').trim();
+        const c = typeof TVC_AdminRegistry !== 'undefined' && cid
+            ? TVC_AdminRegistry.getCompany(cid)
+            : null;
+        return { ...v, company_code: c?.company_code || '' };
+    }
+
+    function sortFleetListRows(vessels, { companyFilterAll = false } = {}) {
+        const sortKey = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.regCodeSortKey.bind(TVC_AdminRegistry)
+            : (v) => {
+                const n = Number(String(v ?? '').trim());
+                return Number.isInteger(n) && n >= 1 && n <= 200 ? n : 9999;
+            };
+        const rows = vessels.map(enrichFleetRowCompanyCode);
+        return [...rows].sort((a, b) => {
+            if (companyFilterAll) {
+                const cc = sortKey(a.company_code) - sortKey(b.company_code);
+                if (cc) return cc;
+            }
+            const vc = sortKey(a.code) - sortKey(b.code);
+            if (vc) return vc;
+            return String(a.id || a.vessel_id || '').localeCompare(String(b.id || b.vessel_id || ''));
+        });
+    }
+
     function adminStatusOptions(selected) {
         const opts = TVC_AdminRegistry?.STATUS_OPTS || ['active', 'inactive'];
         return opts.map(s =>
@@ -8429,6 +8461,12 @@ const TVC_App = (function () {
         const hqSuggest = !isEdit && typeof TVC_AccountProvisioning !== 'undefined'
             ? TVC_AccountProvisioning.suggestCompanyHqUsername(company?.company_id || '', company?.contact_email || '')
             : '';
+        const companyCodeUsed = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.usedCompanyCodes(isEdit ? company?.company_id : null)
+            : new Set();
+        const companyCodeOpts = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.regCodeSelectOptions(companyCodeUsed, company?.company_code)
+            : '';
         host.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">${isEdit ? 'Edit company' : 'Add company'}</h3>
@@ -8439,6 +8477,8 @@ const TVC_App = (function () {
                         placeholder="e.g. DAEMYUNG" value="${escAttr(company?.company_id || '')}">
                 </label>
                 <label>Status<select name="status">${adminStatusOptions(company?.status || 'active')}</select></label>
+                <label>Company Code
+                    <select name="company_code" required>${companyCodeOpts}</select></label>
                 ${adminRegistryLoginFields(company?.hq_login, isEdit, { suggest: hqSuggest })}
                 <label class="span2">Name (KR)
                     <input name="name" required placeholder="e.g. 대명상선" value="${escAttr(company?.name || '')}">
@@ -8502,6 +8542,12 @@ const TVC_App = (function () {
         const masterSuggest = !isEdit && selCompanyId && typeof TVC_AccountProvisioning !== 'undefined'
             ? TVC_AccountProvisioning.suggestVesselMasterUsername(selCompanyId, vessel?.vessel_id || '')
             : '';
+        const vesselCodeUsed = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.usedVesselCodes(selCompanyId, isEdit ? vessel?.vessel_id : null)
+            : new Set();
+        const vesselCodeOpts = typeof TVC_AdminRegistry !== 'undefined'
+            ? TVC_AdminRegistry.regCodeSelectOptions(vesselCodeUsed, vessel?.code)
+            : '';
         host.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">${isEdit ? 'Edit vessel' : 'Add vessel'}</h3>
@@ -8514,10 +8560,8 @@ const TVC_App = (function () {
                 </label>
                 <label>Status<select name="status">${adminStatusOptions(vessel?.status || 'active')}</select></label>
                 ${adminRegistryLoginFields(vessel?.master_login, isEdit, { suggest: masterSuggest })}
-                <label class="span2">Name
-                    <input name="name" required value="${escAttr(vessel?.name || '')}">
-                </label>
-                <label>Code<input name="code" placeholder="01" value="${escAttr(vessel?.code || '')}"></label>
+                <label>Code
+                    <select name="code" required>${vesselCodeOpts}</select></label>
                 <label>IMO No<input name="imo_no" placeholder="9297711" value="${escAttr(vessel?.imo_no || '')}"></label>
                 <label>Delivery<input name="delivery" type="date" value="${escAttr(vessel?.delivery || '')}"></label>
                 <label class="span2">Notes
@@ -8584,6 +8628,7 @@ const TVC_App = (function () {
         const input = {
             _edit: isEdit,
             company_id: fd.get('company_id'),
+            company_code: fd.get('company_code'),
             name: fd.get('name'),
             name_en: fd.get('name_en'),
             status: fd.get('status'),
@@ -8641,7 +8686,6 @@ const TVC_App = (function () {
         const input = {
             _edit: isEdit,
             vessel_id: fd.get('vessel_id'),
-            name: fd.get('name'),
             code: fd.get('code'),
             imo_no: fd.get('imo_no'),
             delivery: fd.get('delivery'),
@@ -8663,7 +8707,7 @@ const TVC_App = (function () {
                         await TVC_AccountProvisioning.saveVesselMasterLogin(companyId, vessel.vessel_id, {
                             username,
                             password: loginPassword,
-                            display_name: `${vessel.name} Master`,
+                            display_name: `${vessel.vessel_id} Master`,
                         });
                     }
                 } else if (loginUsername || loginPassword) {
@@ -8673,7 +8717,7 @@ const TVC_App = (function () {
                     await TVC_AccountProvisioning.saveVesselMasterLogin(companyId, vessel.vessel_id, {
                         username: loginUsername,
                         password: loginPassword,
-                        display_name: `${vessel.name} Master`,
+                        display_name: `${vessel.vessel_id} Master`,
                     });
                 }
             }
@@ -8769,7 +8813,7 @@ const TVC_App = (function () {
         ensureAdminFleetPanelLayout();
         const search = document.getElementById('fleetSearch');
         if (search) {
-            search.placeholder = 'Search ship name / IMO No…';
+            search.placeholder = 'Search vessel ID / IMO No…';
             search.oninput = () => TVC_App.setFleetSearch(search.value);
             if (search.value !== (state.fleetSearch || '')) search.value = state.fleetSearch || '';
         }
@@ -8800,12 +8844,13 @@ const TVC_App = (function () {
         }
         const q = (state.fleetSearch || '').toLowerCase();
         if (q) vessels = vessels.filter(v =>
-            (v.name || '').toLowerCase().includes(q) ||
+            (v.id || '').toLowerCase().includes(q) ||
             (v.imo_no || '').toLowerCase().includes(q) ||
             (v.code || '').toLowerCase().includes(q) ||
-            (v.id || '').toLowerCase().includes(q) ||
             (TVC_Fleet.vesselCompanyId(v) || '').toLowerCase().includes(q)
         );
+        const companyFilterAll = !companyFilter || companyFilter === ADMIN_COMPANY_FILTER_ALL;
+        vessels = sortFleetListRows(vessels, { companyFilterAll });
         state.fleet = vessels;
 
         if (!vessels.length) {
@@ -8819,7 +8864,7 @@ const TVC_App = (function () {
             return `<tr class="fleet-row${sel}" onclick="TVC_App.selectVessel('${escAttr(v.id)}')">
                 <td>${i + 1}</td>
                 <td>${esc(companyId)}</td>
-                <td><strong>${esc(v.name)}</strong></td>
+                <td><strong>${esc(v.id)}</strong></td>
                 <td>${esc(v.imo_no || '—')}</td>
                 <td>${esc(v.delivery || '—')}</td>
                 <td class="fleet-cell-ver">${esc(hqFleetAppVersion(v))}</td>
@@ -8844,7 +8889,7 @@ const TVC_App = (function () {
                 return {
                     vesselId: row.vessel_id || vid,
                     companyId: row.company_id || cid,
-                    name: row.name || vid,
+                    name: row.vessel_id || vid,
                     imo: row.imo_no || '',
                 };
             }

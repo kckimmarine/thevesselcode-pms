@@ -1,8 +1,8 @@
 {
   "vessel_id": "LAB_SHIP",
-  "name": "TVC Lab Ship",
+  "name": "LAB_SHIP",
   "company_id": "TVC_LAB",
-  "code": "LAB",
+  "code": "1",
   "imo_no": "9999999",
   "delivery": "2026-01-01",
   "status": "active",

@@ -9,6 +9,67 @@ const TVC_AdminRegistry = (function () {
     const VESSEL_SKUS = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
     const TVC_LAB_COMPANY_ID = 'TVC_LAB';
     const TVC_LAB_VESSEL_ID = 'LAB_SHIP';
+    const REG_CODE_MIN = 1;
+    const REG_CODE_MAX = 200;
+
+    function parseRegCode(val) {
+        const s = String(val ?? '').trim();
+        if (!s) return null;
+        const n = Number(s);
+        if (!Number.isInteger(n) || n < REG_CODE_MIN || n > REG_CODE_MAX) return null;
+        return n;
+    }
+
+    function normalizeRegCode(val) {
+        const n = parseRegCode(val);
+        return n == null ? '' : String(n);
+    }
+
+    function regCodeSortKey(val) {
+        const n = parseRegCode(val);
+        return n == null ? 9999 : n;
+    }
+
+    function usedCompanyCodes(excludeCompanyId) {
+        const used = new Set();
+        for (const c of _cache?.companies || []) {
+            if (excludeCompanyId && c.company_id === excludeCompanyId) continue;
+            const n = parseRegCode(c.company_code);
+            if (n != null) used.add(n);
+        }
+        return used;
+    }
+
+    function usedVesselCodes(companyId, excludeVesselId) {
+        const used = new Set();
+        const company = getCompany(companyId);
+        for (const v of company?.vessels || []) {
+            if (excludeVesselId && v.vessel_id === excludeVesselId) continue;
+            const n = parseRegCode(v.code);
+            if (n != null) used.add(n);
+        }
+        return used;
+    }
+
+    function regCodeSelectOptions(usedSet, selectedVal) {
+        const selected = parseRegCode(selectedVal);
+        let html = '<option value="">—</option>';
+        for (let i = REG_CODE_MIN; i <= REG_CODE_MAX; i++) {
+            const taken = usedSet.has(i) && i !== selected;
+            html += `<option value="${i}"${i === selected ? ' selected' : ''}${taken ? ' disabled' : ''}>${i}</option>`;
+        }
+        return html;
+    }
+
+    function sortVesselRows(rows) {
+        return [...rows].sort((a, b) => {
+            const cc = regCodeSortKey(a.company_code) - regCodeSortKey(b.company_code);
+            if (cc) return cc;
+            const vc = regCodeSortKey(a.code) - regCodeSortKey(b.code);
+            if (vc) return vc;
+            return String(a.vessel_id || '').localeCompare(String(b.vessel_id || ''));
+        });
+    }
 
     let _cache = null;
 
@@ -138,6 +199,7 @@ const TVC_AdminRegistry = (function () {
     function normalize(data) {
         const companies = (data.companies || []).map(c => ({
             company_id: cleanId(c.company_id),
+            company_code: normalizeRegCode(c.company_code),
             name: String(c.name || c.company_id || '').trim(),
             name_en: String(c.name_en || '').trim(),
             status: normalizeStatus(c.status),
@@ -149,10 +211,12 @@ const TVC_AdminRegistry = (function () {
             contract: normalizeContract(c.contract),
             deploy: normalizeDeploy(c.deploy, { isVessel: false }),
             hq_login: normalizeLoginAccount(c.hq_login),
-            vessels: (c.vessels || []).map(v => ({
-                vessel_id: cleanId(v.vessel_id || v.id),
-                name: String(v.name || v.vessel_id || '').trim(),
-                code: String(v.code || '').trim(),
+            vessels: (c.vessels || []).map(v => {
+                const vesselId = cleanId(v.vessel_id || v.id);
+                return {
+                vessel_id: vesselId,
+                name: vesselId,
+                code: normalizeRegCode(v.code),
                 imo_no: String(v.imo_no || '').trim(),
                 delivery: String(v.delivery || '').trim().slice(0, 10),
                 status: normalizeStatus(v.status),
@@ -160,7 +224,8 @@ const TVC_AdminRegistry = (function () {
                 notes: String(v.notes || '').trim(),
                 deploy: normalizeDeploy(v.deploy, { isVessel: true }),
                 master_login: normalizeLoginAccount(v.master_login),
-            })),
+            };
+            }),
         })).filter(c => c.company_id);
         return {
             version: data.version || 1,
@@ -200,21 +265,21 @@ const TVC_AdminRegistry = (function () {
                     ...v,
                     company_name: c.name,
                     company_id: c.company_id,
+                    company_code: c.company_code || '',
                     deploy: v.deploy || normalizeDeploy({}, { isVessel: true }),
                 });
             }
         }
         if (q) {
             rows = rows.filter(v =>
-                (v.name || '').toLowerCase().includes(q)
-                || (v.vessel_id || '').toLowerCase().includes(q)
+                (v.vessel_id || '').toLowerCase().includes(q)
                 || (v.imo_no || '').toLowerCase().includes(q)
-                || (v.code || '').toLowerCase().includes(q)
+                || String(v.code || '').toLowerCase().includes(q)
                 || (v.company_id || '').toLowerCase().includes(q)
                 || (v.company_name || '').toLowerCase().includes(q)
             );
         }
-        return rows;
+        return sortVesselRows(rows);
     }
 
     function getCompany(companyId) {
@@ -356,6 +421,14 @@ const TVC_AdminRegistry = (function () {
             return 'Company ID is required.';
         }
         if (!name) return 'Company name is required.';
+        const companyCode = normalizeRegCode(input.company_code);
+        if (!companyCode) return `Company code must be ${REG_CODE_MIN}–${REG_CODE_MAX}.`;
+        for (const c of _cache?.companies || []) {
+            if (isEdit && c.company_id === companyId) continue;
+            if (c.company_code === companyCode) {
+                return `Company code ${companyCode} is already used by "${c.company_id}".`;
+            }
+        }
         const startDate = String(input.contract_start_date || '').trim();
         if (startDate && !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
             return 'Contract start date must be YYYY-MM-DD.';
@@ -367,7 +440,6 @@ const TVC_AdminRegistry = (function () {
         const isEdit = !!opts.isEdit;
         const cid = cleanId(companyId);
         const vesselId = cleanId(input.vessel_id);
-        const name = String(input.name || '').trim();
         const company = getCompany(cid);
         if (!company) return 'Select a company first.';
         if (!isEdit) {
@@ -377,7 +449,14 @@ const TVC_AdminRegistry = (function () {
         } else if (!vesselId) {
             return 'Vessel ID is required.';
         }
-        if (!name) return 'Vessel name is required.';
+        const vesselCode = normalizeRegCode(input.code);
+        if (!vesselCode) return `Vessel code must be ${REG_CODE_MIN}–${REG_CODE_MAX}.`;
+        for (const v of company.vessels || []) {
+            if (isEdit && v.vessel_id === vesselId) continue;
+            if (v.code === vesselCode) {
+                return `Vessel code ${vesselCode} is already used in this company.`;
+            }
+        }
         const delivery = String(input.delivery || '').trim();
         if (delivery && !/^\d{4}-\d{2}-\d{2}$/.test(delivery)) {
             return 'Delivery date must be YYYY-MM-DD.';
@@ -394,6 +473,7 @@ const TVC_AdminRegistry = (function () {
         const termMonths = Number(input.contract_term_months);
         const next = {
             company_id: companyId,
+            company_code: normalizeRegCode(input.company_code),
             name: String(input.name || '').trim(),
             name_en: String(input.name_en || '').trim(),
             status: normalizeStatus(input.status),
@@ -424,6 +504,7 @@ const TVC_AdminRegistry = (function () {
             if (!next.contract.term_months) next.contract.term_months = prev.contract?.term_months || 0;
             if (!next.contract.fee_note) next.contract.fee_note = prev.contract?.fee_note || '';
             next.hq_login = prev.hq_login || null;
+            if (!next.company_code) next.company_code = prev.company_code || '';
             _cache.companies[idx] = next;
         } else {
             _cache.companies.push({ ...next, vessels: [] });
@@ -443,8 +524,8 @@ const TVC_AdminRegistry = (function () {
         const vesselId = cleanId(input.vessel_id);
         const next = {
             vessel_id: vesselId,
-            name: String(input.name || '').trim(),
-            code: String(input.code || '').trim(),
+            name: vesselId,
+            code: normalizeRegCode(input.code),
             imo_no: String(input.imo_no || '').trim(),
             delivery: String(input.delivery || '').trim().slice(0, 10),
             status: normalizeStatus(input.status),
@@ -560,6 +641,7 @@ const TVC_AdminRegistry = (function () {
             companies: (_cache.companies || []).map(c => {
                 const row = {
                     company_id: c.company_id,
+                    company_code: c.company_code || '',
                     name: c.name,
                     name_en: c.name_en || '',
                     status: c.status || 'active',
@@ -598,6 +680,7 @@ const TVC_AdminRegistry = (function () {
                 relPath: pathJoin('companies', c.company_id, 'company.json'),
                 data: {
                     company_id: c.company_id,
+                    company_code: c.company_code || '',
                     name: c.name,
                     name_en: c.name_en || '',
                     status: c.status || 'active',
@@ -703,6 +786,14 @@ const TVC_AdminRegistry = (function () {
         TVC_LAB_VESSEL_ID,
         isTvcLabCompany,
         getTvcLabDefaults,
+        parseRegCode,
+        normalizeRegCode,
+        regCodeSortKey,
+        usedCompanyCodes,
+        usedVesselCodes,
+        regCodeSelectOptions,
+        REG_CODE_MIN,
+        REG_CODE_MAX,
     };
 })();
 

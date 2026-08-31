@@ -65,7 +65,7 @@ const TVC_AdminPrint = (function () {
                 : '—';
             return `<tr>
                 <td>${i + 1}</td>
-                <td>${esc(v.name)}</td>
+                <td>${esc(v.vessel_id || v.name || '—')}</td>
                 <td>${esc(v.imo_no || '—')}</td>
                 <td>${esc(v.delivery || '—')}</td>
                 <td>${esc(v.status || 'active')}</td>
@@ -73,7 +73,7 @@ const TVC_AdminPrint = (function () {
             </tr>`;
         }).join('');
         return `<table>
-            <thead><tr><th>No</th><th>Ship's Name</th><th>IMO No</th><th>Delivery</th><th>Status</th><th>Version</th></tr></thead>
+            <thead><tr><th>No</th><th>Vessel ID</th><th>IMO No</th><th>Delivery</th><th>Status</th><th>Version</th></tr></thead>
             <tbody>${rows}</tbody>
         </table>`;
     }
@@ -113,7 +113,7 @@ const TVC_AdminPrint = (function () {
                 const setup = v.deploy?.setup_version || '—';
                 return `<tr>
                     <td>${i + 1}</td>
-                    <td>${esc(v.name)}</td>
+                    <td>${esc(v.vessel_id || v.name || '—')}</td>
                     <td>${esc(v.imo_no || '—')}</td>
                     <td>${esc(v.delivery || '—')}</td>
                     <td>${esc(v.status || 'active')}</td>
@@ -125,7 +125,7 @@ const TVC_AdminPrint = (function () {
                 <h2>${esc(c.name)} (${esc(c.company_id)}) · HQ ${esc(hqVer)} · ${vessels.length} vessel(s)</h2>
                 <p class="meta">Status: ${esc(c.status)} · Setup: ${esc(c.deploy?.setup_version || '—')} · Sent: ${esc(c.deploy?.setup_sent_at || '—')}</p>
                 <table>
-                    <thead><tr><th>No</th><th>Ship's Name</th><th>IMO</th><th>Delivery</th><th>Status</th><th>Setup ver</th><th>Version</th></tr></thead>
+                    <thead><tr><th>No</th><th>Vessel ID</th><th>IMO</th><th>Delivery</th><th>Status</th><th>Setup ver</th><th>Version</th></tr></thead>
                     <tbody>${vrows}</tbody>
                 </table>`;
         }).join('');

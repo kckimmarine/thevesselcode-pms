@@ -1,9 +1,10 @@
 {
   "version": 1,
-  "updated_at": "2026-08-26",
+  "updated_at": "2026-08-31",
   "companies": [
     {
       "company_id": "TVC_LAB",
+      "company_code": "2",
       "name": "TVC 내부 QA",
       "name_en": "TVC Lab",
       "status": "active",
@@ -11,8 +12,8 @@
       "vessels": [
         {
           "vessel_id": "LAB_SHIP",
-          "name": "TVC Lab Ship",
-          "code": "LAB",
+          "name": "LAB_SHIP",
+          "code": "1",
           "imo_no": "9999999",
           "delivery": "2026-01-01",
           "status": "active",
@@ -44,6 +45,7 @@
     },
     {
       "company_id": "DAEMYUNG",
+      "company_code": "1",
       "name": "대명상선",
       "name_en": "Daemyung",
       "status": "active",
@@ -52,7 +54,7 @@
         {
           "vessel_id": "INCHEON CHEMI",
           "name": "INCHEON CHEMI",
-          "code": "01",
+          "code": "1",
           "imo_no": "9297711",
           "delivery": "2003-09-18",
           "status": "active",
@@ -73,7 +75,7 @@
         {
           "vessel_id": "QUARTERBACK J",
           "name": "QUARTERBACK J",
-          "code": "02",
+          "code": "2",
           "imo_no": "9264879",
           "delivery": "2003-01-29",
           "status": "active"
@@ -81,7 +83,7 @@
         {
           "vessel_id": "GOLDSTAR SHINE",
           "name": "GOLDSTAR SHINE",
-          "code": "03",
+          "code": "3",
           "imo_no": "9279707",
           "delivery": "2004-09-27",
           "status": "active"
@@ -89,7 +91,7 @@
         {
           "vessel_id": "VALIANT",
           "name": "VALIANT",
-          "code": "04",
+          "code": "4",
           "imo_no": "9274288",
           "delivery": "2005-01-20",
           "status": "active"

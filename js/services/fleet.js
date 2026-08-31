@@ -10,10 +10,10 @@ const TVC_Fleet = (function () {
 
     /** 초기 Fleet — HQ 등록 선박 (company: DAEMYUNG) */
     const DEFAULT_FLEET = [
-        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '01', imo_no: '9297711', delivery: '2003-09-18', company_id: COMPANY_ID },
-        { id: 'QUARTERBACK J', name: 'QUARTERBACK J', code: '02', imo_no: '9264879', delivery: '2003-01-29', company_id: COMPANY_ID },
-        { id: 'GOLDSTAR SHINE', name: 'GOLDSTAR SHINE', code: '03', imo_no: '9279707', delivery: '2004-09-27', company_id: COMPANY_ID },
-        { id: 'VALIANT', name: 'VALIANT', code: '04', imo_no: '9274288', delivery: '2005-01-20', company_id: COMPANY_ID },
+        { id: 'INCHEON CHEMI', name: 'INCHEON CHEMI', code: '1', company_code: '1', imo_no: '9297711', delivery: '2003-09-18', company_id: COMPANY_ID },
+        { id: 'QUARTERBACK J', name: 'QUARTERBACK J', code: '2', company_code: '1', imo_no: '9264879', delivery: '2003-01-29', company_id: COMPANY_ID },
+        { id: 'GOLDSTAR SHINE', name: 'GOLDSTAR SHINE', code: '3', company_code: '1', imo_no: '9279707', delivery: '2004-09-27', company_id: COMPANY_ID },
+        { id: 'VALIANT', name: 'VALIANT', code: '4', company_code: '1', imo_no: '9274288', delivery: '2005-01-20', company_id: COMPANY_ID },
     ];
 
     /** 예전 테스트 Fleet — HQ 목록에서 제거 */
@@ -35,13 +35,21 @@ const TVC_Fleet = (function () {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(vessels));
     }
 
+    function regCodeSortKey(val) {
+        const s = String(val ?? '').trim();
+        if (!s) return 9999;
+        const n = Number(s);
+        if (!Number.isInteger(n) || n < 1 || n > 200) return 9999;
+        return n;
+    }
+
     function sortFleet(fleet) {
-        const rank = new Map(FLEET_ORDER.map((id, i) => [id, i]));
         return [...fleet].sort((a, b) => {
-            const ra = rank.has(a.id) ? rank.get(a.id) : 999;
-            const rb = rank.has(b.id) ? rank.get(b.id) : 999;
-            if (ra !== rb) return ra - rb;
-            return String(a.name || a.id).localeCompare(String(b.name || b.id));
+            const cc = regCodeSortKey(a.company_code) - regCodeSortKey(b.company_code);
+            if (cc) return cc;
+            const vc = regCodeSortKey(a.code) - regCodeSortKey(b.code);
+            if (vc) return vc;
+            return String(a.id || '').localeCompare(String(b.id || ''));
         });
     }
 
@@ -64,7 +72,7 @@ const TVC_Fleet = (function () {
         if (!id) return null;
         const hit = getAll().find(v => v.id === id);
         if (hit) return hit;
-        return { id, name: id.replace(/_/g, ' '), code: id.split('_').pop() || '—', imo_no: '—', delivery: '—' };
+        return { id, name: id, code: id.split('_').pop() || '—', imo_no: '—', delivery: '—' };
     }
 
     async function ensureFleet() {
@@ -80,7 +88,7 @@ const TVC_Fleet = (function () {
         if (seedVessel && !fleet.some(v => v.id === seedVessel)) {
             fleet.push({
                 id: seedVessel,
-                name: resolveById(seedVessel)?.name || seedVessel.replace(/_/g, ' '),
+                name: seedVessel,
                 code: seedVessel.split('_').pop() || '—',
                 imo_no: '—',
                 delivery: '—',
@@ -216,7 +224,7 @@ const TVC_Fleet = (function () {
             const prev = getAll().find(v => v.id === id) || DEFAULT_FLEET.find(v => v.id === id);
             upsert(prev ? { ...prev, id, company_id: prev.company_id || licenseCompanyId() } : {
                 id,
-                name: id.replace(/_/g, ' '),
+                name: id,
                 code: '—',
                 imo_no: '—',
                 delivery: '—',
@@ -236,11 +244,12 @@ const TVC_Fleet = (function () {
             upsert({
                 ...(prev || {}),
                 id,
-                name: String(r.name || prev?.name || id).trim(),
+                name: id,
                 code: String(r.code || prev?.code || '—').trim() || '—',
                 imo_no: String(r.imo_no || prev?.imo_no || '—').trim() || '—',
                 delivery: String(r.delivery || prev?.delivery || '—').trim().slice(0, 10) || '—',
                 company_id: String(r.company_id || prev?.company_id || licenseCompanyId()).trim() || licenseCompanyId(),
+                company_code: String(r.company_code || prev?.company_code || '').trim(),
             });
         }
         return getAll();
@@ -264,11 +273,12 @@ const TVC_Fleet = (function () {
             upsert({
                 ...(prev || {}),
                 id,
-                name: String(r.name || prev?.name || id).trim(),
+                name: id,
                 code: String(r.code || prev?.code || '—').trim() || '—',
                 imo_no: String(r.imo_no || prev?.imo_no || '—').trim() || '—',
                 delivery: String(r.delivery || prev?.delivery || '—').trim().slice(0, 10) || '—',
                 company_id: String(r.company_id || prev?.company_id || licenseCompanyId()).trim() || licenseCompanyId(),
+                company_code: String(r.company_code || prev?.company_code || '').trim(),
             });
         }
         return getAll();
