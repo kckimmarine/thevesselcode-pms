@@ -458,8 +458,8 @@ const TVC_SpareMenu = (function () {
         <th class="spare-req-list-th-submitted" rowspan="2">Reported Date</th>
         <th class="spare-req-list-th-status" rowspan="2">Status</th>
         <th class="spare-req-list-th-group" colspan="2">Received</th>
-        <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2" title="${SPARE_COL_WAIT_TITLE}">O/S</th>
-        <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2">Total<span class="spare-head-sub">Data</span></th>
+        <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2" title="${SPARE_REQ_LIST_OS_TITLE}">O/S</th>
+        <th class="spare-req-list-th-num spare-col-head-stack" rowspan="2" title="${SPARE_REQ_LIST_TOTAL_TITLE}">Total<span class="spare-head-sub">Data</span></th>
         </tr>
         <tr>
         <th class="spare-req-list-th-sub">Date</th>
@@ -479,6 +479,8 @@ const TVC_SpareMenu = (function () {
     const SPARE_COL_COS_TITLE = 'Consumption';
     const SPARE_COL_WAIT = 'O/S';
     const SPARE_COL_WAIT_TITLE = 'Outstanding (Req − Rcvd)';
+    const SPARE_REQ_LIST_OS_TITLE = 'Outstanding lines (Rcvd < Eval)';
+    const SPARE_REQ_LIST_TOTAL_TITLE = 'Total spare lines in requisition';
     const SPARE_COL_NEED = 'Need';
     const SPARE_COL_NEED_TITLE = 'Need';
     const SPARE_COL_REQ = 'Req';
@@ -6137,12 +6139,18 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqListTotalData(req) {
-        return (req.lines || []).reduce((sum, l) => sum + (Number(l.qty_requested) || 0), 0);
+        return reqLineCount(req);
     }
 
     function reqLineTargetQty(line) {
         if (!line) return 0;
         return line.qty_approved != null ? (Number(line.qty_approved) || 0) : (Number(line.qty_requested) || 0);
+    }
+
+    /** Requisition list O/S — spare line count where Rcvd < Eval. */
+    function reqLineOutstandingByEval(line) {
+        if (!line) return false;
+        return (Number(line.qty_received) || 0) < reqLineTargetQty(line);
     }
 
     /** Line has outstanding qty (Req − Rcvd) — same basis as Wait. */
@@ -6231,10 +6239,11 @@ const TVC_SpareMenu = (function () {
         return !!resolveCloseOsTargetReq(allReqs, m, st);
     }
 
-    /** Requisition List O/S — total unreceived qty (sum of Wait per line); 0 when O/S waived. */
+    /** Requisition List O/S — spare line count where Rcvd < Eval; 0 when O/S waived. */
     function reqListOutstandingData(req) {
         if (reqOsWaived(req)) return 0;
-        return reqRawOutstandingData(req);
+        const effective = reqEffectiveForWait(req);
+        return normalizeReqLines(effective?.lines).filter(l => reqLineOutstandingByEval(l)).length;
     }
 
     function reqListDateCell(val) {
