@@ -22512,10 +22512,28 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         });
     }
 
+    function spareItemHistoryParentModalsOpen() {
+        return ['spareReqWorkModal', 'spareReqListModal', 'spareConsumeModal', 'spareReceiveModal']
+            .some(id => {
+                const el = document.getElementById(id);
+                return el && !el.classList.contains('hidden');
+            });
+    }
+
+    function syncSpareItemHistoryModalStack() {
+        const el = document.getElementById('spareItemHistoryModal');
+        if (!el) return;
+        const open = !el.classList.contains('hidden');
+        el.classList.toggle('modal-over-req-work', open && spareItemHistoryParentModalsOpen());
+    }
+
     async function openSpareItemHistoryForFocus() {
         const id = getFocusedSpareId(getState());
-        if (!id) await TVC_Dialog.alert('Select a spare part row first.');
-        openSpareItemHistory(id);
+        if (!id) {
+            await TVC_Dialog.alert('Select a spare part row first.');
+            return;
+        }
+        await openSpareItemHistory(id);
     }
 
     function spareHistInvRowConsumeLogStub(h) {
@@ -22721,7 +22739,10 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function openSpareItemHistory(spareId, tab) {
         const st = getState();
         const spare = (st.spares || []).map(canon).find(s => String(s.id) === String(spareId));
-        if (!spare) await TVC_Dialog.alert('Spare part not found.');
+        if (!spare) {
+            await TVC_Dialog.alert('Spare part not found.');
+            return;
+        }
         setFocusedSpareId(st, spareId);
         syncSpareItemHistoryBtns();
         if (_shSpareId !== spareId) {
@@ -22733,6 +22754,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (tab) _shTab = tab;
         await renderSpareItemHistoryModal(true);
         showSpicsModal('spareItemHistoryModal');
+        syncSpareItemHistoryModalStack();
     }
 
     function setSpareItemHistoryTab(tab) {
@@ -22747,6 +22769,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         _shHistoryData = null;
         _shHistoryCacheKey = '';
         closeSpicsModal('spareItemHistoryModal');
+        syncSpareItemHistoryModalStack();
     }
 
     async function enterSpareItemNoteEdit() {

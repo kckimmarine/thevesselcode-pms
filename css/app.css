@@ -1374,6 +1374,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .modal { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; }
 .modal.modal-over-consume { z-index: 10050; }
 #spareItemHistoryModal { z-index: 10050; }
+#spareItemHistoryModal.modal-over-req-work { z-index: 10160; }
 #spareConsumeModal.modal-over-spare-hist,
 #spareReqWorkModal.modal-over-spare-hist { z-index: 10100; }
 #spareItemHistoryModal .modal-box.wp-modal {
