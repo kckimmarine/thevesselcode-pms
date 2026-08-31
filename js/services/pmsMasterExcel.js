@@ -53,7 +53,7 @@ const TVC_PmsMasterExcel = (function () {
         if (typeof TVC_Fleet !== 'undefined' && TVC_Fleet.getSelectedId()) {
             return TVC_Fleet.getSelectedId();
         }
-        return (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null)) || 'INCHEON CHEMI';
+        return (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null)) || 'TVC No1';
     }
 
     function sameVessel(row, vesselId) {
@@ -622,7 +622,7 @@ const TVC_PmsMasterExcel = (function () {
             TVC_DB.getAll('maintenance_groups').catch(() => []),
             TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null),
         ]);
-        let vesselId = opts.vesselId || meta || 'INCHEON CHEMI';
+        let vesselId = opts.vesselId || meta || 'TVC No1';
         if (!opts.vesselId && typeof TVC_Fleet !== 'undefined') {
             vesselId = TVC_Fleet.getSelectedId() || TVC_Fleet.getSelected()?.name || TVC_Fleet.PILOT_VESSEL_ID || vesselId;
         }
@@ -789,7 +789,7 @@ const TVC_PmsMasterExcel = (function () {
             || opts.selectedVesselId
             || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.getSelectedId() : null)
             || (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null))
-            || 'INCHEON CHEMI';
+            || 'TVC No1';
         const wb = await exportToWorkbook({ ...opts, department, vesselId });
         const buf = await wb.xlsx.writeBuffer();
         const filename = await masterExcelFilename(vesselId, department);

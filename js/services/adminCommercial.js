@@ -36,7 +36,7 @@
                 <thead><tr><th>Registry</th><th>용도</th></tr></thead>
                 <tbody>
                     <tr><td><strong>TVC_LAB</strong> / <strong>LAB_SHIP</strong></td><td>항상 active · App Update · Sync QA</td></tr>
-                    <tr><td>DAEMYUNG 등 Pilot</td><td>출시 시 inactive → 운영은 새 Company ID</td></tr>
+                    <tr><td>TVC 등 Pilot</td><td>출시 시 inactive → 운영은 새 Company ID</td></tr>
                     <tr><td>실제 계약 선사</td><td>deploy = 고객 배포 버전</td></tr>
                 </tbody>
             </table>

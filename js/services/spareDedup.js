@@ -241,7 +241,7 @@ const TVC_SpareDedup = (function () {
         if (!vesselIds.size) {
             const fallback = typeof TVC_MasterVesselScope !== 'undefined'
                 ? TVC_MasterVesselScope.defaultVesselId()
-                : 'INCHEON CHEMI';
+                : 'TVC No1';
             vesselIds.add(fallback);
         }
 
@@ -334,7 +334,7 @@ const TVC_SpareDedup = (function () {
             if (!vesselIds.size) {
                 vesselIds.add(typeof TVC_MasterVesselScope !== 'undefined'
                     ? TVC_MasterVesselScope.defaultVesselId()
-                    : 'INCHEON CHEMI');
+                    : 'TVC No1');
             }
             const groupsAfter = await TVC_DB.getAll('spare_groups').catch(() => []);
             for (const vid of vesselIds) {

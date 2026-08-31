@@ -1,23 +1,15 @@
-# THE VESSEL CODE — Paste keys when prompted; rest is automatic (INCHEON CHEMI pilot).
+# THE VESSEL CODE — Paste keys when prompted; rest is automatic (TVC No1 pilot).
 # Run from repo root:  .\deploy\QUICK-PASTE-SETUP.ps1
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent $PSScriptRoot
 $EnvFile = Join-Path $Root 'deploy\.env.deploy.local'
-$PilotVessel = 'INCHEON CHEMI'
+$PilotVessel = 'TVC No1'
 
 Write-Host ''
 Write-Host 'TVC-PMS Online Sync — Quick Paste Setup' -ForegroundColor Cyan
 Write-Host "Pilot vessel: $PilotVessel (one Supabase project for all vessels later)" -ForegroundColor Yellow
 Write-Host '================================================================' -ForegroundColor Cyan
-Write-Host ''
-Write-Host 'Supabase: Project Settings -> API Keys' -ForegroundColor Green
-Write-Host '  1) Project URL (https://xxxx.supabase.co)' -ForegroundColor Gray
-Write-Host '  2) service_role key (Reveal -> copy)' -ForegroundColor Gray
-Write-Host 'Supabase: Project Settings -> Database -> Connection string -> URI' -ForegroundColor Green
-Write-Host '  3) DATABASE_URL (postgresql://...)' -ForegroundColor Gray
-Write-Host 'Vercel: Account -> Tokens' -ForegroundColor Green
-Write-Host '  4) VERCEL_TOKEN' -ForegroundColor Gray
 Write-Host ''
 
 $supabaseUrl = Read-Host 'Paste SUPABASE_URL'
@@ -58,5 +50,5 @@ try {
 }
 
 Write-Host ''
-Write-Host 'If verify shows 404 for INCHEON CHEMI, setup succeeded (no package uploaded yet).' -ForegroundColor Yellow
+Write-Host 'If verify shows 404 for TVC No1, setup succeeded (no package uploaded yet).' -ForegroundColor Yellow
 Write-Host 'Test: Master Push to HQ -> HQ Pull from vessel.' -ForegroundColor Yellow

@@ -8471,7 +8471,7 @@ const TVC_App = (function () {
             <form class="orig-job-form" id="adminCompanyForm" onsubmit="event.preventDefault();TVC_App.saveAdminCompanyForm()">
                 <label>Company ID
                     <input name="company_id" required ${isEdit ? 'readonly class="wr-ro"' : ''}
-                        placeholder="e.g. DAEMYUNG" value="${escAttr(company?.company_id || '')}">
+                        placeholder="e.g. TVC" value="${escAttr(company?.company_id || '')}">
                 </label>
                 <label>Status<select name="status">${adminStatusOptions(company?.status || 'active')}</select></label>
                 <label>Company Code
@@ -8481,7 +8481,7 @@ const TVC_App = (function () {
                     <input name="name" required placeholder="e.g. 대명상선" value="${escAttr(company?.name || '')}">
                 </label>
                 <label class="span2">Name (EN)
-                    <input name="name_en" placeholder="e.g. Daemyung" value="${escAttr(company?.name_en || '')}">
+                    <input name="name_en" placeholder="e.g. The Vessel Code" value="${escAttr(company?.name_en || '')}">
                 </label>
                 <label class="span2">Address
                     <input name="address" placeholder="선사 주소" value="${escAttr(company?.address || '')}">
@@ -8553,7 +8553,7 @@ const TVC_App = (function () {
                 <label class="span2">Company<select name="company_id" ${isEdit ? 'disabled' : ''}>${companyOpts}</select></label>
                 <label>Vessel ID
                     <input name="vessel_id" required ${isEdit ? 'readonly class="wr-ro"' : ''}
-                        placeholder="e.g. INCHEON CHEMI" value="${escAttr(vessel?.vessel_id || '')}">
+                        placeholder="e.g. TVC No1" value="${escAttr(vessel?.vessel_id || '')}">
                 </label>
                 <label>Status<select name="status">${adminStatusOptions(vessel?.status || 'active')}</select></label>
                 ${adminRegistryLoginFields(vessel?.master_login, isEdit, { suggest: masterSuggest })}
@@ -8756,7 +8756,7 @@ const TVC_App = (function () {
     }
 
     function hqFleetCompanyId(user) {
-        return String(user?.company_id || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.licenseCompanyId() : 'DAEMYUNG')).trim();
+        return String(user?.company_id || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.licenseCompanyId() : 'TVC')).trim();
     }
 
     function hqFleetCompanySelectOptions(user, selectedFilter) {
@@ -9701,11 +9701,11 @@ const TVC_App = (function () {
         }
         if (pmsEx) {
             pmsEx.disabled = !canMaster;
-            pmsEx.title = canMaster ? 'PMS Master Excel Export → incheonchemi_pms_master_YYYYMMDD_001.xlsx' : pmsMasterExcelDeniedMessage();
+            pmsEx.title = canMaster ? 'PMS Master Excel Export → tvcno1_pms_master_YYYYMMDD_001.xlsx' : pmsMasterExcelDeniedMessage();
         }
         if (pmsIm) {
             pmsIm.disabled = !canMaster;
-            pmsIm.title = canMaster ? 'PMS Master Excel Import (incheonchemi_pms_master_YYYYMMDD_001.xlsx)' : pmsMasterExcelDeniedMessage();
+            pmsIm.title = canMaster ? 'PMS Master Excel Import (tvcno1_pms_master_YYYYMMDD_001.xlsx)' : pmsMasterExcelDeniedMessage();
         }
     }
 

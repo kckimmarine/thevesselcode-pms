@@ -93,7 +93,7 @@ const TVC_PostponeSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
-                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
                 direction: 'POSTPONE_REQUEST_TO_HQ',
                 package_type: 'POSTPONE_REPORT',
@@ -113,7 +113,7 @@ const TVC_PostponeSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
-                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
                 direction: 'POSTPONE_REPLY_HQ_TO_SHIP',
                 package_type: 'POSTPONE_REPORT_REPLY',

@@ -25,7 +25,7 @@ const TVC_MaintenancePlan = (function () {
 
     async function resolveVessel(user, data) {
         if (typeof TVC_MasterVesselScope === 'undefined') {
-            return data?.vessel_id || user?.vessel_id || 'INCHEON CHEMI';
+            return data?.vessel_id || user?.vessel_id || 'TVC No1';
         }
         return TVC_MasterVesselScope.resolve(user, {
             vesselId: data?.vessel_id || data?.vesselId,

@@ -17,7 +17,7 @@ const TVC_VesselProfileSync = (function () {
     function companyId() {
         if (typeof TVC_Fleet !== 'undefined' && TVC_Fleet.COMPANY_ID) return TVC_Fleet.COMPANY_ID;
         if (typeof TVC_License !== 'undefined' && TVC_License.COMPANY_ID) return TVC_License.COMPANY_ID;
-        return 'DAEMYUNG';
+        return 'TVC';
     }
 
     function normalizeProfile(raw = {}) {

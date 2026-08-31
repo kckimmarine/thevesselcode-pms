@@ -7,7 +7,7 @@ import { fileURLToPath } from 'url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENV_PATH = path.join(ROOT, 'deploy', '.env.deploy.local');
-const PILOT_VESSEL = 'INCHEON CHEMI';
+const PILOT_VESSEL = 'TVC No1';
 
 function loadEnv() {
     const out = {};

@@ -1,7 +1,7 @@
 -- THE VESSEL CODE — Supabase schema (paste into SQL Editor)
 -- Demo MVP: companies, vessels, user profiles + RLS
 --
--- Online sync pilot (INCHEON CHEMI only): use deploy/supabase-sync-pilot-incheon-chemi.sql
+-- Online sync pilot (TVC No1 only): use deploy/supabase-sync-pilot-tvc-no1.sql
 -- Full fleet seed below is for future HQ demo; do not run vessel inserts if pilot-only sync is desired.
 
 CREATE TABLE IF NOT EXISTS companies (
@@ -30,12 +30,12 @@ CREATE TABLE IF NOT EXISTS user_profiles (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- Seed: Daemyung pilot fleet
-INSERT INTO companies (id, name) VALUES ('DAEMYUNG', 'Daemyung Shipping')
+-- Seed: TVC pilot fleet
+INSERT INTO companies (id, name) VALUES ('TVC', 'The Vessel Code')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO vessels (id, company_id, name, imo_no, delivery) VALUES
-  ('INCHEON CHEMI', 'DAEMYUNG', 'INCHEON CHEMI', '9297711', '2003-09-18')
+  ('TVC No1', 'TVC', 'TVC No1', '9297711', '2003-09-18')
 ON CONFLICT (id) DO NOTHING;
 
 ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
@@ -53,7 +53,7 @@ CREATE POLICY "profiles_self_or_admin" ON user_profiles FOR SELECT USING (
 );
 
 -- After creating Auth users in Supabase Dashboard, insert profiles:
--- dm_user@thevesselcode.com  → HQ, company_id = DAEMYUNG
+-- dm_user@thevesselcode.com  → HQ, company_id = TVC
 -- admin@thevesselcode.com    → ADMIN, company_id = null
 
 -- Cloud sync storage metadata (ZIP packages: Master→HQ, HQ→Ship)

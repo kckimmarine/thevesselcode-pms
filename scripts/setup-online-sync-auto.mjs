@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * One-shot online sync setup for pilot vessel INCHEON CHEMI.
+ * One-shot online sync setup for pilot vessel TVC No1.
  * Reads deploy/.env.deploy.local (gitignored) and:
- *   1. Runs deploy/supabase-sync-pilot-incheon-chemi.sql
+ *   1. Runs deploy/supabase-sync-pilot-tvc-no1.sql
  *   2. Creates Storage bucket tvc-sync-packages (private)
  *   3. Sets Vercel env vars + triggers redeploy
  *   4. Runs verify-online-sync-api.mjs
@@ -16,8 +16,8 @@ import path from 'path';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENV_PATH = path.join(ROOT, 'deploy', '.env.deploy.local');
-const SQL_PATH = path.join(ROOT, 'deploy', 'supabase-sync-pilot-incheon-chemi.sql');
-const PILOT_VESSEL = 'INCHEON CHEMI';
+const SQL_PATH = path.join(ROOT, 'deploy', 'supabase-sync-pilot-tvc-no1.sql');
+const PILOT_VESSEL = 'TVC No1';
 const BUCKET = 'tvc-sync-packages';
 
 function loadEnv(filePath) {
@@ -46,7 +46,7 @@ function req(env, key) {
 
 async function runSql(env) {
     const dbUrl = req(env, 'DATABASE_URL');
-    console.log('\n[1/4] Running Supabase SQL (INCHEON CHEMI pilot only)...');
+    console.log('\n[1/4] Running Supabase SQL (TVC No1 pilot only)...');
     const r = spawnSync('npx', ['supabase', 'db', 'query', '-f', SQL_PATH, '--db-url', dbUrl], {
         cwd: ROOT,
         stdio: 'inherit',

@@ -3,7 +3,7 @@ const TVC_Seed = (function () {
     async function loadFromJson(data) {
         const ts = new Date().toISOString();
         const seedVessel = data.meta?.vessel_id
-            || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'INCHEON CHEMI');
+            || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'TVC No1');
         const jobs = (data.maintenance_jobs || []).map(j => ({
             ...j,
             vessel_id: j.vessel_id || seedVessel,

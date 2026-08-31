@@ -1,7 +1,7 @@
 /* 일회성·버전별 데이터 정리 — 구 vessel_id 및 PMS Sync 이력 제거 */
 const TVC_DataPurge = (function () {
     const LEGACY_VESSEL_ID = 'DM_CHEMICAL_01';
-    const PILOT_VESSEL_ID = typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'INCHEON CHEMI';
+    const PILOT_VESSEL_ID = typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'TVC No1';
     const PURGE_VERSION = '20260707_legacy_sync';
 
     const SYNC_AUDIT_RE = /📦\s*\[Export|📥\s*\[Import|\[Export\/|\[Import\/|PMS Sync|Sync Package/i;

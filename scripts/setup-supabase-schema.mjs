@@ -7,7 +7,7 @@ import { spawnSync } from 'child_process';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ENV_PATH = path.join(ROOT, 'deploy', '.env.deploy.local');
-const SQL_PATH = path.join(ROOT, 'deploy', 'supabase-sync-pilot-incheon-chemi.sql');
+const SQL_PATH = path.join(ROOT, 'deploy', 'supabase-sync-pilot-tvc-no1.sql');
 
 function loadEnv() {
     const out = {};
@@ -43,15 +43,15 @@ async function seedViaRest(env) {
         }
     }
 
-    await upsert('companies', [{ id: 'DAEMYUNG', name: 'Daemyung Shipping' }]);
+    await upsert('companies', [{ id: 'TVC', name: 'The Vessel Code' }]);
     await upsert('vessels', [{
-        id: 'INCHEON CHEMI',
-        company_id: 'DAEMYUNG',
-        name: 'INCHEON CHEMI',
+        id: 'TVC No1',
+        company_id: 'TVC',
+        name: 'TVC No1',
         imo_no: '9297711',
         delivery: '2003-09-18',
     }]);
-    console.log('Seeded companies + vessels (INCHEON CHEMI only) via REST.');
+    console.log('Seeded companies + vessels (TVC No1 only) via REST.');
 }
 
 async function main() {
@@ -86,12 +86,12 @@ async function main() {
         await seedViaRest(env);
         console.log('Note: sync_packages table still needs SQL (DATABASE_URL) or SQL Editor run once.');
         console.log(`Open: https://supabase.com/dashboard/project/wvgqzgiaajbxbamhvjgr/sql/new`);
-        console.log(`Paste file: deploy/supabase-sync-pilot-incheon-chemi.sql`);
+        console.log(`Paste file: deploy/supabase-sync-pilot-tvc-no1.sql`);
     } catch (e) {
         if (String(e.message).includes('does not exist') || String(e.message).includes('404')) {
             console.error('Tables not created yet. Need either:');
             console.error('  1) Add DATABASE_URL to deploy/.env.deploy.local (DB password from project create), or');
-            console.error('  2) Run deploy/supabase-sync-pilot-incheon-chemi.sql in Supabase SQL Editor once.');
+            console.error('  2) Run deploy/supabase-sync-pilot-tvc-no1.sql in Supabase SQL Editor once.');
         }
         throw e;
     }

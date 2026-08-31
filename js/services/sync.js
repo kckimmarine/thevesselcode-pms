@@ -221,7 +221,7 @@ const TVC_Sync = (function () {
         if (typeof TVC_License !== 'undefined') {
             return TVC_License.statusSync()?.companyId || TVC_License.COMPANY_ID;
         }
-        return 'DAEMYUNG';
+        return 'TVC';
     }
 
     /** Electron Pilot: company + vessel must match license */

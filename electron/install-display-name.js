@@ -68,7 +68,7 @@ function defaultSkuDisplayName(sku, app, explicitVersion) {
 }
 
 /**
- * Licensed display: TVC-PMS INCHEON CHEMI_Master v1.0.5 / TVC-PMS DAEMYUNG v1.0.5
+ * Licensed display: TVC-PMS TVC No1_Master v1.0.5 / TVC-PMS TVC v1.0.5
  */
 function computeLicensedDisplayName(status, app, explicitVersion) {
     const sku = String(status?.sku || '').toUpperCase();
@@ -82,7 +82,7 @@ function computeLicensedDisplayName(status, app, explicitVersion) {
     return defaultSkuDisplayName(sku, app, explicitVersion);
 }
 
-/** AppData folder name (no version): TVC-PMS INCHEON CHEMI_Master */
+/** AppData folder name (no version): TVC-PMS TVC No1_Master */
 function computeLicensedDataDirName(status) {
     const sku = String(status?.sku || '').toUpperCase();
     const companyId = sanitizeDisplayName(status?.companyId || '');
@@ -95,7 +95,7 @@ function computeLicensedDataDirName(status) {
     return '';
 }
 
-/** Setup.exe display filename: TVC-PMS INCHEON CHEMI_Master v1.0.5 Setup.exe */
+/** Setup.exe display filename: TVC-PMS TVC No1_Master v1.0.5 Setup.exe */
 function computeSetupExeName(status, app, explicitVersion) {
     const base = computeLicensedDisplayName(status, app, explicitVersion);
     if (status?.ok && (status.companyId || status.vesselId)) {

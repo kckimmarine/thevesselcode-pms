@@ -67,7 +67,7 @@ const TVC_Filename = (function () {
 
     /**
      * 4-token (no scope): {vessel}_{type}_{YYYYMMDD}_{seq}.{ext}
-     * e.g. incheonchemi_pms_master_20260804_001.xlsx
+     * e.g. tvcno1_pms_master_20260804_001.xlsx
      */
     async function buildFlat(opts = {}) {
         const vessel = vesselSlug(opts.vesselId);

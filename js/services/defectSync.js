@@ -107,7 +107,7 @@ const TVC_DefectSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
-                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_URGENT_TO_HQ',
                 package_type: 'DEFECT_CASE',
@@ -195,7 +195,7 @@ const TVC_DefectSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
-                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_REPLY_HQ_TO_SHIP',
                 package_type: 'DEFECT_CASE_REPLY',
@@ -419,7 +419,7 @@ const TVC_DefectSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
-                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_COMPLETION_TO_HQ',
                 package_type: 'DEFECT_CASE_COMPLETION',
@@ -438,7 +438,7 @@ const TVC_DefectSync = (function () {
         return {
             export_meta: {
                 vessel_id: vesselId,
-                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'DAEMYUNG',
+                company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
                 direction: 'DEFECT_CLOSE_HQ_TO_SHIP',
                 package_type: 'DEFECT_CASE_CLOSE',

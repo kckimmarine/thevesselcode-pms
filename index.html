@@ -238,8 +238,8 @@
                         <button type="button" id="actModifyBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobModify()">✏️ Modify</button>
                         <button type="button" id="actAppendBtn" class="btn btn-sm" onclick="TVC_App.openOrigJobAppend()">➕ Append</button>
                         <button type="button" id="actDeleteBtn" class="btn btn-sm btn-red" onclick="TVC_App.deleteOrigJob()">🗑 Delete</button>
-                        <button type="button" id="actPmsMasterExportBtn" class="btn btn-sm btn-excel hidden" onclick="TVC_App.exportPmsMasterExcel()" title="Export PMS Master Excel (incheonchemi_pms_master_YYYYMMDD_001.xlsx)">📤 Master Export</button>
-                        <button type="button" id="actPmsMasterImportBtn" class="btn btn-sm hidden" onclick="TVC_App.triggerPmsMasterImport()" title="Import PMS Master Excel (incheonchemi_pms_master_YYYYMMDD_001.xlsx)">📥 Master Import</button>
+                        <button type="button" id="actPmsMasterExportBtn" class="btn btn-sm btn-excel hidden" onclick="TVC_App.exportPmsMasterExcel()" title="Export PMS Master Excel (tvcno1_pms_master_YYYYMMDD_001.xlsx)">📤 Master Export</button>
+                        <button type="button" id="actPmsMasterImportBtn" class="btn btn-sm hidden" onclick="TVC_App.triggerPmsMasterImport()" title="Import PMS Master Excel (tvcno1_pms_master_YYYYMMDD_001.xlsx)">📥 Master Import</button>
                         <input type="file" id="pmsMasterImportFile" accept=".xlsx" class="hidden" onchange="TVC_App.importPmsMasterExcel(this.files[0]); this.value='';">
                         <div class="tab-toolbar-end">
                             <button type="button" class="btn btn-sm" onclick="TVC_App.printTabList('actual', false)">🖨 Print</button>
@@ -783,12 +783,12 @@
 <script src="js/services/adminRelease.js?v=20260818-admin-release"></script>
 <script src="js/services/stationSync.js?v=20260825-dialog-en"></script>
 <script src="js/services/onlineSync.js?v=20260831-bidir-sync"></script>
-<script src="js/services/fleet.js?v=20260831-pilot-only"></script>
+<script src="js/services/fleet.js?v=20260831-tvc-no1"></script>
 <script src="js/services/adminRegistry.js?v=20260831-pilot-only"></script>
 <script src="js/services/accountProvisioning.js?v=20260831-reg-codes"></script>
 <script src="js/services/masterVesselScope.js?v=20260813-vessel-master"></script>
 <script src="js/services/dataPurge.js?v=20260812-hq-history-dept"></script>
-<script src="js/services/seed.js?v=20260722-incheon-chemi"></script>
+<script src="js/services/seed.js?v=20260831-tvc-no1"></script>
 <script src="js/ui/listFilters.js?v=20260825-period-filter-ui"></script>
 <script src="js/ui/defectReport.js?v=20260825-dialog-en"></script>
 <script src="js/ui/workPermit.js?v=20260825-dialog-en"></script>

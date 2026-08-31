@@ -2,10 +2,10 @@
 'use strict';
 
 /** @deprecated Legacy pilot constants — seat license is source of truth for universal SKUs */
-const COMPANY_ID = 'DAEMYUNG';
-const PILOT_VESSEL_ID = 'INCHEON CHEMI';
+const COMPANY_ID = 'TVC';
+const PILOT_VESSEL_ID = 'TVC No1';
 const HQ_ALLOWED_VESSEL_IDS = [
-    'INCHEON CHEMI',
+    'TVC No1',
 ];
 
 const SKUS = {

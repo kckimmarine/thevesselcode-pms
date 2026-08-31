@@ -8,7 +8,7 @@ const TVC_SpareSync = (function () {
     function licensedCompanyId() {
         return (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId)
             ? TVC_Sync.licensedCompanyId()
-            : 'DAEMYUNG';
+            : 'TVC';
     }
 
     function exportDateTag() {

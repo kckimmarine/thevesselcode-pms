@@ -108,7 +108,7 @@ const TVC_SpareMasterExcel = (function () {
             || opts.selectedVesselId
             || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.getSelectedId() : null)
             || (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null))
-            || 'INCHEON CHEMI';
+            || 'TVC No1';
     }
 
     const PMS = () => (typeof TVC_PmsMasterExcel !== 'undefined' ? TVC_PmsMasterExcel : null);
@@ -491,7 +491,7 @@ const TVC_SpareMasterExcel = (function () {
             TVC_DB.getAll('spare_groups').catch(() => []),
             TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null),
         ]);
-        let vesselId = opts.vesselId || opts.selectedVesselId || meta || 'INCHEON CHEMI';
+        let vesselId = opts.vesselId || opts.selectedVesselId || meta || 'TVC No1';
         if (!opts.vesselId && !opts.selectedVesselId && typeof TVC_Fleet !== 'undefined') {
             vesselId = TVC_Fleet.getSelectedId() || TVC_Fleet.getSelected()?.name || TVC_Fleet.PILOT_VESSEL_ID || vesselId;
         }
@@ -659,7 +659,7 @@ const TVC_SpareMasterExcel = (function () {
             || opts.selectedVesselId
             || (typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.getSelectedId() : null)
             || (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null))
-            || 'INCHEON CHEMI';
+            || 'TVC No1';
         const persist = opts.persistCodes !== false && !opts.setupExport;
         if (opts.simplifyCodes !== false && persist && typeof TVC_SpareCode !== 'undefined') {
             await TVC_SpareCode.renumberVessel(vesselId, { department });

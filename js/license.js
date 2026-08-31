@@ -1,9 +1,9 @@
 /* THE VESSEL CODE — Renderer license bridge (Electron + browser dev) */
 const TVC_License = (function () {
-    const COMPANY_ID = 'DAEMYUNG';
-    const PILOT_VESSEL_ID = 'INCHEON CHEMI';
+    const COMPANY_ID = 'TVC';
+    const PILOT_VESSEL_ID = 'TVC No1';
     const HQ_ALLOWED_VESSEL_IDS = [
-        'INCHEON CHEMI',
+        'TVC No1',
     ];
 
     let _cache = null;

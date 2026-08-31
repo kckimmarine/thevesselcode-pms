@@ -44,16 +44,16 @@
       }
     },
     {
-      "company_id": "DAEMYUNG",
+      "company_id": "TVC",
       "company_code": "1",
-      "name": "대명상선",
-      "name_en": "Daemyung",
+      "name": "The Vessel Code",
+      "name_en": "The Vessel Code",
       "status": "active",
       "hq_sku": "HQ_OFFICE",
       "vessels": [
         {
-          "vessel_id": "INCHEON CHEMI",
-          "name": "INCHEON CHEMI",
+          "vessel_id": "TVC No1",
+          "name": "TVC No1",
           "code": "1",
           "imo_no": "9297711",
           "delivery": "2003-09-18",

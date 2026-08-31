@@ -64,7 +64,7 @@ const TVC_StationSync = (function () {
             vessel_id: (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || 'UNKNOWN',
             company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId)
                 ? TVC_Sync.licensedCompanyId()
-                : 'DAEMYUNG',
+                : 'TVC',
             schema_version: 6,
             source_format: 'CSV',
         };

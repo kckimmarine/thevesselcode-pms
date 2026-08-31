@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 /**
- * Verify online sync API for pilot vessel INCHEON CHEMI.
+ * Verify online sync API for pilot vessel TVC No1.
  * Usage: node scripts/verify-online-sync-api.mjs [baseUrl]
  */
 const BASE = (process.argv[2] || process.env.SYNC_API_BASE_URL || 'https://app.thevesselcode.com').replace(/\/+$/, '');
-const VESSEL = 'INCHEON CHEMI';
+const VESSEL = 'TVC No1';
 
 async function check(path, label) {
     const url = `${BASE}${path}`;
