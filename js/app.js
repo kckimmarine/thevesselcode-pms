@@ -14405,6 +14405,10 @@ const TVC_App = (function () {
             : `<input class="wr-ro tvc-date-input" value="${esc(val || '')}" readonly disabled>`;
     }
 
+    function wrEditableDateFieldInput(key, value) {
+        return `<input type="text" class="tvc-date-input" data-wf="${key}" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(value || '')}">`;
+    }
+
     function buildWorkReportPrintBody() {
         captureWorkReportForm();
         if (state._wrPage === '2') TVC_SpareMenu.persistWrSpareUsedParts();
@@ -15935,6 +15939,7 @@ const TVC_App = (function () {
                 if (type === 'number') return `<input type="number" class="wr-ro" data-wf="${key}" value="${v}" readonly tabindex="-1">`;
                 return `<input class="wr-ro" data-wf="${key}" value="${v}" readonly tabindex="-1">`;
             }
+            if (type === 'date') return wrEditableDateFieldInput(key, wf(key, val));
             if (type === 'number') return `<input type="number" data-wf="${key}" value="${esc(wf(key, val))}">`;
             return `<input data-wf="${key}" value="${esc(wf(key, val))}">`;
         };
@@ -16015,6 +16020,7 @@ const TVC_App = (function () {
                 if (type === 'number') return `<input type="number" class="wr-ro" data-wf="${key}" value="${v}" readonly tabindex="-1">`;
                 return `<input class="wr-ro" data-wf="${key}" value="${v}" readonly tabindex="-1">`;
             }
+            if (type === 'date') return wrEditableDateFieldInput(key, wf(key, val));
             if (type === 'number') return `<input type="number" data-wf="${key}" value="${esc(wf(key, val))}">`;
             return `<input data-wf="${key}" value="${esc(wf(key, val))}">`;
         };
