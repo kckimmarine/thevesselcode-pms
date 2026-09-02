@@ -1457,6 +1457,7 @@ const TVC_SpareMenu = (function () {
         const {
             hasContent = true,
             editMode = false,
+            inputId = 'sgh_g_criticalEquipment',
         } = opts;
         const val = criticalEquipmentLabel(h.criticalEquipment);
         if (!hasContent) {
@@ -1467,7 +1468,7 @@ const TVC_SpareMenu = (function () {
             const empty = !val;
             return `<span class="spare-gh-value${empty ? ' empty' : ''}">${esc(t)}</span>`;
         }
-        return `<select class="spare-gh-select" id="sgh_g_criticalEquipment" aria-label="Critical Equipment">
+        return `<select class="spare-gh-select" id="${escAttr(inputId)}" aria-label="Critical Equipment">
             <option value=""${val === '' ? ' selected' : ''}>—</option>
             <option value="Yes"${val === 'Yes' ? ' selected' : ''}>Yes</option>
             <option value="No"${val === 'No' ? ' selected' : ''}>No</option>
@@ -1573,6 +1574,19 @@ const TVC_SpareMenu = (function () {
 
     function effectiveGroupCriticalEquipment(st, groupLabel, deptScope, headerStore) {
         return groupDefHeader(st, groupLabel, undefined, headerStore, deptScope)?.criticalEquipment || '';
+    }
+
+    function resolvePlanHeaderCritical(st, group, department, equipment) {
+        const dept = department || st.department || '';
+        const label = String(group || '').trim();
+        if (!label) return '';
+        const h = resolveSpareHeaderFromGroup(st, {
+            groupKey: dept ? `${dept}|${label}` : label,
+            groupLabel: label,
+            equipment: String(equipment || '').trim(),
+            headerStore: 'pms',
+        });
+        return h?.criticalEquipment || '';
     }
 
     async function savePlanCriticalEquipment(rawVal) {
@@ -1993,11 +2007,10 @@ const TVC_SpareMenu = (function () {
 
     function renderPlanJobEquipmentHeaderEditHtml(st, draft) {
         const equipment = String(draft.equipment || '').trim();
-        const crit = String(draft.criticalEquipment || '').trim() || '—';
-        const critEmpty = crit === '—';
+        const crit = String(draft.criticalEquipment || '').trim();
         const hint = equipment
-            ? `Equipment “${equipment}” — Maker ~ Serial No. follow the selected Equipment.`
-            : 'Select Equipment to fill Maker ~ Serial No. Group Critical Equipment is display only.';
+            ? `Equipment “${equipment}” — Maker ~ Serial No. follow the selected Equipment. Critical Equipment applies to this equipment header.`
+            : 'Select Equipment to fill Maker ~ Serial No. Critical Equipment applies to the PMS group default.';
         return `<section class="spare-group-header is-editing is-job-equipment-editing" aria-label="Edit item equipment header">
             <div class="spare-group-header-card">
                 <div class="spare-gh-row spare-gh-row-primary spare-gh-row-plan-split spare-gh-row-primary-split">
@@ -2011,7 +2024,11 @@ const TVC_SpareMenu = (function () {
                     </div>
                     <div class="spare-gh-field">
                         <span class="spare-gh-label">Critical Equipment</span>
-                        <span class="spare-gh-value${critEmpty ? ' empty' : ''}" id="oie_group_critical">${esc(crit)}</span>
+                        ${renderCriticalEquipmentControl(st, { criticalEquipment: crit }, {
+                            hasContent: true,
+                            editMode: true,
+                            inputId: 'oie_header_critical',
+                        })}
                     </div>
                 </div>
                 <div class="spare-gh-row spare-gh-row-quad">
@@ -23693,7 +23710,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         }
     }
 
-    async function saveJobEquipmentHeader(user, { department, group, item_sort1, equipment_no, maker, modelType, capacity, serialNo, header_edited }, store) {
+    async function saveJobEquipmentHeader(user, { department, group, item_sort1, equipment_no, maker, modelType, capacity, serialNo, header_edited, is_critical_equipment }, store) {
         if (!window.TVC_DB) return;
         const use = store || equipmentStore(getState());
         const storeName = use === 'pms' ? 'maintenance_groups' : 'spare_groups';
@@ -23732,8 +23749,35 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             updated_at: new Date().toISOString(),
             sync_status: 'LOCAL',
         };
+        if (is_critical_equipment !== undefined) {
+            row.is_critical_equipment = is_critical_equipment;
+        }
         await TVC_DB.put(storeName, row);
         upsertEquipmentRowInState(getState(), row, use);
+    }
+
+    async function savePmsInlineHeaderCritical(user, { department, group, equipment, equipment_no, criticalRaw }) {
+        if (!window.TVC_DB) return;
+        const st = getState();
+        const label = String(group || '').trim();
+        if (!label) return;
+        const dept = department || user?.department || st.department || '';
+        const critVal = parseCriticalEquipmentValue(criticalRaw);
+        const item = String(equipment || '').trim();
+        if (item) {
+            const eqNo = parseInt(String(equipment_no ?? '').replace(/\D/g, ''), 10);
+            await saveJobEquipmentHeader(user, {
+                department: dept,
+                group: label,
+                item_sort1: item,
+                equipment_no: Number.isFinite(eqNo) && eqNo > 0 ? eqNo : equipmentNoForName(st, label, item, 'pms'),
+                is_critical_equipment: critVal,
+                header_edited: true,
+            }, 'pms');
+            return;
+        }
+        const groupKey = dept ? `${dept}|${label}` : label;
+        await upsertGroupCriticalEquipment(st, critVal, groupKey);
     }
 
     function getPlanGroupPickNodes(st) {
@@ -23772,7 +23816,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         openDetail, closeDetail, saveDetailGroup,
         createRequisition, assignToTask, suggestRequisition,
         append, startInlineAppend, edit, cancelEdit, cancelInlineEdit, saveEdit, saveInlineEdit, startInlineEdit, pickEditGroup, toggleEditGroupPick, pickSpareClass, toggleSpareClassPick,
-        startGroupHeaderEdit, appendGroupFromTree, deleteGroupFromTree, saveGroupHeaderEdit, cancelGroupHeaderEdit, savePlanCriticalEquipment, saveJobEquipmentHeader, onEditEquipmentInput,
+        startGroupHeaderEdit, appendGroupFromTree, deleteGroupFromTree, saveGroupHeaderEdit, cancelGroupHeaderEdit, savePlanCriticalEquipment, savePmsInlineHeaderCritical, saveJobEquipmentHeader, onEditEquipmentInput,
         openEquipmentListModal, closeEquipmentListModal, startAddEquipmentListItem, startEditEquipmentListItem, cancelEquipmentListEdit, saveEquipmentListItem, deleteEquipmentListItem,
         loadBundledXls, loadSpareInventory, ensureInventoryLoaded,
         openConsumeModal, openDeliverModal, closeReceiveModal, saveReceive, confirmSaveReceive, dismissReceiveSaveConfirm, closeTxModal, saveTx, closeConsumeModal, saveConsume, captureConsumeMeta,
@@ -23792,7 +23836,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         page2JobPickSearch, buildPage2JobItemsFromJobs, newConsumeJobRow, jobRowFromMaintenanceJob,
         renderMaintJobRowsHeaderHtml,
         resolveGroupHeaderByKey, getPlanGroupPickNodes, getJobsForGroupKey, findJobByCode, safeTreeLabel,
-        isGroupCriticalEquipmentYes, effectiveGroupCriticalEquipment,
+        isGroupCriticalEquipmentYes, effectiveGroupCriticalEquipment, resolvePlanHeaderCritical,
         equipmentNamesForGroup, equipmentNoForName, resolveJobEquipment, resolveSpareItemEquipment,
         CRITICAL_GROUP_KEY,
         MERGED_GEN_ENGINE_KEY,

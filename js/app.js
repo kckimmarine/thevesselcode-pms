@@ -1366,13 +1366,19 @@ const TVC_App = (function () {
     function updateUserBar(user) {
         const badge = typeof TVC_Space !== 'undefined'
             ? TVC_Space.getModeBadge(user)
-            : (TVC_RBAC.isSuperHqAccount?.(user)
-                ? 'HQ Admin'
-                : (TVC_RBAC.isHqAccount(user)
-                    ? 'HQ Mode'
-                    : (user.department === 'DECK' ? 'Vessel Mode - Deck'
-                        : user.department === 'ENGINE' ? 'Vessel Mode - Engine'
-                            : 'Vessel Mode')));
+            : (TVC_RBAC.isAdminAccount?.(user)
+                ? 'Admin Mode'
+                : (TVC_RBAC.isFleetMonitorAccount?.(user)
+                    ? 'Fleet Monitor'
+                    : (TVC_RBAC.isTvcPilotAccount?.(user)
+                        ? 'HQ Mode'
+                        : (TVC_RBAC.isSuperHqAccount?.(user)
+                            ? 'Admin Mode'
+                            : (TVC_RBAC.isHqAccount(user)
+                                ? 'HQ Mode'
+                                : (user.department === 'DECK' ? 'Vessel Mode - Deck'
+                                    : user.department === 'ENGINE' ? 'Vessel Mode - Engine'
+                                        : 'Vessel Mode'))))));
         const title = getHeaderRegistryUserLabel(user);
         const hideHqBadge = isElectronApp() && !!(user && TVC_RBAC.isHqAccount(user));
         document.querySelectorAll('.userBadgeEl').forEach(el => {
@@ -10239,6 +10245,13 @@ const TVC_App = (function () {
         return TVC_SpareMenu.isGroupCriticalEquipmentYes?.(state, group) ? 'Yes' : '';
     }
 
+    function origJobEffectiveCriticalLabel(group, department, equipment) {
+        if (TVC_SpareMenu?.resolvePlanHeaderCritical) {
+            return TVC_SpareMenu.resolvePlanHeaderCritical(state, group, department, equipment) || '';
+        }
+        return origJobGroupCriticalLabel(group, department);
+    }
+
     function jobEquipmentDraftValue(job) {
         if (TVC_SpareMenu?.resolveJobEquipment) {
             return TVC_SpareMenu.resolveJobEquipment(state, job).equipment;
@@ -10263,7 +10276,7 @@ const TVC_App = (function () {
             capacity: m.draft.capacity ?? '',
             serialNo: m.draft.serialNo ?? '',
             criticalEquipment: m.draft.criticalEquipment
-                || origJobGroupCriticalLabel(m.draft.group, m.draft.department),
+                || origJobEffectiveCriticalLabel(m.draft.group, m.draft.department, m.draft.equipment),
         };
     }
 
@@ -10459,7 +10472,7 @@ const TVC_App = (function () {
             modelType: hdr.modelType || '',
             capacity: hdr.capacity || '',
             serialNo: hdr.serialNo || '',
-            criticalEquipment: origJobGroupCriticalLabel((job.group || '').trim(), job.department),
+            criticalEquipment: origJobEffectiveCriticalLabel((job.group || '').trim(), job.department, equipment),
         };
         state._origJobEditMode = 'modify';
         state._origJobEditId = job.id;
@@ -10503,18 +10516,14 @@ const TVC_App = (function () {
             item_sort1: sort1,
             equipment,
         });
-        const groupCrit = origJobGroupCriticalLabel(group, m.draft.department);
+        const groupCrit = origJobEffectiveCriticalLabel(group, m.draft.department, equipment);
         const set = (id, val) => { const el = document.getElementById(id); if (el) el.value = val || ''; };
         set('oie_maker', hdr.maker);
         set('oie_modelType', hdr.modelType);
         set('oie_capacity', hdr.capacity);
         set('oie_serialNo', hdr.serialNo);
-        const critEl = document.getElementById('oie_group_critical');
-        if (critEl) {
-            const label = groupCrit || '—';
-            critEl.textContent = label;
-            critEl.classList.toggle('empty', label === '—');
-        }
+        const critEl = document.getElementById('oie_header_critical');
+        if (critEl) critEl.value = groupCrit || '';
         m.draft.group = group;
         m.draft.equipment = equipment;
         m.draft.item_sort1 = sort1;
@@ -10557,7 +10566,7 @@ const TVC_App = (function () {
             modelType: hdr.modelType || '',
             capacity: hdr.capacity || '',
             serialNo: hdr.serialNo || '',
-            criticalEquipment: origJobGroupCriticalLabel(ctx.group, ctx.dept),
+            criticalEquipment: origJobEffectiveCriticalLabel(ctx.group, ctx.dept, ctx.equipment || ''),
         };
         state._origJobEditMode = 'append';
         state._origJobEditId = null;
@@ -10635,6 +10644,22 @@ const TVC_App = (function () {
         }, 'pms');
     }
 
+    async function persistOrigJobHeaderCritical(user, data, department) {
+        const critEl = document.getElementById('oie_header_critical');
+        if (!critEl || !TVC_SpareMenu?.savePmsInlineHeaderCritical) return;
+        const equipment = String(data.equipment || '').trim();
+        const eqNo = data.equipment_no || (equipment && TVC_SpareMenu.equipmentNoForName
+            ? TVC_SpareMenu.equipmentNoForName(state, data.group, equipment, 'pms')
+            : 0);
+        await TVC_SpareMenu.savePmsInlineHeaderCritical(user, {
+            department,
+            group: data.group,
+            equipment,
+            equipment_no: eqNo,
+            criticalRaw: critEl.value.trim(),
+        });
+    }
+
     async function saveOrigJobInlineEdit() {
         if (!isOrigJobInlineEditing()) return;
         const user = TVC_Auth.getCurrentUser();
@@ -10654,6 +10679,7 @@ const TVC_App = (function () {
                     ...masterVesselOpts(),
                 });
                 await persistOrigJobEquipmentHeader(user, data, ctx.dept);
+                await persistOrigJobHeaderCritical(user, data, ctx.dept);
                 await TVC_Dialog.alert(`${data.job_code} Item added.`);
             } else {
                 await TVC_MaintenancePlan.updateJob(user, m.editId, {
@@ -10662,11 +10688,9 @@ const TVC_App = (function () {
                     is_critical_equipment: parseJobCriticalEditValue(data.is_critical_equipment),
                     ...masterVesselOpts(),
                 });
-                await persistOrigJobEquipmentHeader(
-                    user,
-                    data,
-                    m.draft?.department || state.department || user.department
-                );
+                const dept = m.draft?.department || state.department || user.department;
+                await persistOrigJobEquipmentHeader(user, data, dept);
+                await persistOrigJobHeaderCritical(user, data, dept);
                 await TVC_Dialog.alert(`${data.job_code} Item updated.`);
             }
             cancelOrigJobInlineEdit({ restoreScroll: false });

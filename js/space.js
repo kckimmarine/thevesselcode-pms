@@ -338,10 +338,10 @@ const TVC_Space = (function () {
 
     function getModeBadge(user) {
         if (!user) return '—';
-        if (TVC_RBAC.isAdminAccount?.(user)) return 'HQ Admin';
+        if (TVC_RBAC.isAdminAccount?.(user)) return 'Admin Mode';
         if (TVC_RBAC.isFleetMonitorAccount?.(user)) return 'Fleet Monitor';
-        if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'Ship Owner';
-        if (TVC_RBAC.isSuperHqAccount?.(user)) return 'HQ Admin';
+        if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'HQ Mode';
+        if (TVC_RBAC.isSuperHqAccount?.(user)) return 'Admin Mode';
         if (TVC_RBAC.isHqAccount(user)) return 'HQ Mode';
         if (isCaptainHub(user)) return 'Vessel Mode - Master';
         const station = getStation(user);
