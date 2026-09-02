@@ -611,7 +611,7 @@ const TVC_WorkReport = (function () {
     }
 
     function getJobItems(report) {
-        return fromLegacy(report).job_items || [];
+        return fromLegacy(report)?.job_items || [];
     }
 
     function getJobCodes(report) {
@@ -1270,6 +1270,7 @@ const TVC_WorkPermit = (function () {
     }
 
     function listWorkflowStatus(row) {
+        if (!row) return 'Draft';
         if (row.approved_at || row.approved_by) return 'Approved';
         if (row.sync_status === 'SYNCED') return 'Submitted';
         if (row.confirmed_at || row.confirmed_by) return 'Confirmed';

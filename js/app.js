@@ -1523,9 +1523,10 @@ const TVC_App = (function () {
     // ── Department toggle & global filter ────────────────────────────
     function deptJobs() {
         const dept = String(state.department || state.user?.department || '').toUpperCase();
-        const active = (j) => !TVC_Indexes.isDetachedCode?.(j.job_code);
-        if (!dept) return state.jobs.filter(active);
-        return state.jobs.filter(j => j.department === dept && active(j));
+        const jobs = state.jobs || [];
+        const active = (j) => !TVC_Indexes?.isDetachedCode?.(j.job_code);
+        if (!dept) return jobs.filter(active);
+        return jobs.filter(j => j.department === dept && active(j));
     }
 
     /** HQ / Captain Hub: Deck / Engine only (no All). Station PC는 고정 부서 라벨만 노출. */
@@ -3034,32 +3035,45 @@ const TVC_App = (function () {
 
     // ── TAB: Menu ────────────────────────────────────────────────────
     function menuCounts() {
-        const jobs = deptJobs();
-        const dash = actualDashboardCounts();
-        const overdue = dash.overdue;
-        const due30 = dash.due30;
-        const dueMonth = jobs.filter(j => { const d = daysUntil(j.next_date); return d >= 0 && d <= 31; }).length;
-        let pending = state.reports.filter(r => repSt(r) === 'REPORTED');
-        if (state.department) pending = pending.filter(r => reportDept(r) === state.department);
-        const approved = state.reports.filter(r => repSt(r) === 'CONFIRMED').length;
-        const defectPending = (state.defectCases || []).filter(d =>
-            d.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
-        ).length;
-        const postponePending = hqPendingPostponeReports().length;
-        const workReportPending = hqPendingWorkReports().length;
-        const reportsPending = hqMonthlyReportsPendingCount();
-        const critical = jobs.filter(jobShowsCriticalEquipmentMark).length;
-        const workPermitPending = (state.workPermits || []).filter(r =>
-            r.visible_in_list !== false && TVC_WorkPermitReport?.isPermitConfirmable?.(r)
-        ).length;
-        const workPermitApprovePending = hqPendingWorkPermits().length;
-        const defectConfirmPending = (state.defectCases || []).filter(d =>
-            TVC_DefectReport?.isDefectReportConfirmable?.(d)
-        ).length;
-        const postponeConfirmPending = (state.reports || []).filter(r => isPostponeReportConfirmable(r)).length;
-        const reportConfirmPending = workPermitPending + defectConfirmPending + pending.length;
-        const hqApprovePending = workPermitApprovePending + defectPending + postponePending + reportsPending;
-        return { total: jobs.length, overdue, due30, dueMonth, pending: pending.length, approved, defectPending, postponePending, workReportPending, reportsPending, critical, workPermitPending, workPermitApprovePending, defectConfirmPending, postponeConfirmPending, reportConfirmPending, hqApprovePending };
+        const empty = {
+            total: 0, overdue: 0, due30: 0, dueMonth: 0, pending: 0, approved: 0,
+            defectPending: 0, postponePending: 0, workReportPending: 0, reportsPending: 0,
+            critical: 0, workPermitPending: 0, workPermitApprovePending: 0,
+            defectConfirmPending: 0, postponeConfirmPending: 0, reportConfirmPending: 0,
+            hqApprovePending: 0,
+        };
+        try {
+            const jobs = deptJobs();
+            const dash = actualDashboardCounts();
+            const overdue = dash.overdue;
+            const due30 = dash.due30;
+            const dueMonth = jobs.filter(j => { const d = daysUntil(j.next_date); return d >= 0 && d <= 31; }).length;
+            let pending = (state.reports || []).filter(r => repSt(r) === 'REPORTED');
+            if (state.department) pending = pending.filter(r => reportDept(r) === state.department);
+            const approved = (state.reports || []).filter(r => repSt(r) === 'CONFIRMED').length;
+            const submitted = typeof TVC_DefectCase !== 'undefined'
+                ? TVC_DefectCase.Status?.SUBMITTED_TO_COMPANY
+                : 'SUBMITTED_TO_COMPANY';
+            const defectPending = (state.defectCases || []).filter(d => d.status === submitted).length;
+            const postponePending = hqPendingPostponeReports().length;
+            const workReportPending = hqPendingWorkReports().length;
+            const reportsPending = hqMonthlyReportsPendingCount();
+            const critical = jobs.filter(jobShowsCriticalEquipmentMark).length;
+            const workPermitPending = (state.workPermits || []).filter(r =>
+                r.visible_in_list !== false && TVC_WorkPermitReport?.isPermitConfirmable?.(r)
+            ).length;
+            const workPermitApprovePending = hqPendingWorkPermits().length;
+            const defectConfirmPending = (state.defectCases || []).filter(d =>
+                TVC_DefectReport?.isDefectReportConfirmable?.(d)
+            ).length;
+            const postponeConfirmPending = (state.reports || []).filter(r => isPostponeReportConfirmable(r)).length;
+            const reportConfirmPending = workPermitPending + defectConfirmPending + pending.length;
+            const hqApprovePending = workPermitApprovePending + defectPending + postponePending + reportsPending;
+            return { total: jobs.length, overdue, due30, dueMonth, pending: pending.length, approved, defectPending, postponePending, workReportPending, reportsPending, critical, workPermitPending, workPermitApprovePending, defectConfirmPending, postponeConfirmPending, reportConfirmPending, hqApprovePending };
+        } catch (e) {
+            console.warn('[TVC] menuCounts', e);
+            return empty;
+        }
     }
 
     function hqMonthlyReportsPendingCount() {
@@ -3082,7 +3096,9 @@ const TVC_App = (function () {
             rows = rows.filter(r => workPermitBelongsToDept(r, state.department, jobs));
         }
         return rows.filter(r => {
-            const st = TVC_WorkPermit.listWorkflowStatus(r);
+            const st = typeof TVC_WorkPermit !== 'undefined'
+                ? TVC_WorkPermit.listWorkflowStatus?.(r)
+                : '';
             return st === 'Confirmed' || st === 'Submitted';
         });
     }
@@ -7041,28 +7057,83 @@ const TVC_App = (function () {
         }).join('');
     }
 
+    function fallbackMenuSections() {
+        const isHq = !!(state.user && TVC_RBAC.isHqAccount(state.user));
+        return [
+            {
+                key: 'daily',
+                tone: 'daily',
+                title: 'Routine Tasks',
+                items: isHq
+                    ? [
+                        { label: 'Check PMS', action: "TVC_App.menuAction('checkPlan')" },
+                        { label: 'Approve Report', action: "TVC_App.menuAction('approveReport')" },
+                    ]
+                    : [
+                        { label: 'Check PMS', action: "TVC_App.menuAction('checkPlan')" },
+                        { label: 'Confirm Report', action: "TVC_App.menuAction('confirmReport')" },
+                    ],
+            },
+            { key: 'monthly', tone: 'monthly', title: 'Monthly Report', items: [] },
+            { key: 'necessary', tone: 'necessary', title: 'If Necessary', items: menuNecessaryItems() },
+        ];
+    }
+
     function renderMenuCards(mainHost, adminHost) {
         if (!mainHost) return;
-        const f = state.user ? TVC_Space.getUiFeatures(state.user) : {};
-        const isSuperHq = TVC_RBAC.isSuperHqAccount?.(state.user);
-        const showAdminTools = TVC_RBAC.isAdminAccount?.(state.user);
-        const cols = menuModel();
+        let f = {};
+        try {
+            f = state.user && typeof TVC_Space !== 'undefined'
+                ? TVC_Space.getUiFeatures(state.user)
+                : {};
+        } catch (e) {
+            console.warn('[TVC] menu features', e);
+        }
+        let cols = [];
+        try {
+            cols = menuModel();
+        } catch (e) {
+            console.warn('[TVC] menuModel', e);
+            cols = fallbackMenuSections();
+        }
+        const showAdminTools = !!(state.user && TVC_RBAC.isAdminAccount?.(state.user));
         const opsCols = showAdminTools
             ? cols.filter(s => s.key !== 'administration')
             : cols;
         const adminCols = showAdminTools
             ? cols.filter(s => s.key === 'administration')
             : [];
-        const spareFlow = f.showSpareTab && typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.renderSpareWorkFlowCard
-            ? TVC_SpareMenu.renderSpareWorkFlowCard()
-            : '';
-        mainHost.innerHTML = renderSectionCard('PMS Work Flow', renderMenuFlowPanel(opsCols, f), {
-            className: 'tvc-section-pms-flow',
-        }) + spareFlow;
+
+        let html = '';
+        try {
+            html += renderSectionCard('PMS Work Flow', renderMenuFlowPanel(opsCols, f), {
+                className: 'tvc-section-pms-flow',
+            });
+        } catch (e) {
+            console.warn('[TVC] PMS Work Flow', e);
+            html += renderSectionCard('PMS Work Flow', '<p class="muted">Menu could not be loaded.</p>', {
+                className: 'tvc-section-pms-flow',
+            });
+        }
+        if (f.showSpareTab && typeof TVC_SpareMenu !== 'undefined' && TVC_SpareMenu.renderSpareWorkFlowCard) {
+            try {
+                html += TVC_SpareMenu.renderSpareWorkFlowCard() || '';
+            } catch (e) {
+                console.warn('[TVC] SPARE Work Flow', e);
+            }
+        }
+        mainHost.innerHTML = html;
+
         if (adminHost) {
-            const adminHtml = renderAdministrationSidebar(adminCols, f);
-            adminHost.innerHTML = adminHtml;
-            adminHost.classList.toggle('hidden', !adminHtml);
+            try {
+                const adminHtml = renderAdministrationSidebar(adminCols, f);
+                adminHost.innerHTML = adminHtml;
+                adminHost.classList.toggle('hidden', !adminHtml);
+            } catch (e) {
+                console.warn('[TVC] Administration', e);
+                adminHost.innerHTML = '';
+                adminHost.classList.add('hidden');
+            }
         }
     }
 
@@ -9545,8 +9616,23 @@ const TVC_App = (function () {
         const sidebarCards = document.getElementById('cmaxsCardsSidebar');
         const mainCards = document.getElementById('cmaxsCards');
         document.getElementById('menuMainCol')?.classList.remove('hidden');
-        renderMenuCards(mainCards, sidebarCards);
-        TVC_OutstandingTasks.render();
+        try {
+            renderMenuCards(mainCards, sidebarCards);
+        } catch (e) {
+            console.warn('[TVC] renderMenuCards', e);
+            if (mainCards && !mainCards.innerHTML) {
+                mainCards.innerHTML = renderSectionCard(
+                    'PMS Work Flow',
+                    '<p class="muted">Menu could not be loaded.</p>',
+                    { className: 'tvc-section-pms-flow' },
+                );
+            }
+        }
+        try {
+            TVC_OutstandingTasks?.render?.();
+        } catch (e) {
+            console.warn('[TVC] OutstandingTasks', e);
+        }
     }
 
     function setHistView(view) {

@@ -398,7 +398,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 
 /* 메뉴(CMAXS 스타일): 선박=4열 workflow, HQ=Ship List + 메뉴 */
 .cmaxs-body { padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
-.cmaxs-body.hq-mode { grid-template-columns: minmax(300px, 360px) minmax(0, 1fr); }
+.cmaxs-body.hq-mode { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
 .menu-main-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .menu-main-col.hidden { display: none !important; }
 .menu-right-col {
@@ -546,7 +546,7 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 .fleet-list-panel[data-admin-layout="1"] .fleet-list-toolbar { display: none; }
 .cmaxs-body.hq-mode:has(#fleetListPanel[data-admin-layout="1"]) {
-    grid-template-columns: minmax(460px, 580px) minmax(0, 1fr);
+    grid-template-columns: minmax(320px, min(520px, 42%)) minmax(0, 1fr);
 }
 .fleet-list-panel[data-admin-layout="1"] .fleet-table-wrap {
     overflow: auto;
@@ -4039,7 +4039,11 @@ input.tvc-date-input::placeholder {
 .q-dept { font-size: 10px; font-weight: 700; color: #fff; background: var(--blue); border-radius: 6px; padding: 1px 6px; }
 
 @media (max-width: 1100px) {
-    .cmaxs-body, .cmaxs-body.hq-mode { grid-template-columns: 1fr; }
+    .cmaxs-body,
+    .cmaxs-body.hq-mode,
+    .cmaxs-body.hq-mode:has(#fleetListPanel[data-admin-layout="1"]) {
+        grid-template-columns: 1fr;
+    }
 }
 @media (max-width: 960px) {
     .plan-layout, .actual-layout, .spare-layout, .spare-layout.panel-open { grid-template-columns: 1fr; }
