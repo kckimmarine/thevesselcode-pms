@@ -1763,6 +1763,7 @@ const TVC_DefectReport = (function () {
 
     function renderDfPostActionSections(row, opts = {}) {
         const {
+            hqBothAttach = false,
             canEditCompanyReply = false,
             canEditShipVerify = false,
             canEditShoreSupport = canEditShipVerify,
@@ -1799,7 +1800,7 @@ const TVC_DefectReport = (function () {
         const p2ro = forPrint || !canEditCompanyReply;
         const p3ro = forPrint || !canEditShipVerify;
         const p4ro = forPrint || !canEditCompanyFinal;
-        const canUploadCompanyAttach = !forPrint && (canEditCompanyReply || canEditCompanyFinal);
+        const canUploadCompanyAttach = !forPrint && (opts.hqBothAttach || canEditCompanyReply || canEditCompanyFinal);
         const replyDateInp = inp('reply_date', row.reply_date || '', 'date', p2ro)
             .replace('data-df="reply_date"', 'id="dfReplyDate" data-df="reply_date"');
         const shipVerifiedDateInp = inp('ship_verified_date', row.ship_verified_date || '', 'date', p3ro)
@@ -1904,7 +1905,7 @@ const TVC_DefectReport = (function () {
     function renderPhase1(row, readonly, opts = {}) {
         const { includeApproval = true, postAction = {}, forPrint = false } = opts;
         const canEditShipInitial = forPrint ? false : (postAction.canEditShipInitial ?? !readonly);
-        const canEditShipAttach = forPrint ? false : (postAction.canEditShipAttach ?? canEditShipInitial);
+        const canEditShipAttach = forPrint ? false : (postAction.hqBothAttach || postAction.canEditShipAttach ?? canEditShipInitial);
         ensureDfDraft(row);
         ensureDfJobItems(row);
         const s = getState();
@@ -2124,9 +2125,10 @@ const TVC_DefectReport = (function () {
         const canEditShipComments = canEditDfShipCommentsSection(row, forceView);
         const canEditShipVerify = canEditShipComments;
         const canEditShoreSupport = canEditShipInitial || canEditShipComments;
-        const canEditShipAttach = canEditShipInitial || canEditShipComments;
+        const canEditShipAttach = canEditShipInitial || canEditShipComments || (hq && !forceView);
         const canEditP4 = !forceView && hq && TVC_DefectCase.isPhase4Editable(row);
         const canEditCompanyFinal = canEditDfCompanyFinalComment(row, forceView);
+        const hqBothAttach = hq && !forceView;
         const canHqApproveOnly = !forceView && hq && approval.canApproveNow;
         const canSave = !forceView && (
             canEditP1 || canEditCompanyReply || canEditShipVerify || canEditShoreSupport || canEditP4 || canEditCompanyFinal || canHqApproveOnly
@@ -2152,6 +2154,7 @@ const TVC_DefectReport = (function () {
             body = `${renderPhase1(row, !canEditP1, {
                 includeApproval: true,
                 postAction: {
+                    hqBothAttach,
                     canEditShipInitial,
                     canEditShipAttach,
                     canEditShoreSupport,

@@ -930,10 +930,11 @@ const TVC_WorkPermitReport = (function () {
     function canMutateWpAttachment(kind) {
         const row = getModalRow();
         if (!row) return false;
-        if (kind === 'company') return !wpCompanyCommentLocked(row) && isHq();
         const ro = getState()._wpMode === 'view' || wpListViewLocked()
             || !TVC_WorkPermit.canModifyListWorkflow(row);
-        return !ro && !isHq();
+        if (ro) return false;
+        if (kind === 'company') return isHq();
+        return true;
     }
 
     async function uploadAttachment(kind) {
@@ -1320,8 +1321,9 @@ const TVC_WorkPermitReport = (function () {
             return `<textarea class="wr-maint-textarea${roClsLocal}" data-wp="${name}" rows="${rows}"${roAttr}>${esc(wpVal(row, name, val))}</textarea>`;
         };
         const companyCommentRo = forPrint || wpCompanyCommentLocked(row);
-        const canUploadShipAttach = !forPrint && !ro && !isHq();
-        const canUploadCompanyAttach = !forPrint && !companyCommentRo && isHq();
+        const hqUser = isHq();
+        const canUploadShipAttach = !forPrint && !ro;
+        const canUploadCompanyAttach = !forPrint && !ro && hqUser;
         const spareChk = `<label class="wr-maint-chk wp-est-spare-chk"><input type="checkbox" data-wp="checked_estimated_spare_parts"${wpVal(row, 'checked_estimated_spare_parts') ? ' checked' : ''}${ro ? ' disabled' : ''}> CHECKED ESTIMATED SPARE PARTS</label>`;
 
         const fileNoInner = forPrint

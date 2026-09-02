@@ -16243,16 +16243,19 @@ const TVC_App = (function () {
             </div>`;
     }
 
-    function canMutateWrAttachment(kind) {
-        const ro = !!state._wrReadonly;
-        const user = state.user;
-        const isHq = !!(user && TVC_RBAC.isHqAccount(user));
+    function wrReportAttachmentEdit(user, ro) {
+        if (ro || !user) return { ship: false, company: false };
+        if (TVC_RBAC.isHqAccount(user)) return { ship: true, company: true };
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
-        if (kind === 'company') {
-            const wrAppr = wrHqApprovalUiState(rep, state.idx?.jobById?.get(state._wrJobId), ro);
-            return !ro && !!wrAppr.canApproveNow;
-        }
-        return !ro && !isHq && (!rep || TVC_RBAC.isReportedStatus(rep.status));
+        return {
+            ship: !rep || TVC_RBAC.isReportedStatus(rep.status),
+            company: false,
+        };
+    }
+
+    function canMutateWrAttachment(kind) {
+        const flags = wrReportAttachmentEdit(state.user, !!state._wrReadonly);
+        return kind === 'company' ? flags.company : flags.ship;
     }
 
     async function uploadWrAttachment(kind) {
@@ -16301,7 +16304,9 @@ const TVC_App = (function () {
         const tab = WR_TABS[state._wrTab] ? state._wrTab : 'repair';
         const reportedByName = TVC_RBAC.getReportedByLabel(state.user);
         const showPages = tab === 'repair';
-        const canEditShipAttach = true;
+        const attachFlags = wrReportAttachmentEdit(state.user, ro);
+        const canEditShipAttach = attachFlags.ship;
+        const canEditCompanyAttach = attachFlags.company;
 
         const batchJobTags = `
             <div class="batch-wr-jobs">
@@ -16334,14 +16339,14 @@ const TVC_App = (function () {
         } else if (tab === 'postpone') {
             body = renderWrPostponeBody(job, {
                 reportedByName, today,
-                canEditShipAttach,
+                canEditShipAttach, canEditCompanyAttach,
                 batchMode: true,
                 batchJobIds: state._batchJobIds,
             });
         } else {
             body = renderWrRepairMaintenanceBody(job, {
                 reportedByName, today,
-                canEditShipAttach,
+                canEditShipAttach, canEditCompanyAttach,
                 batchMode: true,
                 batchJobIds: state._batchJobIds,
             });
@@ -16421,9 +16426,8 @@ const TVC_App = (function () {
             isRepConfirmed, isRepApproved,
         } = wrAppr;
         const reportedByName = workReportReportedByName(rep);
-        const canEditShipAttach = !ro && !wrAppr.isHq && (!rep || TVC_RBAC.isReportedStatus(rep.status));
-        const canEditCompanyAttach = !ro && wrAppr.isHq && TVC_RBAC.canApproveHqReport(state.user)
-            && (isRepApproved || isRepConfirmed || wrAppr.hqDirectApprove);
+        const attachFlags = wrReportAttachmentEdit(state.user, ro);
+        const { ship: canEditShipAttach, company: canEditCompanyAttach } = attachFlags;
 
         const showPages = state._wrTab === 'repair';
         const headHtml = showPages && state._wrPage === '2'
