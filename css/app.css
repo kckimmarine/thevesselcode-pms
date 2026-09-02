@@ -2243,11 +2243,22 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     padding: 0;
     margin: -1px;
 }
+.tvc-date-picker-native.tvc-date-picker-open {
+    clip: auto;
+    overflow: visible;
+}
 .act-period-filter .tvc-date-input-wrap {
-    width: 142px;
+    width: auto;
+    min-width: 128px;
+    flex-shrink: 0;
 }
 .act-period-filter .tvc-date-input-wrap .tvc-date-input {
     min-width: 0;
+    width: 92px;
+    flex: 0 1 auto;
+}
+.act-period-filter .tvc-date-picker-btn {
+    flex-shrink: 0;
 }
 .spare-req-meta-date-range .tvc-date-input-wrap,
 .spare-req-meta-audit .tvc-date-input-wrap {

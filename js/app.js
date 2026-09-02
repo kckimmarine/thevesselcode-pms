@@ -1358,6 +1358,11 @@ const TVC_App = (function () {
         return '—';
     }
 
+    function isElectronApp() {
+        return !!(typeof TVC_Config !== 'undefined' && TVC_Config.isElectron?.())
+            || !!(typeof window !== 'undefined' && window.tvcElectron?.isElectron);
+    }
+
     function updateUserBar(user) {
         const badge = typeof TVC_Space !== 'undefined'
             ? TVC_Space.getModeBadge(user)
@@ -1369,7 +1374,16 @@ const TVC_App = (function () {
                         : user.department === 'ENGINE' ? 'Vessel Mode - Engine'
                             : 'Vessel Mode')));
         const title = getHeaderRegistryUserLabel(user);
-        document.querySelectorAll('.userBadgeEl').forEach(el => el.textContent = badge);
+        const hideHqBadge = isElectronApp() && !!(user && TVC_RBAC.isHqAccount(user));
+        document.querySelectorAll('.userBadgeEl').forEach(el => {
+            if (hideHqBadge) {
+                el.textContent = '';
+                el.classList.add('hidden');
+                return;
+            }
+            el.textContent = badge;
+            el.classList.toggle('hidden', !badge || badge === '—');
+        });
         document.querySelectorAll('.userNameEl').forEach(el => el.textContent = title);
         document.querySelectorAll('.userVesselEl').forEach(el => {
             if (TVC_RBAC.isSuperHqAccount?.(user)) {

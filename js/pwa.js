@@ -106,17 +106,47 @@ const TVC_PWA = (function () {
         });
     }
 
-    function openDatePicker(textEl, pickerEl) {
+    function resetNativePickerStyle(pickerEl) {
+        if (!pickerEl) return;
+        pickerEl.classList.remove('tvc-date-picker-open');
+        pickerEl.style.position = '';
+        pickerEl.style.left = '';
+        pickerEl.style.top = '';
+        pickerEl.style.width = '';
+        pickerEl.style.height = '';
+        pickerEl.style.opacity = '';
+        pickerEl.style.pointerEvents = '';
+        pickerEl.style.zIndex = '';
+    }
+
+    function openDatePicker(textEl, pickerEl, anchorEl) {
         if (textEl.disabled || textEl.readOnly) return;
         syncDatePickerConstraints(textEl, pickerEl);
         const v = normalizeDateText(textEl.value);
         pickerEl.value = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+        const anchor = anchorEl || textEl;
         try {
-            if (typeof pickerEl.showPicker === 'function') pickerEl.showPicker();
-            else pickerEl.click();
-        } catch (_) {
-            pickerEl.click();
-        }
+            if (typeof pickerEl.showPicker === 'function') {
+                pickerEl.showPicker();
+                return;
+            }
+        } catch (_) { /* iframe / browser policy */ }
+        const rect = anchor.getBoundingClientRect();
+        pickerEl.classList.add('tvc-date-picker-open');
+        pickerEl.style.position = 'fixed';
+        pickerEl.style.left = `${Math.max(8, rect.right - 30)}px`;
+        pickerEl.style.top = `${rect.top}px`;
+        pickerEl.style.width = '30px';
+        pickerEl.style.height = `${Math.max(24, rect.height || 28)}px`;
+        pickerEl.style.opacity = '0.02';
+        pickerEl.style.pointerEvents = 'auto';
+        pickerEl.style.zIndex = '100000';
+        const cleanup = () => resetNativePickerStyle(pickerEl);
+        pickerEl.addEventListener('blur', cleanup, { once: true });
+        pickerEl.addEventListener('change', cleanup, { once: true });
+        setTimeout(cleanup, 4000);
+        try { pickerEl.focus({ preventScroll: true }); } catch (_) { /* noop */ }
+        pickerEl.click();
     }
 
     function attachDatePicker(textEl) {
@@ -141,10 +171,18 @@ const TVC_PWA = (function () {
         picker.tabIndex = -1;
         picker.setAttribute('aria-hidden', 'true');
 
-        btn.addEventListener('click', (e) => {
+        const openPicker = (e) => {
             e.preventDefault();
             e.stopPropagation();
-            openDatePicker(textEl, picker);
+            openDatePicker(textEl, picker, btn);
+        };
+
+        btn.addEventListener('click', openPicker);
+        btn.addEventListener('mousedown', (e) => e.preventDefault());
+        textEl.addEventListener('click', (e) => {
+            if (textEl.disabled || textEl.readOnly) return;
+            if (e.target !== textEl) return;
+            openDatePicker(textEl, picker, btn);
         });
 
         picker.addEventListener('change', () => {
