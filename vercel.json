@@ -1,7 +1,5 @@
 {
   "version": 2,
-  "installCommand": "npm install --omit=dev --ignore-scripts",
-  "buildCommand": "node scripts/smoke-web-demo.mjs",
   "rewrites": [
         { "source": "/((?!vendor|js|css|icons|data|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json).*)", "destination": "/index.html" }
   ],
