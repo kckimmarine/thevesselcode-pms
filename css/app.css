@@ -10172,5 +10172,161 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         min-width: 0;
         box-sizing: border-box;
     }
+
+    /* Work Procedure / Report History modal — mobile fit & scroll */
+    #workProcedureModal {
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 12px !important;
+    }
+
+    #workProcedureModal .modal-box.wp-modal {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        min-width: 0 !important;
+        max-height: 88vh !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: auto;
+        border-radius: 12px !important;
+        padding: 12px 12px 0;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+    }
+
+    #workProcedureBody {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    #workProcedureBody > .wp-title,
+    #workProcedureBody > .wp-job-head,
+    #workProcedureBody > .wp-job-detail,
+    #workProcedureBody > .wp-tabs {
+        flex-shrink: 0;
+    }
+
+    #workProcedureBody .wp-title {
+        font-size: 16px;
+        line-height: 1.35;
+        margin-bottom: 6px;
+    }
+
+    #workProcedureBody .wp-job-head {
+        gap: 8px;
+        font-size: 11px;
+        line-height: 1.35;
+        word-break: break-word;
+    }
+
+    #workProcedureBody .wp-job-detail {
+        white-space: normal;
+        word-break: break-word;
+        font-size: 14px;
+        font-weight: 700;
+        line-height: 1.4;
+        margin-bottom: 10px;
+    }
+
+    #workProcedureBody .wp-tabs {
+        gap: 8px;
+        margin-bottom: 10px;
+    }
+
+    #workProcedureBody .wp-tab {
+        flex: 1 1 0;
+        min-height: 44px;
+        padding: 10px 12px;
+        font-size: 12px;
+        text-align: center;
+        touch-action: manipulation;
+    }
+
+    #workProcedureBody > .wp-tab-pane {
+        flex: 1 1 auto;
+        min-height: 0;
+        overflow-y: auto;
+        max-height: calc(88vh - 120px);
+        -webkit-overflow-scrolling: touch;
+        padding: 12px;
+        box-sizing: border-box;
+    }
+
+    #workProcedureBody > .wp-tab-pane-history {
+        min-height: 0 !important;
+        max-height: calc(88vh - 120px) !important;
+    }
+
+    #workProcedureBody .wp-meta-row {
+        gap: 10px 14px;
+        font-size: 11px;
+        line-height: 1.4;
+        word-break: break-word;
+    }
+
+    #workProcedureBody .wp-meta-row span {
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    #workProcedureBody .wp-table-wrap {
+        min-height: 0 !important;
+        max-height: none !important;
+        overflow: visible;
+        border-radius: 8px;
+    }
+
+    #workProcedureBody .wp-table {
+        table-layout: fixed;
+    }
+
+    #workProcedureBody .wp-table th,
+    #workProcedureBody .wp-table td {
+        white-space: normal;
+        word-break: break-word;
+        overflow: visible;
+        text-overflow: clip;
+        vertical-align: top;
+        line-height: 1.35;
+        font-size: 11px;
+        padding: 6px 5px;
+    }
+
+    #workProcedureBody .wp-proc-box,
+    #workProcedureBody .wp-proc-input {
+        min-height: 120px !important;
+        max-height: none !important;
+    }
+
+    #workProcedureBody > .wp-modal-actions {
+        flex-shrink: 0;
+        margin-top: auto;
+        padding: 12px;
+        border-top: 1px solid #e2e8f0;
+        background: #fff;
+        gap: 10px;
+    }
+
+    #workProcedureBody .wp-modal-actions-left,
+    #workProcedureBody .wp-modal-actions-right {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    #workProcedureBody .wp-modal-actions-left {
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    #workProcedureBody .wp-modal-actions .btn {
+        min-height: 44px;
+        padding: 10px 14px;
+        touch-action: manipulation;
+    }
 }
 
