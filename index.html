@@ -49,11 +49,11 @@
             <form class="login-form" onsubmit="event.preventDefault();TVC_App.handleLogin();">
                 <div class="login-field">
                     <label for="loginUser">Username</label>
-                    <input id="loginUser" type="text" placeholder="officer" autocomplete="username">
+                    <input id="loginUser" type="text" placeholder="Enter User ID" autocomplete="username">
                 </div>
                 <div class="login-field">
                     <label for="loginPass">Password</label>
-                    <input id="loginPass" type="password" placeholder="••••••••" autocomplete="current-password">
+                    <input id="loginPass" type="password" placeholder="Enter User ID" autocomplete="current-password">
                 </div>
                 <div class="login-field">
                     <label for="loginDept">Department</label>
@@ -162,7 +162,7 @@
                     <aside id="fleetListPanel" class="fleet-list-panel" data-admin-layout="1">
                         <div class="fleet-search-bar">
                             <div class="search-field-wrap">
-                                <input class="search-input" id="fleetSearch" placeholder="Search ship name / IMO No…" oninput="TVC_App.setFleetSearch(this.value)">
+                                <input class="search-input" id="fleetSearch" placeholder="Enter User ID" oninput="TVC_App.setFleetSearch(this.value)">
                                 <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('fleetSearch')">×</button>
                             </div>
                         </div>
@@ -223,7 +223,7 @@
                     </div>
                     <div class="tree-search-bar">
                         <div class="search-field-wrap">
-                            <input class="search-input" id="actTreeSearch" placeholder="Search GROUP…" oninput="TVC_App.setTreeSearch(this.value)">
+                            <input class="search-input" id="actTreeSearch" placeholder="Enter User ID" oninput="TVC_App.setTreeSearch(this.value)">
                             <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('actTreeSearch')">×</button>
                         </div>
                     </div>
@@ -263,7 +263,7 @@
                         </div>
                         <div class="filter-bar list-filter-search-row">
                             <div class="search-field-wrap">
-                                <input class="search-input spare-list-search-input" id="actSearch" placeholder="Search JOB CODE…" oninput="TVC_App.setSearch(this.value)">
+                                <input class="search-input spare-list-search-input" id="actSearch" placeholder="Enter User ID" oninput="TVC_App.setSearch(this.value)">
                                 <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('actSearch')">×</button>
                             </div>
                         </div>
@@ -317,7 +317,7 @@
                     </div>
                     <div class="filter-bar list-filter-search-row">
                         <div class="search-field-wrap">
-                            <input class="search-input" id="histSearch" placeholder="Search JOB CODE / GROUP / DEFECT…" oninput="TVC_App.setSearch(this.value)">
+                            <input class="search-input" id="histSearch" placeholder="Enter User ID" oninput="TVC_App.setSearch(this.value)">
                             <button type="button" class="search-clear-btn hidden" title="Clear search" aria-label="Clear search" onclick="TVC_App.clearSearchField('histSearch')">×</button>
                         </div>
                     </div>
@@ -600,7 +600,7 @@
                 <button type="button" id="rhRevertBtn" class="btn btn-sm" onclick="TVC_App.revertRunHrs()" disabled>↩ Revert</button>
                 <span class="rh-toolbar-sep" aria-hidden="true"></span>
                 <label class="rh-last-label" for="rhLastUpdated">Last Updated Date</label>
-                <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="—" aria-label="Last Updated Date">
+                <input type="text" id="rhLastUpdated" class="rh-last-input" readonly placeholder="Enter User ID" aria-label="Last Updated Date">
             </div>
             <div class="sheet-table-wrap list-table-scroll-wrap">
                 <table class="sheet-table runhrs-table">
