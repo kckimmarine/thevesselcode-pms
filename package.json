@@ -8,6 +8,7 @@
     "import-xlsx": "python scripts/import-pms-xlsx.py",
     "export-pms-master-sample": "node scripts/export-pms-master-sample.mjs",
     "export-spare-master-sample": "node scripts/export-spare-master-sample.mjs",
+    "build": "node scripts/smoke-web-demo.mjs",
     "serve": "npx --yes serve . -p 3000",
     "start": "npx --yes serve . -p 3000",
     "smoke:web-demo": "node scripts/smoke-web-demo.mjs",

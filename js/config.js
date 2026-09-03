@@ -105,7 +105,7 @@ const TVC_Config = (function () {
         const userInput = document.getElementById('loginUser');
         if (userInput) {
             userInput.type = 'text';
-            userInput.placeholder = 'Enter User ID (tvc, admin, pms-21)';
+            userInput.removeAttribute('placeholder');
             userInput.autocomplete = 'username';
         }
     }

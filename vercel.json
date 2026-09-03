@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "buildCommand": "",
+  "installCommand": "npm install --omit=dev --ignore-scripts",
   "rewrites": [
         { "source": "/((?!vendor|js|css|icons|data|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json).*)", "destination": "/index.html" }
   ],

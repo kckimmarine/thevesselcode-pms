@@ -49,11 +49,11 @@
            <form class="login-form" novalidate onsubmit="event.preventDefault();TVC_App.handleLogin();">
     <div class="login-field">
         <label for="loginUser">User ID</label>
-        <input id="loginUser" type="text" placeholder="Enter User ID (tvc, admin, pms-21)" autocomplete="username">
+        <input id="loginUser" type="text" autocomplete="username">
     </div>
     <div class="login-field">
         <label for="loginPass">Password</label>
-        <input id="loginPass" type="password" placeholder="Enter Password" autocomplete="current-password">
+        <input id="loginPass" type="password" autocomplete="current-password">
     </div>
                 <div class="login-field">
                     <label for="loginDept">Department</label>
@@ -69,7 +69,7 @@
             </form>
             <div id="loginDownloadSection" class="login-download hidden">
                 <a id="loginDownloadLink" class="login-download-btn" href="/downloads/TVC-PMS-HQ_OFFICE-Setup.exe" download>
-                    Download TVC-PMS (Vessel PC Installer)
+                    Download Vessel Mode (PC installer)
                 </a>
                 <p class="login-download-note">Install on ship PC · sync to HQ via web portal</p>
             </div>
@@ -727,7 +727,7 @@
 <script src="vendor/jszip.min.js"></script>
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
-<script src="js/config.js?v=20260831-cloud-restore"></script>
+<script src="js/config.js?v=20260903-signin-cleanup"></script>
 <script src="js/rbac.js?v=20260901-account-roles"></script>
 <script src="js/core/schema.js?v=20260902-menu-cards"></script>
 <script src="js/core/db.js?v=20260903-web-cloud"></script>
