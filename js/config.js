@@ -94,7 +94,7 @@ const TVC_Config = (function () {
         if (hint) hint.classList.add('hidden');
 
         const userLabel = document.querySelector('label[for="loginUser"]');
-        if (userLabel) userLabel.textContent = 'Email or Username';
+        if (userLabel) userLabel.textContent = 'User ID';
 
         const dl = document.getElementById('loginDownloadSection');
         if (dl) dl.classList.remove('hidden');
@@ -104,9 +104,9 @@ const TVC_Config = (function () {
 
         const userInput = document.getElementById('loginUser');
         if (userInput) {
-            userInput.type = 'email';
-            userInput.placeholder = 'dm_user@thevesselcode.com';
-            userInput.autocomplete = 'username email';
+            userInput.type = 'text';
+            userInput.placeholder = 'Enter User ID (tvc, admin, pms-21)';
+            userInput.autocomplete = 'username';
         }
     }
 
