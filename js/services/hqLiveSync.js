@@ -27,7 +27,7 @@ const TVC_HqLiveSync = (function () {
         if (!TVC_OnlineSync.isAvailable()) return;
         try {
             const stats = await TVC_OnlineSync.fetchCloudStats(u, { vesselId });
-            const ts = stats?.ingest?.last_ingested_at || '';
+            const ts = stats?.max_ingested_at || stats?.ingest?.last_ingested_at || '';
             if (ts) setWatermark(vesselId, ts);
         } catch (_) { /* offline or API unavailable */ }
     }
@@ -56,7 +56,7 @@ const TVC_HqLiveSync = (function () {
         if (!vesselId) return false;
 
         const stats = await TVC_OnlineSync.fetchCloudStats(user, { vesselId });
-        const lastIngest = stats?.ingest?.last_ingested_at || '';
+        const lastIngest = stats?.max_ingested_at || stats?.ingest?.last_ingested_at || '';
         if (!lastIngest) return false;
 
         const prev = getWatermark(vesselId);

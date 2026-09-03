@@ -445,10 +445,17 @@ const TVC_DB = (function () {
         }));
     }
 
+    function notifyWebCloudWrite(storeName) {
+        try { window.TVC_WebCloudState?.notifyLocalWrite?.(storeName); } catch (_) {}
+    }
+
     function put(storeName, value) {
         return open().then(() => new Promise((resolve, reject) => {
             const r = tx(storeName, 'readwrite').objectStore(storeName).put(value);
-            r.onsuccess = () => resolve(r.result);
+            r.onsuccess = () => {
+                notifyWebCloudWrite(storeName);
+                resolve(r.result);
+            };
             r.onerror = () => reject(r.error);
         }));
     }
@@ -466,7 +473,10 @@ const TVC_DB = (function () {
             const t = tx(storeName, 'readwrite');
             const store = t.objectStore(storeName);
             values.forEach(v => store.put(v));
-            t.oncomplete = () => resolve(values.length);
+            t.oncomplete = () => {
+                notifyWebCloudWrite(storeName);
+                resolve(values.length);
+            };
             t.onerror = () => reject(t.error);
         }));
     }

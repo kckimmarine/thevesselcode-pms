@@ -365,6 +365,32 @@ const TVC_OnlineSync = (function () {
         return apiFetch(`/api/sync/cloud/records?${params}`, { headers: cloudQueryHeaders(user) });
     }
 
+    /** Web HQ — upsert local IndexedDB rows into cloud sync_records. */
+    async function upsertCloudRecords(user, opts = {}) {
+        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!isAvailable()) throw new Error(statusMessage());
+        const vesselId = String(opts.vesselId || '').trim();
+        if (!vesselId) throw new Error('vessel_id is required.');
+        const companyId = String(opts.companyId || resolveCloudCompanyId(user, vesselId)).trim();
+        const records = Array.isArray(opts.records) ? opts.records : [];
+        const params = new URLSearchParams();
+        params.set('vessel_id', vesselId);
+        if (companyId) params.set('company_id', companyId);
+        return apiFetch(`/api/sync/cloud/records?${params}`, {
+            method: 'POST',
+            headers: {
+                ...cloudQueryHeaders(user),
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                vessel_id: vesselId,
+                company_id: companyId,
+                records,
+                meta: opts.meta || undefined,
+            }),
+        });
+    }
+
     return {
         META_KEY,
         getApiBaseUrl,
@@ -375,6 +401,7 @@ const TVC_OnlineSync = (function () {
         resolveCloudCompanyId,
         fetchCloudStats,
         fetchCloudRecords,
+        upsertCloudRecords,
         pushShipToHq,
         pullShipFromVessel,
         pullHqFeedback,

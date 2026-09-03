@@ -1198,8 +1198,8 @@ const TVC_App = (function () {
         renderCaptainViewDashboard();
         if (isHq) await populateShipHeader(state.user);
         showApp();
-        if (isHq && state.selectedVesselId && typeof TVC_CloudMirror !== 'undefined') {
-            TVC_CloudMirror.maybeMirrorSelectedVessel(state.user, state.selectedVesselId)
+        if (isHq && state.selectedVesselId) {
+            syncWebOrMirrorVessel(state.user, state.selectedVesselId)
                 .then(async (r) => {
                     if (r && !r.skipped && r.ok) {
                         await loadData();
@@ -1214,6 +1214,17 @@ const TVC_App = (function () {
         if (isHq) startHqLiveSync();
         try { TVC_Config?.applyEmbedChrome?.(); } catch (_) {}
         switchTab('menu');
+    }
+
+    function syncWebOrMirrorVessel(user, vesselId) {
+        if (typeof TVC_WebCloudState !== 'undefined' && TVC_WebCloudState.isWebHq(user)) {
+            TVC_WebCloudState.rememberSession(user, vesselId);
+            return TVC_WebCloudState.syncVessel(user, vesselId);
+        }
+        if (typeof TVC_CloudMirror !== 'undefined') {
+            return TVC_CloudMirror.maybeMirrorSelectedVessel(user, vesselId);
+        }
+        return Promise.resolve({ skipped: true });
     }
 
     function startHqLiveSync() {
@@ -9595,8 +9606,8 @@ const TVC_App = (function () {
         await loadData();
         renderFleetList();
         rerenderCurrentTab();
-        if (state.user && typeof TVC_CloudMirror !== 'undefined') {
-            TVC_CloudMirror.maybeMirrorSelectedVessel(state.user, id)
+        if (state.user) {
+            syncWebOrMirrorVessel(state.user, id)
                 .then(async (r) => {
                     if (r && !r.skipped && r.ok) {
                         await loadData();

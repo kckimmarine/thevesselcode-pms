@@ -106,7 +106,9 @@ const TVC_CloudMirror = (function () {
         const records = await fetchAllCloudRecords(user, { vesselId, companyId });
         const payload = recordsToPayload(records, vesselId, companyId);
 
-        await TVC_Sync.mergePayload(payload, null, true, vesselId, { importAuthoritative: false });
+        await TVC_Sync.mergePayload(payload, null, true, vesselId, {
+            importAuthoritative: opts.importAuthoritative === true,
+        });
         const runHoursApplied = await applyRunHoursMeta(user, vesselId, companyId).catch(() => false);
 
         const storeCounts = {};
@@ -171,7 +173,11 @@ const TVC_CloudMirror = (function () {
             return { skipped: true, reason: 'throttled', vessel_id: vesselId };
         }
         try {
-            const result = await mirrorVesselFromCloud(user, { vesselId, companyId: opts.companyId });
+            const result = await mirrorVesselFromCloud(user, {
+                vesselId,
+                companyId: opts.companyId,
+                importAuthoritative: opts.importAuthoritative === true,
+            });
             return { skipped: false, ...result };
         } catch (e) {
             return { skipped: true, reason: 'error', error: e.message || String(e), vessel_id: vesselId };

@@ -279,6 +279,11 @@ module.exports = {
     SYNC_STORES,
     parseSyncZipBuffer,
     collectRecordItems,
+    collectMetaItems,
     shouldApplyIncoming,
+    mergeRecordBatch,
+    upsertMetaItems,
+    recordUpdatedAt,
+    recordKey,
     ingestSyncPackage,
 };

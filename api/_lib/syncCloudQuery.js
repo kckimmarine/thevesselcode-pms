@@ -149,6 +149,17 @@ async function fetchCloudStats(scope) {
     const { data: ingestRows, error: ingestErr } = await ingestQ;
     if (ingestErr) throw ingestErr;
 
+    let maxQ = supabase
+        .from('sync_records')
+        .select('ingested_at')
+        .order('ingested_at', { ascending: false })
+        .limit(1);
+    if (scope.companyId) maxQ = maxQ.eq('company_id', scope.companyId);
+    if (scope.vesselId) maxQ = maxQ.eq('vessel_id', scope.vesselId);
+    const { data: maxRows, error: maxErr } = await maxQ;
+    if (maxErr) throw maxErr;
+    const maxIngestedAt = maxRows?.[0]?.ingested_at || ingestRows?.[0]?.ingested_at || null;
+
     const ingestSummary = {
         packages_total: (ingestRows || []).length,
         packages_ok: (ingestRows || []).filter(r => r.status === 'OK').length,
@@ -167,6 +178,7 @@ async function fetchCloudStats(scope) {
         stores: byStore,
         vessels: byVessel,
         meta,
+        max_ingested_at: maxIngestedAt,
         ingest: ingestSummary,
         known_stores: SYNC_STORES.map(s => s.name),
     };
