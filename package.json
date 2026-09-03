@@ -37,6 +37,7 @@
     "setup-online-sync": "node scripts/setup-online-sync-auto.mjs",
     "setup-telegram-bridge": "node scripts/setup-telegram-bridge.mjs",
     "telegram-chat-id": "node scripts/telegram-get-chat-id.mjs",
+    "test-telegram-bridge": "node scripts/test-telegram-bridge.mjs",
     "setup-supabase-ingest": "node scripts/setup-supabase-ingest.mjs",
     "verify-sync-ingest": "node scripts/verify-sync-ingest.mjs",
     "verify-sync-cloud": "node scripts/verify-sync-cloud-api.mjs",
