@@ -282,6 +282,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     background: #f7fafc;
     border: 1px solid #cbd5e0;
     text-decoration: none;
+    cursor: pointer;
+    font-family: inherit;
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 .login-download-btn:hover {
@@ -293,6 +295,51 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     font-size: 11px;
     color: #94a3b8;
 }
+
+.vessel-download-box { max-width: 420px; }
+.vessel-download-box h3 { margin: 0 0 6px; color: var(--navy); }
+.vessel-download-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.vessel-download-loading { margin: 0; text-align: center; }
+.vessel-download-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    padding: 12px 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    text-align: left;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+    font-family: inherit;
+}
+.vessel-download-item:hover:not(:disabled) {
+    border-color: var(--login-accent, #2b6cb0);
+    background: #f8fafc;
+}
+.vessel-download-item:disabled { opacity: 0.6; cursor: wait; }
+.vessel-download-item.is-unavailable { opacity: 0.55; cursor: not-allowed; }
+.vessel-download-item-icon { font-size: 22px; line-height: 1; flex-shrink: 0; }
+.vessel-download-item-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.vessel-download-item-title { font-weight: 600; color: var(--navy); font-size: 14px; }
+.vessel-download-item-desc { font-size: 12px; color: #64748b; }
+.vessel-download-item-file { font-size: 11px; word-break: break-all; }
+.vessel-download-item-badge {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: #2b6cb0;
+    background: rgba(43, 108, 176, 0.1);
+    padding: 4px 8px;
+    border-radius: 999px;
+}
+.vessel-download-item.is-unavailable .vessel-download-item-badge {
+    color: #94a3b8;
+    background: #f1f5f9;
+}
+.vessel-download-status { margin: 12px 0 0; font-size: 12px; text-align: center; }
+.vessel-download-status.is-error { color: #c53030; }
 
 .tvc-web-deploy .login-hint { display: none !important; }
 

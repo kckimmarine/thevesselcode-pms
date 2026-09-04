@@ -68,9 +68,9 @@
                 <div id="loginErr" class="login-err" role="alert"></div>
             </form>
             <div id="loginDownloadSection" class="login-download hidden">
-                <a id="loginDownloadLink" class="login-download-btn" href="/downloads/TVC-PMS-HQ_OFFICE-Setup.exe" download>
+                <button type="button" id="loginDownloadBtn" class="login-download-btn">
                     Download Vessel Mode (PC installer)
-                </a>
+                </button>
                 <p class="login-download-note">Install on ship PC · sync to HQ via web portal</p>
             </div>
             <div class="login-hint">
@@ -450,6 +450,15 @@
         <div id="procedureHistoryBody"></div>
     </div>
 </div>
+<div id="vesselDownloadModal" class="modal hidden" onclick="if(event.target===this)TVC_VesselDownload.closeModal()">
+    <div class="modal-box vessel-download-box" onclick="event.stopPropagation()">
+        <button type="button" class="modal-x" onclick="TVC_VesselDownload.closeModal()" aria-label="Close">×</button>
+        <h3>Vessel Mode installer</h3>
+        <p class="muted">Select the station type for this ship PC. You will choose where to save the Setup file.</p>
+        <div id="vesselDownloadList" class="vessel-download-list" role="listbox" aria-label="Vessel Mode types"></div>
+        <p id="vesselDownloadStatus" class="vessel-download-status muted hidden" role="status" aria-live="polite"></p>
+    </div>
+</div>
 <div id="deptPickModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('deptPickModal')">
     <div class="modal-box dept-pick-box">
         <button class="modal-x" onclick="TVC_App.closeModal('deptPickModal')">×</button>
@@ -778,6 +787,7 @@
 <script src="js/services/adminPrint.js?v=20260831-reg-codes"></script>
 <script src="js/services/seatLicense.js?v=20260816-admin-seat"></script>
 <script src="js/services/setupExport.js?v=20260831-setup-auto"></script>
+<script src="js/services/vesselDownload.js?v=20260904-vessel-picker"></script>
 <script src="js/services/adminRelease.js?v=20260818-admin-release"></script>
 <script src="js/services/stationSync.js?v=20260825-dialog-en"></script>
 <script src="js/services/onlineSync.js?v=20260903-web-cloud"></script>
