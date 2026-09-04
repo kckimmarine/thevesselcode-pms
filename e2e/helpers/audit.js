@@ -36,6 +36,7 @@ async function collectUiIssues(page) {
     }
 
     function skipOverflow(el) {
+      if (el.closest('#tabBar') && !document.body.classList.contains('mobile-nav-open')) return true;
       if (el.closest('.virtual-scroll, .tree-scroll, .spare-req-list-scroll, .spare-req-hist-list-scroll, .list-table-scroll-wrap, .modal, .wr-page, .login-hint, [class*="scroll"]')) {
         return true;
       }
@@ -114,7 +115,9 @@ async function collectUiIssues(page) {
 
     for (const btn of buttons) {
       if (btn.disabled || btn.getAttribute('aria-disabled') === 'true') continue;
+      if (btn.closest('#tabBar') && !document.body.classList.contains('mobile-nav-open')) continue;
       const r = btn.getBoundingClientRect();
+      if (r.right < 0 || r.left > vw) continue;
       const cx = Math.min(Math.max(r.left + r.width / 2, 1), vw - 1);
       const cy = Math.min(Math.max(r.top + r.height / 2, 1), vh - 1);
       const top = document.elementFromPoint(cx, cy);

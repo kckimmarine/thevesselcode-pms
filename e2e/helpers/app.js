@@ -176,11 +176,28 @@ async function switchTab(page, tab, account) {
     return false;
   }
 
+  const dialog = page.locator('#tvcDialogModal:not(.hidden)');
+  if (await dialog.isVisible().catch(() => false)) {
+    const msg = ((await page.locator('#tvcDialogMessage').textContent().catch(() => '')) || '').trim();
+    const file = await shot(page, `dialog-blocking-nav-${key}`);
+    addFinding({
+      severity: 'bug',
+      category: 'button',
+      title: 'In-app dialog blocked navigation / next click',
+      detail: msg || 'tvcDialogModal was open without being dismissed',
+      screenshot: file,
+      account,
+    });
+    await dismissAllDialogs(page, true);
+  }
+
   const mobileNav = page.locator('#mobileNavBtn');
   if (await mobileNav.isVisible().catch(() => false)) {
     const expanded = await mobileNav.getAttribute('aria-expanded');
-    if (expanded !== 'true') await mobileNav.click();
-    await page.waitForTimeout(200);
+    if (expanded !== 'true') {
+      await mobileNav.click({ force: true });
+      await page.waitForTimeout(250);
+    }
   }
 
   const t0 = Date.now();
@@ -222,6 +239,7 @@ async function openSettings(page, account) {
     if (expanded !== 'true') await mobileNav.click();
     await page.waitForTimeout(200);
   }
+  await dismissAllDialogs(page, true);
   const btn = page.locator('#settingsOpenBtn');
   if (!(await btn.isVisible().catch(() => false))) {
     addFinding({

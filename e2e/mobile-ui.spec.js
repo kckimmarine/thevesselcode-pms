@@ -7,6 +7,7 @@ const {
   switchTab,
   openSettings,
   closeTopModal,
+  dismissAllDialogs,
   waitForJobs,
   waitForSpares,
   shot,
@@ -38,9 +39,11 @@ test('Mobile 390px: overflow / overlap / clip audit across tabs', async ({ page 
     const make = page.locator('#planReportBtn');
     if (await make.isEnabled().catch(() => false)) {
       await make.click();
+      await page.waitForTimeout(400);
       await page.locator('#workReportModal:not(.hidden)').waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
       await auditViewport(page, { name: 'mobile-390-work-report', account, viewport: vp });
       await closeTopModal(page);
+      await dismissAllDialogs(page, true);
     }
   }
 
