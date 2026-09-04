@@ -51,7 +51,8 @@
     "test-vessel-engine-monthly-report": "node scripts/test-vessel-engine-monthly-report.mjs",
     "test-vessel-engine-monthly-roundtrip": "node scripts/test-vessel-engine-monthly-roundtrip.mjs",
     "test-xfer-status-roundtrip": "node scripts/test-xfer-status-roundtrip.mjs",
-    "test-pms-group-equipment-headers": "node scripts/test-pms-group-equipment-headers.mjs"
+    "test-pms-group-equipment-headers": "node scripts/test-pms-group-equipment-headers.mjs",
+    "test-gemini-issue-endpoint": "node scripts/test-gemini-issue-endpoint.mjs"
   },
   "license": "ISC",
   "dependencies": {
