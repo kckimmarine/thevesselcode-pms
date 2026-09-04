@@ -106,8 +106,9 @@ Use it as the **golden path** when validating UI changes.
 
 1. **Single source of truth** — Update `docs/UI-MAP.md` when adding modals or renaming flows.
 2. **Handoff block** — Paste the template from [`docs/GEMINI-COLLAB.md`](docs/GEMINI-COLLAB.md) into every cross-tool task.
-3. **One owner per file** — Avoid both agents editing `js/app.js` and `js/ui/spareMenu.js` in parallel without merging context.
-4. **Evidence** — UI tasks need screenshot or `npm run test:e2e` result in PR / summary.
+3. **Review before implement** — Gemini paste is **not** auto-apply. Compare with the repo, adopt only what is needed, improve incrementally. Document skips/deferrals.
+4. **One owner per file** — Avoid both agents editing `js/app.js` and `js/ui/spareMenu.js` in parallel without merging context.
+5. **Evidence** — UI tasks need screenshot or `npm run test:e2e` result in PR / summary.
 
 ---
 

@@ -15,6 +15,20 @@ This document is the **handoff layer** between Google Gemini (design, domain, re
 
 ---
 
+## ⚠️ Golden rule — review before implement
+
+When the user pastes content **from Gemini** (requirements, designs, refactors, full rewrites):
+
+1. **Do not apply blindly.** Gemini output is input, not an order.
+2. **Compare first** against the current codebase and docs (`UI-MAP.md`, `workflow-manual-v1.md`, running behavior).
+3. **Decide what is truly necessary** — skip duplicate work, wrong file targets, or changes that break desktop/offline/stock rules.
+4. **Improve incrementally** — smallest correct diff from **today’s** state; one logical step per PR when possible.
+5. **Say what you skipped** — briefly list Gemini items deferred or rejected and why.
+
+Cursor should reply with a short **gap analysis** (As-Is vs Gemini proposal → adopt / defer / reject) **before** large edits, unless the user explicitly says “implement as written.”
+
+---
+
 ## Handoff protocol
 
 ### Gemini → Cursor (implementation task)
@@ -27,12 +41,15 @@ Paste this block at the top of the Cursor agent message:
 - **Goal:** (one sentence)
 - **As-Is:** (current behavior + file:function)
 - **To-Be:** (desired behavior)
+- **Review mode:** compare with repo first; incremental only; do not blind-apply
 - **Files allowed:** js/app.js, js/ui/spareMenu.js, css/app.css (list explicitly)
 - **Files forbidden:** index.html, js/auth.js (unless listed)
 - **Constraints:** offline only; desktop >768px no regression; atomic stock
 - **Acceptance:** (bullets + how to test)
 - **Open questions:** (none / list)
 ```
+
+**Cursor first response should include:** (1) what already exists, (2) what from Gemini is needed now, (3) proposed minimal step.
 
 ### Cursor → Gemini (review task)
 
@@ -88,6 +105,8 @@ You are advising on **THE VESSEL CODE PMS** — an offline-first ship maintenanc
 **Do not assume:** Work Report UI is in `js/pms.js` (that file is scheduling helpers only).
 
 When proposing UI changes, specify: modal id, Page tab, `data-wf` field keys, desktop vs mobile-only CSS, and stock lifecycle (draft vs submit).
+
+**Process:** Proposals will be compared to the existing repo before implementation. Prefer incremental improvements over full rewrites unless the gap analysis justifies a larger change.
 
 ---
 
@@ -178,4 +197,5 @@ When Gemini and Cursor agree on a workflow change, bump version and add a one-li
 
 ### Changelog
 
+- **2026-09-04** — Golden rule: review Gemini paste vs repo; incremental adoption only.
 - **2026-09-04** — Initial collaboration pack; WR station backlog documented.
