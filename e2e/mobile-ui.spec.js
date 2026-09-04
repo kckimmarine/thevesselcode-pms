@@ -64,7 +64,22 @@ test('Mobile 390px: overflow / overlap / clip audit across tabs', async ({ page 
 
   const nav = page.locator('#mobileNavBtn');
   if (await nav.isVisible().catch(() => false)) {
-    await nav.click();
+    const expanded = await nav.getAttribute('aria-expanded');
+    if (expanded !== 'true') {
+      try {
+        await nav.click({ timeout: 3_000 });
+      } catch (e) {
+        findings.addFinding({
+          severity: 'bug',
+          category: 'blocked-button',
+          title: 'Hamburger menu click intercepted',
+          detail: e.message,
+          account,
+          viewport: vp,
+        });
+        await nav.click({ force: true });
+      }
+    }
     await page.waitForTimeout(250);
     await auditViewport(page, { name: 'mobile-390-nav-open', account, viewport: vp });
     await shot(page, 'mobile-390-nav-open-full');

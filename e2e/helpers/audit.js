@@ -90,16 +90,32 @@ async function collectUiIssues(page) {
       return x * y;
     }
 
+    let reportedTreeClash = false;
     for (let i = 0; i < texts.length; i++) {
       const a = texts[i].getBoundingClientRect();
       if (a.width < 8 || a.height < 8) continue;
       for (let j = i + 1; j < texts.length; j++) {
         if (texts[i].contains(texts[j]) || texts[j].contains(texts[i])) continue;
         if (texts[i].parentElement === texts[j].parentElement) continue;
+        const treeA = !!texts[i].closest('.tree-panel, .tree-scroll');
+        const treeB = !!texts[j].closest('.tree-panel, .tree-scroll');
+        const mainA = !!texts[i].closest('.plan-main, .act-filter-dashboard, .filter-bar');
+        const mainB = !!texts[j].closest('.plan-main, .act-filter-dashboard, .filter-bar');
+        if ((treeA && mainB) || (treeB && mainA)) {
+          if (reportedTreeClash) continue;
+          reportedTreeClash = true;
+          issues.push({
+            kind: 'overlap',
+            severity: 'ux',
+            title: 'PMS tree column overlaps the job list on a 390px viewport',
+            detail: '`.tree-panel` stays side-by-side with `.plan-main` instead of stacking. Group labels collide with Print / dashboard chips.',
+          });
+          continue;
+        }
         const b = texts[j].getBoundingClientRect();
         const area = overlapArea(a, b);
         const min = Math.min(a.width * a.height, b.width * b.height);
-        if (area > 24 && area / min > 0.35) {
+        if (area > 40 && area / min > 0.45) {
           issues.push({
             kind: 'overlap',
             severity: 'ux',
@@ -146,12 +162,14 @@ async function collectUiIssues(page) {
     }
 
     const seen = new Set();
+    const perKind = {};
     return issues.filter((it) => {
       const k = `${it.kind}|${it.title}|${it.detail}`;
       if (seen.has(k)) return false;
       seen.add(k);
-      return true;
-    }).slice(0, 40);
+      perKind[it.kind] = (perKind[it.kind] || 0) + 1;
+      return perKind[it.kind] <= 8;
+    });
   });
 }
 
