@@ -127,9 +127,29 @@ async function login(page, role) {
 }
 
 async function logout(page) {
+  const backdrop = page.locator('#mobileNavBackdrop');
+  const navOpen = await page.evaluate(() => document.body.classList.contains('mobile-nav-open'));
+  if (navOpen) {
+    if (await backdrop.isVisible().catch(() => false)) {
+      await backdrop.click({ force: true }).catch(() => {});
+    } else {
+      await page.evaluate(() => document.body.classList.remove('mobile-nav-open'));
+    }
+    await page.waitForTimeout(200);
+  }
   const endBtn = page.locator('#appShell header .btn-red', { hasText: 'End' });
   if (await endBtn.isVisible().catch(() => false)) {
-    await endBtn.click();
+    try {
+      await endBtn.click({ timeout: 4_000 });
+    } catch (e) {
+      addFinding({
+        severity: 'bug',
+        category: 'blocked-button',
+        title: 'End (logout) click intercepted',
+        detail: e.message,
+      });
+      await endBtn.click({ force: true });
+    }
     await page.locator('#loginScreen').waitFor({ state: 'visible', timeout: 15_000 });
   }
 }
