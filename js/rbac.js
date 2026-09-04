@@ -31,6 +31,7 @@ const TVC_RBAC = (function () {
     };
 
     function normalizeReportStatus(status, isLocked) {
+        if (status === 'DRAFT') return 'DRAFT';
         if (status === 'PENDING') return ReportStatus.REPORTED;
         if (status === 'POSTPONED') return ReportStatus.CONFIRMED;
         if (status === 'APPROVED') return isLocked ? ReportStatus.APPROVED : ReportStatus.CONFIRMED;
@@ -38,6 +39,7 @@ const TVC_RBAC = (function () {
         return status || ReportStatus.REPORTED;
     }
 
+    function isDraftStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === 'DRAFT'; }
     function isReportedStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === ReportStatus.REPORTED; }
     function isConfirmedStatus(status, isLocked) { return normalizeReportStatus(status, isLocked) === ReportStatus.CONFIRMED; }
     function isApprovedStatus(status, isLocked) {
@@ -683,7 +685,7 @@ const TVC_RBAC = (function () {
         isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isTvcPilotAccount, isPms21Account, isFleetMonitorAccount, canMasterExcelAccount, isCompanyHqAccount, isHqSku, isApprover,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
-        normalizeReportStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,
+        normalizeReportStatus, isDraftStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,
         getAccessibleDepartments, canAccessDepartment, canConfirmDepartment, canModifyDefectShipPhase3, canApproveDepartment, canApproveHqReport,
         isHqAuthoredRecord, canHqDirectApprove,
     };
