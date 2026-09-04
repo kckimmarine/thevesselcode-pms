@@ -11571,6 +11571,9 @@ const TVC_App = (function () {
             voyNo: '',
             runHrs: '0',
             place: '',
+            troubleDefect: false,
+            personInCharge: '',
+            jobName: '',
             troubleParts: '',
             workResult: '',
             troublePoint: '',
@@ -11584,7 +11587,6 @@ const TVC_App = (function () {
             lastMaintDate: '',
             pmsGroupNo: '',
             pmsGroupKey: '',
-            jobName: '',
             maker: '',
             modelType: '',
             capacity: '',
@@ -14237,6 +14239,8 @@ const TVC_App = (function () {
                 modelType: hdr.modelType || '',
                 capacity: hdr.capacity || '',
                 serialNo: hdr.serialNo || '',
+                jobName: job.job_detail || '',
+                personInCharge: job.pic || TVC_RBAC.getReportedByLabel(state.user),
             });
             state._wrTab = 'repair';
             state._wrPage = '1';

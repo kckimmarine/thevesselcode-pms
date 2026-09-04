@@ -76,6 +76,16 @@ npm run import-xlsx          # Excel → data/pms-unified.json 재생성
 
 시범 운영 체크리스트: [`docs/PILOT_CHECKLIST.md`](docs/PILOT_CHECKLIST.md)
 
+## AI / UI documentation
+
+| Doc | Purpose |
+|-----|---------|
+| [`AGENTS.md`](AGENTS.md) | Cursor & Gemini — run, test, constraints |
+| [`docs/UI-MAP.md`](docs/UI-MAP.md) | Tabs, modals, JS function map |
+| [`docs/UI-PATTERNS.md`](docs/UI-PATTERNS.md) | `wr-maint`, spare list, stock patterns |
+| [`docs/MOBILE-UX.md`](docs/MOBILE-UX.md) | 390px known issues |
+| [`docs/GEMINI-COLLAB.md`](docs/GEMINI-COLLAB.md) | Gemini ↔ Cursor handoff templates |
+
 ## Architecture
 
 | Layer | Path |
