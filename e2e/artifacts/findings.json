@@ -1,0 +1,1185 @@
+{
+  "startedAt": "2026-09-04T03:54:05.123Z",
+  "findings": [
+    {
+      "at": "2026-09-04T03:54:05.870Z",
+      "severity": "bug",
+      "category": "js-error",
+      "title": "Uncaught page error",
+      "detail": "Unexpected token '??'",
+      "screenshot": "",
+      "viewport": "",
+      "account": "Engine / engineer (390px)"
+    },
+    {
+      "at": "2026-09-04T03:54:10.137Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.spare-flow-item \"Database Backup & Restore\" covered by header.spare-flow-head \"IF NECESSARY\" at (188,843) [mobile-390-menu]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-menu.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:10.137Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.ot-pms-metric.ot-pms-overdue.ot-pms-scope-total \"473\" covered by header.spare-flow-head \"IF NECESSARY\" at (166,843) [mobile-390-menu]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-menu.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:10.139Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.ot-pms-metric.ot-pms-overdue.ot-pms-scope-nonCritical \"473\" covered by header.spare-flow-head \"IF NECESSARY\" at (166,843) [mobile-390-menu]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-menu.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:10.139Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.ot-badge.ot-lowstock.ot-hot \"📦 Low Stock 326\" covered by header.spare-flow-head \"IF NECESSARY\" at (106,843) [mobile-390-menu]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-menu.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.187Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button#actListFilterBtn.btn.btn-sm.list-filter-btn \"Filter\" rect=357,1014 64x36 vw=390 [mobile-390-pms]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-pms.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.187Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button.btn.btn-sm.act-period-clear \"Clear\" rect=436,1014 58x36 vw=390 [mobile-390-pms]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-pms.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.188Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "span#actCount.count-label \"699 jobs\" rect=500,1010 53x44 vw=390 [mobile-390-pms]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-pms.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.188Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "PMS tree column overlaps the job list on a 390px viewport",
+      "detail": "`.tree-panel` stays side-by-side with `.plan-main` instead of stacking. Group labels collide with Print / dashboard chips. [mobile-390-pms]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-pms.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.188Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.act-dash-btn.act-dash-critical \"0 ⚠ Critical\" covered by span.act-dash-label \"! Overdue\" at (79,843) [mobile-390-pms]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-pms.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.188Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.act-dash-btn.act-dash-total.active \"699 Total\" covered by span.act-dash-label \"◷ Due (30d)\" at (188,843) [mobile-390-pms]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-pms.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.189Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.tvc-date-picker-btn covered by span.act-dash-label \"◷ Due (30d)\" at (188,843) [mobile-390-pms]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-pms.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.190Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.tvc-date-picker-btn covered by button.act-dash-btn.act-dash-postponed \"0 P Postponed\" at (330,843) [mobile-390-pms]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-pms.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.786Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button#actListFilterBtn.btn.btn-sm.list-filter-btn \"Filter\" rect=357,1014 64x36 vw=390 [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.786Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button.btn.btn-sm.act-period-clear \"Clear\" rect=436,1014 58x36 vw=390 [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.786Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "span#actCount.count-label \"699 jobs\" rect=500,1010 53x44 vw=390 [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.787Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn.active \"📝 PMS\" ∩ button.wr-kind-tab \"Work Permit\" overlap=1951px² [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.787Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn.active \"📝 PMS\" ∩ button.wr-kind-tab.active \"Maintenance\" overlap=2150px² [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.787Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn.active \"📝 PMS\" ∩ button.wr-kind-tab \"Defect\" overlap=1120px² [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.787Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn \"🔩 SPARE\" ∩ button.wr-pagetab.active \"Page 1\" overlap=1559px² [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.788Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn \"🔩 SPARE\" ∩ button.wr-pagetab \"Page 2\" overlap=1598px² [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.788Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "PMS tree column overlaps the job list on a 390px viewport",
+      "detail": "`.tree-panel` stays side-by-side with `.plan-main` instead of stacking. Group labels collide with Print / dashboard chips. [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.788Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "span \"🌳 PMS GROUP Tree\" ∩ label \"FILE NO.\" overlap=2107px² [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:11.788Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "span \"ENGINE\" ∩ label \"PLACE\" overlap=287px² [mobile-390-work-report]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-work-report.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:13.257Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "PMS tree column overlaps the job list on a 390px viewport",
+      "detail": "`.tree-panel` stays side-by-side with `.plan-main` instead of stacking. Group labels collide with Print / dashboard chips. [mobile-390-spare]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-spare.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:13.257Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "span \"23. REFRIGERATOR & COLD CHAMBER\" ∩ span.spare-gh-label \"Equipment\" overlap=475px² [mobile-390-spare]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-spare.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.204Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button#histListFilterBtn.btn.btn-sm.list-filter-btn \"Filter\" rect=364,262 64x36 vw=390 [mobile-390-history]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-history.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.204Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button.btn.btn-sm.act-period-clear \"Clear\" rect=443,262 58x36 vw=390 [mobile-390-history]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-history.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.204Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "span#histCount.count-label \"0 / 0 entries\" rect=507,258 70x44 vw=390 [mobile-390-history]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-history.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.204Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-sort1 rect=352,459 167x41 vw=390 [mobile-390-history]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-history.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.204Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-sort2 rect=519,459 167x41 vw=390 [mobile-390-history]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-history.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.205Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-date rect=685,459 88x41 vw=390 [mobile-390-history]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-history.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.205Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-status rect=773,459 96x41 vw=390 [mobile-390-history]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-history.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.205Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-flag rect=869,459 40x41 vw=390 [mobile-390-history]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-history.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.567Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button#histListFilterBtn.btn.btn-sm.list-filter-btn \"Filter\" rect=364,262 64x36 vw=390 [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.567Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button.btn.btn-sm.act-period-clear \"Clear\" rect=443,262 58x36 vw=390 [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.568Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "span#histCount.count-label \"0 / 0 entries\" rect=507,258 70x44 vw=390 [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.568Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-sort1 rect=352,459 167x41 vw=390 [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.568Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-sort2 rect=519,459 167x41 vw=390 [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.568Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-date rect=685,459 88x41 vw=390 [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.568Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-status rect=773,459 96x41 vw=390 [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.569Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-flag rect=869,459 40x41 vw=390 [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.569Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "span.userBadgeEl.pill.ok \"Vessel Mode - Engine\" ∩ button.tab-btn \"📑 Menu\" overlap=1338px² [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.570Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "span.dept-fixed.pill.ok \"Engine 🔒\" ∩ button.tab-btn \"📑 Menu\" overlap=630px² [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.570Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn \"📝 PMS\" ∩ h2 \"📜 Report History\" overlap=4755px² [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.571Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn \"🔩 SPARE\" ∩ button.hist-scope-tab.active \"PMS\" overlap=2113px² [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.571Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn \"🔩 SPARE\" ∩ button.hist-scope-tab \"SPARE\" overlap=2589px² [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.571Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn.active \"📜 Report History\" ∩ button#histBtnDetail.btn.btn-sm \"Detail Report\" overlap=3697px² [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.571Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn.active \"📜 Report History\" ∩ button#histBtnDelete.btn.btn-sm.btn-red \"Delete\" overlap=2305px² [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:14.572Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button#settingsOpenBtn.tab-bar-settings \"⚙ Settings\" ∩ button.btn.btn-sm \"🖨 Print\" overlap=1739px² [mobile-390-settings]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-settings.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.233Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button#histListFilterBtn.btn.btn-sm.list-filter-btn \"Filter\" rect=364,262 64x36 vw=390 [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.234Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "button.btn.btn-sm.act-period-clear \"Clear\" rect=443,262 58x36 vw=390 [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.234Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "span#histCount.count-label \"0 / 0 entries\" rect=507,258 70x44 vw=390 [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.234Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-sort1 rect=352,459 167x41 vw=390 [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.235Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-sort2 rect=519,459 167x41 vw=390 [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.235Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-date rect=685,459 88x41 vw=390 [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.235Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-status rect=773,459 96x41 vw=390 [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.235Z",
+      "severity": "ux",
+      "category": "mobile-overflow",
+      "title": "Element clipped outside viewport",
+      "detail": "col.hist-col-flag rect=869,459 40x41 vw=390 [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.235Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "span.userBadgeEl.pill.ok \"Vessel Mode - Engine\" ∩ button.tab-btn \"📑 Menu\" overlap=1338px² [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.236Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "span.dept-fixed.pill.ok \"Engine 🔒\" ∩ button.tab-btn \"📑 Menu\" overlap=630px² [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.236Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn \"📝 PMS\" ∩ h2 \"📜 Report History\" overlap=4755px² [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.237Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn \"🔩 SPARE\" ∩ button.hist-scope-tab.active \"PMS\" overlap=2113px² [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.237Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn \"🔩 SPARE\" ∩ button.hist-scope-tab \"SPARE\" overlap=2589px² [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.238Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn.active \"📜 Report History\" ∩ button#histBtnDetail.btn.btn-sm \"Detail Report\" overlap=3697px² [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.238Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button.tab-btn.active \"📜 Report History\" ∩ button#histBtnDelete.btn.btn-sm.btn-red \"Delete\" overlap=2305px² [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.238Z",
+      "severity": "ux",
+      "category": "mobile-overlap",
+      "title": "Text labels overlap",
+      "detail": "button#settingsOpenBtn.tab-bar-settings \"⚙ Settings\" ∩ button.btn.btn-sm \"🖨 Print\" overlap=1739px² [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.238Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button#mobileNavBtn.mobile-nav-btn covered by button.tab-btn \"📑 Menu\" at (36,30) [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.239Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.btn.btn-red \"End\" covered by div#mobileNavBackdrop.mobile-nav-backdrop at (339,30) [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.239Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.hist-scope-tab.active \"PMS\" covered by button.tab-btn \"🔩 SPARE\" at (52,132) [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.239Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.hist-scope-tab \"SPARE\" covered by button.tab-btn \"🔩 SPARE\" at (127,132) [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.239Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.btn.btn-sm \"🖨 Print\" covered by button#settingsOpenBtn.tab-bar-settings \"⚙ Settings\" at (211,225) [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.240Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.btn.btn-sm \"👁 Preview\" covered by div#mobileNavBackdrop.mobile-nav-backdrop at (297,225) [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.240Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.tvc-date-picker-btn covered by nav#tabBar.tab-bar \"📑 Menu 📝 PMS 🔩 SPARE 📜 Report History ⚙ Settings\" at (195,280) [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:15.240Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "Button center is covered — click may miss",
+      "detail": "button.tvc-date-picker-btn covered by div#mobileNavBackdrop.mobile-nav-backdrop at (337,280) [mobile-390-nav-open]",
+      "screenshot": "e2e/artifacts/screenshots/mobile-390-nav-open.png",
+      "viewport": "390x844",
+      "account": "Engine / engineer @390"
+    },
+    {
+      "at": "2026-09-04T03:54:19.487Z",
+      "severity": "bug",
+      "category": "blocked-button",
+      "title": "End (logout) click intercepted",
+      "detail": "locator.click: Timeout 4000ms exceeded.\nCall log:\n\u001b[2m  - waiting for locator('#appShell header .btn-red').filter({ hasText: 'End' })\u001b[22m\n\u001b[2m    - locator resolved to <button class=\"btn btn-red\" onclick=\"TVC_App.handleLogout()\">End</button>\u001b[22m\n\u001b[2m  - attempting click action\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div aria-hidden=\"true\" id=\"mobileNavBackdrop\" class=\"mobile-nav-backdrop\"></div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m    - waiting 20ms\u001b[22m\n\u001b[2m    2 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div aria-hidden=\"true\" id=\"mobileNavBackdrop\" class=\"mobile-nav-backdrop\"></div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 100ms\u001b[22m\n\u001b[2m    8 × waiting for element to be visible, enabled and stable\u001b[22m\n\u001b[2m      - element is visible, enabled and stable\u001b[22m\n\u001b[2m      - scrolling into view if needed\u001b[22m\n\u001b[2m      - done scrolling\u001b[22m\n\u001b[2m      - <div aria-hidden=\"true\" id=\"mobileNavBackdrop\" class=\"mobile-nav-backdrop\"></div> intercepts pointer events\u001b[22m\n\u001b[2m    - retrying click action\u001b[22m\n\u001b[2m      - waiting 500ms\u001b[22m\n",
+      "screenshot": "",
+      "viewport": "",
+      "account": ""
+    },
+    {
+      "at": "2026-09-04T03:54:24.540Z",
+      "severity": "bug",
+      "category": "button",
+      "title": "End did not return to Sign in",
+      "detail": "handleLogout via the End button left #appShell visible (often the mobile drawer backdrop swallows the tap). Recovered with TVC_App.handleLogout().",
+      "screenshot": "e2e/artifacts/screenshots/logout-stuck-on-app.png",
+      "viewport": "",
+      "account": ""
+    },
+    {
+      "at": "2026-09-04T03:54:24.840Z",
+      "severity": "bug",
+      "category": "js-error",
+      "title": "Uncaught page error",
+      "detail": "Unexpected token '??'",
+      "screenshot": "",
+      "viewport": "",
+      "account": "deck"
+    },
+    {
+      "at": "2026-09-04T03:55:30.093Z",
+      "severity": "bug",
+      "category": "spare",
+      "title": "SPARE list empty or never rendered",
+      "detail": "",
+      "screenshot": "e2e/artifacts/screenshots/spare-empty-Deck_officer.png",
+      "viewport": "",
+      "account": "Deck / officer"
+    },
+    {
+      "at": "2026-09-04T03:55:33.211Z",
+      "severity": "bug",
+      "category": "js-error",
+      "title": "Uncaught page error",
+      "detail": "Unexpected token '??'",
+      "screenshot": "",
+      "viewport": "",
+      "account": "deck"
+    },
+    {
+      "at": "2026-09-04T03:55:33.212Z",
+      "severity": "bug",
+      "category": "js-error",
+      "title": "Uncaught page error",
+      "detail": "Unexpected token '??'",
+      "screenshot": "",
+      "viewport": "",
+      "account": "engine"
+    }
+  ],
+  "steps": [
+    {
+      "at": "2026-09-04T03:54:05.674Z",
+      "name": "login:engine",
+      "account": "Engine / engineer"
+    },
+    {
+      "at": "2026-09-04T03:54:10.076Z",
+      "name": "login-ok:engine",
+      "account": "Engine / engineer",
+      "ms": 55
+    },
+    {
+      "at": "2026-09-04T03:54:10.790Z",
+      "name": "tab:actual",
+      "account": "Engine / engineer @390",
+      "ms": 376
+    },
+    {
+      "at": "2026-09-04T03:54:13.187Z",
+      "name": "tab:spare",
+      "account": "Engine / engineer @390",
+      "ms": 311
+    },
+    {
+      "at": "2026-09-04T03:54:13.838Z",
+      "name": "tab:history",
+      "account": "Engine / engineer @390",
+      "ms": 316
+    },
+    {
+      "at": "2026-09-04T03:54:24.617Z",
+      "name": "mobile-audit-done",
+      "count": 57
+    },
+    {
+      "at": "2026-09-04T03:54:24.659Z",
+      "name": "login:deck",
+      "account": "Deck / officer"
+    },
+    {
+      "at": "2026-09-04T03:54:29.045Z",
+      "name": "login-ok:deck",
+      "account": "Deck / officer",
+      "ms": 77
+    },
+    {
+      "at": "2026-09-04T03:54:29.435Z",
+      "name": "tab:menu",
+      "account": "Deck / officer",
+      "ms": 316
+    },
+    {
+      "at": "2026-09-04T03:54:29.840Z",
+      "name": "menu-flow-count",
+      "account": "Deck / officer",
+      "count": 7
+    },
+    {
+      "at": "2026-09-04T03:54:30.295Z",
+      "name": "menu-flow-click",
+      "account": "Deck / officer",
+      "label": "Check PMS 112"
+    },
+    {
+      "at": "2026-09-04T03:54:30.623Z",
+      "name": "tab:menu",
+      "account": "Deck / officer",
+      "ms": 314
+    },
+    {
+      "at": "2026-09-04T03:54:31.058Z",
+      "name": "menu-flow-click",
+      "account": "Deck / officer",
+      "label": "Confirm Report"
+    },
+    {
+      "at": "2026-09-04T03:54:31.382Z",
+      "name": "tab:menu",
+      "account": "Deck / officer",
+      "ms": 312
+    },
+    {
+      "at": "2026-09-04T03:54:31.803Z",
+      "name": "menu-flow-click",
+      "account": "Deck / officer",
+      "label": "Database Backup & Restore"
+    },
+    {
+      "at": "2026-09-04T03:54:32.552Z",
+      "name": "menu-flow-click",
+      "account": "Deck / officer",
+      "label": "Check SPARE"
+    },
+    {
+      "at": "2026-09-04T03:54:32.879Z",
+      "name": "tab:menu",
+      "account": "Deck / officer",
+      "ms": 315
+    },
+    {
+      "at": "2026-09-04T03:54:33.304Z",
+      "name": "menu-flow-click",
+      "account": "Deck / officer",
+      "label": "Spare Parts Requisition"
+    },
+    {
+      "at": "2026-09-04T03:54:33.960Z",
+      "name": "tab:menu",
+      "account": "Deck / officer",
+      "ms": 315
+    },
+    {
+      "at": "2026-09-04T03:54:34.388Z",
+      "name": "menu-flow-click",
+      "account": "Deck / officer",
+      "label": "Check Spare Parts Inventory"
+    },
+    {
+      "at": "2026-09-04T03:54:34.718Z",
+      "name": "tab:menu",
+      "account": "Deck / officer",
+      "ms": 317
+    },
+    {
+      "at": "2026-09-04T03:54:35.052Z",
+      "name": "tab:actual",
+      "account": "Deck / officer",
+      "ms": 324
+    },
+    {
+      "at": "2026-09-04T03:54:36.776Z",
+      "name": "work-report-filled",
+      "account": "Deck / officer",
+      "screenshot": "e2e/artifacts/screenshots/work-report-Deck_officer.png"
+    },
+    {
+      "at": "2026-09-04T03:54:38.571Z",
+      "name": "work-report-save-clicked",
+      "account": "Deck / officer"
+    },
+    {
+      "at": "2026-09-04T03:54:39.225Z",
+      "name": "tab:spare",
+      "account": "Deck / officer",
+      "ms": 313
+    },
+    {
+      "at": "2026-09-04T03:55:30.428Z",
+      "name": "tab:history",
+      "account": "Deck / officer",
+      "ms": 326
+    },
+    {
+      "at": "2026-09-04T03:55:32.020Z",
+      "name": "tab:menu",
+      "account": "Deck / officer",
+      "ms": 314
+    },
+    {
+      "at": "2026-09-04T03:55:32.358Z",
+      "name": "tab:actual",
+      "account": "Deck / officer",
+      "ms": 329
+    },
+    {
+      "at": "2026-09-04T03:55:32.680Z",
+      "name": "tab:history",
+      "account": "Deck / officer",
+      "ms": 312
+    },
+    {
+      "at": "2026-09-04T03:55:33.003Z",
+      "name": "tab:menu",
+      "account": "Deck / officer",
+      "ms": 314
+    },
+    {
+      "at": "2026-09-04T03:55:33.034Z",
+      "name": "logout:deck",
+      "account": "Deck / officer"
+    },
+    {
+      "at": "2026-09-04T03:55:33.034Z",
+      "name": "login:engine",
+      "account": "Engine / engineer"
+    },
+    {
+      "at": "2026-09-04T03:55:33.594Z",
+      "name": "login-ok:engine",
+      "account": "Engine / engineer",
+      "ms": 40
+    },
+    {
+      "at": "2026-09-04T03:55:33.997Z",
+      "name": "tab:menu",
+      "account": "Engine / engineer",
+      "ms": 312
+    },
+    {
+      "at": "2026-09-04T03:55:34.400Z",
+      "name": "menu-flow-count",
+      "account": "Engine / engineer",
+      "count": 8
+    },
+    {
+      "at": "2026-09-04T03:55:34.874Z",
+      "name": "menu-flow-click",
+      "account": "Engine / engineer",
+      "label": "Check PMS 473"
+    },
+    {
+      "at": "2026-09-04T03:55:35.203Z",
+      "name": "tab:menu",
+      "account": "Engine / engineer",
+      "ms": 317
+    },
+    {
+      "at": "2026-09-04T03:55:35.636Z",
+      "name": "menu-flow-click",
+      "account": "Engine / engineer",
+      "label": "Confirm Report"
+    },
+    {
+      "at": "2026-09-04T03:55:35.964Z",
+      "name": "tab:menu",
+      "account": "Engine / engineer",
+      "ms": 315
+    },
+    {
+      "at": "2026-09-04T03:55:36.391Z",
+      "name": "menu-flow-click",
+      "account": "Engine / engineer",
+      "label": "Update Running Hours"
+    },
+    {
+      "at": "2026-09-04T03:55:37.132Z",
+      "name": "menu-flow-click",
+      "account": "Engine / engineer",
+      "label": "Database Backup & Restore"
+    },
+    {
+      "at": "2026-09-04T03:55:37.883Z",
+      "name": "menu-flow-click",
+      "account": "Engine / engineer",
+      "label": "Check SPARE"
+    },
+    {
+      "at": "2026-09-04T03:55:38.210Z",
+      "name": "tab:menu",
+      "account": "Engine / engineer",
+      "ms": 315
+    },
+    {
+      "at": "2026-09-04T03:55:38.636Z",
+      "name": "menu-flow-click",
+      "account": "Engine / engineer",
+      "label": "Spare Parts Requisition"
+    },
+    {
+      "at": "2026-09-04T03:55:39.292Z",
+      "name": "tab:menu",
+      "account": "Engine / engineer",
+      "ms": 318
+    },
+    {
+      "at": "2026-09-04T03:55:39.646Z",
+      "name": "tab:actual",
+      "account": "Engine / engineer",
+      "ms": 345
+    },
+    {
+      "at": "2026-09-04T03:55:41.403Z",
+      "name": "work-report-filled",
+      "account": "Engine / engineer",
+      "screenshot": "e2e/artifacts/screenshots/work-report-Engine_engineer.png"
+    },
+    {
+      "at": "2026-09-04T03:55:43.200Z",
+      "name": "work-report-save-clicked",
+      "account": "Engine / engineer"
+    },
+    {
+      "at": "2026-09-04T03:55:43.883Z",
+      "name": "tab:spare",
+      "account": "Engine / engineer",
+      "ms": 319
+    },
+    {
+      "at": "2026-09-04T03:55:45.504Z",
+      "name": "spare-consume-opened",
+      "account": "Engine / engineer",
+      "screenshot": "e2e/artifacts/screenshots/spare-consume-Engine_engineer.png"
+    },
+    {
+      "at": "2026-09-04T03:55:47.200Z",
+      "name": "spare-consume-save-clicked",
+      "account": "Engine / engineer"
+    },
+    {
+      "at": "2026-09-04T03:55:47.860Z",
+      "name": "tab:history",
+      "account": "Engine / engineer",
+      "ms": 318
+    },
+    {
+      "at": "2026-09-04T03:55:49.460Z",
+      "name": "tab:menu",
+      "account": "Engine / engineer",
+      "ms": 320
+    },
+    {
+      "at": "2026-09-04T03:55:49.835Z",
+      "name": "tab:actual",
+      "account": "Engine / engineer",
+      "ms": 366
+    },
+    {
+      "at": "2026-09-04T03:55:50.159Z",
+      "name": "tab:history",
+      "account": "Engine / engineer",
+      "ms": 314
+    },
+    {
+      "at": "2026-09-04T03:55:50.486Z",
+      "name": "tab:menu",
+      "account": "Engine / engineer",
+      "ms": 318
+    },
+    {
+      "at": "2026-09-04T03:55:50.517Z",
+      "name": "logout:engine",
+      "account": "Engine / engineer"
+    }
+  ],
+  "consoleErrors": [
+    {
+      "at": "2026-09-04T03:54:05.934Z",
+      "account": "Engine / engineer (390px)",
+      "text": "[TVC] DefectReport init ReferenceError: TVC_DefectReport is not defined\n    at Object.boot (http://127.0.0.1:4173/js/app.js?v=20260903-web-cloud:446:9)"
+    },
+    {
+      "at": "2026-09-04T03:54:24.920Z",
+      "account": "deck",
+      "text": "[TVC] DefectReport init ReferenceError: TVC_DefectReport is not defined\n    at Object.boot (http://127.0.0.1:4173/js/app.js?v=20260903-web-cloud:446:9)"
+    },
+    {
+      "at": "2026-09-04T03:55:33.225Z",
+      "account": "deck",
+      "text": "[TVC] DefectReport init ReferenceError: TVC_DefectReport is not defined\n    at Object.boot (http://127.0.0.1:4173/js/app.js?v=20260903-web-cloud:446:9)"
+    },
+    {
+      "at": "2026-09-04T03:55:33.225Z",
+      "account": "engine",
+      "text": "[TVC] DefectReport init ReferenceError: TVC_DefectReport is not defined\n    at Object.boot (http://127.0.0.1:4173/js/app.js?v=20260903-web-cloud:446:9)"
+    }
+  ],
+  "pageErrors": [
+    {
+      "at": "2026-09-04T03:54:05.870Z",
+      "account": "Engine / engineer (390px)",
+      "text": "Unexpected token '??'"
+    },
+    {
+      "at": "2026-09-04T03:54:24.840Z",
+      "account": "deck",
+      "text": "Unexpected token '??'"
+    },
+    {
+      "at": "2026-09-04T03:55:33.211Z",
+      "account": "deck",
+      "text": "Unexpected token '??'"
+    },
+    {
+      "at": "2026-09-04T03:55:33.211Z",
+      "account": "engine",
+      "text": "Unexpected token '??'"
+    }
+  ],
+  "updatedAt": "2026-09-04T03:55:50.517Z"
+}

@@ -28,3 +28,10 @@ admin/releases/**
 
 # Deploy secrets (Supabase / Vercel tokens — never commit)
 deploy/.env.deploy.local
+.env
+deploy/.env.local
+
+# Playwright HTML/trace dumps (keep e2e/artifacts screenshots + TEST_REPORT.md)
+/test-results/
+/playwright-report/
+/blob-report/
