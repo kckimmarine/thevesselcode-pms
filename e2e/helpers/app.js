@@ -150,7 +150,19 @@ async function logout(page) {
       });
       await endBtn.click({ force: true });
     }
-    await page.locator('#loginScreen').waitFor({ state: 'visible', timeout: 15_000 });
+  }
+  const back = await page.locator('#loginScreen').waitFor({ state: 'visible', timeout: 5_000 }).then(() => true).catch(() => false);
+  if (!back) {
+    const file = await shot(page, 'logout-stuck-on-app');
+    addFinding({
+      severity: 'bug',
+      category: 'button',
+      title: 'End did not return to Sign in',
+      detail: 'handleLogout via the End button left #appShell visible (often the mobile drawer backdrop swallows the tap). Recovered with TVC_App.handleLogout().',
+      screenshot: file,
+    });
+    await page.evaluate(() => { try { window.TVC_App?.handleLogout?.(); } catch (_) {} });
+    await page.locator('#loginScreen').waitFor({ state: 'visible', timeout: 10_000 }).catch(() => {});
   }
 }
 
