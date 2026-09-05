@@ -2684,6 +2684,10 @@ const TVC_App = (function () {
         const wrap = document.getElementById('actPeriodFilter');
         if (wrap) wrap.classList.toggle('active', hasActualPeriodFilter());
     }
+
+    function initPeriodDatePickers(scope) {
+        TVC_PWA?.initPeriodDatePickers?.(scope);
+    }
     function selectGroup(key) {
         if (isOrigJobInlineEditing()) cancelOrigJobInlineEdit();
         if (modStateSpare()?.groupHeaderEdit && TVC_SpareMenu?.cancelGroupHeaderEdit) {
@@ -11330,6 +11334,7 @@ const TVC_App = (function () {
                 msgEl.classList.add('hidden');
             }
         }
+        initPeriodDatePickers();
     }
 
     function inferReportDepartment(report, jobs) {
@@ -13577,6 +13582,7 @@ const TVC_App = (function () {
         updateHistToolbarState();
         TVC_RunHours.syncRhToolbarUi();
         TVC_ListFilters?.syncBtn('history');
+        initPeriodDatePickers();
     }
 
     /** Work History: 단일 클릭 — 행 선택 하이라이트(Work Plan과 동일 UX) */
@@ -17154,6 +17160,7 @@ const TVC_App = (function () {
         refreshWorkProcedureIfOpen();
         TVC_RunHours.syncRhToolbarUi();
         syncPlanUpdateUi();
+        initPeriodDatePickers();
     }
 
     async function refreshAfterImport(payload) {
