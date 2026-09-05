@@ -3242,9 +3242,12 @@ const TVC_SpareMenu = (function () {
             input.removeAttribute('disabled');
             input.removeAttribute('readonly');
             input.classList.remove('wr-ro');
+            wrap.style.pointerEvents = 'auto';
             wrap.querySelectorAll('.tvc-date-picker-btn, .tvc-date-picker-native').forEach(btn => {
                 btn.disabled = false;
                 btn.removeAttribute('disabled');
+                btn.removeAttribute('readonly');
+                btn.style.pointerEvents = 'auto';
             });
         });
     }
@@ -3896,6 +3899,7 @@ const TVC_SpareMenu = (function () {
             if (cur) cur.outerHTML = thead;
         });
         applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
+        syncReqWorkMetaDatePickers(document.getElementById('spareReqWorkBody'));
     }
 
     function closeReqQuoteHeadPicks() {
@@ -8004,6 +8008,7 @@ const TVC_SpareMenu = (function () {
             applyReqWorkMetaFromSession(_reqWorkDraft);
             syncReqWorkApprovalSection(_reqWorkDraft);
             applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
+            syncReqWorkMetaDatePickers(document.getElementById('spareReqWorkBody'));
             syncReqWorkFlowBtns();
             syncSparePartsRequisitionWindowTitle();
             syncReqWorkListWindowHeadButtons();
@@ -14379,6 +14384,7 @@ const TVC_SpareMenu = (function () {
         m.reqWorkListEditing = keepEditing;
         m.reqWorkPostSaveView = false;
         applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
+        syncReqWorkMetaDatePickers(document.getElementById('spareReqWorkBody'));
         syncReqWorkHistNavChrome(reqs, i, _reqWorkDraft);
     }
 
@@ -16283,6 +16289,7 @@ const TVC_SpareMenu = (function () {
         updateSpareModalTreeToggleUi('reqWork');
         if (!opts.skipScrollLock && isReqWorkListViewLocked()) {
             applyReqWorkScrollLock(document.getElementById('spareReqWorkBody'));
+            syncReqWorkMetaDatePickers(document.getElementById('spareReqWorkBody'));
         }
         if (isRequisitionListWindow(m)) syncReqWorkListWindowHeadButtons();
         syncReqWorkSaveBtn();
@@ -16509,8 +16516,10 @@ const TVC_SpareMenu = (function () {
                 el.setAttribute('disabled', 'disabled');
             });
         }
+        syncSpareDateInputs(body);
         // Requisition List 조회 모드 · Complete 완료 후: 본문 잠금 (Select Requisition만 항상 활성)
         applyReqWorkScrollLock(body);
+        syncReqWorkMetaDatePickers(body);
         bindReqWorkListKeyboard();
         bindReqWorkHistListClicks();
         if (preservedHist) {
@@ -16532,7 +16541,6 @@ const TVC_SpareMenu = (function () {
             syncReqWorkHeadLayout();
             requestAnimationFrame(syncReqWorkHeadLayout);
         });
-        syncSpareDateInputs(body);
         syncReqWorkMetaDatePickers(body);
         syncReqWorkListWindowHeadButtons();
     }

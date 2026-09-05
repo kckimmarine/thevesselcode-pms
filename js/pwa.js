@@ -125,6 +125,10 @@ const TVC_PWA = (function () {
         const v = normalizeDateText(textEl.value);
         pickerEl.value = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
         const anchor = anchorEl || textEl;
+        pickerEl.disabled = false;
+        pickerEl.removeAttribute('disabled');
+        pickerEl.readOnly = false;
+        pickerEl.removeAttribute('readonly');
         try {
             if (typeof pickerEl.showPicker === 'function') {
                 pickerEl.showPicker();
@@ -146,7 +150,26 @@ const TVC_PWA = (function () {
         pickerEl.addEventListener('change', cleanup, { once: true });
         setTimeout(cleanup, 4000);
         try { pickerEl.focus({ preventScroll: true }); } catch (_) { /* noop */ }
-        pickerEl.click();
+        try { pickerEl.click(); } catch (_) { /* noop */ }
+    }
+
+    function bindDatePickerTrigger(el, handler) {
+        if (!el || el._tvcPickerTriggerBound) return;
+        el._tvcPickerTriggerBound = true;
+        el.style.touchAction = 'manipulation';
+        let lastTouch = 0;
+        const run = (e) => {
+            if (e.type === 'touchend') {
+                e.preventDefault();
+                lastTouch = Date.now();
+                handler(e);
+                return;
+            }
+            if (e.type === 'click' && Date.now() - lastTouch < 500) return;
+            handler(e);
+        };
+        el.addEventListener('click', run);
+        el.addEventListener('touchend', run, { passive: false });
     }
 
     function attachDatePicker(textEl) {
@@ -155,8 +178,10 @@ const TVC_PWA = (function () {
 
         const wrap = document.createElement('span');
         wrap.className = 'tvc-date-input-wrap';
+        wrap.style.position = 'relative';
         textEl.parentNode.insertBefore(wrap, textEl);
         wrap.appendChild(textEl);
+        textEl.style.touchAction = 'manipulation';
 
         const btn = document.createElement('button');
         btn.type = 'button';
@@ -177,11 +202,13 @@ const TVC_PWA = (function () {
             openDatePicker(textEl, picker, btn);
         };
 
-        btn.addEventListener('click', openPicker);
+        bindDatePickerTrigger(btn, openPicker);
         btn.addEventListener('mousedown', (e) => e.preventDefault());
-        textEl.addEventListener('click', (e) => {
+        bindDatePickerTrigger(textEl, (e) => {
             if (textEl.disabled || textEl.readOnly) return;
             if (e.target !== textEl) return;
+            e.preventDefault();
+            e.stopPropagation();
             openDatePicker(textEl, picker, btn);
         });
 

@@ -7234,14 +7234,24 @@ label.spare-file-pick input[type=file] { display: none; }
 }
 .spare-req-work-scroll.is-req-locked #reqWorkReceivedOn:not(:disabled),
 .spare-req-work-scroll.is-req-locked #reqWorkReceivedPort:not(:disabled),
-.spare-req-work-scroll.is-req-locked #reqWorkShipComments:not(:disabled) {
+.spare-req-work-scroll.is-req-locked #reqWorkShipComments:not(:disabled),
+.spare-req-work-scroll.is-req-locked #reqWorkDelFrom:not(:disabled),
+.spare-req-work-scroll.is-req-locked #reqWorkDelTo:not(:disabled),
+.spare-req-work-scroll.is-req-locked #reqWorkMadeOn:not(:disabled),
+.spare-req-work-scroll.is-req-locked #reqWorkAssessedOn:not(:disabled),
+.spare-req-work-scroll.is-req-locked #reqWorkOrderedOn:not(:disabled) {
     opacity: 1;
     cursor: text;
     background: #fff;
     color: inherit;
 }
 .spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkReceivedOn:not([readonly])) .tvc-date-picker-btn:not(:disabled),
-.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkReceivedOn:not(:disabled)) .tvc-date-picker-btn:not(:disabled) {
+.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkReceivedOn:not(:disabled)) .tvc-date-picker-btn:not(:disabled),
+.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkDelFrom:not(:disabled)) .tvc-date-picker-btn:not(:disabled),
+.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkDelTo:not(:disabled)) .tvc-date-picker-btn:not(:disabled),
+.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkMadeOn:not(:disabled)) .tvc-date-picker-btn:not(:disabled),
+.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkAssessedOn:not(:disabled)) .tvc-date-picker-btn:not(:disabled),
+.spare-req-work-scroll.is-req-locked .tvc-date-input-wrap:has(#reqWorkOrderedOn:not(:disabled)) .tvc-date-picker-btn:not(:disabled) {
     opacity: 1;
     cursor: pointer;
     pointer-events: auto;
@@ -10827,6 +10837,25 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .tvc-date-input-wrap {
+        position: relative;
+        z-index: 50;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .tvc-date-input-wrap .tvc-date-input,
+    #spareReqWorkBody .spare-req-work-meta .tvc-date-input-wrap .tvc-date-picker-btn {
+        min-height: 40px;
+        touch-action: manipulation;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .tvc-date-input-wrap .tvc-date-picker-btn {
+        width: 40px;
+        height: 40px;
+        flex: 0 0 40px;
     }
 
     #spareReqWorkBody .spare-req-work-meta .spare-req-meta-received-inline {
