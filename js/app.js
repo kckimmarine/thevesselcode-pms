@@ -18187,8 +18187,12 @@ const TVC_App = (function () {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
+            const contentType = String(res.headers.get('content-type') || '');
+            if (!contentType.includes('application/json')) {
+                throw new Error('Feedback API unavailable (invalid response).');
+            }
+            const data = await res.json();
+            if (!res.ok || !data.ok) {
                 throw new Error(data.message || data.error || `HTTP ${res.status}`);
             }
             console.info('[TVC-AI-Help] CEO review queue', data);
