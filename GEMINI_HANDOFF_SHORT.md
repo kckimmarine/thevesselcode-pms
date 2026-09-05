@@ -3,10 +3,13 @@
 ## 로그인
 engineer / 0000 / ENGINE
 
-## 완료 PR (최신)
-- **#24 AI Help dual-engine (Guide chat + CEO review queue)**
+## 완료 PR (최신 · master 반영됨)
+- **#24 AI Help dual-engine** — MERGED ✅
+- **#25 feedback API JSON validation** — MERGED ✅
+- 포함: #21 Period/Machinery mobile, #22 WP modal, AI Help (#23 Feedback 대체)
 
-## PR #24 AI Help
+## Gemini handoff (master)
+https://raw.githubusercontent.com/kckimmarine/thevesselcode-pms/master/GEMINI_HANDOFF_SHORT.md
 - `#modal-ai-help` — Mode A Quick Guide (instant chat, no GitHub)
 - Mode B Report Issue → POST `/api/feedback` → GitHub Issue labels `pending-review`, `crew-feedback`
 - `js/app.js`: `openAiHelp`, `askAiHelp`, `submitAiHelpReport`
