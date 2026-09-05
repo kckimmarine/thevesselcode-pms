@@ -10360,33 +10360,120 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     }
 }
 
-/* Period datepicker — mobile portrait only (≤768px); desktop (>768px) unchanged */
+/* Period datepicker + mobile layout fixes (≤768px); desktop (>768px) unchanged */
 @media screen and (max-width: 768px) {
+    /* Period filter row — prevent right-edge clipping */
     .list-filter-stack .list-filter-period-row {
+        display: flex;
         flex-wrap: wrap;
-        row-gap: 6px;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
         overflow: visible;
+        row-gap: 8px;
         position: relative;
         z-index: 30;
         pointer-events: auto;
         touch-action: manipulation;
     }
-    .act-period-filter,
-    .act-period-filter .tvc-date-input-wrap,
-    .act-period-filter .act-period-input,
-    .act-period-filter .tvc-date-input,
-    .act-period-filter .tvc-date-picker-btn {
+    .list-filter-stack .list-filter-period-row .count-label {
+        margin-left: 0;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .act-period-filter {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        flex: 1 1 100%;
+        box-sizing: border-box;
         position: relative;
         z-index: 30;
         pointer-events: auto;
         touch-action: manipulation;
     }
-    .act-period-filter .tvc-date-input-wrap .tvc-date-input {
+    .act-period-filter .act-period-label {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+    .act-period-filter .act-period-sep {
+        flex: 0 0 auto;
+    }
+    .act-period-filter .list-filter-wrap {
+        flex: 0 0 auto;
+        margin-left: 0;
+    }
+    .act-period-filter .tvc-date-input-wrap {
+        flex: 1 1 calc(50% - 20px);
+        min-width: 0;
+        max-width: calc(50% - 4px);
+        width: auto;
+        position: relative;
+        z-index: 30;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+    .act-period-filter .tvc-date-input-wrap .tvc-date-input,
+    .act-period-filter .act-period-input {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
         cursor: pointer;
     }
     .act-period-filter .tvc-date-picker-btn {
         min-width: 32px;
         min-height: 32px;
+        flex-shrink: 0;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+
+    /* Machinery info card — PMS Group / Equipment row 1, Critical Equipment row 2 */
+    .plan-group-header .spare-gh-row-plan-split.spare-gh-row-primary-split,
+    .spare-group-header .spare-gh-row-plan-split.spare-gh-row-primary-split {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        grid-template-columns: none;
+        align-items: stretch;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(1),
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(2) {
+        flex: 1 1 calc(50% - 5px);
+        min-width: 0;
+        max-width: calc(50% - 5px);
+        grid-column: auto;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(3) {
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        grid-column: 1 / -1;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-field-span2,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-field-span3 {
+        grid-column: auto;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-label-row {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-select,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-input,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-value,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-group-trigger {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
     }
 }
 
