@@ -3,8 +3,8 @@
 ## 로그인
 engineer / 0000 / ENGINE
 
-## 완료 PR (최신 · master 반영 예정)
-- **#30 FEEDBACK_QUEUE.json** — Mode B POST appends ticket to repo root queue + GitHub Issue
+## 완료 PR (최신 · master 반영됨)
+- **#31 FEEDBACK_QUEUE.json** — MERGED ✅ Mode B appends ticket to repo queue + GitHub Issue
 - **#29 AI Help visual wording** — MERGED ✅
 - **#26–#28** — MERGED ✅ compression, feedback API, UI guides
 
