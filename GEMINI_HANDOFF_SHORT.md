@@ -3,8 +3,8 @@
 ## 로그인
 engineer / 0000 / ENGINE
 
-## 완료 PR (최신 · master 반영 예정)
-- **#27 AI Help UI workflows** — Mode A guides now reference concrete [PMS]/[SPARE]/[Make Report] click paths
+## 완료 PR (최신 · master 반영됨)
+- **#27 AI Help UI workflows** — MERGED ✅ concrete [PMS]/[SPARE]/[Make Report] click paths
 - **#26 AI Help chat fix** — MERGED ✅
 - **#24 AI Help dual-engine** — MERGED ✅
 - **#25 feedback API JSON validation** — MERGED ✅
