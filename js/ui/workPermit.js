@@ -1346,7 +1346,7 @@ const TVC_WorkPermitReport = (function () {
             ? `<div id="wpHistPanel" class="spare-req-hist-popover hidden" aria-hidden="true"></div>`
             : `<div id="wpFileNoPickPanel" class="wr-file-no-popover spare-req-hist-popover hidden" aria-hidden="true"></div>`;
 
-        return `<div class="wr-maint-form">
+        return `<div class="wr-maint-form" id="form-work-permit">
             ${renderWpApprovalHtml(row, { forPrint })}
             <section class="wr-maint-card wr-maint-body wr-file-no-anchor wp-meta-form">
                 <div class="wr-maint-grid wr-maint-grid-3">

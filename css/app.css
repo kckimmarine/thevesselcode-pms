@@ -9672,26 +9672,22 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         justify-content: center;
         padding: 12px;
     }
+    #workReportModal .modal-box.wr-modal,
+    #workReportModal .modal-box.wr-modal.spare-req-work-modal,
     #defectReportModal .modal-box.wr-modal,
+    #defectReportModal .modal-box.wr-modal.spare-req-work-modal,
     #workPermitModal .modal-box.wr-modal,
+    #workPermitModal .modal-box.wr-modal.spare-req-work-modal,
     #spareConsumeModal.is-consume-list-window .modal-box.spare-req-work-modal,
     #spareConsumeLogModal .modal-box.spare-req-list-modal {
-        width: 1000px;
-        min-width: 1000px;
-        max-width: 1000px;
-        height: min(92vh, 920px);
-        min-height: min(92vh, 920px);
-        border-radius: 12px;
-    }
-    #workReportModal .modal-box.wr-modal,
-    #workReportModal .modal-box.wr-modal.spare-req-work-modal {
         width: 95vw !important;
         min-width: 0 !important;
         max-width: 95vw !important;
         max-height: 90vh !important;
         min-height: 0 !important;
         height: auto !important;
-        margin: auto;
+        margin: 0 auto;
+        box-sizing: border-box;
         border-radius: 12px;
     }
     #workReportBody > .wr-page {
@@ -11241,19 +11237,119 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         align-items: center !important;
         justify-content: center !important;
         padding: 12px !important;
+        box-sizing: border-box;
     }
 
-    #workReportModal .modal-box.wr-modal,
-    #defectReportModal .modal-box.wr-modal,
-    #workPermitModal .modal-box.wr-modal {
+    /* Higher specificity beats responsive-scale.css 1000px !important (loads after app.css) */
+    #workReportModal#workReportModal .modal-box.wr-modal,
+    #workReportModal#workReportModal .modal-box.wr-modal.spare-req-work-modal,
+    #defectReportModal#defectReportModal .modal-box.wr-modal,
+    #defectReportModal#defectReportModal .modal-box.wr-modal.spare-req-work-modal,
+    #workPermitModal#workPermitModal .modal-box.wr-modal,
+    #workPermitModal#workPermitModal .modal-box.wr-modal.spare-req-work-modal {
         width: 95vw !important;
         min-width: 0 !important;
         max-width: 95vw !important;
         max-height: 90vh !important;
         min-height: 0 !important;
         height: auto !important;
-        margin: auto;
+        margin: 0 auto !important;
+        box-sizing: border-box !important;
         border-radius: 12px;
+        overflow: hidden;
+    }
+
+    #workReportBody,
+    #defectReportBody,
+    #workPermitBody,
+    #workReportBody > .df-modal-inner,
+    #defectReportBody > .df-modal-inner,
+    #workPermitBody > .df-modal-inner,
+    #workReportBody .wr-page,
+    #defectReportBody .wr-page,
+    #workPermitBody .wr-page {
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #form-defect,
+    #form-work-permit,
+    #form-defect .wr-maint-body,
+    #form-work-permit .wr-maint-body {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 12px;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #form-defect .wr-maint-grid,
+    #form-work-permit .wr-maint-grid,
+    #defectReportBody .wr-maint-pms-crit-row.spare-gh-row-plan-split,
+    #workPermitBody .wr-maint-pms-crit-row.spare-gh-row-plan-split {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+        gap: 12px;
+        grid-template-columns: none !important;
+    }
+
+    #form-defect .wr-maint-pms-crit-row .spare-gh-field,
+    #form-work-permit .wr-maint-pms-crit-row .spare-gh-field,
+    #form-defect .wr-maint-pms-crit-row .spare-gh-field-span3,
+    #form-work-permit .wr-maint-pms-crit-row .spare-gh-field-span3 {
+        width: 100%;
+        max-width: 100%;
+        grid-column: auto !important;
+    }
+
+    #form-defect input,
+    #form-defect select,
+    #form-defect textarea,
+    #form-defect .wr-maint-job-pick,
+    #form-defect .spare-consume-job-pick-trigger,
+    #form-defect .spare-consume-pick-trigger,
+    #form-work-permit input,
+    #form-work-permit select,
+    #form-work-permit textarea,
+    #form-work-permit .wr-maint-job-pick,
+    #form-work-permit .spare-consume-job-pick-trigger,
+    #form-work-permit .spare-consume-pick-trigger {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #defectReportBody .df-post-title-row,
+    #defectReportBody .df-post-date-field {
+        flex-direction: column;
+        align-items: stretch;
+        width: 100%;
+        margin-left: 0;
+    }
+
+    #defectReportBody .df-post-date-field input[type="date"],
+    #defectReportBody .df-post-date-field input.tvc-date-input,
+    #defectReportBody .df-post-date-field .tvc-date-input-wrap {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    #defectReportBody .report-modal-table-hscroll,
+    #workPermitBody .report-modal-table-hscroll,
+    #defectReportBody .wr-spare-work-layout .spare-req-table-hscroll,
+    #workPermitBody .wr-spare-work-layout .spare-req-table-hscroll,
+    #defectReportBody .spare-req-hist-popover .spare-req-list-panel-wrap,
+    #workPermitBody .spare-req-hist-popover .spare-req-list-panel-wrap,
+    #workPermitBody .wp-list-panel {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
     }
 
     #workReportBody > .df-modal-inner > .wr-pagetabs-bar,

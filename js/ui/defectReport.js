@@ -1982,14 +1982,14 @@ const TVC_DefectReport = (function () {
                 ${fld('Action Plan / Corrective Action', ta('action_taken', ''), 'wr-maint-span-all')}`;
 
         if (forPrint) {
-            return `<div class="wr-maint-form">
+            return `<div class="wr-maint-form" id="form-defect">
             ${includeApproval ? renderDfApprovalHtml(row, { forPrint }) : ''}
             <section class="wr-maint-card wr-maint-body wr-file-no-anchor">${mainFields}</section>
             ${bottomTail}
         </div>`;
         }
 
-        return `<div class="wr-maint-form">
+        return `<div class="wr-maint-form" id="form-defect">
             ${includeApproval ? renderDfApprovalHtml(row, { forPrint }) : ''}
             <section class="wr-maint-card wr-maint-body wr-file-no-anchor">
                 ${mainFields}
