@@ -3,8 +3,8 @@
 ## 로그인
 engineer / 0000 / ENGINE
 
-## 완료 PR (최신 · master 반영 예정)
-- **#28 AI Help action guide copy** — 동선 titles + [Consumed Parts]/[New Requisition] wording (#26/#27 baseline)
+## 완료 PR (최신 · master 반영됨)
+- **#28 AI Help action guide copy** — MERGED ✅ 동선 titles + [Consumed Parts]/[New Requisition]
 - **#27 AI Help UI workflows** — MERGED ✅
 - **#26 AI Help chat fix** — MERGED ✅ (canvas JPEG 1200px + feedback API)
 
