@@ -1318,7 +1318,7 @@ const TVC_WorkPermitReport = (function () {
                     : name === 'report_date'
                         ? ' id="work-permit-reported-date"'
                         : '';
-                return `<input type="date" data-wp="${name}"${idAttr} class="${roCls.trim()}" value="${v}"${roAttr}>`;
+                return `<input type="date" data-native-date="1" data-wp="${name}"${idAttr} class="${roCls.trim()}" value="${v}"${roAttr}>`;
             }
             if (type === 'number') return `<input type="number" data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
             return `<input data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
@@ -1796,66 +1796,26 @@ const TVC_WorkPermitReport = (function () {
         return wpFormDateInputEnabled(input);
     }
 
-    function triggerWpDatePicker(inputEl) {
-        if (!inputEl || inputEl.disabled || inputEl.readOnly) return;
-        const wrap = inputEl.closest('.tvc-date-input-wrap');
-        const native = wrap?.querySelector('.tvc-date-picker-native');
-        if (native && typeof native.showPicker === 'function') {
-            try {
-                native.showPicker();
-                return;
-            } catch (_) { /* browser policy */ }
-        }
-        if (typeof inputEl.showPicker === 'function') {
-            try {
-                inputEl.showPicker();
-                return;
-            } catch (_) { /* browser policy */ }
-        }
-        try { inputEl.focus({ preventScroll: true }); } catch (_) { inputEl.focus(); }
-    }
-
-    function bindWpFormDatePicker(inputEl) {
-        if (!inputEl || inputEl._wpDatePickerBound) return;
-        inputEl._wpDatePickerBound = true;
-        const wrap = inputEl.closest('.tvc-date-input-wrap');
-        const btn = wrap?.querySelector('.tvc-date-picker-btn');
-        const run = (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            triggerWpDatePicker(inputEl);
-        };
-        inputEl.addEventListener('click', run);
-        inputEl.addEventListener('touchend', run, { passive: false });
-        if (btn && !btn._wpDatePickerBound) {
-            btn._wpDatePickerBound = true;
-            btn.addEventListener('click', run);
-            btn.addEventListener('touchend', run, { passive: false });
-        }
-    }
-
     function syncWpFormDatePickers(root) {
         const scope = root?.querySelector?.('#form-work-permit') || root;
         if (!scope?.querySelectorAll) return;
-        scope.querySelectorAll('input.tvc-date-input[data-wp]').forEach(input => {
+        scope.querySelectorAll('input.report-native-date[data-wp], input[type="date"][data-wp]').forEach(input => {
             if (!wpFormDateInputEnabled(input)) return;
             input.removeAttribute('disabled');
-            input.removeAttribute('readonly');
             input.classList.remove('wr-ro');
-            const wrap = input.closest('.tvc-date-input-wrap');
+            const wrap = input.closest('.report-native-date-wrap, .tvc-date-input-wrap');
             if (wrap) {
                 wrap.style.pointerEvents = 'auto';
                 wrap.style.touchAction = 'manipulation';
             }
-            wrap?.querySelectorAll('.tvc-date-picker-btn, .tvc-date-picker-native').forEach(btn => {
+            wrap?.querySelectorAll('.tvc-date-picker-btn').forEach(btn => {
                 btn.disabled = false;
                 btn.removeAttribute('disabled');
-                btn.removeAttribute('readonly');
                 btn.style.pointerEvents = 'auto';
                 btn.style.touchAction = 'manipulation';
             });
-            bindWpFormDatePicker(input);
         });
+        TVC_PWA?.initDateInputFormat?.(scope);
     }
 
     function bindWpModalTouchGuards(root) {
@@ -1868,7 +1828,7 @@ const TVC_WorkPermitReport = (function () {
             btn.addEventListener('touchstart', stop, { passive: true });
             btn.addEventListener('touchend', stop);
         });
-        scope.querySelectorAll('#form-work-permit .tvc-date-input-wrap').forEach(wrap => {
+        scope.querySelectorAll('#form-work-permit .report-native-date-wrap, #form-work-permit .tvc-date-input-wrap').forEach(wrap => {
             if (wrap._wpTouchGuardBound) return;
             wrap._wpTouchGuardBound = true;
             const stop = (e) => e.stopPropagation();
@@ -1879,8 +1839,8 @@ const TVC_WorkPermitReport = (function () {
 
     function finalizeWpModalInputs(body) {
         if (!body) return;
-        TVC_PWA?.initDateInputFormat?.(body);
         applyWpListScrollLock(body);
+        TVC_PWA?.initDateInputFormat?.(body);
         syncWpFormDatePickers(body);
         bindWpModalTouchGuards(body);
     }

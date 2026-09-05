@@ -230,15 +230,129 @@ const TVC_PWA = (function () {
         wrap.appendChild(picker);
     }
 
+    const REPORT_MODAL_DATE_WF_KEYS = new Set(['workDate', 'reportDate', 'lastMaintDate', 'postponeDate']);
+
+    function isMobileViewport() {
+        try { return window.matchMedia('(max-width: 768px)').matches; } catch (_) { return false; }
+    }
+
+    function isReportModalDateInput(el) {
+        if (!el || el.tagName !== 'INPUT') return false;
+        if (el.dataset.tvcReportNativeDate) return false;
+        if (el.dataset.nativeDate === '1') return true;
+        const modal = el.closest('#workReportModal, #defectReportModal, #workPermitModal');
+        if (!modal) return false;
+        if (el.dataset.wp || el.dataset.df) return true;
+        if (el.dataset.wf && REPORT_MODAL_DATE_WF_KEYS.has(el.dataset.wf)) return true;
+        return false;
+    }
+
+    function handleReportDateClick(e, inputEl) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!inputEl || inputEl.disabled) return;
+        if (inputEl.readOnly && !inputEl.dataset.allowPicker) return;
+        if (typeof inputEl.showPicker === 'function') {
+            try {
+                inputEl.showPicker();
+                return;
+            } catch (_) { /* browser policy */ }
+        }
+        try { inputEl.focus({ preventScroll: true }); } catch (_) { inputEl.focus(); }
+    }
+
+    function syncReportNativeDateMobileGuard(inputEl, btn) {
+        const editable = !inputEl.disabled && !inputEl.classList.contains('wr-ro');
+        if (isMobileViewport() && editable) {
+            inputEl.setAttribute('readonly', 'readonly');
+            inputEl.dataset.allowPicker = '1';
+            inputEl.setAttribute('inputmode', 'none');
+        } else if (inputEl.dataset.allowPicker) {
+            inputEl.removeAttribute('readonly');
+            delete inputEl.dataset.allowPicker;
+        }
+        if (btn) btn.disabled = !editable;
+    }
+
+    function ensureReportNativeDateInput(el) {
+        if (!el || el.dataset.tvcReportNativeDate) return;
+        el.dataset.tvcReportNativeDate = '1';
+
+        if (el.type === 'text' || el.classList.contains('tvc-date-input')) {
+            const v = normalizeDateText(el.value);
+            el.type = 'date';
+            el.value = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+            el.classList.remove('tvc-date-input');
+            el.removeAttribute('placeholder');
+            el.removeAttribute('maxlength');
+            el.removeAttribute('pattern');
+        }
+        el.type = 'date';
+        el.classList.add('report-native-date');
+        el.setAttribute('inputmode', 'none');
+        el.setAttribute('autocomplete', 'off');
+        if (el.value) {
+            const v = normalizeDateText(el.value);
+            el.value = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : '';
+        }
+
+        let wrap = el.closest('.report-native-date-wrap');
+        if (!wrap) {
+            wrap = document.createElement('span');
+            wrap.className = 'tvc-date-input-wrap report-native-date-wrap';
+            wrap.style.position = 'relative';
+            el.parentNode.insertBefore(wrap, el);
+            wrap.appendChild(el);
+        }
+        el.style.touchAction = 'manipulation';
+
+        let btn = wrap.querySelector('.tvc-date-picker-btn');
+        if (!btn) {
+            btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'tvc-date-picker-btn';
+            btn.title = 'Pick date';
+            btn.setAttribute('aria-label', 'Pick date');
+            btn.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path fill="currentColor" d="M7 2a1 1 0 0 1 1 1v1h8V3a1 1 0 1 1 2 0v1h1a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3h1V3a1 1 0 0 1 1-1zm13 9H4v9a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-9zM6 7h12a1 1 0 0 0 1-1V6a1 1 0 0 0-1-1h-1v1a1 1 0 1 1-2 0V5H9v1a1 1 0 1 1-2 0V5H6a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1z"/></svg>';
+            wrap.appendChild(btn);
+        }
+        btn.style.pointerEvents = 'auto';
+        btn.style.touchAction = 'manipulation';
+
+        const openPicker = (e) => handleReportDateClick(e, el);
+        if (!el._tvcReportNativeDateBound) {
+            el._tvcReportNativeDateBound = true;
+            bindDatePickerTrigger(el, openPicker);
+        }
+        if (!btn._tvcReportNativeDateBound) {
+            btn._tvcReportNativeDateBound = true;
+            bindDatePickerTrigger(btn, openPicker);
+            btn.addEventListener('mousedown', (e) => e.preventDefault());
+        }
+
+        syncReportNativeDateMobileGuard(el, btn);
+        if (!el._tvcReportNativeDateObs) {
+            el._tvcReportNativeDateObs = true;
+            new MutationObserver(() => syncReportNativeDateMobileGuard(el, btn))
+                .observe(el, { attributes: true, attributeFilter: ['disabled', 'readonly', 'class'] });
+        }
+    }
+
     function isBindableDateInput(el) {
         if (!el || el.tagName !== 'INPUT') return false;
         if (el.classList.contains('tvc-date-picker-native')) return false;
+        if (el.dataset.tvcReportNativeDate) return false;
+        if (isReportModalDateInput(el)) return true;
         if (el.dataset.tvcDateFmt || el.dataset.tvcDatePicker) return false;
         if (el.type === 'date') return true;
         return el.classList.contains('tvc-date-input');
     }
 
     function ensureDateInput(el) {
+        if (isReportModalDateInput(el)) {
+            ensureReportNativeDateInput(el);
+            return;
+        }
         if (!isBindableDateInput(el)) {
             if (el?.dataset?.tvcDateFmt && !el.dataset.tvcDatePicker) attachDatePicker(el);
             return;
@@ -274,8 +388,11 @@ const TVC_PWA = (function () {
 
     function initDateInputFormat(scope) {
         const root = scope && typeof scope.querySelectorAll === 'function' ? scope : document;
-        root.querySelectorAll('input[type="date"]:not(.tvc-date-picker-native)').forEach(ensureDateInput);
-        root.querySelectorAll('input.tvc-date-input:not([data-tvc-date-fmt])').forEach(ensureDateInput);
+        root.querySelectorAll('#workReportModal input[data-wf], #defectReportModal input[data-df], #workPermitModal input[data-wp], input.report-native-date, input[data-native-date="1"]').forEach(el => {
+            if (isReportModalDateInput(el) || el.classList.contains('report-native-date')) ensureReportNativeDateInput(el);
+        });
+        root.querySelectorAll('input[type="date"]:not(.tvc-date-picker-native):not(.report-native-date)').forEach(ensureDateInput);
+        root.querySelectorAll('input.tvc-date-input:not([data-tvc-date-fmt]):not(.report-native-date)').forEach(ensureDateInput);
     }
 
     function bindDateInputFormatObserver() {
@@ -285,10 +402,10 @@ const TVC_PWA = (function () {
         const processAdded = (nodes) => {
             for (const node of nodes) {
                 if (node.nodeType !== 1) continue;
-                if (node.matches?.('input[type="date"], input.tvc-date-input') && isBindableDateInput(node)) {
+                if (node.matches?.('input[type="date"], input.tvc-date-input, input.report-native-date, input[data-native-date]') && isBindableDateInput(node)) {
                     ensureDateInput(node);
                 }
-                node.querySelectorAll?.('input[type="date"]:not(.tvc-date-picker-native), input.tvc-date-input:not([data-tvc-date-fmt])').forEach(el => {
+                node.querySelectorAll?.('input[type="date"]:not(.tvc-date-picker-native), input.tvc-date-input:not([data-tvc-date-fmt]), input.report-native-date, input[data-native-date="1"]').forEach(el => {
                     if (isBindableDateInput(el)) ensureDateInput(el);
                 });
             }

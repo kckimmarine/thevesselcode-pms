@@ -11275,8 +11275,12 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 
     #form-defect,
     #form-work-permit,
+    #form-maintenance,
+    #form-postpone,
     #form-defect .wr-maint-body,
-    #form-work-permit .wr-maint-body {
+    #form-work-permit .wr-maint-body,
+    #form-maintenance .wr-maint-body,
+    #form-postpone .wr-maint-body {
         display: flex;
         flex-direction: column;
         width: 100%;
@@ -11288,6 +11292,9 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 
     #form-defect .wr-maint-grid,
     #form-work-permit .wr-maint-grid,
+    #form-maintenance .wr-maint-grid,
+    #form-postpone .wr-maint-grid,
+    #workReportBody .wr-maint-pms-crit-row.spare-gh-row-plan-split,
     #defectReportBody .wr-maint-pms-crit-row.spare-gh-row-plan-split,
     #workPermitBody .wr-maint-pms-crit-row.spare-gh-row-plan-split {
         display: flex;
@@ -11299,8 +11306,12 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 
     #form-defect .wr-maint-pms-crit-row .spare-gh-field,
     #form-work-permit .wr-maint-pms-crit-row .spare-gh-field,
+    #form-maintenance .wr-maint-pms-crit-row .spare-gh-field,
+    #form-postpone .wr-maint-pms-crit-row .spare-gh-field,
     #form-defect .wr-maint-pms-crit-row .spare-gh-field-span3,
-    #form-work-permit .wr-maint-pms-crit-row .spare-gh-field-span3 {
+    #form-work-permit .wr-maint-pms-crit-row .spare-gh-field-span3,
+    #form-maintenance .wr-maint-pms-crit-row .spare-gh-field-span3,
+    #form-postpone .wr-maint-pms-crit-row .spare-gh-field-span3 {
         width: 100%;
         max-width: 100%;
         grid-column: auto !important;
@@ -11317,7 +11328,19 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     #form-work-permit textarea,
     #form-work-permit .wr-maint-job-pick,
     #form-work-permit .spare-consume-job-pick-trigger,
-    #form-work-permit .spare-consume-pick-trigger {
+    #form-work-permit .spare-consume-pick-trigger,
+    #form-maintenance input:not([type="checkbox"]),
+    #form-maintenance select,
+    #form-maintenance textarea,
+    #form-maintenance .wr-maint-job-pick,
+    #form-maintenance .spare-consume-job-pick-trigger,
+    #form-maintenance .spare-consume-pick-trigger,
+    #form-postpone input:not([type="checkbox"]),
+    #form-postpone select,
+    #form-postpone textarea,
+    #form-postpone .wr-maint-job-pick,
+    #form-postpone .spare-consume-job-pick-trigger,
+    #form-postpone .spare-consume-pick-trigger {
         width: 100%;
         max-width: 100%;
         box-sizing: border-box;
@@ -11578,7 +11601,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         touch-action: manipulation;
     }
 
-    /* Work Permit modal — mobile approval labels, date pickers, horizontal lock */
+    /* Work Permit modal — mobile approval labels and horizontal lock */
     #workPermitModal#workPermitModal {
         max-width: 100vw;
         overflow-x: hidden !important;
@@ -11590,12 +11613,27 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         overflow-x: hidden !important;
     }
 
+    #workReportModal#workReportModal,
+    #defectReportModal#defectReportModal,
+    #workPermitModal#workPermitModal {
+        overflow-x: hidden !important;
+    }
+
+    #workReportBody,
+    #defectReportBody,
     #workPermitBody,
-    #workPermitBody > .df-modal-inner,
-    #workPermitBody .wr-page,
+    #form-defect,
     #form-work-permit,
+    #form-maintenance,
+    #form-postpone,
+    #form-defect .wr-maint-body,
     #form-work-permit .wr-maint-body,
-    #form-work-permit fieldset {
+    #form-maintenance .wr-maint-body,
+    #form-postpone .wr-maint-body,
+    #form-defect fieldset,
+    #form-work-permit fieldset,
+    #form-maintenance fieldset,
+    #form-postpone fieldset {
         overflow-x: hidden;
         max-width: 100%;
     }
@@ -11634,7 +11672,10 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         margin-right: 0;
     }
 
-    #form-work-permit .tvc-date-input-wrap {
+    #form-defect .report-native-date-wrap,
+    #form-work-permit .report-native-date-wrap,
+    #form-maintenance .report-native-date-wrap,
+    #form-postpone .report-native-date-wrap {
         display: flex;
         width: 100%;
         max-width: 100%;
@@ -11645,36 +11686,33 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         box-sizing: border-box;
     }
 
-    #form-work-permit .tvc-date-input-wrap .tvc-date-input,
-    #form-work-permit .tvc-date-input-wrap .tvc-date-picker-btn {
+    #form-defect .report-native-date-wrap .report-native-date,
+    #form-work-permit .report-native-date-wrap .report-native-date,
+    #form-maintenance .report-native-date-wrap .report-native-date,
+    #form-postpone .report-native-date-wrap .report-native-date,
+    #form-defect .report-native-date-wrap input[type="date"],
+    #form-work-permit .report-native-date-wrap input[type="date"],
+    #form-maintenance .report-native-date-wrap input[type="date"],
+    #form-postpone .report-native-date-wrap input[type="date"] {
+        flex: 1 1 auto;
+        width: auto;
+        min-width: 0;
+        max-width: 100%;
         pointer-events: auto;
         touch-action: manipulation;
         min-height: 40px;
     }
 
-    #form-work-permit .tvc-date-input-wrap .tvc-date-input {
-        flex: 1 1 auto;
-        width: auto;
-        min-width: 0;
-        max-width: 100%;
-    }
-
-    #form-work-permit .tvc-date-input-wrap .tvc-date-picker-btn {
+    #form-defect .report-native-date-wrap .tvc-date-picker-btn,
+    #form-work-permit .report-native-date-wrap .tvc-date-picker-btn,
+    #form-maintenance .report-native-date-wrap .tvc-date-picker-btn,
+    #form-postpone .report-native-date-wrap .tvc-date-picker-btn {
         width: 40px;
         height: 40px;
         flex: 0 0 40px;
-    }
-
-    #workPermitBody .wr-page.is-req-locked #form-work-permit input.tvc-date-input:not([disabled]),
-    #workPermitBody .wr-page:not(.is-req-locked) #form-work-permit input.tvc-date-input:not([readonly]):not([disabled]) {
-        pointer-events: auto;
-    }
-
-    #workPermitBody .wr-page.is-req-locked #form-work-permit .tvc-date-input-wrap:has(input.tvc-date-input:not([disabled])) .tvc-date-picker-btn:not(:disabled),
-    #workPermitBody .wr-page:not(.is-req-locked) #form-work-permit .tvc-date-input-wrap:has(input.tvc-date-input:not([readonly])) .tvc-date-picker-btn:not(:disabled) {
-        opacity: 1;
-        pointer-events: auto;
+        pointer-events: auto !important;
         touch-action: manipulation;
+        opacity: 1;
     }
 }
 

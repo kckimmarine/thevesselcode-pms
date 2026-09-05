@@ -1778,7 +1778,16 @@ const TVC_DefectReport = (function () {
             const roAttr = ro ? ' readonly' : '';
             const dis = ro ? ' disabled' : '';
             const roCls = ro ? ' wr-ro' : '';
-            if (type === 'date') return `<input type="date" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}${dis}>`;
+            if (type === 'date') {
+                const idAttr = name === 'work_date'
+                    ? ' id="form-defect-occurred-date"'
+                    : name === 'report_date'
+                        ? ' id="form-defect-reported-date"'
+                        : name === 'last_maintenance_date'
+                            ? ' id="form-defect-last-maint-date"'
+                            : '';
+                return `<input type="date" data-native-date="1" data-df="${name}"${idAttr} class="${roCls.trim()}" value="${v}"${roAttr}${dis}>`;
+            }
             if (type === 'number') return `<input type="number" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}${dis}>`;
             return `<input data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}${dis}>`;
         };
@@ -1924,7 +1933,16 @@ const TVC_DefectReport = (function () {
         const inp = (name, val, type = 'text') => {
             if (forPrint && type === 'date') return dfDateUiPrintInput(dfVal(row, name, val));
             const v = esc(dfVal(row, name, val));
-            if (type === 'date') return `<input type="date" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}${ro ? ' disabled' : ''}>`;
+            if (type === 'date') {
+                const idAttr = name === 'work_date'
+                    ? ' id="form-defect-occurred-date"'
+                    : name === 'report_date'
+                        ? ' id="form-defect-reported-date"'
+                        : name === 'last_maintenance_date'
+                            ? ' id="form-defect-last-maint-date"'
+                            : '';
+                return `<input type="date" data-native-date="1" data-df="${name}"${idAttr} class="${roCls.trim()}" value="${v}"${roAttr}${ro ? ' disabled' : ''}>`;
+            }
             if (type === 'number') return `<input type="number" data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
             return `<input data-df="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
         };

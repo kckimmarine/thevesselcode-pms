@@ -14603,7 +14603,15 @@ const TVC_App = (function () {
     }
 
     function wrEditableDateFieldInput(key, value) {
-        return `<input type="text" class="tvc-date-input" data-wf="${key}" placeholder="YYYY-MM-DD" autocomplete="off" value="${esc(value || '')}">`;
+        const idMap = {
+            workDate: 'form-maintenance-work-date',
+            reportDate: 'form-maintenance-reported-date',
+            lastMaintDate: 'form-maintenance-last-maint-date',
+            postponeDate: 'form-postpone-date',
+        };
+        const idAttr = idMap[key] ? ` id="${idMap[key]}"` : '';
+        const v = esc((value || '').slice(0, 10));
+        return `<input type="date" class="report-native-date" data-native-date="1" data-wf="${key}"${idAttr} value="${v}">`;
     }
 
     function buildWorkReportPrintBody() {
@@ -16147,7 +16155,7 @@ const TVC_App = (function () {
         const roWf = (key, val) => `<input class="wr-ro" data-wf="${key}" value="${esc(wf(key, val))}" readonly tabindex="-1">`;
         const jobInfoBlock = renderWrJobRowsBlock(job, rep, ro, forPrint);
 
-        return `<div class="wr-maint-form">
+        return `<div class="wr-maint-form" id="form-maintenance">
             ${renderWrApprovalHtml({
                 canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
                 approvedByVal, confirmedByVal, forPrint,
@@ -16235,7 +16243,7 @@ const TVC_App = (function () {
             : '';
         const jobInfoBlock = renderWrJobRowsBlock(job, rep, ro, forPrint);
 
-        return `<div class="wr-maint-form">
+        return `<div class="wr-maint-form" id="form-postpone">
             ${renderWrApprovalHtml({
                 canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
                 approvedByVal, confirmedByVal, forPrint,
@@ -16269,7 +16277,7 @@ const TVC_App = (function () {
                     ${fld('Original Due Date', forPrint ? `<input class="wr-ro" value="${esc(originalDueDate || '—')}" readonly tabindex="-1">` : `<input class="wr-ro" value="${esc(originalDueDate || '—')}" readonly>`)}
                     ${fld('Postpone Date', forPrint
                         ? `<input class="wr-ro" value="${esc(wf('postponeDate') || '')}" readonly tabindex="-1">`
-                        : `<input type="date" class="tvc-date-input" data-wf="postponeDate" placeholder="YYYY-MM-DD" value="${esc(wf('postponeDate'))}"${postponeMinMax}${ro ? ' disabled' : ''} onchange="TVC_App.onPostponeDateChange()">`, 'wr-postpone-date')}
+                        : `<input type="date" id="form-postpone-date" class="report-native-date" data-native-date="1" data-wf="postponeDate" value="${esc(wf('postponeDate'))}"${postponeMinMax}${ro ? ' disabled' : ''} onchange="TVC_App.onPostponeDateChange()">`, 'wr-postpone-date')}
                 </div>
                 ${renderWrReportFooter({
                     rep,
