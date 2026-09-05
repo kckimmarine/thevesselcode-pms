@@ -2,11 +2,20 @@
 
 const DEFAULT_REPO = 'kckimmarine/thevesselcode-pms';
 const REVIEW_LABELS = ['pending-review', 'crew-feedback'];
+const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
 function readJsonBody(req) {
     return new Promise((resolve, reject) => {
         const chunks = [];
-        req.on('data', (chunk) => chunks.push(chunk));
+        let total = 0;
+        req.on('data', (chunk) => {
+            total += chunk.length;
+            if (total > MAX_BODY_BYTES) {
+                reject(Object.assign(new Error('Payload too large'), { code: 'PAYLOAD_TOO_LARGE' }));
+                return;
+            }
+            chunks.push(chunk);
+        });
         req.on('end', () => {
             try {
                 const raw = Buffer.concat(chunks).toString('utf8');
@@ -23,7 +32,7 @@ function githubConfig() {
     const token = process.env.GITHUB_TOKEN || process.env.GH_TOKEN || '';
     const [owner, repo] = String(process.env.GITHUB_REPO || DEFAULT_REPO).split('/');
     return {
-        token,
+        token: String(token || '').trim(),
         owner: owner || 'kckimmarine',
         repo: repo || 'thevesselcode-pms',
     };
@@ -32,8 +41,8 @@ function githubConfig() {
 async function githubRequest(path, opts = {}) {
     const c = githubConfig();
     if (!c.token) {
-        const err = new Error('GITHUB_TOKEN is not configured on the server.');
-        err.code = 'NOT_CONFIGURED';
+        const err = new Error('GitHub Token Missing');
+        err.code = 'GITHUB_TOKEN_MISSING';
         throw err;
     }
     const res = await fetch(`https://api.github.com${path}`, {
@@ -83,7 +92,7 @@ function buildIssueBody({ comment, deviceInfo, images }) {
     if (imgs.length) {
         lines.push('', '### Screenshots');
         imgs.forEach((img, i) => {
-            const name = img.name || `screenshot-${i + 1}.png`;
+            const name = img.name || `screenshot-${i + 1}.jpg`;
             lines.push('', `#### ${name}`, `<img alt="${name}" src="${img.dataUrl}" width="480" />`);
         });
     }
@@ -106,6 +115,12 @@ async function handler(req, res) {
         return res.status(405).json({ error: 'Method not allowed' });
     }
 
+    const c = githubConfig();
+    if (!c.token) {
+        console.error('[feedback] GitHub Token Missing — set GITHUB_TOKEN on Vercel');
+        return res.status(500).json({ error: 'GitHub Token Missing' });
+    }
+
     try {
         const body = await readJsonBody(req);
         const comment = String(body.comment || '').trim();
@@ -119,29 +134,44 @@ async function handler(req, res) {
 
         const issueTitle = `[Field Feedback] ${excerpt(titleInput || comment)}`;
         const issueBody = buildIssueBody({ comment, deviceInfo, images });
-        const c = githubConfig();
 
-        const issue = await githubRequest(`/repos/${c.owner}/${c.repo}/issues`, {
-            method: 'POST',
-            body: {
-                title: issueTitle.slice(0, 256),
-                body: issueBody,
-                labels: REVIEW_LABELS,
-            },
-        });
+        let issue;
+        try {
+            issue = await githubRequest(`/repos/${c.owner}/${c.repo}/issues`, {
+                method: 'POST',
+                body: {
+                    title: issueTitle.slice(0, 256),
+                    body: issueBody,
+                    labels: REVIEW_LABELS,
+                },
+            });
+        } catch (ghErr) {
+            console.error('[feedback] GitHub issue creation failed', ghErr.message || ghErr);
+            if (ghErr.code === 'GITHUB_TOKEN_MISSING' || ghErr.status === 401 || ghErr.status === 403) {
+                return res.status(500).json({ error: 'GitHub Token Missing', message: ghErr.message });
+            }
+            if (ghErr.status === 422) {
+                return res.status(422).json({ error: 'GITHUB_VALIDATION', message: ghErr.message });
+            }
+            throw ghErr;
+        }
 
+        console.info('[feedback] issue created', issue.number, issue.html_url);
         return res.status(200).json({
             ok: true,
             issueNumber: issue.number,
             issueUrl: issue.html_url,
         });
     } catch (e) {
-        const code = e.code || 'FEEDBACK_FAILED';
-        const status = code === 'NOT_CONFIGURED' ? 501
-            : code === 'GITHUB_ERROR' && e.status === 422 ? 422
-                : 500;
-        return res.status(status).json({
-            error: code,
+        console.error('[feedback] unhandled error', e);
+        if (e.code === 'PAYLOAD_TOO_LARGE') {
+            return res.status(413).json({
+                error: 'Payload too large',
+                message: 'Screenshot payload exceeds server limit. Client compression should reduce size.',
+            });
+        }
+        return res.status(500).json({
+            error: e.code || 'FEEDBACK_FAILED',
             message: e.message || String(e),
         });
     }
