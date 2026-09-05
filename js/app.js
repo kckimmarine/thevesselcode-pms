@@ -14813,7 +14813,7 @@ const TVC_App = (function () {
             cfCb.checked = reportShowsConfirmed(rep);
             return;
         }
-        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name');
         const user = TVC_Auth.getCurrentUser();
         if (!user) return;
 
@@ -16115,7 +16115,7 @@ const TVC_App = (function () {
         if (!user || !TVC_RBAC.isHqAccount(user)) return;
         const rep = state._wrReportId ? state.reports.find(r => r.id === state._wrReportId) : null;
         const job = state.idx?.jobById.get(state._wrJobId);
-        const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name');
         const superLabel = hqSuperintendentLabel(user);
         if (!apCb.checked) {
             if (rep && reportIsApproved(rep) && state._wrReadonly && TVC_RBAC.canApproveHqReport(user)) {
@@ -16435,14 +16435,16 @@ const TVC_App = (function () {
         const confirmOnchange = confirmOk ? ' onchange="TVC_App.wrReportConfirmByToggle()"' : '';
         const approveOnchange = approveOk ? ' onchange="TVC_App.wrApprovedByToggle()"' : '';
         const approvedRow = hideApprovedBy ? '' : `
-            <div class="wr-maint-approval-item${approveOk ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wrApprovedBy" ${isRepApproved ? 'checked' : ''}${approveDis}${approveOnchange}> Approved by</label>
-                <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly>
+            <div class="wr-maint-approval-item wr-approval-row${approveOk ? ' is-active' : ''}">
+                <input type="checkbox" id="wrApprovedBy" ${isRepApproved ? 'checked' : ''}${approveDis}${approveOnchange}>
+                <label class="wr-maint-approval-label" for="wrApprovedBy">Approved by:</label>
+                <input type="text" class="wr-ro wr-approval-name" value="${esc(approvedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Approved by name">
             </div>`;
         return `<section class="wr-maint-card wr-maint-approval">
-            <div class="wr-maint-approval-item${confirmOk ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wrConfirmedBy" ${isRepConfirmed ? 'checked' : ''}${confirmDis}${confirmOnchange}> Confirmed by</label>
-                <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly>
+            <div class="wr-maint-approval-item wr-approval-row${confirmOk ? ' is-active' : ''}">
+                <input type="checkbox" id="wrConfirmedBy" ${isRepConfirmed ? 'checked' : ''}${confirmDis}${confirmOnchange}>
+                <label class="wr-maint-approval-label" for="wrConfirmedBy">Confirmed by:</label>
+                <input type="text" class="wr-ro wr-approval-name" value="${esc(confirmedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Confirmed by name">
             </div>
             ${approvedRow}
         </section>`;

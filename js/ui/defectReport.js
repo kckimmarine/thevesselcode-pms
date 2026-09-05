@@ -1900,13 +1900,15 @@ const TVC_DefectReport = (function () {
         const confirmDis = displayOnly || !canConfirmNow ? ' disabled' : '';
         const approveDis = displayOnly || !canApproveNow ? ' disabled' : '';
         return `<section class="wr-maint-card wr-maint-approval">
-            <div class="wr-maint-approval-item${!displayOnly && canConfirmNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="dfConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${displayOnly ? '' : ' onchange="TVC_DefectReport.dfReportConfirmByToggle()"'}> Confirmed by</label>
-                <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
+            <div class="wr-maint-approval-item wr-approval-row${!displayOnly && canConfirmNow ? ' is-active' : ''}">
+                <input type="checkbox" id="dfConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${displayOnly ? '' : ' onchange="TVC_DefectReport.dfReportConfirmByToggle()"'}>
+                <label class="wr-maint-approval-label" for="dfConfirmedBy">Confirmed by:</label>
+                <input type="text" class="wr-ro wr-approval-name" value="${esc(confirmedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Confirmed by name">
             </div>
-            <div class="wr-maint-approval-item${!displayOnly && canApproveNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="dfApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${displayOnly ? '' : ' onchange="TVC_DefectReport.dfApprovedByToggle()"'}> Approved by</label>
-                <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
+            <div class="wr-maint-approval-item wr-approval-row${!displayOnly && canApproveNow ? ' is-active' : ''}">
+                <input type="checkbox" id="dfApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${displayOnly ? '' : ' onchange="TVC_DefectReport.dfApprovedByToggle()"'}>
+                <label class="wr-maint-approval-label" for="dfApprovedBy">Approved by:</label>
+                <input type="text" class="wr-ro wr-approval-name" value="${esc(approvedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Approved by name">
             </div>
         </section>`;
     }
@@ -2739,7 +2741,7 @@ const TVC_DefectReport = (function () {
         if (!row?.id) return;
         const user = s.user;
         if (!user || !TVC_RBAC.isHqAccount(user)) return;
-        const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name');
         const superLabel = hqSuperintendentApprovalLabel(user);
 
         if (!apCb.checked) {
@@ -2819,7 +2821,7 @@ const TVC_DefectReport = (function () {
             cfCb.checked = !!(row.confirmed_at || row.confirmed_by);
             return;
         }
-        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name');
         const user = s.user;
         if (!user) return;
 

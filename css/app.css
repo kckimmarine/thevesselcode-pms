@@ -2387,12 +2387,28 @@ input.tvc-date-input::placeholder {
 #defectReportBody .wr-maint-form > .wr-maint-approval,
 #workPermitBody .wr-maint-form > .wr-maint-approval { margin-bottom: 0; }
 .wr-maint-approval .wr-maint-date,
+.wr-maint-approval .wr-approval-name,
 .wr-maint-approval .wr-ro {
     padding: 6px 8px; border: 1px solid #cbd5e0; border-radius: 5px;
     background: #f7fafc; font-size: 11px;
-    width: auto !important; min-width: 118px; max-width: 240px; flex: 0 0 auto;
+    width: auto !important; min-width: 118px; max-width: 240px; flex: 1 1 auto;
 }
 .wr-maint-approval-item { display: flex; align-items: center; gap: 8px; }
+.wr-maint-approval-item.wr-approval-row > input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    max-width: none;
+    margin: 0;
+    flex: 0 0 auto;
+}
+.wr-maint-approval-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: #334155;
+    white-space: nowrap;
+    margin: 0;
+    flex: 0 0 auto;
+}
 .spare-req-work-scroll > .wr-maint-approval,
 .spare-consume-meta-form > .wr-maint-approval { margin-bottom: 10px; }
 #spareConsumeBody .spare-req-work-scroll > .consume-report-meta {
@@ -11412,12 +11428,80 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         gap: 10px 16px;
     }
 
-    #workReportBody .wr-maint-approval-item,
-    #defectReportBody .wr-maint-approval-item,
-    #workPermitBody .wr-maint-approval-item {
+    #workReportBody .wr-maint-approval-item:not(.wr-approval-row),
+    #defectReportBody .wr-maint-approval-item:not(.wr-approval-row),
+    #workPermitBody .wr-maint-approval-item:not(.wr-approval-row) {
         flex-wrap: wrap;
         width: 100%;
         max-width: 100%;
+    }
+
+    #workReportBody .wr-maint-approval-item.wr-approval-row,
+    #defectReportBody .wr-maint-approval-item.wr-approval-row,
+    #workPermitBody .wr-maint-approval-item.wr-approval-row {
+        display: flex;
+        flex-direction: row;
+        flex-wrap: nowrap;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: 100%;
+        margin-bottom: 8px;
+    }
+
+    #workReportBody .wr-maint-approval-item.wr-approval-row > input[type="checkbox"],
+    #defectReportBody .wr-maint-approval-item.wr-approval-row > input[type="checkbox"],
+    #workPermitBody .wr-maint-approval-item.wr-approval-row > input[type="checkbox"] {
+        width: 18px;
+        height: 18px;
+        max-width: none;
+        margin: 0;
+        flex: 0 0 auto;
+    }
+
+    #workReportBody .wr-maint-approval-label,
+    #defectReportBody .wr-maint-approval-label,
+    #workPermitBody .wr-maint-approval-label {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    #workReportBody .wr-approval-name,
+    #defectReportBody .wr-approval-name,
+    #workPermitBody .wr-approval-name {
+        flex: 1 1 auto;
+        min-width: 0;
+        max-width: none;
+        width: auto !important;
+    }
+
+    #workReportBody .wr-file-no-row,
+    #defectReportBody .wr-file-no-row,
+    #workPermitBody .wr-file-no-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        width: 100%;
+    }
+
+    #workReportBody .wr-file-no-row > input,
+    #defectReportBody .wr-file-no-row > input,
+    #workPermitBody .wr-file-no-row > input {
+        flex: 1;
+        min-width: 0;
+    }
+
+    #workReportBody .wr-file-no-pick-btn,
+    #defectReportBody .wr-file-no-pick-btn,
+    #workPermitBody .wr-file-no-pick-btn {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+
+    #workReportBody .wr-file-no-row .tvc-date-picker-btn,
+    #defectReportBody .wr-file-no-row .tvc-date-picker-btn,
+    #workPermitBody .wr-file-no-row .tvc-date-picker-btn {
+        display: none !important;
     }
 
     #workReportBody .wr-maint-grid-4,
@@ -11670,40 +11754,6 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     #form-postpone fieldset {
         overflow-x: hidden;
         max-width: 100%;
-    }
-
-    #workPermitBody .wr-maint-approval-item.wp-approval-row {
-        display: flex;
-        flex-direction: column;
-        align-items: stretch;
-        gap: 8px;
-        width: 100%;
-    }
-
-    #workPermitBody .wr-maint-approval-item.wp-approval-row > input[type="checkbox"] {
-        width: 18px;
-        height: 18px;
-        max-width: none;
-        margin: 0;
-        flex: 0 0 auto;
-        align-self: flex-start;
-    }
-
-    #workPermitBody .wr-maint-approval-label {
-        display: block;
-        font-size: 12px;
-        font-weight: 600;
-        color: #334155;
-        line-height: 1.35;
-        margin: 0;
-    }
-
-    #workPermitBody .wp-approval-name {
-        width: 100% !important;
-        max-width: 100%;
-        box-sizing: border-box;
-        margin-left: 0;
-        margin-right: 0;
     }
 
     #form-defect .report-native-date-wrap,

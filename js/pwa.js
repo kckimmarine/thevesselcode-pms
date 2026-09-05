@@ -231,6 +231,10 @@ const TVC_PWA = (function () {
     }
 
     const REPORT_MODAL_DATE_WF_KEYS = new Set(['workDate', 'reportDate', 'lastMaintDate', 'postponeDate']);
+    const REPORT_MODAL_DATE_WP_KEYS = new Set(['plan_date', 'report_date', 'last_maintenance_date']);
+    const REPORT_MODAL_DATE_DF_KEYS = new Set([
+        'work_date', 'report_date', 'last_maintenance_date', 'reply_date', 'ship_verified_date',
+    ]);
 
     function isMobileViewport() {
         try { return window.matchMedia('(max-width: 768px)').matches; } catch (_) { return false; }
@@ -242,7 +246,8 @@ const TVC_PWA = (function () {
         if (el.dataset.nativeDate === '1') return true;
         const modal = el.closest('#workReportModal, #defectReportModal, #workPermitModal');
         if (!modal) return false;
-        if (el.dataset.wp || el.dataset.df) return true;
+        if (el.dataset.wp && REPORT_MODAL_DATE_WP_KEYS.has(el.dataset.wp)) return true;
+        if (el.dataset.df && REPORT_MODAL_DATE_DF_KEYS.has(el.dataset.df)) return true;
         if (el.dataset.wf && REPORT_MODAL_DATE_WF_KEYS.has(el.dataset.wf)) return true;
         return false;
     }
