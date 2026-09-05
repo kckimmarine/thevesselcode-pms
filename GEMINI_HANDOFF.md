@@ -9,14 +9,14 @@
 
 ### ① 한 번에 복사 (추천)
 1. 아래 **짧은 버전 링크**를 폰 브라우저에서 연다  
-   **https://raw.githubusercontent.com/kckimmarine/thevesselcode-pms/cursor/mobile-orientation-media-f39c/GEMINI_HANDOFF_SHORT.md**
+   **https://raw.githubusercontent.com/kckimmarine/thevesselcode-pms/cursor/automation-cache-automerge-f39c/GEMINI_HANDOFF_SHORT.md**
 2. 길게 눌러 **전체 선택 → 복사**
 3. Gemini 앱 열기 → 붙여넣기 →  
    *「아래 내용 읽고 TVC-PMS 작업 이어서 도와줘」*
 
 ### ② 복사 버튼 페이지
 1. 브라우저에서 연다:  
-   **https://htmlpreview.github.io/?https://github.com/kckimmarine/thevesselcode-pms/blob/cursor/mobile-orientation-media-f39c/gemini-handoff.html**
+   **https://htmlpreview.github.io/?https://github.com/kckimmarine/thevesselcode-pms/blob/cursor/automation-cache-automerge-f39c/gemini-handoff.html**
 2. **「📋 요약 전체 복사」** 버튼 탭
 3. Gemini 앱 → 붙여넣기
 
@@ -24,7 +24,7 @@
 Gemini에게 이렇게 입력:
 ```
 이 문서 읽고 TVC-PMS UI 작업 맥락 파악해줘:
-https://raw.githubusercontent.com/kckimmarine/thevesselcode-pms/cursor/mobile-orientation-media-f39c/GEMINI_HANDOFF.md
+https://raw.githubusercontent.com/kckimmarine/thevesselcode-pms/cursor/automation-cache-automerge-f39c/GEMINI_HANDOFF.md
 ```
 
 ### ④ PC에서 파일 전달
@@ -54,12 +54,28 @@ https://raw.githubusercontent.com/kckimmarine/thevesselcode-pms/cursor/mobile-or
 | #17 | 모바일 PMS GROUP Tree compact | `cursor/pms-tree-mobile-compact-f39c` | master |
 | #18 | Period datepicker 클릭/탭 수정 | `cursor/period-datepicker-fix-f39c` | `cursor/playwright-e2e-ui-audit-f39c` |
 | #19 | 모바일 CSS 세로+가로 breakpoint 통합 | `cursor/mobile-orientation-media-f39c` | `cursor/playwright-e2e-ui-audit-f39c` |
+| #20 | SW 즉시 새로고침 + Cursor PR 자동 머지 | `cursor/automation-cache-automerge-f39c` | `master` |
 
-**머지 순서 참고**: PR #19는 PR #18 커밋을 포함한 브랜치에서 분기됨. #18 → #19 순 검토 권장.
+**머지 순서 참고**: PR #19는 PR #18 커밋을 포함한 브랜치에서 분기됨. #18 → #19 순 검토 권장. PR #20은 master에 머지되면 `cursor/*` PR 자동 머지가 활성화됨.
 
 ---
 
-## 3. PR #15 — Report History Detail Report 모달
+## 3. PR #20 — Automation & Cache Management
+
+**목표**: F5 새로고침 시 최신 UI 즉시 반영 + CI 통과한 Cursor PR 자동 master 머지.
+
+**수정**:
+- `service-worker.js`: cache version `tvc-pms-1.0.6-automerge`, `SKIP_WAITING` handler, fetch `cache: 'no-store'`, install/activate에서 skipWaiting + clients.claim
+- `js/pwa.js`: 웹포털 포함 SW 등록, versioned URL, `updateViaCache: 'none'`, 업데이트 시 skipWaiting + controllerchange reload
+- `vercel.json`: `/js/*`, `/css/*` Cache-Control no-cache
+- `.github/workflows/ci.yml`: PR/push 시 `npm run build`
+- `.github/workflows/cursor-auto-merge.yml`: `cursor/*` → `master`, CI green + same-repo일 때 자동 머지
+
+**제약**: IndexedDB(`js/core/db.js`) 변경 없음. secrets 노출 없음.
+
+**검증**: `npm run build` ✓
+
+---
 
 **문제**: Report History에서 Detail Report 클릭 시 모달 내용이 비어 보임.
 
