@@ -17924,28 +17924,28 @@ const TVC_App = (function () {
         {
             id: 'report-workflow',
             keys: ['레포트', '리포트', 'report', '종류', '작성', '보고서', 'routine', 'incident', 'trouble', 'history', 'pms레포트', 'pms report', 'work report', 'defect', '승인', 'approve', 'make report'],
-            title: '📘 TVC-PMS 레포트 작성 및 조회 동선',
+            title: '📘 TVC-PMS 보고서 작성 및 확인',
             steps: [
-                '정기 정비 보고: 상단 [PMS] 탭 → 기기 선택 → 상단 초록색 [Make Report] 버튼 클릭 (체크리스트 작성 후 하단 [Save]).',
-                '고장/결함 보고: [Make Report] 폼 안에서 [Trouble / Defect] 체크박스 체크 (M/E Stop 시간 및 원인/조치 입력창 펼쳐짐).',
-                '보고서 조회/승인: 상단 [Report History] 탭 클릭 (날짜별 보고서 열람, 출력, 승인 진행).',
+                '일반 정비 작성: 상단 [PMS] 탭 → 기기 선택 → 상단 초록색 [Make Report] 버튼 클릭 후 [Save].',
+                '고장/수리 작성: [Make Report] 창 안에서 [☑ Trouble / Defect] 체크박스 선택 (고장 원인 및 지연 시간 입력창 확장).',
+                '작성 내역 확인: 상단 [Report History] 탭에서 이전 보고서 조회 및 승인(Approve).',
             ],
         },
         {
             id: 'spare-workflow',
             keys: ['스페어', '부품', 'spare', '재고', '소모', 'consume', 'requisition', '청구', 'spare parts', '소모 입력', 'consume log'],
-            title: '📦 부품 소모 및 청구 동선',
+            title: '📦 부품 소모 및 청구',
             steps: [
-                '정비 중 소모: [Make Report] 폼 하단 [Consumed Parts]에서 부품 검색 후 수량 입력 시 재고 자동 차감.',
-                '신규 청구: 상단 [SPARE] 탭 → [New Requisition] 버튼으로 청구서 생성.',
+                '소모 입력: [Make Report] 창 하단 부품 목록에서 수량 입력 후 저장 시 재고 자동 차감.',
+                '신규 청구: 상단 [SPARE] 탭 → [New Requisition] 버튼으로 청구서 작성.',
             ],
         },
         {
             id: 'period-filter',
             keys: ['달력', '기간', 'period', 'date', 'datepicker', '필터', '날짜'],
-            title: '📅 기간별 조회 방법',
+            title: '📅 기간별 조회',
             steps: [
-                '상단 [Period] 날짜 입력창 또는 달력(📅) 아이콘을 눌러 작업 일자 범위를 지정.',
+                '상단 [Period] 날짜 칸(YYYY-MM-DD) 또는 달력(📅) 아이콘을 눌러 작업 일자 범위 지정.',
             ],
         },
         {
@@ -17953,9 +17953,9 @@ const TVC_App = (function () {
             keys: ['동기화', 'sync', 'export', 'import', '내보내기', '가져오기', '전송', 'xfer', 'hq', '선박', 'vessel', 'backup', '복원'],
             title: '🔄 선박 ↔ HQ 데이터 동기화',
             steps: [
-                '[Menu] 탭 → [Transfer / Export] 메뉴 → 패키지 유형 선택 → [Export]로 vessel/HQ 파일 생성.',
-                '상대 PC에서 [Menu] → [Import]로 동일 유형 파일을 선택해 가져옵니다.',
-                'HQ Cloud 모드: [Menu] → [Online Sync] 또는 [Cloud Restore] 사용.',
+                '[Menu] 탭 → [Transfer / Export] → 유형 선택 → [Export] 버튼으로 파일 저장.',
+                '[Menu] 탭 → [Import] → 저장한 파일 선택 후 가져오기.',
+                '[Menu] 탭 → [Online Sync] 또는 [Cloud Restore] (HQ Cloud 사용 시).',
             ],
         },
     ];
@@ -18039,7 +18039,7 @@ const TVC_App = (function () {
     function formatGuideReply(guide) {
         const lines = [guide.title, ''];
         guide.steps.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
-        lines.push('', '다른 주제: 레포트 작성 · 부품/스페어 · 기간(Period) · 동기화(Export/Import)');
+        lines.push('', '다른 주제: [PMS] 보고서 · [SPARE] 부품 · [Period] 기간 · [Menu] Export/Import');
         return lines.join('\n');
     }
 
@@ -18053,9 +18053,9 @@ const TVC_App = (function () {
         } else {
             appendAiHelpBubble('bot', [
                 '관련 가이드를 찾지 못했습니다. 아래 주제 중 하나를 선택해 보세요:',
-                '• [PMS] → [Make Report] → [Report History] 레포트 동선',
-                '• [SPARE] · [Consumed Parts] · [New Requisition] 부품 동선',
-                '• [Period] 기간 필터',
+                '• [PMS] → [Make Report] → [Save] → [Report History]',
+                '• [SPARE] → [New Requisition] · [Make Report] 하단 부품 목록',
+                '• [Period] 날짜(YYYY-MM-DD) 또는 📅 아이콘',
                 '',
                 '버그/개선 제안은 "Report Issue / Idea" 탭에서 CEO 검토 대기열로 보내주세요.',
             ].join('\n'));
