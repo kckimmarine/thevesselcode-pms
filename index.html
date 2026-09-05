@@ -15,7 +15,7 @@
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
-    <link rel="stylesheet" href="css/app.css?v=20260903-wp-modal-mobile">
+    <link rel="stylesheet" href="css/app.css?v=20260905-period-datepicker">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260824-ship-docs">
 </head>
 <body>
@@ -251,9 +251,9 @@
                         <div class="filter-bar list-filter-period-row">
                             <div id="actPeriodFilter" class="act-period-filter" title="Filter jobs by date range">
                                 <span class="act-period-label">Period</span>
-                                <input type="date" id="actPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onActualPeriodChange()">
+                                <input type="text" id="actPeriodFrom" class="act-period-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" aria-label="Period from" onchange="TVC_App.onActualPeriodChange()">
                                 <span class="act-period-sep">~</span>
-                                <input type="date" id="actPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onActualPeriodChange()">
+                                <input type="text" id="actPeriodTo" class="act-period-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" aria-label="Period to" onchange="TVC_App.onActualPeriodChange()">
                                 <div class="list-filter-wrap">
                                     <button type="button" id="actListFilterBtn" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('actual', event)">Filter</button>
                                 </div>
@@ -305,9 +305,9 @@
                     <div class="filter-bar list-filter-period-row">
                         <div id="histPeriodFilter" class="act-period-filter" title="Filter by Reported Date">
                             <span class="act-period-label">Period</span>
-                            <input type="date" id="histPeriodFrom" class="act-period-input" aria-label="Period from" onchange="TVC_App.onReportPeriodChange()">
+                            <input type="text" id="histPeriodFrom" class="act-period-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" aria-label="Period from" onchange="TVC_App.onReportPeriodChange()">
                             <span class="act-period-sep">~</span>
-                            <input type="date" id="histPeriodTo" class="act-period-input" aria-label="Period to" onchange="TVC_App.onReportPeriodChange()">
+                            <input type="text" id="histPeriodTo" class="act-period-input tvc-date-input" placeholder="YYYY-MM-DD" autocomplete="off" aria-label="Period to" onchange="TVC_App.onReportPeriodChange()">
                             <div class="list-filter-wrap">
                                 <button type="button" id="histListFilterBtn" class="btn btn-sm list-filter-btn" onclick="TVC_ListFilters.toggle('history', event)">Filter</button>
                             </div>
@@ -795,7 +795,7 @@
 <script src="js/ui/workPermit.js?v=20260902-hq-attach"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
-<script src="js/app.js?v=20260903-web-cloud"></script>
-<script src="js/pwa.js?v=20260902-date-picker"></script>
+<script src="js/app.js?v=20260905-period-datepicker"></script>
+<script src="js/pwa.js?v=20260905-period-datepicker"></script>
 </body>
 </html>
