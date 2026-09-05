@@ -10562,5 +10562,24 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     #spareReqWorkBody .spare-req-draft-actions .btn {
         min-height: 40px;
     }
+
+    /* PMS GROUP Tree — compact list (match SPARE GROUP Tree mobile height) */
+    #tab-actual .actual-layout .tree-panel {
+        min-height: auto !important;
+        max-height: none !important;
+    }
+
+    #tab-actual .actual-layout .tree-panel .panel-body.tree-scroll,
+    #tab-actual #actTree {
+        max-height: 180px !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+    }
+
+    #tab-actual .actual-layout .tree-panel .tree-node {
+        touch-action: manipulation;
+    }
 }
 
