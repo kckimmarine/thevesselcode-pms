@@ -17924,20 +17924,20 @@ const TVC_App = (function () {
         {
             id: 'report-workflow',
             keys: ['레포트', '리포트', 'report', '종류', '작성', '보고서', 'routine', 'incident', 'trouble', 'history', 'pms레포트', 'pms report', 'work report', 'defect', '승인', 'approve', 'make report'],
-            title: '📘 TVC-PMS 레포트 작성 및 조회 방법',
+            title: '📘 TVC-PMS 레포트 작성 및 조회 동선',
             steps: [
-                '[정기 정비 보고] 상단 [PMS] 탭 → 기기(작업) 선택 → 상단 초록색 [Make Report] 버튼 클릭 → 작성 후 [Save] 저장.',
-                '[고장/수리 보고] [Make Report] 창 내부에서 [Trouble / Defect] 체크박스를 켜면 고장 원인 및 지연 시간 입력창이 아래로 펼쳐집니다.',
-                '[작성 이력 조회] 상단 [Report History] 탭 → 제출된 보고서를 기간별로 조회하고 [Approve]로 승인합니다.',
+                '정기 정비 보고: 상단 [PMS] 탭 → 기기 선택 → 상단 초록색 [Make Report] 버튼 클릭 (체크리스트 작성 후 하단 [Save]).',
+                '고장/결함 보고: [Make Report] 폼 안에서 [Trouble / Defect] 체크박스 체크 (M/E Stop 시간 및 원인/조치 입력창 펼쳐짐).',
+                '보고서 조회/승인: 상단 [Report History] 탭 클릭 (날짜별 보고서 열람, 출력, 승인 진행).',
             ],
         },
         {
             id: 'spare-workflow',
             keys: ['스페어', '부품', 'spare', '재고', '소모', 'consume', 'requisition', '청구', 'spare parts', '소모 입력', 'consume log'],
-            title: '📦 부품 소모 및 청구 방법',
+            title: '📦 부품 소모 및 청구 동선',
             steps: [
-                '[정비 중 소모] [Make Report] 폼 하단 [Page 2] (Consumed Parts)에서 부품 검색 후 수량 입력 → [Save] 저장 시 재고가 자동 차감됩니다.',
-                '[신규 청구] 상단 [SPARE] 탭 → 부품 체크 → [Make Requisition] 버튼 클릭 → 부품 선택 후 발주서 생성.',
+                '정비 중 소모: [Make Report] 폼 하단 [Consumed Parts]에서 부품 검색 후 수량 입력 시 재고 자동 차감.',
+                '신규 청구: 상단 [SPARE] 탭 → [New Requisition] 버튼으로 청구서 생성.',
             ],
         },
         {
@@ -17945,7 +17945,7 @@ const TVC_App = (function () {
             keys: ['달력', '기간', 'period', 'date', 'datepicker', '필터', '날짜'],
             title: '📅 기간별 조회 방법',
             steps: [
-                '상단 [Period] 입력창 또는 달력(📅) 아이콘을 눌러 시작일·종료일을 지정하면 [PMS] · [Report History] 목록이 자동 필터링됩니다. [Clear]로 초기화.',
+                '상단 [Period] 날짜 입력창 또는 달력(📅) 아이콘을 눌러 작업 일자 범위를 지정.',
             ],
         },
         {
@@ -18053,9 +18053,9 @@ const TVC_App = (function () {
         } else {
             appendAiHelpBubble('bot', [
                 '관련 가이드를 찾지 못했습니다. 아래 주제 중 하나를 선택해 보세요:',
-                '• [PMS] 레포트 작성 · [Report History] 조회/승인',
-                '• [SPARE] 부품 소모(Page 2) · [Make Requisition] 청구',
-                '• [Period] 기간 필터 · Export/Import 동기화',
+                '• [PMS] → [Make Report] → [Report History] 레포트 동선',
+                '• [SPARE] · [Consumed Parts] · [New Requisition] 부품 동선',
+                '• [Period] 기간 필터',
                 '',
                 '버그/개선 제안은 "Report Issue / Idea" 탭에서 CEO 검토 대기열로 보내주세요.',
             ].join('\n'));
