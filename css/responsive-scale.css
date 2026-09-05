@@ -379,3 +379,16 @@ body {
 @media (max-width: 960px) {
     #appShell { max-width: none; }
 }
+
+@media screen and (max-width: 768px) {
+    #workReportModal .modal-box.wr-modal,
+    #workReportModal .modal-box.wr-modal.spare-req-work-modal {
+        width: 95vw !important;
+        min-width: 0 !important;
+        max-width: 95vw !important;
+        max-height: 90vh !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: auto !important;
+    }
+}

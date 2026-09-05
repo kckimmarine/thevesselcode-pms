@@ -9335,7 +9335,6 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         justify-content: center;
         padding: 12px;
     }
-    #workReportModal .modal-box.wr-modal,
     #defectReportModal .modal-box.wr-modal,
     #workPermitModal .modal-box.wr-modal,
     #spareConsumeModal.is-consume-list-window .modal-box.spare-req-work-modal,
@@ -9346,6 +9345,26 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         height: min(92vh, 920px);
         min-height: min(92vh, 920px);
         border-radius: 12px;
+    }
+    #workReportModal .modal-box.wr-modal,
+    #workReportModal .modal-box.wr-modal.spare-req-work-modal {
+        width: 95vw !important;
+        min-width: 0 !important;
+        max-width: 95vw !important;
+        max-height: 90vh !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: auto;
+        border-radius: 12px;
+    }
+    #workReportBody > .wr-page {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    #workReportBody .wr-maint-grid-4,
+    #workReportBody .wr-maint-grid-3,
+    #workReportBody .wr-maint-grid-2 {
+        grid-template-columns: 1fr;
     }
     #workProcedureModal .modal-box.wp-modal,
     #vesselDocsModal .modal-box.wp-modal {
@@ -10437,6 +10456,111 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         min-height: 44px;
         padding: 10px 14px;
         touch-action: manipulation;
+    }
+
+    /* Spare Report History — double-tap row target */
+    #tab-history .spare-hist-req-host .spare-req-list-body-table tbody tr.spare-req-list-row,
+    #spareHistReqListHost .spare-req-list-body-table tbody tr.spare-req-list-row {
+        touch-action: manipulation;
+    }
+
+    /* Spare Parts Requisition modal — mobile form stack & footer actions */
+    #spareReqWorkModal {
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 12px !important;
+    }
+
+    #spareReqWorkModal .modal-box.spare-req-work-modal {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        min-width: 0 !important;
+        max-height: 90vh !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: auto;
+    }
+
+    #spareReqWorkBody .spare-req-work-scroll {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-grid {
+        grid-template-columns: 1fr;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-col-left {
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-row {
+        grid-template-columns: 1fr;
+        align-items: stretch;
+        gap: 6px;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-label,
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-inline-label {
+        white-space: normal;
+        width: 100%;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-field,
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-date-range,
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-received-inline {
+        width: 100%;
+        min-width: 0;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-input,
+    #spareReqWorkBody .spare-req-work-meta textarea.spare-req-meta-input,
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-date-range .spare-req-meta-input {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-received-inline {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+
+    #spareReqWorkBody .spare-req-work-meta .spare-req-meta-comments-row {
+        grid-template-columns: 1fr;
+    }
+
+    #spareReqWorkBody .spare-req-approval-row--split {
+        grid-template-columns: 1fr;
+    }
+
+    #spareReqWorkBody .spare-req-approval-left {
+        border-right: none;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    #spareReqWorkBody .spare-req-draft-actions.wr-actions-split {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px;
+    }
+
+    #spareReqWorkBody .spare-req-draft-actions .wr-modal-actions-left,
+    #spareReqWorkBody .spare-req-draft-actions .wr-modal-actions-center,
+    #spareReqWorkBody .spare-req-draft-actions .wr-modal-actions-right {
+        width: 100%;
+        margin-left: 0;
+        justify-content: center;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    #spareReqWorkBody .spare-req-draft-actions .btn {
+        min-height: 40px;
     }
 }
 

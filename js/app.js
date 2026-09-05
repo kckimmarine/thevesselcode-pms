@@ -12101,6 +12101,58 @@ const TVC_App = (function () {
         return form;
     }
 
+    function wrStr(val) {
+        if (val === null || val === undefined) return '';
+        return String(val).trim();
+    }
+
+    function wrRoDisplay(val, fallback = '—') {
+        const s = wrStr(val);
+        return s || fallback;
+    }
+
+    /** History/detail — saved form + job/report metadata so modal sections always render */
+    function resolveWrFormForView(rep, item, job) {
+        if (!rep) return {};
+        TVC_WorkReport.fromLegacy(rep);
+        const isBatchView = rep.is_batch && (rep.job_items || []).length > 1;
+        const base = isBatchView
+            ? resolveBatchWrForm(rep, item)
+            : { ...(item?.form || {}), ...(rep.report_form || {}) };
+        const j = job || resolveJobForWorkReport(item, rep);
+        const hdr = j ? (TVC_SpareMenu?.resolveWrJobHeader?.(state, j) || {}) : {};
+        const reported = listReportedDateStr(rep);
+        const workDate = wrStr(base.workDate) || wrStr(rep.work_date) || wrStr(rep.completed_date) || reported;
+        const reportDate = wrStr(base.reportDate) || reported || workDate;
+        const merged = {
+            ...base,
+            fileNo: wrStr(base.fileNo) || wrStr(rep.file_no),
+            voyNo: wrStr(base.voyNo) || wrStr(rep.voy_no) || wrStr(rep.voyage_no),
+            place: wrStr(base.place) || wrStr(rep.place),
+            workDate,
+            reportDate,
+            outline: wrStr(base.outline) || wrStr(item?.description) || wrStr(rep.description) || wrStr(j?.job_detail),
+            maker: wrStr(base.maker) || wrStr(hdr.maker),
+            modelType: wrStr(base.modelType) || wrStr(hdr.modelType),
+            capacity: wrStr(base.capacity) || wrStr(hdr.capacity),
+            serialNo: wrStr(base.serialNo) || wrStr(hdr.serialNo),
+            runHrs: base.runHrs ?? rep.run_hours ?? '0',
+            lastMaintDate: wrStr(base.lastMaintDate) || wrStr(j?.last_done),
+            rhAfterLastMaint: wrStr(base.rhAfterLastMaint),
+            shipComments: wrStr(base.shipComments) || wrStr(rep.ship_comment) || wrStr(item?.description),
+            handHours: base.handHours ?? '0',
+            handMembers: base.handMembers ?? '0',
+            postponeDate: wrStr(base.postponeDate) || wrStr(rep.postpone_date),
+        };
+        if (!wrStr(merged.pmsGroupKey) && j?.department && j?.group) {
+            merged.pmsGroupKey = `${j.department}|${String(j.group).trim()}`;
+        }
+        if (!wrStr(merged.pmsGroupNo)) {
+            merged.pmsGroupNo = wrStr(hdr.pmsGroupNo) || wrStr(j?.group);
+        }
+        return merged;
+    }
+
     function formatCmaxsHistDate(dateStr) {
         if (!dateStr) return '';
         return String(dateStr).slice(0, 10);
@@ -14362,9 +14414,7 @@ const TVC_App = (function () {
         } else {
         state._wrReadonly = !canModifyHistEntry(histEntry);
         }
-        state._wrForm = isBatchView
-            ? resolveBatchWrForm(rep, item)
-            : { ...(item?.form || rep.report_form || {}) };
+        state._wrForm = resolveWrFormForView(rep, item, job);
         state._wrUsedParts = isBatchView
             ? enrichUsedParts(TVC_SpareMenu.aggregateUsedPartsFromWorkReport(rep))
             : enrichUsedParts(item?.used_parts || rep.used_parts || []);
@@ -14420,9 +14470,7 @@ const TVC_App = (function () {
         const isBatchView = report.is_batch && (report.job_items || []).length > 1;
         state._wrReportId = report.id;
         state._wrBatchItemId = isBatchView ? null : (item?.maintenance_job_id || null);
-        state._wrForm = isBatchView
-            ? resolveBatchWrForm(report, item)
-            : { ...(item?.form || report.report_form || {}) };
+        state._wrForm = resolveWrFormForView(report, item, job);
         state._wrUsedParts = isBatchView
             ? enrichUsedParts(TVC_SpareMenu.aggregateUsedPartsFromWorkReport(report))
             : enrichUsedParts(item?.used_parts || report.used_parts || []);
@@ -14453,9 +14501,7 @@ const TVC_App = (function () {
         const isBatchView = report.is_batch && (report.job_items || []).length > 1;
         state._wrReportId = report.id;
         state._wrBatchItemId = isBatchView ? null : (item?.maintenance_job_id || null);
-        state._wrForm = isBatchView
-            ? resolveBatchWrForm(report, item)
-            : { ...(item?.form || report.report_form || {}) };
+        state._wrForm = resolveWrFormForView(report, item, job);
         state._wrUsedParts = isBatchView
             ? enrichUsedParts(TVC_SpareMenu.aggregateUsedPartsFromWorkReport(report))
             : enrichUsedParts(item?.used_parts || report.used_parts || []);
@@ -14939,13 +14985,14 @@ const TVC_App = (function () {
         if (Array.isArray(state._wrJobItems) && state._wrJobItems.length) return state._wrJobItems;
         if (rep && (rep.job_items || []).length) {
             state._wrJobItems = rep.job_items.map(it => {
-                const j = state.idx?.jobById.get(it.maintenance_job_id);
+                const j = state.idx?.jobById.get(it.maintenance_job_id)
+                    || resolveJobByCode(it.job_code, reportDept(rep));
                 return {
                     maintenance_job_id: it.maintenance_job_id || j?.id || '',
                     job_code: it.job_code || j?.job_code || '',
                     sort1: j?.item_sort1 || it.item_sort1 || it.form?.sort1 || '',
                     sort2: j?.item_sort2 || it.item_sort2 || it.form?.sort2 || '',
-                    job_detail: j?.job_detail || it.job_detail || it.form?.jobDetail || '',
+                    job_detail: j?.job_detail || it.job_detail || it.form?.jobDetail || it.description || '',
                 };
             });
             return state._wrJobItems;
@@ -15210,9 +15257,12 @@ const TVC_App = (function () {
         const fld = (label, inner) => hideLabels
             ? `<div class="wr-maint-field wr-maint-field-nolabel">${inner}</div>`
             : `<div class="wr-maint-field"><label>${label}</label>${inner}</div>`;
-        const roInp = (val, field) => field
-            ? `<input class="wr-ro" data-field="${field}" value="${esc(val || '')}" readonly tabindex="-1">`
-            : `<input class="wr-ro" value="${esc(val || '')}" readonly tabindex="-1">`;
+        const roInp = (val, field) => {
+            const display = ro ? wrRoDisplay(val) : (val || '');
+            return field
+                ? `<input class="wr-ro" data-field="${field}" value="${esc(display)}" readonly tabindex="-1">`
+                : `<input class="wr-ro" value="${esc(display)}" readonly tabindex="-1">`;
+        };
         let jobInner;
         if (ro) {
             jobInner = roInp(item.job_code, 'job_code');
@@ -16307,7 +16357,13 @@ const TVC_App = (function () {
 
     function wf(key, fallback) {
         const v = state._wrForm ? state._wrForm[key] : undefined;
-        return v !== undefined ? v : (fallback ?? '');
+        const raw = v !== undefined && v !== null ? v : (fallback ?? '');
+        if (!state._wrReadonly) return raw;
+        if (raw === '' || (typeof raw === 'string' && !raw.trim())) {
+            if (key === 'runHrs' || key === 'handHours' || key === 'handMembers') return '0';
+            return '—';
+        }
+        return raw;
     }
 
     function wrAttachmentList(formKey) {
