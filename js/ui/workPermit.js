@@ -1362,8 +1362,10 @@ const TVC_WorkPermitReport = (function () {
                     ${fld('File No.', fileNoInner)}
                     ${fld('Voy. No.', inp('voy_no', ''))}
                     ${fld('Place', inp('place', ''))}
-                    ${fld('Plan Date', inp('plan_date', row.plan_date || row.report_date, 'date'))}
-                    ${fld('Reported Date', inp('report_date', row.report_date, 'date'))}
+                    <div class="wr-maint-date-pair-row">
+                        ${fld('Plan Date', inp('plan_date', row.plan_date || row.report_date, 'date'))}
+                        ${fld('Reported Date', inp('report_date', row.report_date, 'date'))}
+                    </div>
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByLabel(row))}" readonly>`)}
                 </div>
                 ${TVC_App.renderWrPmsGroupCriticalRow({
