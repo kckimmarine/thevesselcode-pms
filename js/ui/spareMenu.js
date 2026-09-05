@@ -15264,13 +15264,15 @@ const TVC_SpareMenu = (function () {
             ? ' disabled tabindex="-1" aria-readonly="true"'
             : (approveEnabled ? '' : ' disabled');
         return `<section class="wr-maint-card wr-maint-approval" aria-label="Approval">
-            <div class="wr-maint-approval-item${confirmEnabled ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="${prefix}ConfirmedBy"${isRepConfirmed ? ' checked' : ''}${confirmLock}${displayOnly ? '' : ` onchange="${confirmToggle}"`}> Confirmed by</label>
-                <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
+            <div class="wr-maint-approval-item wr-approval-row${confirmEnabled ? ' is-active' : ''}">
+                <input type="checkbox" id="${prefix}ConfirmedBy"${isRepConfirmed ? ' checked' : ''}${confirmLock}${displayOnly ? '' : ` onchange="${confirmToggle}"`}>
+                <label class="wr-maint-approval-label" for="${prefix}ConfirmedBy">Confirmed by:</label>
+                <input type="text" class="wr-ro wr-approval-name" value="${esc(confirmedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Confirmed by name">
             </div>
-            <div class="wr-maint-approval-item${approveEnabled ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="${prefix}ApprovedBy"${isRepApproved ? ' checked' : ''}${approveLock}${displayOnly || !approveToggle ? '' : ` onchange="${approveToggle}"`}> Approved by</label>
-                <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
+            <div class="wr-maint-approval-item wr-approval-row${approveEnabled ? ' is-active' : ''}">
+                <input type="checkbox" id="${prefix}ApprovedBy"${isRepApproved ? ' checked' : ''}${approveLock}${displayOnly || !approveToggle ? '' : ` onchange="${approveToggle}"`}>
+                <label class="wr-maint-approval-label" for="${prefix}ApprovedBy">Approved by:</label>
+                <input type="text" class="wr-ro wr-approval-name" value="${esc(approvedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Approved by name">
             </div>
         </section>`;
     }
@@ -15529,7 +15531,7 @@ const TVC_SpareMenu = (function () {
             cfCb.checked = !cfCb.checked;
             return;
         }
-        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name, .wr-maint-date');
 
         if (!cfCb.checked) {
             if (input && !req.confirmed_by && !req.confirmed_at) {
@@ -15613,7 +15615,7 @@ const TVC_SpareMenu = (function () {
         const draft = getConsumeSession();
         const logId = draft?.log_id || m.selectedConsumeLogId;
         const user = spareInventoryUser(st);
-        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name, .wr-maint-date');
         if (!logId || !user) return;
 
         if (!cfCb.checked) {
@@ -15679,7 +15681,7 @@ const TVC_SpareMenu = (function () {
         const draft = getConsumeSession();
         const logId = draft?.log_id || m.selectedConsumeLogId;
         const user = spareInventoryUser(st);
-        const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name, .wr-maint-date');
         if (!logId || !user || !TVC_RBAC.canApproveHqReport(user)) return;
 
         if (!apCb.checked) {
@@ -15732,7 +15734,7 @@ const TVC_SpareMenu = (function () {
     function spareConfirmedByToggle(prefix) {
         const cb = document.getElementById(`${prefix}ConfirmedBy`);
         if (!cb || cb.disabled) return;
-        const input = cb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = cb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name, .wr-maint-date');
         if (!input) return;
         const st = getState();
         const record = prefix === 'reqWork' ? _reqWorkDraft
@@ -19262,8 +19264,10 @@ const TVC_SpareMenu = (function () {
                 ${fld('File No.', fileNoInner)}
                 ${fld('Voy. No.', txtInp('consumeVoyNo', draft.voy_no || ''))}
                 ${fld('Place', txtInp('consumePlace', draft.place || ''))}
-                ${fld('Work Date', dateInp('consumeDate', draft.consumed_date || today, ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
-                ${fld('Reported Date', dateInp('consumeMadeOn', draft.made_on || '', ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
+                <div class="wr-maint-date-pair-row">
+                    ${fld('Work Date', dateInp('consumeDate', draft.consumed_date || today, ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
+                    ${fld('Reported Date', dateInp('consumeMadeOn', draft.made_on || '', ro ? '' : ' onchange="TVC_SpareMenu.captureConsumeMeta()"'))}
+                </div>
                 ${fld('Reported by', `<input type="text" id="consumeMadeBy" class="wr-ro" value="${esc(reportedByVal)}" readonly disabled tabindex="-1">`)}
                 ${pmsField}
             </div>

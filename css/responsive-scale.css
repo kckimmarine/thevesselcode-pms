@@ -382,7 +382,11 @@ body {
 
 @media screen and (max-width: 768px) {
     #workReportModal .modal-box.wr-modal,
-    #workReportModal .modal-box.wr-modal.spare-req-work-modal {
+    #workReportModal .modal-box.wr-modal.spare-req-work-modal,
+    #defectReportModal .modal-box.wr-modal,
+    #defectReportModal .modal-box.wr-modal.spare-req-work-modal,
+    #workPermitModal .modal-box.wr-modal,
+    #workPermitModal .modal-box.wr-modal.spare-req-work-modal {
         width: 95vw !important;
         min-width: 0 !important;
         max-width: 95vw !important;
@@ -390,5 +394,6 @@ body {
         min-height: 0 !important;
         height: auto !important;
         margin: auto !important;
+        box-sizing: border-box !important;
     }
 }
