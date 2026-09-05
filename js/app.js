@@ -12632,6 +12632,25 @@ const TVC_App = (function () {
         if (!body || body._histEventsBound) return;
         body._histEventsBound = true;
         initHistCellTips();
+        const HIST_DBL_TAP_MS = 300;
+        let histLastTouch = { key: '', time: 0 };
+        body.addEventListener('touchend', (ev) => {
+            if (ev.target.closest('.hist-chk')) return;
+            const row = ev.target.closest('tr.hist-row[data-hist-key]');
+            if (!row) return;
+            const rowKey = row.dataset.histKey;
+            if (!rowKey) return;
+            const now = Date.now();
+            if (histLastTouch.key === rowKey && (now - histLastTouch.time) <= HIST_DBL_TAP_MS) {
+                histLastTouch = { key: '', time: 0 };
+                state._histSuppressHistClick = Date.now() + 500;
+                ev.preventDefault();
+                const entry = workHistoryEntries().find(e => histEntryRowKey(e) === rowKey);
+                if (entry) openWorkHistoryEntry(entry);
+                return;
+            }
+            histLastTouch = { key: rowKey, time: now };
+        }, { passive: false });
         body.addEventListener('change', (ev) => {
             const cb = ev.target.closest('.hist-chk-input');
             if (!cb || cb.disabled) return;
@@ -13584,8 +13603,10 @@ const TVC_App = (function () {
     /** Work History: 단일 클릭 — 행 선택 하이라이트(Work Plan과 동일 UX) */
     function selectHistRow(rowKey, ev) {
         if (ev?.target?.closest?.('.hist-chk')) return;
+        if (state._histSuppressHistClick && Date.now() < state._histSuppressHistClick) return;
         state._histSelReportId = rowKey;
         syncHistRowSelection();
+        updateHistToolbarState();
     }
 
     // ── Running Hours modal (예측 정비 엔진 UI) ───────────────────────

@@ -3720,7 +3720,7 @@ input.tvc-date-input::placeholder {
 .sheet-table th { position: sticky; top: 0; background: var(--navy); color: #fff; padding: 10px 12px; text-align: left; font-weight: 600; }
 .sheet-table td { padding: 9px 12px; border-bottom: 1px solid #edf2f7; }
 .sheet-table tbody tr:nth-child(even) { background: #fbfdff; }
-.hist-row { cursor: pointer; user-select: none; }
+.hist-row { cursor: pointer; user-select: none; touch-action: manipulation; }
 .hist-row:hover { background: #ebf4ff; }
 .hist-row.row-selected,
 .sheet-table tbody tr.hist-row.row-selected { background: rgba(66, 153, 225, 0.35) !important; }
