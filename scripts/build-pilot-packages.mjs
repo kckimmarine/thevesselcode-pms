@@ -77,7 +77,7 @@ for (const sku of Object.keys(SKUS)) {
     fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2));
 
     console.log('\n=== Building', sku, `(${def.productName}) ===\n`);
-    run('npx', ['electron-builder', '--win', 'nsis', '--config', cfgPath], {
+    run('npx', ['electron-builder', '--win', 'nsis', '--config', cfgPath, '--publish', 'never'], {
         TVC_BUILD_SKU: sku,
         CSC_IDENTITY_AUTO_DISCOVERY: 'false',
     });

@@ -76,7 +76,7 @@ const cfgPath = path.join(cfgDir, `${sku}-${winTarget}.json`);
 fs.writeFileSync(cfgPath, JSON.stringify(config, null, 2));
 
 console.log(`\n=== Building ${sku} (${def.productName}) → ${winTarget} ===\n`);
-run('npx', ['electron-builder', '--win', winTarget, '--config', cfgPath], {
+run('npx', ['electron-builder', '--win', winTarget, '--config', cfgPath, '--publish', 'never'], {
     TVC_BUILD_SKU: sku,
     CSC_IDENTITY_AUTO_DISCOVERY: 'false',
 });
