@@ -1821,6 +1821,10 @@ const TVC_WorkPermitReport = (function () {
     }
 
     function bindWpModalTouchGuards(root) {
+        if (typeof TVC_App?.bindMakeReportTouchGuards === 'function') {
+            TVC_App.bindMakeReportTouchGuards(root);
+            return;
+        }
         const scope = root || document.getElementById('workPermitBody');
         if (!scope?.querySelectorAll) return;
         scope.querySelectorAll('.wr-pagetab, .wr-kindtab, .report-kind-tab, .wr-tabsel button').forEach(btn => {

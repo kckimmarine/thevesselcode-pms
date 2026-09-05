@@ -16872,6 +16872,7 @@ const TVC_App = (function () {
         }
         syncWorkReportPage2Ui(showPages, ro);
         TVC_PWA?.initDateInputFormat?.(host);
+        bindMakeReportTouchGuards(host);
         restoreWorkReportModalScroll(scroll);
     }
 
@@ -18502,6 +18503,27 @@ const TVC_App = (function () {
     }
 
     /** Work History — Work Report ↔ Defect 전환 시 backdrop 깜빡임 방지 */
+    function bindMakeReportTouchGuards(root) {
+        const scope = root?.querySelectorAll ? root : document.getElementById(root) || document;
+        if (!scope?.querySelectorAll) return;
+        const stop = (e) => e.stopPropagation();
+        scope.querySelectorAll(
+            '.wr-pagetab, .wr-kind-tab, .wr-report-kind-tabs button, .wr-tabsel button,'
+            + ' .wr-file-no-pick-btn, .modal-actions .btn, .df-modal-actions .btn, .wp-modal-actions .btn',
+        ).forEach(btn => {
+            if (btn._makeReportTouchGuard) return;
+            btn._makeReportTouchGuard = true;
+            btn.addEventListener('touchstart', stop, { passive: true });
+            btn.addEventListener('touchend', stop);
+        });
+        scope.querySelectorAll('.report-native-date-wrap, .tvc-date-input-wrap').forEach(wrap => {
+            if (wrap._makeReportTouchGuard) return;
+            wrap._makeReportTouchGuard = true;
+            wrap.addEventListener('touchstart', stop, { passive: true });
+            wrap.addEventListener('touchend', stop);
+        });
+    }
+
     function swapHistoryModals(showId, hideId, opts = {}) {
         const showEl = document.getElementById(showId);
         const hideEl = hideId ? document.getElementById(hideId) : null;
@@ -18813,6 +18835,7 @@ const TVC_App = (function () {
         openJobDetail, openWorkProcedure, openPlanWorkProcedure, onPlanRowClick, setWorkProcedureTab,
         enterWorkProcedureEdit, cancelWorkProcedureEdit, saveWorkProcedure, uploadWorkProcedureAttachment, removeWorkProcedureAttachment,
         refreshWorkProcedureIfOpen, isModalOpen, isWorkProcedureHistNav, applyModalOverWorkProcedure, clearModalOverWorkProcedure,
+        bindMakeReportTouchGuards,
         openProcedureHistory, openProcedureHistoryByCode,
         openWorkReport, openWorkReportInput, setWorkReportTab, setWorkReportPage, saveWorkReport, captureWorkReportForm,
         onPostponeDateChange,
