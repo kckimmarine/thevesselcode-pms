@@ -17,8 +17,8 @@ const TVC_Config = (function () {
     /** Optional — when set on Vercel (SYNC_CLOUD_RESTORE_KEY), same value for cloud restore publish/download. */
     const SYNC_CLOUD_RESTORE_KEY = '';
 
-    /** Vessel Setup.exe — upload to /downloads/ on Vercel or use GitHub Release URL. */
-    const VESSEL_SETUP_DOWNLOAD_URL = '/downloads/TVC-PMS-HQ_OFFICE-Setup.exe';
+    /** Vessel Mode Setup — GitHub Releases (not HQ Office; ship PC installers only). */
+    const VESSEL_SETUP_DOWNLOAD_URL = 'https://github.com/kckimmarine/thevesselcode-pms/releases/latest';
 
     const WEB_HOSTS = new Set([
         'thevesselcode.com',
