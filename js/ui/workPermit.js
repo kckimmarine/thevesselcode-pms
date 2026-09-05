@@ -1145,13 +1145,15 @@ const TVC_WorkPermitReport = (function () {
         const confirmDis = displayOnly || !canConfirmNow ? ' disabled' : '';
         const approveDis = displayOnly || !canApproveNow ? ' disabled' : '';
         return `<section class="wr-maint-card wr-maint-approval">
-            <div class="wr-maint-approval-item${!displayOnly && canConfirmNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wpConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${displayOnly ? '' : ' onchange="TVC_WorkPermitReport.wpConfirmByToggle()"'}> Confirmed by</label>
-                <input class="wr-ro wr-maint-date" value="${esc(confirmedByVal)}" readonly tabindex="-1">
+            <div class="wr-maint-approval-item wp-approval-row${!displayOnly && canConfirmNow ? ' is-active' : ''}">
+                <input type="checkbox" id="wpConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${displayOnly ? '' : ' onchange="TVC_WorkPermitReport.wpConfirmByToggle()"'}>
+                <label class="wr-maint-approval-label" for="wpConfirmedBy">Confirmed by</label>
+                <input type="text" class="wr-ro wr-maint-date wp-approval-name" value="${esc(confirmedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Confirmed by name">
             </div>
-            <div class="wr-maint-approval-item${!displayOnly && canApproveNow ? ' is-active' : ''}">
-                <label class="wr-maint-chk"><input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${displayOnly ? '' : ' onchange="TVC_WorkPermitReport.wpApprovedByToggle()"'}> Approved by</label>
-                <input class="wr-ro wr-maint-date" value="${esc(approvedByVal)}" readonly tabindex="-1">
+            <div class="wr-maint-approval-item wp-approval-row${!displayOnly && canApproveNow ? ' is-active' : ''}">
+                <input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${displayOnly ? '' : ' onchange="TVC_WorkPermitReport.wpApprovedByToggle()"'}>
+                <label class="wr-maint-approval-label" for="wpApprovedBy">Approved by</label>
+                <input type="text" class="wr-ro wr-maint-date wp-approval-name" value="${esc(approvedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Approved by name">
             </div>
         </section>`;
     }
@@ -1310,7 +1312,14 @@ const TVC_WorkPermitReport = (function () {
                     ? TVC_SpareMenu.buildWrSpareDateUiPrintInput(raw)
                     : `<input class="wr-ro tvc-date-input" value="${v}" readonly disabled>`;
             }
-            if (type === 'date') return `<input type="date" data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
+            if (type === 'date') {
+                const idAttr = name === 'plan_date'
+                    ? ' id="work-permit-plan-date"'
+                    : name === 'report_date'
+                        ? ' id="work-permit-reported-date"'
+                        : '';
+                return `<input type="date" data-wp="${name}"${idAttr} class="${roCls.trim()}" value="${v}"${roAttr}>`;
+            }
             if (type === 'number') return `<input type="number" data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
             return `<input data-wp="${name}" class="${roCls.trim()}" value="${v}"${roAttr}>`;
         };
@@ -1664,7 +1673,6 @@ const TVC_WorkPermitReport = (function () {
 
         syncWpListHeadTitle();
         syncWpListHeadButtons();
-        applyWpListScrollLock(document.getElementById('workPermitBody'));
         if (_wpHistOpen) {
             syncWpListRowSelection();
             if (opts.refreshList !== false) await patchWpListUi();
@@ -1672,7 +1680,7 @@ const TVC_WorkPermitReport = (function () {
             if (histScrollEl) histScrollEl.scrollTop = histScrollTop;
         }
         restoreWpModalScroll(scroll);
-        TVC_PWA?.initDateInputFormat?.(document.querySelector('#workPermitBody .df-modal-inner > .wr-page'));
+        finalizeWpModalInputs(document.getElementById('workPermitBody'));
         syncWpCompanyCommentLock(row);
         return true;
     }
@@ -1709,13 +1717,12 @@ const TVC_WorkPermitReport = (function () {
             await refreshWpHistList();
         }
 
-        applyWpListScrollLock(document.getElementById('workPermitBody'));
         if (wpPage === '2') {
             syncWpSparePage2Ui(true, ro);
         }
         syncWpPageTabs();
         restoreWpModalScroll(scroll);
-        TVC_PWA?.initDateInputFormat?.(page);
+        finalizeWpModalInputs(document.getElementById('workPermitBody'));
         return true;
     }
 
@@ -1756,7 +1763,6 @@ const TVC_WorkPermitReport = (function () {
 
         if (isWpListWindow()) {
             body.innerHTML = renderListWindowBody(row);
-            applyWpListScrollLock(body);
             if (histSnap) {
                 restoreWpHistSnapshot(histSnap);
             } else if (_wpHistOpen) {
@@ -1771,7 +1777,112 @@ const TVC_WorkPermitReport = (function () {
         }
         restoreWpModalScroll(scroll);
         syncWpPageTabs();
+        finalizeWpModalInputs(body);
+    }
+
+    const WP_FORM_DATE_FIELDS = new Set(['plan_date', 'report_date', 'last_maintenance_date']);
+
+    function wpFormDateInputEnabled(input) {
+        if (!input?.dataset?.wp || !WP_FORM_DATE_FIELDS.has(input.dataset.wp)) return false;
+        if (wpListViewLocked()) return false;
+        if (input.classList.contains('wr-ro') || input.readOnly) return false;
+        return true;
+    }
+
+    function wpDatePickerSiblingKeepEnabled(el) {
+        if (!el?.classList) return false;
+        if (!el.classList.contains('tvc-date-picker-btn') && !el.classList.contains('tvc-date-picker-native')) return false;
+        const input = el.closest('.tvc-date-input-wrap')?.querySelector('input.tvc-date-input[data-wp]');
+        return wpFormDateInputEnabled(input);
+    }
+
+    function triggerWpDatePicker(inputEl) {
+        if (!inputEl || inputEl.disabled || inputEl.readOnly) return;
+        const wrap = inputEl.closest('.tvc-date-input-wrap');
+        const native = wrap?.querySelector('.tvc-date-picker-native');
+        if (native && typeof native.showPicker === 'function') {
+            try {
+                native.showPicker();
+                return;
+            } catch (_) { /* browser policy */ }
+        }
+        if (typeof inputEl.showPicker === 'function') {
+            try {
+                inputEl.showPicker();
+                return;
+            } catch (_) { /* browser policy */ }
+        }
+        try { inputEl.focus({ preventScroll: true }); } catch (_) { inputEl.focus(); }
+    }
+
+    function bindWpFormDatePicker(inputEl) {
+        if (!inputEl || inputEl._wpDatePickerBound) return;
+        inputEl._wpDatePickerBound = true;
+        const wrap = inputEl.closest('.tvc-date-input-wrap');
+        const btn = wrap?.querySelector('.tvc-date-picker-btn');
+        const run = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            triggerWpDatePicker(inputEl);
+        };
+        inputEl.addEventListener('click', run);
+        inputEl.addEventListener('touchend', run, { passive: false });
+        if (btn && !btn._wpDatePickerBound) {
+            btn._wpDatePickerBound = true;
+            btn.addEventListener('click', run);
+            btn.addEventListener('touchend', run, { passive: false });
+        }
+    }
+
+    function syncWpFormDatePickers(root) {
+        const scope = root?.querySelector?.('#form-work-permit') || root;
+        if (!scope?.querySelectorAll) return;
+        scope.querySelectorAll('input.tvc-date-input[data-wp]').forEach(input => {
+            if (!wpFormDateInputEnabled(input)) return;
+            input.removeAttribute('disabled');
+            input.removeAttribute('readonly');
+            input.classList.remove('wr-ro');
+            const wrap = input.closest('.tvc-date-input-wrap');
+            if (wrap) {
+                wrap.style.pointerEvents = 'auto';
+                wrap.style.touchAction = 'manipulation';
+            }
+            wrap?.querySelectorAll('.tvc-date-picker-btn, .tvc-date-picker-native').forEach(btn => {
+                btn.disabled = false;
+                btn.removeAttribute('disabled');
+                btn.removeAttribute('readonly');
+                btn.style.pointerEvents = 'auto';
+                btn.style.touchAction = 'manipulation';
+            });
+            bindWpFormDatePicker(input);
+        });
+    }
+
+    function bindWpModalTouchGuards(root) {
+        const scope = root || document.getElementById('workPermitBody');
+        if (!scope?.querySelectorAll) return;
+        scope.querySelectorAll('.wr-pagetab, .wr-kindtab, .report-kind-tab, .wr-tabsel button').forEach(btn => {
+            if (btn._wpTouchGuardBound) return;
+            btn._wpTouchGuardBound = true;
+            const stop = (e) => e.stopPropagation();
+            btn.addEventListener('touchstart', stop, { passive: true });
+            btn.addEventListener('touchend', stop);
+        });
+        scope.querySelectorAll('#form-work-permit .tvc-date-input-wrap').forEach(wrap => {
+            if (wrap._wpTouchGuardBound) return;
+            wrap._wpTouchGuardBound = true;
+            const stop = (e) => e.stopPropagation();
+            wrap.addEventListener('touchstart', stop, { passive: true });
+            wrap.addEventListener('touchend', stop);
+        });
+    }
+
+    function finalizeWpModalInputs(body) {
+        if (!body) return;
         TVC_PWA?.initDateInputFormat?.(body);
+        applyWpListScrollLock(body);
+        syncWpFormDatePickers(body);
+        bindWpModalTouchGuards(body);
     }
 
     function applyWpListScrollLock(body) {
@@ -1784,6 +1895,18 @@ const TVC_WorkPermitReport = (function () {
             if (keepActive.has(el.id)) return;
             if (el.closest('#wpHistPanel')) return;
             if (el.id === 'wpConfirmedBy' || el.id === 'wpApprovedBy') return;
+            if (wpFormDateInputEnabled(el)) {
+                el.removeAttribute('disabled');
+                el.removeAttribute('readonly');
+                el.classList.remove('wr-ro');
+                return;
+            }
+            if (wpDatePickerSiblingKeepEnabled(el)) {
+                el.disabled = false;
+                el.removeAttribute('disabled');
+                el.removeAttribute('readonly');
+                return;
+            }
             if (locked) el.setAttribute('disabled', 'disabled');
             else el.removeAttribute('disabled');
         });
