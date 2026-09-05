@@ -42,18 +42,34 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force -Path downloads | Out-Null
+          $setups = @()
           Get-ChildItem dist/TVC-PMS-VESSEL_*-*-Setup.exe | ForEach-Object {
             Copy-Item $_.FullName -Destination (Join-Path downloads $_.Name) -Force
             Write-Host "Published $($_.Name) ($([math]::Round($_.Length / 1MB, 1)) MB)"
+            if ($_.Name -match '^TVC-PMS-(VESSEL_[A-Z]+)-(.+)-Setup\.exe$') {
+              $setups += [ordered]@{
+                sku = $Matches[1]
+                filename = $_.Name
+                bytes = [int64]$_.Length
+              }
+            }
           }
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $manifest = [ordered]@{
+            version = $version
+            generated_at = (Get-Date).ToUniversalTime().ToString('o')
+            setups = $setups
+          }
+          $manifest | ConvertTo-Json -Depth 4 | Set-Content -Path downloads/installers.json -Encoding utf8
           Get-ChildItem downloads/TVC-PMS-VESSEL_*-*-Setup.exe | Format-Table Name, Length
+          Get-Content downloads/installers.json
 
       - name: Commit and push downloads
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add downloads/TVC-PMS-VESSEL_*-*-Setup.exe
+          git add downloads/TVC-PMS-VESSEL_*-*-Setup.exe downloads/installers.json
           if git diff --staged --quiet; then
             echo "No installer changes to commit."
             exit 0

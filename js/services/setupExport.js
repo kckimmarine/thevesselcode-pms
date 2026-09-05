@@ -81,7 +81,29 @@ const TVC_SetupExport = (function () {
         manifest.master_data = master;
     }
 
+    async function fetchWebInstallersManifest() {
+        try {
+            const r = await fetch('/downloads/installers.json', { cache: 'no-store' });
+            if (!r.ok) return null;
+            const raw = await r.json();
+            if (!raw || typeof raw !== 'object') return null;
+            return {
+                version: String(raw.version || '').trim(),
+                generated_at: raw.generated_at || '',
+                setups: Array.isArray(raw.setups) ? raw.setups.map(s => ({
+                    sku: String(s.sku || '').trim(),
+                    filename: String(s.filename || '').trim(),
+                    bytes: Number(s.bytes) || 0,
+                })).filter(s => s.sku && s.filename) : [],
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
     async function fetchPackageVersion() {
+        const manifest = await fetchWebInstallersManifest();
+        if (manifest?.version) return manifest.version;
         try {
             const r = await fetch('/package.json', { cache: 'no-store' });
             if (!r.ok) return '';
@@ -106,18 +128,31 @@ const TVC_SetupExport = (function () {
     }
 
     async function getWebSourceStatus() {
-        const appVersion = await fetchPackageVersion();
+        const manifest = await fetchWebInstallersManifest();
+        const appVersion = manifest?.version || await fetchPackageVersion();
         if (!appVersion) {
             return {
                 configured: false,
                 path: null,
                 setups: [],
                 appVersion: '',
-                message: 'Could not read app version from package.json.',
+                message: 'Could not read app version from installers manifest or package.json.',
             };
         }
         const setups = [];
+        const manifestBySku = new Map((manifest?.setups || []).map(s => [s.sku, s]));
         for (const sku of HANDOFF_SKUS) {
+            const listed = manifestBySku.get(sku);
+            if (listed) {
+                setups.push({
+                    sku,
+                    filename: listed.filename,
+                    url: `/downloads/${encodeURIComponent(listed.filename)}`,
+                    bytes: listed.bytes || 0,
+                    web: true,
+                });
+                continue;
+            }
             const hit = await probeWebSetup(sku, appVersion);
             if (hit) setups.push(hit);
         }
@@ -285,6 +320,7 @@ const TVC_SetupExport = (function () {
         HANDOFF_SKUS,
         VESSEL_SETUP_SKUS,
         skuRoleLabel,
+        fetchWebInstallersManifest,
         fetchPackageVersion,
         probeWebSetup,
         readSetupBytes,

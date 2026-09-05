@@ -45,17 +45,38 @@ const TVC_VesselDownload = (function () {
         showStatus('');
     }
 
+    function isMobileDevice() {
+        return /iPhone|iPad|iPod|Android|Mobile/i.test(navigator.userAgent || '');
+    }
+
+    function prefersDirectDownload() {
+        return isMobileDevice() || typeof window.showSaveFilePicker !== 'function';
+    }
+
     async function loadSetups() {
         if (cachedSetups) return cachedSetups;
         const skus = TVC_SetupExport?.VESSEL_SETUP_SKUS || Object.keys(SKU_META);
-        const version = TVC_SetupExport?.fetchPackageVersion
-            ? await TVC_SetupExport.fetchPackageVersion()
-            : '';
+        const manifest = TVC_SetupExport?.fetchWebInstallersManifest
+            ? await TVC_SetupExport.fetchWebInstallersManifest()
+            : null;
+        const manifestBySku = new Map((manifest?.setups || []).filter(s => skus.includes(s.sku)).map(s => [s.sku, s]));
+        let version = String(manifest?.version || '').trim();
+        if (!version && TVC_SetupExport?.fetchPackageVersion) {
+            version = await TVC_SetupExport.fetchPackageVersion();
+        }
         const setups = [];
         for (const sku of skus) {
             const meta = SKU_META[sku] || { label: sku, desc: '', icon: '💾' };
+            const listed = manifestBySku.get(sku);
             let hit = null;
-            if (version && TVC_SetupExport?.probeWebSetup) {
+            if (listed) {
+                hit = {
+                    sku,
+                    filename: listed.filename,
+                    url: `/downloads/${encodeURIComponent(listed.filename)}`,
+                    bytes: listed.bytes || 0,
+                };
+            } else if (version && TVC_SetupExport?.probeWebSetup) {
                 hit = await TVC_SetupExport.probeWebSetup(sku, version);
             }
             setups.push({
@@ -98,7 +119,7 @@ const TVC_VesselDownload = (function () {
         if (!list) return;
         list.innerHTML = '<p class="muted vessel-download-loading">Checking installers…</p>';
         const { version, setups } = await loadSetups();
-        if (!version) {
+        if (!version && !setups.some(s => s.available)) {
             list.innerHTML = setups.map(renderListItem).join('');
             showStatus('Could not read app version. Installers may be unavailable.', true);
             return;
@@ -153,6 +174,16 @@ const TVC_VesselDownload = (function () {
         return false;
     }
 
+    function triggerDirectDownload(setup) {
+        const a = document.createElement('a');
+        a.href = setup.url;
+        a.download = setup.filename;
+        a.rel = 'noopener';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+    }
+
     async function startDownload(sku) {
         if (busy) return;
         busy = true;
@@ -167,6 +198,10 @@ const TVC_VesselDownload = (function () {
                     : 'Installer not available.');
             }
             closeModal();
+            if (prefersDirectDownload()) {
+                triggerDirectDownload(setup);
+                return;
+            }
             const bytes = TVC_SetupExport?.readSetupBytes
                 ? await TVC_SetupExport.readSetupBytes(setup)
                 : new Uint8Array(await (await fetch(setup.url, { cache: 'no-store' })).arrayBuffer());
