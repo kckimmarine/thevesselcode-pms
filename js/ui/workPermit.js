@@ -1447,7 +1447,7 @@ const TVC_WorkPermitReport = (function () {
             <div class="wr-titlebar">${titleText}</div>
             ${kindTabs}
             <div class="wr-pagetabs-bar">${pageTabs}</div>
-            <div class="wr-page tone-defect wp-page">
+            <div class="wr-page tone-permit wp-page">
                 ${headHtml}
                 ${body}
             </div>
@@ -1486,7 +1486,7 @@ const TVC_WorkPermitReport = (function () {
                 ${headActions}
             </div>
             <div class="wr-pagetabs-bar">${pageTabs}</div>
-            <div class="wr-page tone-defect wp-page">
+            <div class="wr-page tone-permit wp-page">
                 ${headHtml}
                 ${formBody}
             </div>

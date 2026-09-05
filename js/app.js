@@ -14210,6 +14210,11 @@ const TVC_App = (function () {
         }
         state._reportKindLocked = null;
         const fromId = currentMakeReportModalId();
+        hideMakeReportPeerModals(
+            kind === 'permit' ? 'workPermitModal'
+                : kind === 'defect' ? 'defectReportModal'
+                    : 'workReportModal',
+        );
         const swapOpts = { preserveScroll: true };
         if (kind === 'repair' || kind === 'postpone') {
             const stay = fromId === 'workReportModal';
@@ -16535,6 +16540,7 @@ const TVC_App = (function () {
             <button class="btn" onclick="TVC_App.requestCloseWorkReport()">Cancel</button>`;
 
         host.innerHTML = `
+            <div class="df-modal-inner">
             <div class="wr-titlebar">Work Report (Draft)</div>
             ${batchJobTags}
             <div class="wr-tabsel">${tabBtns}</div>
@@ -16543,7 +16549,8 @@ const TVC_App = (function () {
                 ${headHtml}
                 ${body}
             </div>
-            <div class="modal-actions wr-actions">${actionsHtml}</div>`;
+            <div class="modal-actions wr-actions">${actionsHtml}</div>
+            </div>`;
         syncWorkReportPage2Ui(showPages, ro);
         TVC_PWA?.initDateInputFormat?.(host);
     }
@@ -16712,6 +16719,7 @@ const TVC_App = (function () {
             : (isNewUnsavedWorkReportSession() ? `${kindLabel} (Draft)` : (ro ? `${kindLabel} (View)` : kindLabel));
 
         host.innerHTML = `
+            <div class="df-modal-inner">
             <div class="wr-titlebar">${titleText}</div>
             ${kindTabs}
             ${pageTabsBar}
@@ -16721,6 +16729,7 @@ const TVC_App = (function () {
             </div>
             <div class="${actionsClass}">
                 ${actionsHtml}
+            </div>
             </div>`;
 
         if (ro) {
