@@ -150,7 +150,10 @@
         <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 PMS</button>
         <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
         <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Report History</button>
-        <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">⚙ Settings</button>
+        <div class="tab-bar-end">
+            <button type="button" id="btn-open-feedback" class="btn-feedback" onclick="TVC_Feedback.open()" title="Feedback">💬 Feedback</button>
+            <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">⚙ Settings</button>
+        </div>
     </nav>
 
     <div id="tabContent">
@@ -597,6 +600,21 @@
         </div>
     </div>
 </div>
+<div id="modal-feedback" class="modal hidden" onclick="if(event.target===this)TVC_Feedback.close()">
+    <div class="modal-box feedback-modal" onclick="event.stopPropagation()">
+        <button type="button" class="modal-x" onclick="TVC_Feedback.close()" aria-label="Close">×</button>
+        <h3 class="feedback-title">💬 Feedback</h3>
+        <p class="feedback-sub muted">Attach screenshots and short notes for UI or workflow issues.</p>
+        <div id="feedback-item-list" class="feedback-item-list" aria-live="polite"></div>
+        <div class="feedback-toolbar">
+            <button type="button" id="feedback-add-btn" class="btn btn-sm" onclick="TVC_Feedback.addItem()">+ Add Another Issue</button>
+        </div>
+        <div class="feedback-footer">
+            <button type="button" class="btn" onclick="TVC_Feedback.close()">Cancel</button>
+            <button type="button" id="feedback-send-btn" class="btn btn-green" onclick="TVC_Feedback.submit()">Send Feedback</button>
+        </div>
+    </div>
+</div>
 <div id="runHoursModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeRunHoursModal()">
     <div class="modal-box runhrs-modal" onclick="event.stopPropagation()">
         <button type="button" class="modal-x" onclick="TVC_App.closeRunHoursModal()" aria-label="Close">×</button>
@@ -805,6 +823,7 @@
 <script src="js/ui/defectReport.js?v=20260902-hq-attach"></script>
 <script src="js/ui/workPermit.js?v=20260902-hq-attach"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
+<script src="js/ui/feedback.js?v=20260905-feedback-modal"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
 <script src="js/app.js?v=20260903-web-cloud"></script>
 <script src="js/pwa.js?v=20260902-date-picker"></script>
