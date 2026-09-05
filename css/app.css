@@ -2263,6 +2263,13 @@ body {
 .wr-maint-grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .wr-maint-field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .wr-maint-field.wr-maint-span-all { grid-column: 1 / -1; }
+.wr-maint-date-pair-row { display: contents; }
+
+/* Make Report — cached kind panes (Maintenance ↔ Postpone) */
+.wr-make-report-panes { min-height: 240px; }
+.wr-report-kind-pane { display: none; }
+.wr-report-kind-pane.active { display: block; }
+.wr-make-report-page .wr-make-report-panes { animation: none; }
 .wr-maint-field > label {
     font-size: 10px; font-weight: 700; color: #1a202c;
     text-transform: uppercase; letter-spacing: .03em;
@@ -11423,6 +11430,33 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     #workPermitBody .wr-maint-grid-3,
     #workPermitBody .wr-maint-grid-2 {
         grid-template-columns: 1fr;
+    }
+
+    #workReportBody .wr-maint-date-pair-row,
+    #defectReportBody .wr-maint-date-pair-row,
+    #workPermitBody .wr-maint-date-pair-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8px;
+        width: 100%;
+        grid-column: 1 / -1;
+        min-width: 0;
+    }
+
+    #workReportBody .wr-maint-date-pair-row .wr-maint-field,
+    #defectReportBody .wr-maint-date-pair-row .wr-maint-field,
+    #workPermitBody .wr-maint-date-pair-row .wr-maint-field {
+        margin-bottom: 0;
+        min-width: 0;
+    }
+
+    #workReportBody .wr-maint-date-pair-row .tvc-date-input-wrap,
+    #defectReportBody .wr-maint-date-pair-row .tvc-date-input-wrap,
+    #workPermitBody .wr-maint-date-pair-row .tvc-date-input-wrap,
+    #workReportBody .wr-maint-date-pair-row input[type="date"],
+    #defectReportBody .wr-maint-date-pair-row input[type="date"],
+    #workPermitBody .wr-maint-date-pair-row input[type="date"] {
+        max-width: 100%;
     }
 
     #workReportBody .wr-maint-field,

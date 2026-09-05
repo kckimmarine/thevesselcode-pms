@@ -14196,6 +14196,122 @@ const TVC_App = (function () {
         if (keep !== 'defectReportModal') document.getElementById('defectReportModal')?.classList.add('hidden');
     }
 
+    function canUseWrKindPanes(rep, ro) {
+        if (rep || ro || state._wrFromHistory || state._wrPostSaveView) return false;
+        if ((state._wrPage || '1') !== '1') return false;
+        return true;
+    }
+
+    function resetWrMakeReportDraftForm(job) {
+        const today = new Date().toISOString().slice(0, 10);
+        state._wrForm = defaultWrForm(today);
+        const hdr = TVC_SpareMenu.resolveWrJobHeader(state, job);
+        Object.assign(state._wrForm, {
+            lastMaintDate: job.last_done || '',
+            pmsGroupNo: hdr.pmsGroupNo || '',
+            pmsGroupKey: `${job.department}|${String(job.group || '').trim()}`,
+            maker: hdr.maker || '',
+            modelType: hdr.modelType || '',
+            capacity: hdr.capacity || '',
+            serialNo: hdr.serialNo || '',
+            jobName: job.job_detail || '',
+            personInCharge: job.pic || TVC_RBAC.getReportedByLabel(state.user),
+        });
+        state._wrPage = '1';
+        state._wrSpareSearch = '';
+        state._wrJobItems = null;
+        state._wrReportId = null;
+        state._wrBatchItemId = null;
+        state._wrReadonly = false;
+        state._wrPostSaveView = false;
+        state._wrFromHistory = false;
+        state._wrUsedParts = [];
+    }
+
+    function buildWrPaneBodyOpts(job, rep, wrAppr, reportedByName, attachFlags, today) {
+        const {
+            canConfirmNow, canApproveNow, confirmedByVal, approvedByVal, canEditCompanyComment,
+            isRepConfirmed, isRepApproved,
+        } = wrAppr;
+        const { ship: canEditShipAttach, company: canEditCompanyAttach } = attachFlags;
+        return {
+            rep,
+            reportedByName,
+            today,
+            canApproveNow,
+            canConfirmNow,
+            isRepApproved,
+            isRepConfirmed,
+            approvedByVal,
+            confirmedByVal,
+            canEditShipAttach,
+            canEditCompanyAttach,
+            canEditCompanyComment,
+            ro: !!state._wrReadonly,
+        };
+    }
+
+    function syncWrMakeReportChrome(kind) {
+        const host = document.getElementById('workReportBody');
+        if (!host) return;
+        const shell = host.querySelector('.wr-make-report-shell');
+        if (shell) shell.dataset.wrTab = kind;
+        host.querySelectorAll('.wr-kind-tab').forEach(btn => {
+            const onclick = btn.getAttribute('onclick') || '';
+            const match = onclick.match(/switchMakeReportKind\('(\w+)'\)/);
+            btn.classList.toggle('active', match?.[1] === kind);
+        });
+        const page = host.querySelector('.wr-page');
+        if (page) {
+            page.classList.remove('tone-repair', 'tone-postpone');
+            page.classList.add(`tone-${kind}`);
+        }
+        const title = host.querySelector('.wr-titlebar');
+        if (title && isNewUnsavedWorkReportSession()) {
+            title.textContent = kind === 'postpone' ? 'Postponed Report (Draft)' : 'Maintenance Report (Draft)';
+        }
+        const pageTabsBar = host.querySelector('.wr-pagetabs-bar');
+        if (pageTabsBar) pageTabsBar.classList.toggle('hidden', kind !== 'repair');
+    }
+
+    async function switchWorkReportKindPane(kind) {
+        if (kind !== 'repair' && kind !== 'postpone') return;
+        const job = resolveJobById(state._wrJobId);
+        if (!job) return;
+        resetWrMakeReportDraftForm(job);
+        state._wrTab = kind;
+        state._reportKindLocked = null;
+        state._wrJobId = job.id;
+        state.selectedJobId = job.id;
+        if (state.vlActual) state.vlActual.refresh();
+        renderSidePanel();
+
+        const host = document.getElementById('workReportBody');
+        const shell = host?.querySelector('.wr-make-report-shell');
+        if (!shell) {
+            renderWorkReportModal({ preserveScroll: true });
+            captureWrMakeReportDirtySnap();
+            return;
+        }
+
+        const today = new Date().toISOString().slice(0, 10);
+        const wrAppr = wrHqApprovalUiState(null, job, false);
+        const reportedByName = workReportReportedByName(null);
+        const attachFlags = wrReportAttachmentEdit(state.user, false);
+        const paneOpts = buildWrPaneBodyOpts(job, null, wrAppr, reportedByName, attachFlags, today);
+        const repairPane = shell.querySelector('.wr-pane-repair');
+        const postponePane = shell.querySelector('.wr-pane-postpone');
+        if (repairPane) repairPane.innerHTML = renderWrRepairMaintenanceBody(job, paneOpts);
+        if (postponePane) postponePane.innerHTML = renderWrPostponeBody(job, paneOpts);
+        shell.querySelectorAll('.wr-report-kind-pane').forEach(pane => {
+            pane.classList.toggle('active', pane.classList.contains(`wr-pane-${kind}`));
+        });
+        syncWrMakeReportChrome(kind);
+        syncWorkReportPage2Ui(kind === 'repair', false);
+        TVC_PWA?.initDateInputFormat?.(host);
+        captureWrMakeReportDirtySnap();
+    }
+
     async function switchMakeReportKind(kind) {
         if (!REPORT_KIND_TABS.some(([k]) => k === kind)) kind = 'repair';
         const current = currentMakeReportKind();
@@ -14215,6 +14331,10 @@ const TVC_App = (function () {
                 : kind === 'defect' ? 'defectReportModal'
                     : 'workReportModal',
         );
+        if ((kind === 'repair' || kind === 'postpone') && fromId === 'workReportModal') {
+            await switchWorkReportKindPane(kind);
+            return;
+        }
         const swapOpts = { preserveScroll: true };
         if (kind === 'repair' || kind === 'postpone') {
             const stay = fromId === 'workReportModal';
@@ -16166,8 +16286,10 @@ const TVC_App = (function () {
                     ${fld('File No.', renderFileNoInputHtml({ value: wf('fileNo', ''), ro, forPrint }))}
                     ${fld('Voy. No.', fieldInp('voyNo', ''))}
                     ${fld('Place', fieldInp('place', ''))}
-                    ${fld('Work Date', fieldInp('workDate', today, 'date'))}
-                    ${fld('Reported Date', fieldInp('reportDate', today, 'date'))}
+                    <div class="wr-maint-date-pair-row">
+                        ${fld('Work Date', fieldInp('workDate', today, 'date'))}
+                        ${fld('Reported Date', fieldInp('reportDate', today, 'date'))}
+                    </div>
                     ${fld('Reported by', `<input class="wr-ro" value="${esc(reportedByName)}" readonly>`)}
                 </div>
                 ${renderWrPmsGroupCriticalRow({
@@ -16623,6 +16745,7 @@ const TVC_App = (function () {
         const { ship: canEditShipAttach, company: canEditCompanyAttach } = attachFlags;
 
         const showPages = state._wrTab === 'repair';
+        const useKindPanes = canUseWrKindPanes(rep, ro);
         const headHtml = showPages && state._wrPage === '2'
             ? renderWrPage2HeadHtml({
                 reportedByName,
@@ -16636,31 +16759,28 @@ const TVC_App = (function () {
             : '';
 
         let body = '';
-        const pageTabs = showPages ? `
+        const pageTabs = showPages || useKindPanes ? `
             <div class="wr-pagetabs">
                 <button type="button" class="wr-pagetab${state._wrPage === '1' ? ' active' : ''}" onclick="TVC_App.setWorkReportPage('1')">Page 1</button>
                 <button type="button" class="wr-pagetab${state._wrPage === '2' ? ' active' : ''}" onclick="TVC_App.setWorkReportPage('2')">Page 2</button>
             </div>` : '';
-        const pageTabsBar = showPages ? `<div class="wr-pagetabs-bar">${pageTabs}</div>` : '';
+        const pageTabsBar = showPages || useKindPanes
+            ? `<div class="wr-pagetabs-bar${useKindPanes && state._wrTab !== 'repair' ? ' hidden' : ''}">${pageTabs}</div>`
+            : '';
+
+        const paneBodyOpts = buildWrPaneBodyOpts(job, rep, wrAppr, reportedByName, attachFlags, today);
 
         if (showPages && state._wrPage === '2') {
             body = renderWrPage2Body(ro);
+        } else if (useKindPanes) {
+            body = `<div class="wr-make-report-panes">
+                <div class="wr-report-kind-pane wr-pane-repair${state._wrTab === 'repair' ? ' active' : ''}">${renderWrRepairMaintenanceBody(job, paneBodyOpts)}</div>
+                <div class="wr-report-kind-pane wr-pane-postpone${state._wrTab === 'postpone' ? ' active' : ''}">${renderWrPostponeBody(job, paneBodyOpts)}</div>
+            </div>`;
         } else if (state._wrTab === 'repair') {
-            body = renderWrRepairMaintenanceBody(job, {
-                rep, reportedByName, today,
-                canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
-                approvedByVal, confirmedByVal,
-                canEditShipAttach, canEditCompanyAttach, canEditCompanyComment,
-                ro,
-            });
+            body = renderWrRepairMaintenanceBody(job, paneBodyOpts);
         } else if (state._wrTab === 'postpone') {
-            body = renderWrPostponeBody(job, {
-                rep, reportedByName, today,
-                canApproveNow, canConfirmNow, isRepApproved, isRepConfirmed,
-                approvedByVal, confirmedByVal,
-                canEditShipAttach, canEditCompanyAttach, canEditCompanyComment,
-                ro,
-            });
+            body = renderWrPostponeBody(job, paneBodyOpts);
         }
 
         const isHist = !!state._wrReportId;
@@ -16727,11 +16847,11 @@ const TVC_App = (function () {
             : (isNewUnsavedWorkReportSession() ? `${kindLabel} (Draft)` : (ro ? `${kindLabel} (View)` : kindLabel));
 
         host.innerHTML = `
-            <div class="df-modal-inner">
+            <div class="df-modal-inner${useKindPanes ? ' wr-make-report-shell' : ''}"${useKindPanes ? ` data-wr-tab="${state._wrTab}"` : ''}>
             <div class="wr-titlebar">${titleText}</div>
             ${kindTabs}
             ${pageTabsBar}
-            <div class="wr-page tone-${state._wrTab}">
+            <div class="wr-page tone-${state._wrTab}${useKindPanes ? ' wr-make-report-page' : ''}">
                 ${headHtml}
                 ${body}
             </div>
@@ -18384,6 +18504,13 @@ const TVC_App = (function () {
         const showEl = document.getElementById(showId);
         const hideEl = hideId ? document.getElementById(hideId) : null;
         if (!showEl) return;
+        const showBox = showEl.querySelector('.modal-box');
+        if (hideEl && showBox && !hideEl.classList.contains('hidden')) {
+            const hideBox = hideEl.querySelector('.modal-box');
+            const hidePage = hideEl.querySelector('.wr-page, .df-modal-inner > .wr-page');
+            const stableMin = Math.max(hideBox?.offsetHeight || 0, hidePage?.offsetHeight || 0);
+            if (stableMin > 0) showBox.style.minHeight = `${stableMin}px`;
+        }
         showEl.classList.remove('modal-hist-swapping');
         if (hideEl && !hideEl.classList.contains('hidden')) {
             hideEl.classList.add('modal-hist-swapping');
@@ -18395,7 +18522,6 @@ const TVC_App = (function () {
         }
         if (!opts.preserveScroll) {
             showEl.scrollTop = 0;
-            const showBox = showEl.querySelector('.modal-box');
             if (showBox) showBox.scrollTop = 0;
         }
         requestAnimationFrame(() => {
@@ -18407,6 +18533,7 @@ const TVC_App = (function () {
                     clearModalOverWorkProcedure(hideId);
                     window.TVC_ModalDrag?.resetModal?.(hideEl);
                 }
+                if (showBox) showBox.style.minHeight = '';
             });
         });
     }
