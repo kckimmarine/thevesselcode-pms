@@ -1,25 +1,48 @@
 /* THE VESSEL CODE — PWA bootstrap (service worker + mobile nav helpers) */
 const TVC_PWA = (function () {
-    const SW_URL = 'service-worker.js';
+    /** Bump with each deploy so the browser fetches a fresh service-worker.js */
+    const SW_VERSION = '1.0.6-automerge-cache';
+    const SW_URL = `service-worker.js?v=${encodeURIComponent(SW_VERSION)}`;
+    let swReloadPending = false;
 
     function canRegister() {
         return 'serviceWorker' in navigator
             && (location.protocol === 'https:' || location.hostname === 'localhost' || location.hostname === '127.0.0.1');
     }
 
+    function bindServiceWorkerRefresh() {
+        if (!canRegister() || navigator.serviceWorker._tvcRefreshBound) return;
+        navigator.serviceWorker._tvcRefreshBound = true;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+            if (swReloadPending) return;
+            swReloadPending = true;
+            console.info('[TVC-PWA] New version active — reloading for fresh assets.');
+            window.location.reload();
+        });
+    }
+
     async function registerServiceWorker() {
         if (!canRegister()) return null;
+        bindServiceWorkerRefresh();
         try {
-            const reg = await navigator.serviceWorker.register(SW_URL, { scope: '/' });
+            const reg = await navigator.serviceWorker.register(SW_URL, {
+                scope: '/',
+                updateViaCache: 'none',
+            });
             reg.addEventListener('updatefound', () => {
                 const worker = reg.installing;
                 if (!worker) return;
                 worker.addEventListener('statechange', () => {
                     if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                        console.info('[TVC-PWA] New version installed — will apply on next visit or manual refresh.');
+                        console.info('[TVC-PWA] New version installing — activating immediately.');
+                        worker.postMessage({ type: 'SKIP_WAITING' });
                     }
                 });
             });
+            if (reg.waiting && navigator.serviceWorker.controller) {
+                reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+            reg.update().catch(() => {});
             return reg;
         } catch (err) {
             console.warn('[TVC-PWA] Service worker registration failed:', err);
@@ -315,29 +338,12 @@ const TVC_PWA = (function () {
         } catch (_) { return false; }
     }
 
-    async function clearStaleCachesOnWeb() {
-        if (!isWebPortalHost()) return;
-        try {
-            if ('serviceWorker' in navigator) {
-                const regs = await navigator.serviceWorker.getRegistrations();
-                await Promise.all(regs.map(r => r.unregister()));
-            }
-            if ('caches' in window) {
-                const keys = await caches.keys();
-                await Promise.all(keys.filter(k => k.startsWith('tvc-pms-')).map(k => caches.delete(k)));
-            }
-        } catch (err) {
-            console.warn('[TVC-PWA] web cache clear', err);
-        }
-    }
-
     function boot() {
         bindConnectivity();
         initMobileNav();
         bindDateInputFormatObserver();
         if (isStandalone()) document.body.classList.add('pwa-standalone');
-        if (isWebPortalHost()) clearStaleCachesOnWeb();
-        else registerServiceWorker();
+        registerServiceWorker();
     }
 
     return { boot, toggleMobileNav, closeMobileNav, registerServiceWorker, initDateInputFormat, initPeriodDatePickers, normalizeDateText };

@@ -1,0 +1,101 @@
+name: Cursor Auto Merge
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge verified Cursor PR into master
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const headBranch = context.payload.workflow_run.head_branch;
+
+            if (!headBranch || !headBranch.startsWith('cursor/')) {
+              core.info(`Skip auto-merge: head branch "${headBranch}" is not a Cursor branch.`);
+              return;
+            }
+
+            const { data: pulls } = await github.rest.pulls.list({
+              owner,
+              repo,
+              state: 'open',
+              head: `${owner}:${headBranch}`,
+            });
+
+            const pr = pulls.find((item) => item.base.ref === 'master' && item.draft === false);
+            if (!pr) {
+              core.info(`Skip auto-merge: no open PR from ${headBranch} to master.`);
+              return;
+            }
+
+            if (pr.head.repo.full_name !== `${owner}/${repo}`) {
+              core.info('Skip auto-merge: PR is from a fork.');
+              return;
+            }
+
+            const { data: combinedStatus } = await github.rest.repos.getCombinedStatusForRef({
+              owner,
+              repo,
+              ref: pr.head.sha,
+            });
+
+            if (combinedStatus.state !== 'success') {
+              core.info(`Skip auto-merge: combined status is "${combinedStatus.state}".`);
+              return;
+            }
+
+            const { data: checks } = await github.rest.checks.listForRef({
+              owner,
+              repo,
+              ref: pr.head.sha,
+            });
+
+            const pending = checks.check_runs.filter((run) => run.status !== 'completed');
+            if (pending.length) {
+              core.info('Skip auto-merge: checks still running.');
+              return;
+            }
+
+            const failed = checks.check_runs.filter((run) => {
+              return run.conclusion !== 'success'
+                && run.conclusion !== 'skipped'
+                && run.conclusion !== 'neutral';
+            });
+            if (failed.length) {
+              core.info(`Skip auto-merge: ${failed.length} check(s) did not pass.`);
+              return;
+            }
+
+            await github.rest.pulls.merge({
+              owner,
+              repo,
+              pull_number: pr.number,
+              merge_method: 'merge',
+            });
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: pr.number,
+              body: [
+                'Cursor verified PR auto-merged into `master` after CI passed (`npm run build`).',
+                '',
+                `Workflow run: ${context.payload.workflow_run.html_url}`,
+              ].join('\n'),
+            });
+
+            core.info(`Auto-merged PR #${pr.number} (${headBranch} -> master).`);

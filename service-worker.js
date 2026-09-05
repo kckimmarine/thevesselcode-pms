@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260903-web-cloud';
+const CACHE_VERSION = 'tvc-pms-1.0.6-automerge';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -57,6 +57,7 @@ const PRECACHE_ASSETS = [
 ];
 
 const OFFLINE_EXTENSIONS = ['.js', '.css', '.json', '.svg', '.woff', '.woff2'];
+const NETWORK_FETCH = { cache: 'no-store' };
 
 function isSameOrigin(url) {
     return url.origin === self.location.origin;
@@ -74,7 +75,7 @@ function isCacheableAsset(pathname) {
 
 /** Online: network-first so ?v= cache-bust query strings always fetch latest code */
 function networkFirstAsset(request) {
-    return fetch(request).then(res => {
+    return fetch(request, NETWORK_FETCH).then(res => {
         if (res && res.ok) {
             const copy = res.clone();
             caches.open(RUNTIME_CACHE).then(cache => cache.put(request, copy)).catch(() => {});
@@ -89,13 +90,19 @@ function networkFirstAsset(request) {
 }
 
 function networkFirstNavigation(request) {
-    return fetch(request).catch(async () => {
+    return fetch(request, NETWORK_FETCH).catch(async () => {
         const cache = await caches.open(SHELL_CACHE);
         return cache.match('/index.html', { ignoreSearch: true })
             || cache.match('/', { ignoreSearch: true })
             || Response.error();
     });
 }
+
+self.addEventListener('message', event => {
+    if (event.data && event.data.type === 'SKIP_WAITING') {
+        self.skipWaiting();
+    }
+});
 
 self.addEventListener('install', event => {
     event.waitUntil(
