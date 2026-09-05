@@ -10699,3 +10699,134 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     }
 }
 
+/* Work Procedure modal — mobile centering & layout (≤768px only; desktop >768px unchanged) */
+@media screen and (max-width: 768px) {
+    #workProcedureModal {
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
+    }
+
+    /* Higher specificity beats responsive-scale.css 820px !important without editing that file */
+    #workProcedureModal#workProcedureModal .modal-box.wp-modal {
+        position: fixed !important;
+        top: 50% !important;
+        left: 50% !important;
+        transform: translate(-50%, -50%) !important;
+        width: 95vw !important;
+        max-width: 95vw !important;
+        min-width: 0 !important;
+        max-height: 90dvh !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 12px 12px 0 !important;
+        box-sizing: border-box !important;
+        border-radius: 12px !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    #workProcedureModal#workProcedureModal .modal-box.wp-modal > .modal-x {
+        flex-shrink: 0;
+    }
+
+    #workProcedureModal #workProcedureBody {
+        flex: 1 1 auto;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        box-sizing: border-box;
+    }
+
+    #workProcedureModal #workProcedureBody > .wp-title,
+    #workProcedureModal #workProcedureBody > .wp-job-head,
+    #workProcedureModal #workProcedureBody > .wp-job-detail,
+    #workProcedureModal #workProcedureBody > .wp-tabs,
+    #workProcedureModal #workProcedureBody > .wp-modal-actions {
+        flex-shrink: 0;
+    }
+
+    #workProcedureModal #workProcedureBody .wp-title,
+    #workProcedureModal #workProcedureBody .wp-job-head,
+    #workProcedureModal #workProcedureBody .wp-job-detail {
+        white-space: normal !important;
+        word-break: break-word !important;
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+        padding: 10px 12px !important;
+        box-sizing: border-box;
+    }
+
+    #workProcedureModal #workProcedureBody .wp-title {
+        margin: 0;
+        padding-bottom: 0;
+    }
+
+    #workProcedureModal #workProcedureBody .wp-job-head {
+        padding-top: 0;
+    }
+
+    #workProcedureModal #workProcedureBody .wp-tabs {
+        display: flex !important;
+        width: 100% !important;
+        gap: 8px;
+        margin: 0 0 10px;
+        padding: 0 12px;
+        box-sizing: border-box;
+    }
+
+    #workProcedureModal #workProcedureBody .wp-tab {
+        flex: 1 1 50% !important;
+        text-align: center !important;
+        font-size: 13px !important;
+        white-space: nowrap !important;
+        min-height: 44px;
+        padding: 10px 8px;
+        touch-action: manipulation;
+    }
+
+    #workProcedureModal #workProcedureBody > .wp-tab-pane,
+    #workProcedureModal #workProcedureBody > .wp-tab-pane-history {
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        max-height: calc(90dvh - 130px) !important;
+        min-height: 0 !important;
+        padding: 12px !important;
+        box-sizing: border-box;
+    }
+
+    #workProcedureModal #workProcedureBody > .wp-modal-actions {
+        display: flex !important;
+        flex-wrap: wrap;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 8px 12px !important;
+        gap: 8px;
+        min-height: 44px;
+        margin-top: auto;
+        border-top: 1px solid #e2e8f0;
+        background: #fff;
+        box-sizing: border-box;
+    }
+
+    #workProcedureModal #workProcedureBody .wp-modal-actions-left,
+    #workProcedureModal #workProcedureBody .wp-modal-actions-right {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        width: auto;
+        min-width: 0;
+        margin-left: 0;
+    }
+
+    #workProcedureModal #workProcedureBody .wp-modal-actions .btn {
+        min-height: 44px;
+        padding: 10px 12px;
+        touch-action: manipulation;
+    }
+}
+
