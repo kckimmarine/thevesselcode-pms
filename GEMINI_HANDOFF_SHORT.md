@@ -3,18 +3,17 @@
 ## 로그인
 engineer / 0000 / ENGINE
 
-## 완료 PR (최신 · master 반영됨)
-- **#28 AI Help action guide copy** — MERGED ✅ 동선 titles + [Consumed Parts]/[New Requisition]
-- **#27 AI Help UI workflows** — MERGED ✅
-- **#26 AI Help chat fix** — MERGED ✅ (canvas JPEG 1200px + feedback API)
+## 완료 PR (최신 · master 반영 예정)
+- **#29 AI Help visual wording** — screen-only labels ([PMS], [Make Report], no Routine/Incident/Consumed Parts)
+- **#28–#26** — MERGED ✅ (compression, feedback API, UI workflows)
 
 ## Gemini handoff (master)
 https://raw.githubusercontent.com/kckimmarine/thevesselcode-pms/master/GEMINI_HANDOFF_SHORT.md
 
 ## AI Help (Mode A + B)
-- Mode A: fuzzy match → concrete click paths ([PMS], [Make Report], [Report History], [SPARE], [Consumed Parts], [New Requisition], [Period])
-- Mode B: `compressImageFile()` canvas max 1200px JPEG 0.7 before POST `/api/feedback`
-- `api/feedback.js`: 4MB limit, GITHUB_TOKEN check, try/catch GitHub issue create
+- Mode A: **visual UI labels only** — no internal report type / DB names in answers
+- Mode B: canvas JPEG 1200px q0.7 before POST `/api/feedback`
+- `api/feedback.js`: 4MB limit, token check, try/catch → 200/500
 
 ## Gemini에게
 모바일 CSS는 `@media screen and (max-width: 768px)` only. CEO queue issues must stay `pending-review` — never auto-merge code from crew reports.
