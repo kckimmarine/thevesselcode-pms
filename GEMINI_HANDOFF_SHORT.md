@@ -4,29 +4,28 @@
 engineer / 0000 / ENGINE
 
 ## 완료 PR (최신)
-- #20 SW 즉시 새로고침 + Cursor PR 자동 머지 (master)
-- **#21 모바일 Period row + Machinery info card 레이아웃 (≤768px)**
+- #21 모바일 Period row + Machinery info card (≤768px)
+- **#22 Work Procedure modal 모바일 centering + left clipping fix (≤768px)**
+
+## PR #22 Work Procedure Modal Mobile
+- 파일: `css/app.css` only
+- `@media screen and (max-width: 768px)` ONLY
+- `#workProcedureModal#workProcedureModal .modal-box.wp-modal` — fixed center, 95vw, 90dvh
+- Header/tabs/body/footer mobile layout; double-ID beats responsive-scale 820px !important
+- JS/HTML 변경 없음
 
 ## PR #21 Mobile Period + Machinery Card
-- 파일: `css/app.css` only
-- 범위: `@media screen and (max-width: 768px)` ONLY — desktop (>768px) 변경 없음
-- Period row: `.filter-bar.list-filter-period-row`, `.act-period-filter` flex-wrap, gap 8px, date inputs 50% each
-- Machinery card: `.spare-gh-row-plan-split.spare-gh-row-primary-split` → Row1 PMS+Equipment 50/50, Row2 Critical Equipment 100%
-- JS/HTML/필터 핸들러 변경 없음
+- Period row flex-wrap; Machinery card 2-row layout (≤768px only)
 
 ## PR #20 Automation
-- service-worker.js + js/pwa.js instant refresh
-- ci.yml + cursor-auto-merge.yml
-
-## E2E
-period-datepicker.spec.js, mobile-orientation.spec.js
+- SW instant refresh + cursor/* auto-merge (master)
 
 ## PR 링크
-github.com/kckimmarine/thevesselcode-pms/pull/20
 github.com/kckimmarine/thevesselcode-pms/pull/21
+github.com/kckimmarine/thevesselcode-pms/pull/22
 
 ## 브랜치
-cursor/mobile-period-machinery-f39c (base: master)
+cursor/wp-modal-mobile-f39c (base: master)
 
 ## Gemini에게
-위 맥락으로 TVC-PMS UI/E2E/자동화 이어서 작업. 모바일 전용 CSS는 반드시 `@media screen and (max-width: 768px)` 안에만 작성.
+모바일 CSS는 `@media screen and (max-width: 768px)` 안에만. Desktop (>768px) 변경 금지.
