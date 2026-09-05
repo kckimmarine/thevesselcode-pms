@@ -3,8 +3,8 @@
 ## 로그인
 engineer / 0000 / ENGINE
 
-## 완료 PR (최신 · master 반영 예정)
-- **#29 AI Help visual wording** — screen-only labels ([PMS], [Make Report], no Routine/Incident/Consumed Parts)
+## 완료 PR (최신 · master 반영됨)
+- **#29 AI Help visual wording** — MERGED ✅ screen-only labels, no Routine/Incident/Consumed Parts
 - **#28–#26** — MERGED ✅ (compression, feedback API, UI workflows)
 
 ## Gemini handoff (master)
