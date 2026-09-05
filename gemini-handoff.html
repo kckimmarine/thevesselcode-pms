@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>TVC-PMS → Gemini 전달</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      margin: 0; padding: 16px;
+      background: #0c1929; color: #edf2f7;
+      line-height: 1.5;
+      padding-bottom: max(24px, env(safe-area-inset-bottom));
+    }
+    h1 { font-size: 1.15rem; margin: 0 0 8px; color: #fff; }
+    .sub { font-size: 0.85rem; color: #a0aec0; margin-bottom: 16px; }
+    .btns { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+    button, a.btn {
+      display: block; width: 100%; padding: 14px 16px;
+      border: none; border-radius: 10px; font-size: 1rem; font-weight: 600;
+      text-align: center; text-decoration: none; cursor: pointer;
+    }
+    .copy { background: #2b6cb0; color: #fff; }
+    .copy:active { background: #1a365d; }
+    .link { background: #2d3748; color: #fff; }
+    .ok { background: #276749; color: #fff; display: none; }
+    pre {
+      background: #1a365d; border: 1px solid #2c5282;
+      border-radius: 10px; padding: 14px; font-size: 0.78rem;
+      white-space: pre-wrap; word-break: break-word;
+      max-height: 50vh; overflow: auto; -webkit-overflow-scrolling: touch;
+      margin: 0 0 16px;
+    }
+    .qr-wrap { text-align: center; background: #fff; border-radius: 12px; padding: 16px; margin-top: 12px; }
+    .qr-wrap img { max-width: 200px; height: auto; }
+    .qr-label { color: #4a5568; font-size: 0.8rem; margin-top: 8px; }
+    footer { font-size: 0.75rem; color: #718096; margin-top: 16px; }
+  </style>
+</head>
+<body>
+  <h1>TVC-PMS → Gemini 전달</h1>
+  <p class="sub">아래 버튼으로 복사하거나 링크를 Gemini에 붙여넣으세요.</p>
+
+  <div class="btns">
+    <button type="button" class="copy" id="copyBtn">📋 요약 전체 복사 (Gemini에 붙여넣기)</button>
+    <button type="button" class="ok" id="okBtn">✓ 복사됨! Gemini 앱으로 가서 붙여넣기</button>
+    <a class="btn link" id="rawLink" href="#" target="_blank" rel="noopener">📄 GitHub 원문 열기 (긴 버전)</a>
+  </div>
+
+  <pre id="text"># TVC-PMS 작업 요약 (Gemini용)
+
+## 로그인: engineer / 0000 / ENGINE
+
+## 완료 PR
+#15 Report History Detail 모달 | #16 Spare 더블탭 | #17 PMS Tree compact
+#18 Period datepicker | #19 모바일 세로+가로 CSS
+
+## PR #18 Period datepicker
+- index.html, js/pwa.js, js/app.js, css/app.css
+- #actPeriodFrom/To, #histPeriodFrom/To → text + tvc-date-input
+- pwa.js: touchend+click, initPeriodDatePickers(), openDatePicker()
+- app.js: refreshAll/renderActualPlan/renderWorkHistory 후 init
+- onActualPeriodChange/onReportPeriodChange 변경 없음
+
+## PR #19 모바일 breakpoint (세로+가로)
+@media screen and (max-width: 768px),
+       screen and (max-height: 600px) and (max-width: 1024px) { }
+- #actTree max-height 180px, tree-panel min-height auto
+
+## E2E: period-datepicker.spec.js, mobile-orientation.spec.js
+
+## PR: github.com/kckimmarine/thevesselcode-pms/pull/18 , /pull/19
+## 브랜치: cursor/period-datepicker-fix-f39c, cursor/mobile-orientation-media-f39c
+
+Gemini에게: 위 맥락으로 TVC-PMS UI/E2E 이어서. 모바일 CSS는 768px만 쓰지 말고 OR breakpoint 사용.</pre>
+
+  <div class="qr-wrap" id="qrBox">
+    <div id="qrcode"></div>
+    <p class="qr-label">QR 스캔 → 이 페이지 (다른 기기에서 열기)</p>
+  </div>
+
+  <footer>상세 문서: GEMINI_HANDOFF.md (저장소 루트)</footer>
+
+  <script>
+    const RAW = 'https://raw.githubusercontent.com/kckimmarine/thevesselcode-pms/cursor/mobile-orientation-media-f39c/GEMINI_HANDOFF.md';
+    document.getElementById('rawLink').href = RAW;
+
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      const t = document.getElementById('text').textContent;
+      try {
+        await navigator.clipboard.writeText(t);
+      } catch (_) {
+        const ta = document.createElement('textarea');
+        ta.value = t; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        document.execCommand('copy'); document.body.removeChild(ta);
+      }
+      document.getElementById('copyBtn').style.display = 'none';
+      document.getElementById('okBtn').style.display = 'block';
+      setTimeout(() => {
+        document.getElementById('copyBtn').style.display = 'block';
+        document.getElementById('okBtn').style.display = 'none';
+      }, 3000);
+    });
+
+    // Minimal QR via Google Chart API (no deps; works on static serve)
+    const pageUrl = location.href.split('?')[0];
+    const qr = document.createElement('img');
+    qr.alt = 'QR';
+    qr.src = 'https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=' + encodeURIComponent(pageUrl);
+    document.getElementById('qrcode').appendChild(qr);
+  </script>
+</body>
+</html>

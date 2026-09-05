@@ -172,17 +172,30 @@ const TVC_PWA = (function () {
         picker.setAttribute('aria-hidden', 'true');
 
         const openPicker = (e) => {
+            if (textEl.disabled || textEl.readOnly) return;
             e.preventDefault();
             e.stopPropagation();
             openDatePicker(textEl, picker, btn);
         };
 
-        btn.addEventListener('click', openPicker);
+        const bindPickerActivator = (el, handler) => {
+            let touchTs = 0;
+            el.addEventListener('touchend', (e) => {
+                if (textEl.disabled || textEl.readOnly) return;
+                touchTs = Date.now();
+                handler(e);
+            }, { passive: false });
+            el.addEventListener('click', (e) => {
+                if (Date.now() - touchTs < 400) return;
+                handler(e);
+            });
+        };
+
+        bindPickerActivator(btn, openPicker);
         btn.addEventListener('mousedown', (e) => e.preventDefault());
-        textEl.addEventListener('click', (e) => {
-            if (textEl.disabled || textEl.readOnly) return;
+        bindPickerActivator(textEl, (e) => {
             if (e.target !== textEl) return;
-            openDatePicker(textEl, picker, btn);
+            openPicker(e);
         });
 
         picker.addEventListener('change', () => {
@@ -251,6 +264,16 @@ const TVC_PWA = (function () {
         root.querySelectorAll('input.tvc-date-input:not([data-tvc-date-fmt])').forEach(ensureDateInput);
     }
 
+    /** Ensure Period filter date inputs have calendar picker UI and touch handlers. */
+    function initPeriodDatePickers(scope) {
+        const root = scope && typeof scope.querySelectorAll === 'function' ? scope : document;
+        root.querySelectorAll?.('.act-period-filter').forEach(wrap => initDateInputFormat(wrap));
+        ['actPeriodFilter', 'histPeriodFilter'].forEach(id => {
+            const el = root.getElementById?.(id) || document.getElementById(id);
+            if (el) initDateInputFormat(el);
+        });
+    }
+
     function bindDateInputFormatObserver() {
         if (window._tvcDateFmtObs) return;
         initDateInputFormat();
@@ -317,7 +340,7 @@ const TVC_PWA = (function () {
         else registerServiceWorker();
     }
 
-    return { boot, toggleMobileNav, closeMobileNav, registerServiceWorker, initDateInputFormat, normalizeDateText };
+    return { boot, toggleMobileNav, closeMobileNav, registerServiceWorker, initDateInputFormat, initPeriodDatePickers, normalizeDateText };
 })();
 
 document.addEventListener('DOMContentLoaded', () => TVC_PWA.boot());

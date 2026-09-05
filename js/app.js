@@ -2684,6 +2684,40 @@ const TVC_App = (function () {
         const wrap = document.getElementById('actPeriodFilter');
         if (wrap) wrap.classList.toggle('active', hasActualPeriodFilter());
     }
+
+    function initPeriodDatePickers(scope) {
+        TVC_PWA?.initPeriodDatePickers?.(scope);
+        bindPeriodDatePickerMobile(scope);
+    }
+
+    /** Mobile (≤768px): ensure Period calendar icon/input open native picker on tap. */
+    function bindPeriodDatePickerMobile(scope) {
+        if (!window.matchMedia('(max-width: 768px)').matches) return;
+        const root = scope && typeof scope.querySelectorAll === 'function' ? scope : document;
+        root.querySelectorAll('.act-period-filter:not([data-tvc-period-mobile])').forEach(filter => {
+            filter.dataset.tvcPeriodMobile = '1';
+            filter.addEventListener('touchend', (e) => {
+                const hit = e.target.closest('.tvc-date-picker-btn, input.act-period-input, input.tvc-date-input');
+                if (!hit || !filter.contains(hit)) return;
+                const wrap = hit.closest('.tvc-date-input-wrap');
+                const textEl = wrap?.querySelector('input.act-period-input, input.tvc-date-input');
+                const picker = wrap?.querySelector('.tvc-date-picker-native');
+                if (!textEl || textEl.disabled || textEl.readOnly) return;
+                e.preventDefault();
+                e.stopPropagation();
+                try {
+                    if (picker && typeof picker.showPicker === 'function') {
+                        picker.showPicker();
+                        return;
+                    }
+                } catch (_) { /* browser policy */ }
+                if (picker) {
+                    try { picker.focus({ preventScroll: true }); picker.click(); return; } catch (_) { /* noop */ }
+                }
+                textEl.focus({ preventScroll: true });
+            }, { passive: false, capture: true });
+        });
+    }
     function selectGroup(key) {
         if (isOrigJobInlineEditing()) cancelOrigJobInlineEdit();
         if (modStateSpare()?.groupHeaderEdit && TVC_SpareMenu?.cancelGroupHeaderEdit) {
@@ -11330,6 +11364,7 @@ const TVC_App = (function () {
                 msgEl.classList.add('hidden');
             }
         }
+        initPeriodDatePickers();
     }
 
     function inferReportDepartment(report, jobs) {
@@ -13577,6 +13612,7 @@ const TVC_App = (function () {
         updateHistToolbarState();
         TVC_RunHours.syncRhToolbarUi();
         TVC_ListFilters?.syncBtn('history');
+        initPeriodDatePickers();
     }
 
     /** Work History: 단일 클릭 — 행 선택 하이라이트(Work Plan과 동일 UX) */
@@ -17154,6 +17190,7 @@ const TVC_App = (function () {
         refreshWorkProcedureIfOpen();
         TVC_RunHours.syncRhToolbarUi();
         syncPlanUpdateUi();
+        initPeriodDatePickers();
     }
 
     async function refreshAfterImport(payload) {

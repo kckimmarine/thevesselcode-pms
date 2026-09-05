@@ -28,6 +28,13 @@
     --list-table-scroll-h: calc(1000px * var(--ui-scale));
     --hist-list-max-h: calc(1000px * var(--ui-scale));
 }
+
+/*
+ * TVC mobile breakpoint — portrait AND landscape phones, zero desktop impact.
+ * Portrait: width ≤768px
+ * Landscape phone: height ≤600px AND width ≤1024px (e.g. 844×390)
+ * Use this exact @media list for all phone-only layout/touch rules.
+ */
 * { box-sizing: border-box; }
 html {
     scrollbar-gutter: stable;
@@ -331,7 +338,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     padding-bottom: 8px;
 }
 
-@media (max-width: 480px) {
+@media screen and (max-width: 480px),
+       screen and (max-height: 600px) and (max-width: 1024px) {
     .login-card { padding: 28px 22px 22px; border-radius: 10px; }
     .login-brand-name { font-size: 18px; letter-spacing: 0.1em; }
 }
@@ -1292,7 +1300,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .act-dash-total { color: #4a5568; background: #edf2f7; border-color: #e2e8f0; }
 .act-dash-total.active { background: #718096; color: #fff; border-color: #718096; }
 .act-dash-total.active .act-dash-count { color: #fff; }
-@media (max-width: 720px) {
+@media screen and (max-width: 720px),
+       screen and (max-height: 600px) and (max-width: 1024px) {
     .act-filter-dashboard-inner {
         flex-wrap: nowrap;
         padding-bottom: 4px;
@@ -1301,7 +1310,8 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     .act-dash-count { font-size: 17px; }
     .act-dash-label { font-size: 10px; white-space: normal; max-width: 72px; }
 }
-@media (max-width: 480px) {
+@media screen and (max-width: 480px),
+       screen and (max-height: 600px) and (max-width: 1024px) {
     .act-filter-dashboard-inner {
         display: grid;
         grid-template-columns: repeat(3, 1fr);
@@ -3636,7 +3646,8 @@ input.tvc-date-input::placeholder {
 .hist-table tbody tr { cursor: pointer; }
 .sheet-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 
-@media (max-width: 768px) {
+@media screen and (max-width: 768px),
+       screen and (max-height: 600px) and (max-width: 1024px) {
     #tab-history .list-table-scroll-wrap,
     #tab-defect .list-table-scroll-wrap {
         max-height: 50vh;
@@ -9143,7 +9154,8 @@ body.mobile-nav-open .mobile-nav-icon::after { top: 0; transform: rotate(-45deg)
 }
 body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 
-@media (max-width: 768px) {
+@media screen and (max-width: 768px),
+       screen and (max-height: 600px) and (max-width: 1024px) {
     .mobile-nav-btn { display: inline-flex; }
 
     .cmaxs-header {
@@ -9204,7 +9216,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         grid-template-columns: 1fr;
         padding: 10px 12px 20px;
     }
-    .tree-panel { min-height: 280px; }
+    .tree-panel { min-height: auto; }
     .cmaxs-body {
         grid-template-columns: 1fr;
         padding: 12px;
@@ -9262,7 +9274,8 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     }
 }
 
-@media (max-width: 480px) {
+@media screen and (max-width: 480px),
+       screen and (max-height: 600px) and (max-width: 1024px) {
     .cmaxs-legend { font-size: 11px; padding: 6px 12px; }
     .hist-panel { overflow-x: hidden; }
     .dept-btn { padding: 6px 10px; font-size: 12px; }
@@ -9993,8 +10006,9 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     min-height: 320px;
 }
 
-/* ── Mobile-only layout fixes (≤768px) — zero desktop impact ───────────── */
-@media screen and (max-width: 768px) {
+/* ── Mobile-only layout fixes (portrait ≤768px OR landscape phone) ─────── */
+@media screen and (max-width: 768px),
+       screen and (max-height: 600px) and (max-width: 1024px) {
     /* Header — sleek single-row native app bar */
     .cmaxs-header {
         display: flex;
@@ -10327,6 +10341,139 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         min-height: 44px;
         padding: 10px 14px;
         touch-action: manipulation;
+    }
+
+    /* PMS GROUP Tree — compact height (portrait + landscape phones) */
+    #tab-actual .actual-layout .tree-panel {
+        min-height: auto;
+    }
+    #tab-actual .actual-layout .tree-panel .panel-body.tree-scroll,
+    #tab-actual #actTree {
+        max-height: 180px !important;
+        overflow-y: auto !important;
+        -webkit-overflow-scrolling: touch;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 8px;
+    }
+    #tab-actual .actual-layout .tree-panel .tree-node {
+        touch-action: manipulation;
+    }
+}
+
+/* Period datepicker + mobile layout fixes (≤768px); desktop (>768px) unchanged */
+@media screen and (max-width: 768px) {
+    /* Period filter row — prevent right-edge clipping */
+    .list-filter-stack .list-filter-period-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        overflow: visible;
+        row-gap: 8px;
+        position: relative;
+        z-index: 30;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+    .list-filter-stack .list-filter-period-row .count-label {
+        margin-left: 0;
+        flex: 1 1 auto;
+        min-width: 0;
+    }
+    .act-period-filter {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        flex: 1 1 100%;
+        box-sizing: border-box;
+        position: relative;
+        z-index: 30;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+    .act-period-filter .act-period-label {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+    .act-period-filter .act-period-sep {
+        flex: 0 0 auto;
+    }
+    .act-period-filter .list-filter-wrap {
+        flex: 0 0 auto;
+        margin-left: 0;
+    }
+    .act-period-filter .tvc-date-input-wrap {
+        flex: 1 1 calc(50% - 20px);
+        min-width: 0;
+        max-width: calc(50% - 4px);
+        width: auto;
+        position: relative;
+        z-index: 30;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+    .act-period-filter .tvc-date-input-wrap .tvc-date-input,
+    .act-period-filter .act-period-input {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+        cursor: pointer;
+    }
+    .act-period-filter .tvc-date-picker-btn {
+        min-width: 32px;
+        min-height: 32px;
+        flex-shrink: 0;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+
+    /* Machinery info card — PMS Group / Equipment row 1, Critical Equipment row 2 */
+    .plan-group-header .spare-gh-row-plan-split.spare-gh-row-primary-split,
+    .spare-group-header .spare-gh-row-plan-split.spare-gh-row-primary-split {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px 10px;
+        grid-template-columns: none;
+        align-items: stretch;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(1),
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(2) {
+        flex: 1 1 calc(50% - 5px);
+        min-width: 0;
+        max-width: calc(50% - 5px);
+        grid-column: auto;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(3) {
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        grid-column: 1 / -1;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-field-span2,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-field-span3 {
+        grid-column: auto;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-label-row {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-select,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-input,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-value,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-group-trigger {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
     }
 }
 
