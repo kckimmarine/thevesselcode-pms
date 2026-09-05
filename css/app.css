@@ -10583,3 +10583,119 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     }
 }
 
+/* Period row + Machinery info card (mobile ≤768px only; desktop >768px unchanged) */
+@media screen and (max-width: 768px) {
+    /* Period filter row — flexible wrap, no viewport clipping */
+    .filter-bar.list-filter-period-row,
+    .list-filter-stack .list-filter-period-row {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+        overflow: visible;
+    }
+    .list-filter-stack .list-filter-period-row .count-label {
+        margin-left: 0;
+        flex: 1 1 auto;
+        min-width: 0;
+        white-space: normal;
+    }
+    .filter-bar.list-filter-period-row .act-period-clear,
+    .list-filter-stack .list-filter-period-row .act-period-clear {
+        flex: 0 0 auto;
+    }
+    .hist-toolbar .act-period-filter,
+    .act-period-filter {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        flex: 1 1 100%;
+        flex-shrink: 1;
+        box-sizing: border-box;
+    }
+    .act-period-filter .act-period-label {
+        flex: 0 0 auto;
+        white-space: nowrap;
+    }
+    .act-period-filter .act-period-sep {
+        flex: 0 0 auto;
+    }
+    .act-period-filter .list-filter-wrap {
+        flex: 0 0 auto;
+        margin-left: 0;
+    }
+    .act-period-filter .tvc-date-input-wrap {
+        flex: 1 1 calc(50% - 20px);
+        min-width: 0;
+        max-width: calc(50% - 4px);
+        width: auto;
+    }
+    .act-period-filter .tvc-date-input-wrap .tvc-date-input,
+    .act-period-filter .act-period-input {
+        width: 100%;
+        min-width: 0;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+    .act-period-filter .tvc-date-picker-btn {
+        min-width: 32px;
+        min-height: 32px;
+        flex-shrink: 0;
+    }
+
+    /* Machinery info card — Row 1: PMS Group + Equipment; Row 2: Critical Equipment full width */
+    .plan-group-header .spare-gh-row-plan-split.spare-gh-row-primary-split,
+    .spare-group-header .spare-gh-row-plan-split.spare-gh-row-primary-split {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        grid-template-columns: none;
+        align-items: stretch;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(1),
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(2) {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: none;
+        grid-column: auto;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split > .spare-gh-field:nth-child(3) {
+        flex: 1 1 100%;
+        width: 100%;
+        max-width: 100%;
+        min-width: 0;
+        grid-column: auto;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-field-span2,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-field-span3 {
+        grid-column: auto;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-label,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-value {
+        white-space: normal;
+        overflow: visible;
+        text-overflow: clip;
+        word-break: break-word;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-label-row {
+        flex-wrap: wrap;
+        min-width: 0;
+    }
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-select,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-input,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-value,
+    .spare-gh-row-plan-split.spare-gh-row-primary-split .spare-gh-group-trigger {
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+    }
+}
+
