@@ -10231,10 +10231,10 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         width: 95vw !important;
         max-width: 95vw !important;
         min-width: 0 !important;
-        max-height: 88vh !important;
+        max-height: 90vh !important;
         height: auto !important;
         min-height: 0 !important;
-        margin: auto;
+        margin: auto !important;
         border-radius: 12px !important;
         padding: 12px 12px 0;
         overflow: hidden;
@@ -10297,8 +10297,9 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     #workProcedureBody > .wp-tab-pane {
         flex: 1 1 auto;
         min-height: 0;
-        overflow-y: auto;
-        max-height: calc(88vh - 120px);
+        overflow-y: auto !important;
+        overflow-x: auto;
+        max-height: calc(90vh - 120px);
         -webkit-overflow-scrolling: touch;
         padding: 12px;
         box-sizing: border-box;
@@ -10306,7 +10307,7 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 
     #workProcedureBody > .wp-tab-pane-history {
         min-height: 0 !important;
-        max-height: calc(88vh - 120px) !important;
+        max-height: calc(90vh - 120px) !important;
     }
 
     #workProcedureBody .wp-meta-row {
@@ -10324,8 +10325,10 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     #workProcedureBody .wp-table-wrap {
         min-height: 0 !important;
         max-height: none !important;
-        overflow: visible;
+        overflow-x: auto;
+        overflow-y: visible;
         border-radius: 8px;
+        -webkit-overflow-scrolling: touch;
     }
 
     #workProcedureBody .wp-table {
@@ -10371,6 +10374,107 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     }
 
     #workProcedureBody .wp-modal-actions .btn {
+        min-height: 44px;
+        padding: 10px 14px;
+        touch-action: manipulation;
+    }
+
+    /* Spare History / Spare Item History (Consumed Log) — mobile fit & scroll */
+    #spareHistoryModal,
+    #spareItemHistoryModal {
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 12px !important;
+        overflow-x: hidden;
+    }
+
+    #spareHistoryModal .modal-box.menu-hist-modal,
+    #spareItemHistoryModal .modal-box.wp-modal {
+        width: 95vw !important;
+        max-width: 95vw !important;
+        min-width: 0 !important;
+        max-height: 90vh !important;
+        height: auto !important;
+        min-height: 0 !important;
+        margin: auto !important;
+        border-radius: 12px !important;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        box-sizing: border-box;
+        padding: 12px 12px 0;
+    }
+
+    #spareHistoryBody,
+    #spareItemHistoryBody {
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+
+    #spareHistoryBody > .spare-sync-title,
+    #spareHistoryBody > .spare-hist-sub,
+    #spareHistoryBody > .menu-hist-cats,
+    #spareItemHistoryBody > .wp-title,
+    #spareItemHistoryBody > .spare-item-hist-part-wrap,
+    #spareItemHistoryBody > .wp-tabs {
+        flex-shrink: 0;
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    #spareHistoryBody .menu-hist-table-wrap,
+    #spareItemHistoryBody > .wp-tab-pane-consumed,
+    #spareItemHistoryBody > .wp-tab-pane-requisition,
+    #spareItemHistoryBody > .wp-tab-pane-note,
+    #spareItemHistoryBody .wp-table-wrap {
+        flex: 1 1 auto;
+        min-height: 0;
+        min-width: 0;
+        overflow-y: auto !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        max-height: calc(90vh - 120px);
+    }
+
+    #spareHistoryBody .menu-hist-table,
+    #spareHistoryBody .spics-hist-table,
+    #spareItemHistoryBody .spare-data-table,
+    #spareItemHistoryBody .wp-table {
+        table-layout: fixed;
+        width: 100%;
+    }
+
+    #spareHistoryBody .menu-hist-table th,
+    #spareHistoryBody .menu-hist-table td,
+    #spareItemHistoryBody .spare-data-table th,
+    #spareItemHistoryBody .spare-data-table td,
+    #spareItemHistoryBody .wp-table th,
+    #spareItemHistoryBody .wp-table td {
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    #spareHistoryBody .menu-hist-file-text {
+        white-space: normal;
+        word-break: break-word;
+    }
+
+    #spareHistoryBody > .modal-actions,
+    #spareItemHistoryBody > .wp-modal-actions {
+        flex-shrink: 0;
+        margin-top: auto;
+        padding: 12px;
+        border-top: 1px solid #e2e8f0;
+        background: #fff;
+        gap: 10px;
+    }
+
+    #spareHistoryBody > .modal-actions .btn,
+    #spareItemHistoryBody > .wp-modal-actions .btn {
         min-height: 44px;
         padding: 10px 14px;
         touch-action: manipulation;
