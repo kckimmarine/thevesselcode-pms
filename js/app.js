@@ -17917,12 +17917,46 @@ const TVC_App = (function () {
     const AI_HELP_TOAST_ID = 'tvcAiHelpToast';
     let aiHelpReportPreviewUrl = null;
     let aiHelpReportBlob = null;
+    let aiHelpReportCompressed = null;
     let aiHelpPasteBound = false;
 
     const AI_HELP_GUIDES = [
         {
+            id: 'report-types',
+            keys: ['레포트', '리포트', 'report', '종류', 'routine', 'incident', 'trouble', 'history', 'pms레포트', 'pms report', 'work report', 'defect', '보고서'],
+            title: 'PMS 레포트 종류',
+            steps: [
+                'Routine Work Report — 정기·계획 작업 완료 보고 (PMS → Make Report).',
+                'Incident / Trouble Report — 고장·결함(Defect) 보고 및 조치 이력.',
+                'Report History — 제출된 모든 보고 조회 · Detail Report · 승인(Confirm/Approve).',
+                'Period 필터로 기간별 Report History를 좁혀 볼 수 있습니다.',
+            ],
+        },
+        {
+            id: 'spare-stock',
+            keys: ['스페어', '부품', 'spare', '재고', '소모', 'consume', 'requisition', '청구', 'spare parts'],
+            title: 'SPARE 부품 · 재고 · 청구',
+            steps: [
+                'SPARE 탭에서 그룹/부품을 선택하고 Requisition(청구) 또는 Consume(소모) 기록을 작성합니다.',
+                'Work Report 완료 시 연결된 spare 소모가 자동 반영될 수 있습니다(설정/보고 유형에 따름).',
+                'Report History · Spare Report History에서 청구/소모 내역을 확인합니다.',
+                '재고 수량은 SPARE 목록 및 Consume Log에서 검증하세요.',
+            ],
+        },
+        {
+            id: 'sync-transfer',
+            keys: ['동기화', 'sync', 'export', 'import', '내보내기', '가져오기', '전송', 'xfer', 'hq', '선박', 'vessel', 'backup', '복원'],
+            title: '선박 ↔ HQ 데이터 동기화',
+            steps: [
+                'Menu → Transfer/Export에서 vessel/HQ 패키지를 Export(내보내기)합니다.',
+                '상대 시스템에서 Import(가져오기)로 동일 유형 패키지를 적용합니다.',
+                'HQ Cloud 모드에서는 Online Sync / Cloud Restore 메뉴를 사용할 수 있습니다.',
+                'Export 전 Master Backup으로 스냅샷을 권장합니다.',
+            ],
+        },
+        {
             id: 'spare-consume',
-            keys: ['부품', '소모', 'consume', 'spare consume', '재고', '소모 입력'],
+            keys: ['소모 입력', 'consume log', '소모 기록'],
             title: '부품 소모 입력법',
             steps: [
                 'SPARE 탭 → 해당 부품/그룹을 선택합니다.',
@@ -17990,24 +18024,45 @@ const TVC_App = (function () {
         appendAiHelpBubble('bot', '안녕하세요! 운영 방법이 궁금하시면 아래 칩을 누르거나 질문을 입력해 주세요. (GitHub 접수 없이 즉시 안내)');
     }
 
+    function normalizeAiHelpQuery(query) {
+        return String(query || '')
+            .toLowerCase()
+            .replace(/[?!.,;:·/\\|()[\]{}'"`~]+/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    function tokenizeAiHelpQuery(query) {
+        const q = normalizeAiHelpQuery(query);
+        if (!q) return [];
+        return q.split(' ').filter((t) => t.length >= 1);
+    }
+
     function matchAiHelpGuide(query) {
-        const q = String(query || '').trim().toLowerCase();
+        const q = normalizeAiHelpQuery(query);
         if (!q) return null;
+        const tokens = tokenizeAiHelpQuery(q);
         let best = null;
         let bestScore = 0;
         for (const guide of AI_HELP_GUIDES) {
             let score = 0;
-            if (guide.title.toLowerCase().includes(q) || q.includes(guide.title.toLowerCase())) score += 3;
+            const titleLower = guide.title.toLowerCase();
+            if (q.includes(titleLower) || titleLower.includes(q)) score += 4;
             for (const key of guide.keys) {
-                const k = key.toLowerCase();
-                if (q.includes(k) || k.includes(q)) score += 2;
+                const k = String(key).toLowerCase();
+                if (!k) continue;
+                if (q.includes(k)) score += 3;
+                for (const token of tokens) {
+                    if (token.includes(k) || k.includes(token)) score += 2;
+                    if (token.length >= 2 && k.length >= 2 && (token.startsWith(k) || k.startsWith(token))) score += 1;
+                }
             }
             if (score > bestScore) {
                 bestScore = score;
                 best = guide;
             }
         }
-        return bestScore > 0 ? best : null;
+        return bestScore >= 2 ? best : null;
     }
 
     function formatGuideReply(guide) {
@@ -18027,9 +18082,10 @@ const TVC_App = (function () {
         } else {
             appendAiHelpBubble('bot', [
                 '관련 가이드를 찾지 못했습니다. 아래 주제 중 하나를 선택해 보세요:',
-                '• 부품 소모 입력법',
-                '• 작업 지시 승인 방법',
-                '• 달력/기간 설정',
+                '• PMS 레포트 종류 (Routine / Incident / History)',
+                '• SPARE 부품 · 재고 · 청구',
+                '• 선박 ↔ HQ 동기화 (Export / Import)',
+                '• 작업 지시 승인 · 달력/기간 설정',
                 '',
                 '버그/개선 제안은 "Report Issue / Idea" 탭에서 CEO 검토 대기열로 보내주세요.',
             ].join('\n'));
@@ -18056,19 +18112,73 @@ const TVC_App = (function () {
         }
         aiHelpReportPreviewUrl = null;
         aiHelpReportBlob = null;
+        aiHelpReportCompressed = null;
     }
 
-    function setAiHelpReportImage(file) {
+    function compressImageFile(file, opts = {}) {
+        const maxDim = opts.maxDim || 1200;
+        const quality = opts.quality ?? 0.7;
+        return new Promise((resolve, reject) => {
+            const objectUrl = URL.createObjectURL(file);
+            const img = new Image();
+            img.onload = () => {
+                URL.revokeObjectURL(objectUrl);
+                let width = img.naturalWidth || img.width;
+                let height = img.naturalHeight || img.height;
+                const scale = Math.min(1, maxDim / Math.max(width, height, 1));
+                width = Math.max(1, Math.round(width * scale));
+                height = Math.max(1, Math.round(height * scale));
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                if (!ctx) {
+                    reject(new Error('Canvas unavailable'));
+                    return;
+                }
+                ctx.drawImage(img, 0, 0, width, height);
+                canvas.toBlob((blob) => {
+                    if (!blob) {
+                        reject(new Error('Image compression failed'));
+                        return;
+                    }
+                    const reader = new FileReader();
+                    reader.onload = () => resolve({
+                        blob,
+                        dataUrl: String(reader.result || ''),
+                        name: `${String(file.name || 'screenshot').replace(/\.[^.]+$/, '')}.jpg`,
+                    });
+                    reader.onerror = () => reject(reader.error || new Error('read failed'));
+                    reader.readAsDataURL(blob);
+                }, 'image/jpeg', quality);
+            };
+            img.onerror = () => {
+                URL.revokeObjectURL(objectUrl);
+                reject(new Error('Image load failed'));
+            };
+            img.src = objectUrl;
+        });
+    }
+
+    async function setAiHelpReportImage(file) {
         if (!file || !String(file.type || '').startsWith('image/')) return false;
         revokeAiHelpReportPreview();
-        aiHelpReportPreviewUrl = URL.createObjectURL(file);
-        aiHelpReportBlob = file;
+        let compressed = null;
+        try {
+            compressed = await compressImageFile(file);
+        } catch (e) {
+            console.warn('[TVC-AI-Help] image compress failed, using original', e);
+        }
+        const useBlob = compressed?.blob || file;
+        aiHelpReportCompressed = compressed;
+        aiHelpReportBlob = useBlob;
+        aiHelpReportPreviewUrl = URL.createObjectURL(useBlob);
         const preview = aiHelpEl('ai-help-report-preview');
         const img = aiHelpEl('ai-help-report-img');
         const empty = document.querySelector('#ai-help-panel-report .feedback-photo-empty');
         if (img) {
             img.src = aiHelpReportPreviewUrl;
-            img.alt = file.name || 'Screenshot';
+            img.alt = compressed?.name || file.name || 'Screenshot';
         }
         preview?.classList.remove('hidden');
         empty?.classList.add('hidden');
@@ -18076,7 +18186,7 @@ const TVC_App = (function () {
         if (input) {
             try {
                 const dt = new DataTransfer();
-                dt.items.add(file);
+                dt.items.add(useBlob);
                 input.files = dt.files;
             } catch (_) {
                 input.value = '';
@@ -18105,11 +18215,11 @@ const TVC_App = (function () {
             const file = imageFileFromClipboard(event);
             if (!file) return;
             event.preventDefault();
-            setAiHelpReportImage(file);
+            setAiHelpReportImage(file).catch((err) => console.warn('[TVC-AI-Help] paste image', err));
         });
         aiHelpEl('ai-help-report-photo')?.addEventListener('change', (event) => {
             const file = event.target?.files?.[0];
-            if (file) setAiHelpReportImage(file);
+            if (file) setAiHelpReportImage(file).catch((err) => console.warn('[TVC-AI-Help] pick image', err));
         });
         aiHelpPasteBound = true;
     }
@@ -18151,6 +18261,24 @@ const TVC_App = (function () {
         });
     }
 
+    async function aiHelpImagePayload(file) {
+        if (aiHelpReportCompressed?.dataUrl) {
+            return {
+                name: aiHelpReportCompressed.name || 'screenshot.jpg',
+                dataUrl: aiHelpReportCompressed.dataUrl,
+            };
+        }
+        if (!file) return null;
+        try {
+            const compressed = await compressImageFile(file);
+            return { name: compressed.name, dataUrl: compressed.dataUrl };
+        } catch (e) {
+            console.warn('[TVC-AI-Help] submit compress fallback', e);
+            const dataUrl = await fileToDataUrl(file);
+            return { name: file.name || 'screenshot.jpg', dataUrl };
+        }
+    }
+
     async function submitAiHelpReport() {
         const comment = aiHelpEl('ai-help-report-comment')?.value?.trim() || '';
         const title = aiHelpEl('ai-help-report-title')?.value?.trim() || '';
@@ -18171,8 +18299,8 @@ const TVC_App = (function () {
 
         if (file) {
             try {
-                const dataUrl = await fileToDataUrl(file);
-                payload.images.push({ name: file.name || 'screenshot.png', dataUrl });
+                const imgPayload = await aiHelpImagePayload(file);
+                if (imgPayload?.dataUrl) payload.images.push(imgPayload);
             } catch (e) {
                 console.warn('[TVC-AI-Help] image encode failed', e);
             }
