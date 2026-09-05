@@ -6,6 +6,7 @@ build/sku-stamps/
 build/test-seat/
 data/_test*
 *.exe
+!downloads/TVC-PMS-VESSEL_*-Setup.exe
 electron/keys/private.pem
 .git/
 scripts/_sim*

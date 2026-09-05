@@ -19,6 +19,7 @@ dist/
 build/licenses/
 build/electron-builder/
 *.exe
+!downloads/TVC-PMS-VESSEL_*-Setup.exe
 *.blockmap
 *.nsis.7z
 
