@@ -150,7 +150,10 @@
         <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 PMS</button>
         <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
         <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Report History</button>
-        <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">⚙ Settings</button>
+        <div class="tab-bar-end">
+            <button type="button" id="btn-open-ai-help" class="btn-ai-help btn-feedback" onclick="TVC_App.openAiHelp()" title="AI Help">🤖 AI Help</button>
+            <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">⚙ Settings</button>
+        </div>
     </nav>
 
     <div id="tabContent">
@@ -594,6 +597,56 @@
 
         <div class="settings-footer">
             <button type="button" class="btn" onclick="TVC_Settings.close()">Close</button>
+        </div>
+    </div>
+</div>
+<div id="modal-ai-help" class="modal hidden" onclick="if(event.target===this)TVC_App.closeAiHelp()">
+    <div class="modal-box ai-help-modal" onclick="event.stopPropagation()">
+        <button type="button" class="modal-x" onclick="TVC_App.closeAiHelp()" aria-label="Close">×</button>
+        <h3 class="ai-help-title">TVC-PMS AI Assistant &amp; Help</h3>
+        <p class="ai-help-sub muted">Operational how-to answers instantly · defects &amp; ideas go to CEO review queue only.</p>
+
+        <div class="ai-help-mode-tabs" role="tablist" aria-label="AI Help mode">
+            <button type="button" id="ai-help-mode-guide" class="ai-help-mode-btn active" data-ai-help-mode="guide" onclick="TVC_App.setAiHelpMode('guide')">Quick Guide</button>
+            <button type="button" id="ai-help-mode-report" class="ai-help-mode-btn" data-ai-help-mode="report" onclick="TVC_App.setAiHelpMode('report')">Report Issue / Idea</button>
+        </div>
+
+        <div id="ai-help-panel-guide" class="ai-help-panel" role="tabpanel">
+            <div id="ai-help-chat" class="ai-help-chat" aria-live="polite"></div>
+            <div class="ai-help-chips" aria-label="Suggested questions">
+                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('부품 소모 입력법')">부품 소모 입력법</button>
+                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('작업 지시 승인 방법')">작업 지시 승인 방법</button>
+                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('달력/기간 설정')">달력/기간 설정</button>
+            </div>
+            <form class="ai-help-input-row" onsubmit="event.preventDefault();TVC_App.submitAiHelpQuery();">
+                <input type="text" id="ai-help-query" class="ai-help-query-input" placeholder="예: Period 필터 사용법" autocomplete="off">
+                <button type="submit" class="btn btn-sm btn-green">Ask</button>
+            </form>
+        </div>
+
+        <div id="ai-help-panel-report" class="ai-help-panel hidden" role="tabpanel">
+            <label class="ai-help-report-label">
+                <span class="ai-help-report-caption">Issue title (optional)</span>
+                <input type="text" id="ai-help-report-title" class="ai-help-report-title" placeholder="짧은 제목">
+            </label>
+            <div class="ai-help-report-photo-wrap">
+                <label class="feedback-photo-label">
+                    <input type="file" id="ai-help-report-photo" class="feedback-photo-input" accept="image/*">
+                    <span class="feedback-photo-btn">📷 Attach screenshot</span>
+                </label>
+                <p class="feedback-photo-empty muted">Paste an image (Ctrl+V) while this panel is open.</p>
+                <div id="ai-help-report-preview" class="feedback-photo-preview hidden">
+                    <img id="ai-help-report-img" class="feedback-photo-img" alt="">
+                </div>
+            </div>
+            <label class="feedback-comment-label">
+                <span class="feedback-comment-caption">Description</span>
+                <textarea id="ai-help-report-comment" class="feedback-comment" rows="4" placeholder="어떤 점이 어색하거나 개선이 필요한가요?"></textarea>
+            </label>
+            <div class="ai-help-report-footer">
+                <button type="button" class="btn" onclick="TVC_App.closeAiHelp()">Cancel</button>
+                <button type="button" id="ai-help-report-send" class="btn btn-green" onclick="TVC_App.submitAiHelpReport()">Send to CEO Review Queue</button>
+            </div>
         </div>
     </div>
 </div>

@@ -17912,6 +17912,312 @@ const TVC_App = (function () {
         }
     }
 
+    // ── AI Help (Guide chat + CEO review queue) ───────────────────────
+    const AI_HELP_MODAL_ID = 'modal-ai-help';
+    const AI_HELP_TOAST_ID = 'tvcAiHelpToast';
+    let aiHelpReportPreviewUrl = null;
+    let aiHelpReportBlob = null;
+    let aiHelpPasteBound = false;
+
+    const AI_HELP_GUIDES = [
+        {
+            id: 'spare-consume',
+            keys: ['부품', '소모', 'consume', 'spare consume', '재고', '소모 입력'],
+            title: '부품 소모 입력법',
+            steps: [
+                'SPARE 탭 → 해당 부품/그룹을 선택합니다.',
+                'Consume / Stock 관련 메뉴에서 소모(Consume) 기록을 엽니다.',
+                '수량·일자·비고를 입력하고 저장합니다.',
+                'Report History에서 소모 내역을 확인할 수 있습니다.',
+            ],
+        },
+        {
+            id: 'work-approval',
+            keys: ['작업', '지시', '승인', 'approve', 'work report', '보고', '결재'],
+            title: '작업 지시 · 승인 방법',
+            steps: [
+                'PMS 탭에서 작업을 선택 후 Make Report로 Work Report를 작성합니다.',
+                'Captain / CE 등 권한 있는 사용자가 Report History에서 승인(Confirm/Approve)합니다.',
+                'HQ 모드에서는 Fleet/HQ 승인 흐름을 확인합니다.',
+                '승인 전에는 수정 가능 · 승인 후에는 정책에 따라 잠금됩니다.',
+            ],
+        },
+        {
+            id: 'period-filter',
+            keys: ['달력', '기간', 'period', 'date', 'datepicker', '필터', '날짜'],
+            title: '달력 / 기간(Period) 설정',
+            steps: [
+                'PMS · Report History 상단 Period 행에서 From ~ To 날짜를 탭/클릭합니다.',
+                '모바일에서는 달력 아이콘 또는 입력란을 눌러 날짜를 선택합니다.',
+                'Filter 버튼으로 추가 조건을 적용할 수 있습니다.',
+                'Clear로 기간 필터를 초기화합니다.',
+            ],
+        },
+    ];
+
+    function aiHelpEl(id) { return document.getElementById(id); }
+
+    function showAiHelpToast(message) {
+        let toast = aiHelpEl(AI_HELP_TOAST_ID);
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = AI_HELP_TOAST_ID;
+            toast.className = 'tvc-feedback-toast hidden';
+            toast.setAttribute('role', 'status');
+            toast.setAttribute('aria-live', 'polite');
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.classList.remove('hidden');
+        clearTimeout(showAiHelpToast._timer);
+        showAiHelpToast._timer = setTimeout(() => toast.classList.add('hidden'), 3600);
+    }
+
+    function appendAiHelpBubble(role, text) {
+        const chat = aiHelpEl('ai-help-chat');
+        if (!chat) return;
+        const bubble = document.createElement('div');
+        bubble.className = `ai-help-bubble ai-help-bubble-${role}`;
+        bubble.textContent = text;
+        chat.appendChild(bubble);
+        chat.scrollTop = chat.scrollHeight;
+    }
+
+    function resetAiHelpChat() {
+        const chat = aiHelpEl('ai-help-chat');
+        if (!chat) return;
+        chat.innerHTML = '';
+        appendAiHelpBubble('bot', '안녕하세요! 운영 방법이 궁금하시면 아래 칩을 누르거나 질문을 입력해 주세요. (GitHub 접수 없이 즉시 안내)');
+    }
+
+    function matchAiHelpGuide(query) {
+        const q = String(query || '').trim().toLowerCase();
+        if (!q) return null;
+        let best = null;
+        let bestScore = 0;
+        for (const guide of AI_HELP_GUIDES) {
+            let score = 0;
+            if (guide.title.toLowerCase().includes(q) || q.includes(guide.title.toLowerCase())) score += 3;
+            for (const key of guide.keys) {
+                const k = key.toLowerCase();
+                if (q.includes(k) || k.includes(q)) score += 2;
+            }
+            if (score > bestScore) {
+                bestScore = score;
+                best = guide;
+            }
+        }
+        return bestScore > 0 ? best : null;
+    }
+
+    function formatGuideReply(guide) {
+        const lines = [`📘 ${guide.title}`, ''];
+        guide.steps.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
+        lines.push('', '다른 주제는 키워드(예: Period, 승인, 소모)로 다시 물어보세요.');
+        return lines.join('\n');
+    }
+
+    function askAiHelp(query) {
+        const q = String(query || '').trim();
+        if (!q) return;
+        appendAiHelpBubble('user', q);
+        const guide = matchAiHelpGuide(q);
+        if (guide) {
+            appendAiHelpBubble('bot', formatGuideReply(guide));
+        } else {
+            appendAiHelpBubble('bot', [
+                '관련 가이드를 찾지 못했습니다. 아래 주제 중 하나를 선택해 보세요:',
+                '• 부품 소모 입력법',
+                '• 작업 지시 승인 방법',
+                '• 달력/기간 설정',
+                '',
+                '버그/개선 제안은 "Report Issue / Idea" 탭에서 CEO 검토 대기열로 보내주세요.',
+            ].join('\n'));
+        }
+        const input = aiHelpEl('ai-help-query');
+        if (input) input.value = '';
+    }
+
+    function submitAiHelpQuery() {
+        askAiHelp(aiHelpEl('ai-help-query')?.value || '');
+    }
+
+    function setAiHelpMode(mode) {
+        const guide = mode === 'guide';
+        aiHelpEl('ai-help-panel-guide')?.classList.toggle('hidden', !guide);
+        aiHelpEl('ai-help-panel-report')?.classList.toggle('hidden', guide);
+        aiHelpEl('ai-help-mode-guide')?.classList.toggle('active', guide);
+        aiHelpEl('ai-help-mode-report')?.classList.toggle('active', !guide);
+    }
+
+    function revokeAiHelpReportPreview() {
+        if (aiHelpReportPreviewUrl) {
+            try { URL.revokeObjectURL(aiHelpReportPreviewUrl); } catch (_) { /* noop */ }
+        }
+        aiHelpReportPreviewUrl = null;
+        aiHelpReportBlob = null;
+    }
+
+    function setAiHelpReportImage(file) {
+        if (!file || !String(file.type || '').startsWith('image/')) return false;
+        revokeAiHelpReportPreview();
+        aiHelpReportPreviewUrl = URL.createObjectURL(file);
+        aiHelpReportBlob = file;
+        const preview = aiHelpEl('ai-help-report-preview');
+        const img = aiHelpEl('ai-help-report-img');
+        const empty = document.querySelector('#ai-help-panel-report .feedback-photo-empty');
+        if (img) {
+            img.src = aiHelpReportPreviewUrl;
+            img.alt = file.name || 'Screenshot';
+        }
+        preview?.classList.remove('hidden');
+        empty?.classList.add('hidden');
+        const input = aiHelpEl('ai-help-report-photo');
+        if (input) {
+            try {
+                const dt = new DataTransfer();
+                dt.items.add(file);
+                input.files = dt.files;
+            } catch (_) {
+                input.value = '';
+            }
+        }
+        return true;
+    }
+
+    function imageFileFromClipboard(event) {
+        const items = event.clipboardData?.items;
+        if (!items) return null;
+        for (const item of items) {
+            if (item.kind === 'file' && String(item.type || '').startsWith('image/')) {
+                return item.getAsFile();
+            }
+        }
+        return null;
+    }
+
+    function bindAiHelpReportPaste() {
+        if (aiHelpPasteBound) return;
+        const modal = aiHelpEl(AI_HELP_MODAL_ID);
+        if (!modal) return;
+        modal.addEventListener('paste', (event) => {
+            if (aiHelpEl('ai-help-panel-report')?.classList.contains('hidden')) return;
+            const file = imageFileFromClipboard(event);
+            if (!file) return;
+            event.preventDefault();
+            setAiHelpReportImage(file);
+        });
+        aiHelpEl('ai-help-report-photo')?.addEventListener('change', (event) => {
+            const file = event.target?.files?.[0];
+            if (file) setAiHelpReportImage(file);
+        });
+        aiHelpPasteBound = true;
+    }
+
+    function resetAiHelpReportForm() {
+        revokeAiHelpReportPreview();
+        const title = aiHelpEl('ai-help-report-title');
+        const comment = aiHelpEl('ai-help-report-comment');
+        const photo = aiHelpEl('ai-help-report-photo');
+        const preview = aiHelpEl('ai-help-report-preview');
+        const empty = document.querySelector('#ai-help-panel-report .feedback-photo-empty');
+        if (title) title.value = '';
+        if (comment) comment.value = '';
+        if (photo) photo.value = '';
+        preview?.classList.add('hidden');
+        empty?.classList.remove('hidden');
+    }
+
+    function collectAiHelpDeviceInfo() {
+        return {
+            userAgent: navigator.userAgent,
+            viewport: `${window.innerWidth}x${window.innerHeight}`,
+            language: navigator.language,
+            platform: navigator.platform,
+            online: navigator.onLine,
+            url: location.href.split('?')[0],
+            user: state.user?.username || state.user?.name || null,
+            dept: state.user?.department || null,
+            appVersion: document.getElementById('loginAppVersion')?.textContent?.trim() || null,
+        };
+    }
+
+    function fileToDataUrl(file) {
+        return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(String(reader.result || ''));
+            reader.onerror = () => reject(reader.error || new Error('read failed'));
+            reader.readAsDataURL(file);
+        });
+    }
+
+    async function submitAiHelpReport() {
+        const comment = aiHelpEl('ai-help-report-comment')?.value?.trim() || '';
+        const title = aiHelpEl('ai-help-report-title')?.value?.trim() || '';
+        const photoInput = aiHelpEl('ai-help-report-photo');
+        const file = photoInput?.files?.[0] || aiHelpReportBlob;
+
+        if (!comment && !file) {
+            showAiHelpToast('설명 또는 스크린샷을 입력해 주세요.');
+            return;
+        }
+
+        const payload = {
+            title,
+            comment,
+            deviceInfo: collectAiHelpDeviceInfo(),
+            images: [],
+        };
+
+        if (file) {
+            try {
+                const dataUrl = await fileToDataUrl(file);
+                payload.images.push({ name: file.name || 'screenshot.png', dataUrl });
+            } catch (e) {
+                console.warn('[TVC-AI-Help] image encode failed', e);
+            }
+        }
+
+        const sendBtn = aiHelpEl('ai-help-report-send');
+        if (sendBtn) sendBtn.disabled = true;
+
+        try {
+            const res = await fetch('/api/feedback', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(data.message || data.error || `HTTP ${res.status}`);
+            }
+            console.info('[TVC-AI-Help] CEO review queue', data);
+            resetAiHelpReportForm();
+            closeAiHelp();
+            showAiHelpToast('대표님(공무감독)의 검토 대기열로 안전하게 접수되었습니다.');
+        } catch (e) {
+            console.error('[TVC-AI-Help] report failed', e);
+            showAiHelpToast('접수에 실패했습니다. 네트워크 또는 서버 설정을 확인해 주세요.');
+        } finally {
+            if (sendBtn) sendBtn.disabled = false;
+        }
+    }
+
+    function openAiHelp(mode) {
+        resetAiHelpChat();
+        resetAiHelpReportForm();
+        setAiHelpMode(mode === 'report' ? 'report' : 'guide');
+        bindAiHelpReportPaste();
+        showModal(AI_HELP_MODAL_ID);
+        if (mode === 'report') aiHelpEl('ai-help-report-comment')?.focus();
+        else aiHelpEl('ai-help-query')?.focus();
+    }
+
+    function closeAiHelp() {
+        closeModal(AI_HELP_MODAL_ID);
+        resetAiHelpReportForm();
+    }
+
     // ── Utils ────────────────────────────────────────────────────────
     function isModalOpen(id) {
         const el = document.getElementById(id);
@@ -18324,6 +18630,7 @@ const TVC_App = (function () {
         openMasterBackupModal, closeMasterBackupModal, runMasterBackup, triggerMasterRestore, onMasterRestoreFile,
         uploadAttachment, saveDetailReport, closeModal, showModal, swapHistoryModals, dismissSpicsAlerts, openSpicsRequisition,
         buildWorkReportPage2PrintHtmlFromReport,
+        openAiHelp, closeAiHelp, setAiHelpMode, askAiHelp, submitAiHelpQuery, submitAiHelpReport,
     };
 })();
 

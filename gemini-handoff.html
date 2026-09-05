@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>TVC-PMS → Gemini 전달</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 16px; background: #0c1929; color: #edf2f7; line-height: 1.5; }
+    h1 { font-size: 1.15rem; margin: 0 0 8px; }
+    .sub { font-size: 0.85rem; color: #a0aec0; margin-bottom: 16px; }
+    button { width: 100%; padding: 14px; border: none; border-radius: 10px; font-size: 1rem; font-weight: 600; background: #2b6cb0; color: #fff; cursor: pointer; margin-bottom: 12px; }
+    pre { background: #1a365d; border-radius: 10px; padding: 14px; font-size: 0.78rem; white-space: pre-wrap; max-height: 50vh; overflow: auto; }
+  </style>
+</head>
+<body>
+  <h1>TVC-PMS → Gemini 전달</h1>
+  <p class="sub">버튼으로 복사하거나 raw URL을 Gemini에 붙여넣으세요.</p>
+  <button type="button" id="copyBtn">📋 요약 전체 복사</button>
+  <pre id="text"># TVC-PMS (Gemini용)
+
+로그인: engineer / 0000 / ENGINE
+
+최신 PR #21: 모바일 Period row + Machinery card (css/app.css, max-width 768px only)
+- Period filter: flex-wrap, gap 8px, date inputs viewport 내 50%씩
+- Machinery card: PMS Group + Equipment 1행, Critical Equipment 2행 full width
+- Desktop (>768px) CSS 변경 없음
+
+PR #20: SW instant refresh + cursor/* auto-merge (master)
+
+브랜치: cursor/mobile-period-machinery-f39c
+PR: github.com/kckimmarine/thevesselcode-pms/pull/21</pre>
+  <script>
+    document.getElementById('copyBtn').addEventListener('click', async () => {
+      const t = document.getElementById('text').textContent;
+      try { await navigator.clipboard.writeText(t); } catch (_) {}
+      alert('복사됨 — Gemini에 붙여넣기');
+    });
+  </script>
+</body>
+</html>
