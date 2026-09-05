@@ -3,6 +3,23 @@ const { login, switchTab, waitForJobs, dismissAllDialogs, closeTopModal } = requ
 
 const MOBILE = { width: 390, height: 844 };
 
+async function expectCompactApprovalRow(page, row) {
+  const cb = await row.locator('input[type="checkbox"]').boundingBox();
+  const name = await row.locator('.wr-approval-name').boundingBox();
+  expect(cb && name).toBeTruthy();
+  expect(Math.abs((cb.y || 0) - (name.y || 0))).toBeLessThan(12);
+}
+
+async function expectNoErroneousCalendars(page, formSelector) {
+  await expect(page.locator(`${formSelector} .wr-file-no-row .tvc-date-picker-btn`)).toHaveCount(0);
+  const textInputs = page.locator(`${formSelector} input:not([type="date"]):not(.report-native-date)`);
+  const count = await textInputs.count();
+  for (let i = 0; i < count; i += 1) {
+    const wrap = textInputs.nth(i).locator('xpath=ancestor::span[contains(@class,"tvc-date-input-wrap")]');
+    await expect(wrap).toHaveCount(0);
+  }
+}
+
 test('Report modal: date pair row and kind tab panes', async ({ page }) => {
   await page.setViewportSize(MOBILE);
   await login(page, 'engine');
@@ -17,6 +34,10 @@ test('Report modal: date pair row and kind tab panes', async ({ page }) => {
   await expect(make).toBeEnabled({ timeout: 10_000 });
   await make.click();
   await page.locator('#workReportModal:not(.hidden)').waitFor({ state: 'visible', timeout: 10_000 });
+
+  await expectNoErroneousCalendars(page, '#form-maintenance');
+  await expectCompactApprovalRow(page, page.locator('#form-maintenance .wr-approval-row').first());
+  await expect(page.locator('#form-maintenance .wr-maint-date-pair-row .tvc-date-picker-btn')).toHaveCount(2);
 
   const datePair = page.locator('#form-maintenance .wr-maint-date-pair-row');
   await expect(datePair).toBeVisible();
@@ -53,6 +74,9 @@ test('Report modal: date pair row and kind tab panes', async ({ page }) => {
   await page.waitForTimeout(400);
   await page.locator('#workPermitModal:not(.hidden)').waitFor({ state: 'visible', timeout: 10_000 });
 
+  await expectNoErroneousCalendars(page, '#form-work-permit');
+  await expectCompactApprovalRow(page, page.locator('#form-work-permit .wr-approval-row').first());
+
   const wpDatePair = page.locator('#form-work-permit .wr-maint-date-pair-row');
   await expect(wpDatePair).toBeVisible();
   const wpF1 = await wpDatePair.locator('.wr-maint-field').nth(0).boundingBox();
@@ -64,6 +88,9 @@ test('Report modal: date pair row and kind tab panes', async ({ page }) => {
   await page.locator('#workPermitModal .wr-kind-tab', { hasText: 'Defect' }).click();
   await page.waitForTimeout(400);
   await page.locator('#defectReportModal:not(.hidden)').waitFor({ state: 'visible', timeout: 10_000 });
+
+  await expectNoErroneousCalendars(page, '#form-defect');
+  await expectCompactApprovalRow(page, page.locator('#form-defect .wr-approval-row').first());
 
   const dfDatePair = page.locator('#form-defect .wr-maint-date-pair-row');
   await expect(dfDatePair).toBeVisible();

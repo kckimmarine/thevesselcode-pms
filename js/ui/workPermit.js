@@ -1145,15 +1145,15 @@ const TVC_WorkPermitReport = (function () {
         const confirmDis = displayOnly || !canConfirmNow ? ' disabled' : '';
         const approveDis = displayOnly || !canApproveNow ? ' disabled' : '';
         return `<section class="wr-maint-card wr-maint-approval">
-            <div class="wr-maint-approval-item wp-approval-row${!displayOnly && canConfirmNow ? ' is-active' : ''}">
+            <div class="wr-maint-approval-item wr-approval-row${!displayOnly && canConfirmNow ? ' is-active' : ''}">
                 <input type="checkbox" id="wpConfirmedBy"${isConfirmed ? ' checked' : ''}${confirmDis}${displayOnly ? '' : ' onchange="TVC_WorkPermitReport.wpConfirmByToggle()"'}>
-                <label class="wr-maint-approval-label" for="wpConfirmedBy">Confirmed by</label>
-                <input type="text" class="wr-ro wr-maint-date wp-approval-name" value="${esc(confirmedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Confirmed by name">
+                <label class="wr-maint-approval-label" for="wpConfirmedBy">Confirmed by:</label>
+                <input type="text" class="wr-ro wr-approval-name" value="${esc(confirmedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Confirmed by name">
             </div>
-            <div class="wr-maint-approval-item wp-approval-row${!displayOnly && canApproveNow ? ' is-active' : ''}">
+            <div class="wr-maint-approval-item wr-approval-row${!displayOnly && canApproveNow ? ' is-active' : ''}">
                 <input type="checkbox" id="wpApprovedBy"${isApproved ? ' checked' : ''}${approveDis}${displayOnly ? '' : ' onchange="TVC_WorkPermitReport.wpApprovedByToggle()"'}>
-                <label class="wr-maint-approval-label" for="wpApprovedBy">Approved by</label>
-                <input type="text" class="wr-ro wr-maint-date wp-approval-name" value="${esc(approvedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Approved by name">
+                <label class="wr-maint-approval-label" for="wpApprovedBy">Approved by:</label>
+                <input type="text" class="wr-ro wr-approval-name" value="${esc(approvedByVal)}" placeholder="Name / Rank" readonly tabindex="-1" aria-label="Approved by name">
             </div>
         </section>`;
     }
@@ -2644,7 +2644,7 @@ const TVC_WorkPermitReport = (function () {
         const s = getState();
         const row = getModalRow();
         if (!row?.id || row.id === 'wp-draft-empty') return;
-        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-maint-date');
+        const input = cfCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name');
         const user = s.user;
         if (!user) return;
         const isConfirmed = !!(row.confirmed_at || row.confirmed_by);
