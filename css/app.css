@@ -31,8 +31,17 @@
 * { box-sizing: border-box; }
 html {
     scrollbar-gutter: stable;
+    overscroll-behavior-y: none;
+    background-color: var(--deep-navy);
 }
-body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif; background: var(--bg); color: #2d3748; font-size: var(--ui-base-font, 16px); }
+body {
+    margin: 0;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: var(--bg);
+    color: #2d3748;
+    font-size: var(--ui-base-font, 16px);
+    overscroll-behavior-y: none;
+}
 .hidden { display: none !important; }
 
 /* ── Login (Enterprise SaaS) ───────────────────────────────────── */
@@ -9208,8 +9217,44 @@ body.mobile-nav-open .mobile-nav-icon::after { top: 0; transform: rotate(-45deg)
 }
 body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 
+.mobile-refresh-btn {
+    display: none;
+}
+
 @media (max-width: 768px) {
+    html,
+    body {
+        background-color: var(--deep-navy);
+    }
+
+    #loginScreen,
+    #appShell {
+        min-height: 100dvh;
+    }
+
     .mobile-nav-btn { display: inline-flex; }
+
+    .mobile-refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 36px;
+        min-height: 36px;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border: 1px solid rgba(255, 255, 255, .35);
+        border-radius: 8px;
+        background: rgba(255, 255, 255, .12);
+        color: #fff;
+        font-size: 18px;
+        line-height: 1;
+        cursor: pointer;
+        flex-shrink: 0;
+    }
+    .mobile-refresh-btn:active {
+        background: rgba(255, 255, 255, .22);
+    }
 
     .cmaxs-header {
         padding: 10px 12px;
