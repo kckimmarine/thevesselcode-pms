@@ -7608,6 +7608,31 @@ const TVC_SpareMenu = (function () {
             histHost._reqListKeyBound = true;
             histHost.addEventListener('keydown', onReqListKeydown, true);
         }
+        bindSpareHistReqListTouchEvents();
+    }
+
+    /** Spare Report History — mobile double-tap opens Detail Report (same as desktop dblclick) */
+    function bindSpareHistReqListTouchEvents() {
+        const host = document.getElementById('spareHistReqListHost');
+        if (!host || host._spareHistTouchBound) return;
+        host._spareHistTouchBound = true;
+        const DBL_TAP_MS = 300;
+        let lastTouch = { id: '', time: 0 };
+        host.addEventListener('touchend', (ev) => {
+            if (ev.target.closest('.spare-req-list-chk')) return;
+            const row = ev.target.closest('tr.spare-req-list-row[data-req-id]');
+            if (!row) return;
+            const reqId = row.dataset.reqId;
+            if (!reqId) return;
+            const now = Date.now();
+            if (lastTouch.id === reqId && (now - lastTouch.time) <= DBL_TAP_MS) {
+                lastTouch = { id: '', time: 0 };
+                ev.preventDefault();
+                reqListOpenRow(reqId);
+                return;
+            }
+            lastTouch = { id: reqId, time: now };
+        }, { passive: false });
     }
 
     function setSpareListToolbarBtnDisabled(scope, onclickNeedle, disabled) {
