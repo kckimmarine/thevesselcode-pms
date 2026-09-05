@@ -9335,7 +9335,6 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         justify-content: center;
         padding: 12px;
     }
-    #workReportModal .modal-box.wr-modal,
     #defectReportModal .modal-box.wr-modal,
     #workPermitModal .modal-box.wr-modal,
     #spareConsumeModal.is-consume-list-window .modal-box.spare-req-work-modal,
@@ -9346,6 +9345,26 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         height: min(92vh, 920px);
         min-height: min(92vh, 920px);
         border-radius: 12px;
+    }
+    #workReportModal .modal-box.wr-modal,
+    #workReportModal .modal-box.wr-modal.spare-req-work-modal {
+        width: 95vw !important;
+        min-width: 0 !important;
+        max-width: 95vw !important;
+        max-height: 90vh !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: auto;
+        border-radius: 12px;
+    }
+    #workReportBody > .wr-page {
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    #workReportBody .wr-maint-grid-4,
+    #workReportBody .wr-maint-grid-3,
+    #workReportBody .wr-maint-grid-2 {
+        grid-template-columns: 1fr;
     }
     #workProcedureModal .modal-box.wp-modal,
     #vesselDocsModal .modal-box.wp-modal {
