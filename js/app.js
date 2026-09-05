@@ -17922,69 +17922,40 @@ const TVC_App = (function () {
 
     const AI_HELP_GUIDES = [
         {
-            id: 'report-types',
-            keys: ['레포트', '리포트', 'report', '종류', 'routine', 'incident', 'trouble', 'history', 'pms레포트', 'pms report', 'work report', 'defect', '보고서'],
-            title: 'PMS 레포트 종류',
+            id: 'report-workflow',
+            keys: ['레포트', '리포트', 'report', '종류', '작성', '보고서', 'routine', 'incident', 'trouble', 'history', 'pms레포트', 'pms report', 'work report', 'defect', '승인', 'approve', 'make report'],
+            title: '📘 TVC-PMS 레포트 작성 및 조회 방법',
             steps: [
-                'Routine Work Report — 정기·계획 작업 완료 보고 (PMS → Make Report).',
-                'Incident / Trouble Report — 고장·결함(Defect) 보고 및 조치 이력.',
-                'Report History — 제출된 모든 보고 조회 · Detail Report · 승인(Confirm/Approve).',
-                'Period 필터로 기간별 Report History를 좁혀 볼 수 있습니다.',
+                '[정기 정비 보고] 상단 [PMS] 탭 → 기기(작업) 선택 → 상단 초록색 [Make Report] 버튼 클릭 → 작성 후 [Save] 저장.',
+                '[고장/수리 보고] [Make Report] 창 내부에서 [Trouble / Defect] 체크박스를 켜면 고장 원인 및 지연 시간 입력창이 아래로 펼쳐집니다.',
+                '[작성 이력 조회] 상단 [Report History] 탭 → 제출된 보고서를 기간별로 조회하고 [Approve]로 승인합니다.',
             ],
         },
         {
-            id: 'spare-stock',
-            keys: ['스페어', '부품', 'spare', '재고', '소모', 'consume', 'requisition', '청구', 'spare parts'],
-            title: 'SPARE 부품 · 재고 · 청구',
+            id: 'spare-workflow',
+            keys: ['스페어', '부품', 'spare', '재고', '소모', 'consume', 'requisition', '청구', 'spare parts', '소모 입력', 'consume log'],
+            title: '📦 부품 소모 및 청구 방법',
             steps: [
-                'SPARE 탭에서 그룹/부품을 선택하고 Requisition(청구) 또는 Consume(소모) 기록을 작성합니다.',
-                'Work Report 완료 시 연결된 spare 소모가 자동 반영될 수 있습니다(설정/보고 유형에 따름).',
-                'Report History · Spare Report History에서 청구/소모 내역을 확인합니다.',
-                '재고 수량은 SPARE 목록 및 Consume Log에서 검증하세요.',
-            ],
-        },
-        {
-            id: 'sync-transfer',
-            keys: ['동기화', 'sync', 'export', 'import', '내보내기', '가져오기', '전송', 'xfer', 'hq', '선박', 'vessel', 'backup', '복원'],
-            title: '선박 ↔ HQ 데이터 동기화',
-            steps: [
-                'Menu → Transfer/Export에서 vessel/HQ 패키지를 Export(내보내기)합니다.',
-                '상대 시스템에서 Import(가져오기)로 동일 유형 패키지를 적용합니다.',
-                'HQ Cloud 모드에서는 Online Sync / Cloud Restore 메뉴를 사용할 수 있습니다.',
-                'Export 전 Master Backup으로 스냅샷을 권장합니다.',
-            ],
-        },
-        {
-            id: 'spare-consume',
-            keys: ['소모 입력', 'consume log', '소모 기록'],
-            title: '부품 소모 입력법',
-            steps: [
-                'SPARE 탭 → 해당 부품/그룹을 선택합니다.',
-                'Consume / Stock 관련 메뉴에서 소모(Consume) 기록을 엽니다.',
-                '수량·일자·비고를 입력하고 저장합니다.',
-                'Report History에서 소모 내역을 확인할 수 있습니다.',
-            ],
-        },
-        {
-            id: 'work-approval',
-            keys: ['작업', '지시', '승인', 'approve', 'work report', '보고', '결재'],
-            title: '작업 지시 · 승인 방법',
-            steps: [
-                'PMS 탭에서 작업을 선택 후 Make Report로 Work Report를 작성합니다.',
-                'Captain / CE 등 권한 있는 사용자가 Report History에서 승인(Confirm/Approve)합니다.',
-                'HQ 모드에서는 Fleet/HQ 승인 흐름을 확인합니다.',
-                '승인 전에는 수정 가능 · 승인 후에는 정책에 따라 잠금됩니다.',
+                '[정비 중 소모] [Make Report] 폼 하단 [Page 2] (Consumed Parts)에서 부품 검색 후 수량 입력 → [Save] 저장 시 재고가 자동 차감됩니다.',
+                '[신규 청구] 상단 [SPARE] 탭 → 부품 체크 → [Make Requisition] 버튼 클릭 → 부품 선택 후 발주서 생성.',
             ],
         },
         {
             id: 'period-filter',
             keys: ['달력', '기간', 'period', 'date', 'datepicker', '필터', '날짜'],
-            title: '달력 / 기간(Period) 설정',
+            title: '📅 기간별 조회 방법',
             steps: [
-                'PMS · Report History 상단 Period 행에서 From ~ To 날짜를 탭/클릭합니다.',
-                '모바일에서는 달력 아이콘 또는 입력란을 눌러 날짜를 선택합니다.',
-                'Filter 버튼으로 추가 조건을 적용할 수 있습니다.',
-                'Clear로 기간 필터를 초기화합니다.',
+                '상단 [Period] 입력창 또는 달력(📅) 아이콘을 눌러 시작일·종료일을 지정하면 [PMS] · [Report History] 목록이 자동 필터링됩니다. [Clear]로 초기화.',
+            ],
+        },
+        {
+            id: 'sync-transfer',
+            keys: ['동기화', 'sync', 'export', 'import', '내보내기', '가져오기', '전송', 'xfer', 'hq', '선박', 'vessel', 'backup', '복원'],
+            title: '🔄 선박 ↔ HQ 데이터 동기화',
+            steps: [
+                '[Menu] 탭 → [Transfer / Export] 메뉴 → 패키지 유형 선택 → [Export]로 vessel/HQ 파일 생성.',
+                '상대 PC에서 [Menu] → [Import]로 동일 유형 파일을 선택해 가져옵니다.',
+                'HQ Cloud 모드: [Menu] → [Online Sync] 또는 [Cloud Restore] 사용.',
             ],
         },
     ];
@@ -18066,9 +18037,9 @@ const TVC_App = (function () {
     }
 
     function formatGuideReply(guide) {
-        const lines = [`📘 ${guide.title}`, ''];
+        const lines = [guide.title, ''];
         guide.steps.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
-        lines.push('', '다른 주제는 키워드(예: Period, 승인, 소모)로 다시 물어보세요.');
+        lines.push('', '다른 주제: 레포트 작성 · 부품/스페어 · 기간(Period) · 동기화(Export/Import)');
         return lines.join('\n');
     }
 
@@ -18082,10 +18053,9 @@ const TVC_App = (function () {
         } else {
             appendAiHelpBubble('bot', [
                 '관련 가이드를 찾지 못했습니다. 아래 주제 중 하나를 선택해 보세요:',
-                '• PMS 레포트 종류 (Routine / Incident / History)',
-                '• SPARE 부품 · 재고 · 청구',
-                '• 선박 ↔ HQ 동기화 (Export / Import)',
-                '• 작업 지시 승인 · 달력/기간 설정',
+                '• [PMS] 레포트 작성 · [Report History] 조회/승인',
+                '• [SPARE] 부품 소모(Page 2) · [Make Requisition] 청구',
+                '• [Period] 기간 필터 · Export/Import 동기화',
                 '',
                 '버그/개선 제안은 "Report Issue / Idea" 탭에서 CEO 검토 대기열로 보내주세요.',
             ].join('\n'));
