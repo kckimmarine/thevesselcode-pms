@@ -909,11 +909,10 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
 .filter-tab { padding: 5px 12px; border-radius: 16px; border: 1px solid #cbd5e0; background: #fff; cursor: pointer; font-size: 12px; font-weight: 600; }
 .filter-tab.active { background: var(--navy); color: #fff; border-color: var(--navy); }
 .filter-tab.overdue-tab.active { background: var(--red); border-color: var(--red); }
-.act-period-filter { display: flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #cbd5e0; border-radius: 16px; background: #fff; font-size: 11px; position: relative; z-index: 10; pointer-events: auto; touch-action: manipulation; }
+.act-period-filter { display: flex; align-items: center; gap: 4px; padding: 2px 8px; border: 1px solid #cbd5e0; border-radius: 16px; background: #fff; font-size: 11px; }
 .act-period-filter.active { border-color: var(--navy); background: #ebf8ff; }
 .act-period-label { font-weight: 600; color: #4a5568; white-space: nowrap; margin-right: 2px; }
-.act-period-input { padding: 3px 4px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 11px; width: 118px; pointer-events: auto; touch-action: manipulation; }
-.act-period-input.tvc-date-input { cursor: pointer; }
+.act-period-input { padding: 3px 4px; border: 1px solid #cbd5e0; border-radius: 4px; font-size: 11px; width: 118px; }
 .act-period-sep { color: #718096; font-weight: 600; }
 .act-period-clear:hover { background: #2c5282; }
 .search-input { flex: 1; min-width: 100px; padding: 6px 10px; border: 1px solid #cbd5e0; border-radius: 6px; font-size: 12px; }
@@ -2262,22 +2261,14 @@ body { margin: 0; font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
     width: auto;
     min-width: 128px;
     flex-shrink: 0;
-    position: relative;
-    z-index: 1;
-    pointer-events: auto;
-    touch-action: manipulation;
 }
 .act-period-filter .tvc-date-input-wrap .tvc-date-input {
     min-width: 0;
     width: 92px;
     flex: 0 1 auto;
-    pointer-events: auto;
-    touch-action: manipulation;
 }
 .act-period-filter .tvc-date-picker-btn {
     flex-shrink: 0;
-    pointer-events: auto;
-    touch-action: manipulation;
 }
 .spare-req-meta-date-range .tvc-date-input-wrap,
 .spare-req-meta-audit .tvc-date-input-wrap {
@@ -10352,26 +10343,6 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         touch-action: manipulation;
     }
 
-    /* Period filter — reliable tap targets; prevent overlay swallowing clicks on mobile */
-    .list-filter-stack .list-filter-period-row {
-        flex-wrap: wrap;
-        row-gap: 6px;
-        overflow: visible;
-        position: relative;
-        z-index: 10;
-        pointer-events: auto;
-    }
-    .act-period-filter {
-        position: relative;
-        z-index: 11;
-        pointer-events: auto;
-        touch-action: manipulation;
-    }
-    .act-period-filter .tvc-date-picker-btn {
-        min-width: 32px;
-        min-height: 32px;
-    }
-
     /* PMS GROUP Tree — compact height (portrait + landscape phones) */
     #tab-actual .actual-layout .tree-panel {
         min-height: auto;
@@ -10386,6 +10357,36 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     }
     #tab-actual .actual-layout .tree-panel .tree-node {
         touch-action: manipulation;
+    }
+}
+
+/* Period datepicker — mobile portrait only (≤768px); desktop (>768px) unchanged */
+@media screen and (max-width: 768px) {
+    .list-filter-stack .list-filter-period-row {
+        flex-wrap: wrap;
+        row-gap: 6px;
+        overflow: visible;
+        position: relative;
+        z-index: 30;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+    .act-period-filter,
+    .act-period-filter .tvc-date-input-wrap,
+    .act-period-filter .act-period-input,
+    .act-period-filter .tvc-date-input,
+    .act-period-filter .tvc-date-picker-btn {
+        position: relative;
+        z-index: 30;
+        pointer-events: auto;
+        touch-action: manipulation;
+    }
+    .act-period-filter .tvc-date-input-wrap .tvc-date-input {
+        cursor: pointer;
+    }
+    .act-period-filter .tvc-date-picker-btn {
+        min-width: 32px;
+        min-height: 32px;
     }
 }
 
