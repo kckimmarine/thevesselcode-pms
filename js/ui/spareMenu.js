@@ -14163,11 +14163,8 @@ const TVC_SpareMenu = (function () {
           ${reqListPhaseTabsHtml(m, phaseCounts, st)}
           <div class="spare-req-list-panel-wrap">
             <div class="panel spare-req-list-panel">
-              <div class="spare-req-list-head-wrap" id="spareHistReqListHead">
-                <table class="spare-data-table spare-req-list-table spare-req-list-head-table">${REQ_LIST_COLGROUP}${reqListTableHeadHtml('spareHistReqHeadChkAll')}</table>
-              </div>
-              <div class="spare-req-list-scroll" id="spareHistReqListScroll">
-                <table class="spare-data-table spare-req-list-table spare-req-list-body-table">${REQ_LIST_COLGROUP}<tbody>${buildReqListRowsHtml(reqs, 'modal')}</tbody></table>
+              <div class="table-scroll-container spare-req-list-scroll" id="spareHistReqListScroll">
+                <table class="spare-data-table spare-req-list-table spare-req-list-body-table report-history-table">${REQ_LIST_COLGROUP}${reqListTableHeadHtml('spareHistReqHeadChkAll')}<tbody>${buildReqListRowsHtml(reqs, 'modal')}</tbody></table>
               </div>
             </div>
           </div>
@@ -14178,14 +14175,6 @@ const TVC_SpareMenu = (function () {
         bindReqListKeyboard();
         TVC_App.bindSearchClearInput?.('spareHistReqSearch');
         TVC_App.updateSearchClearBtn?.('spareHistReqSearch');
-        requestAnimationFrame(() => {
-            const scroll = document.getElementById('spareHistReqListScroll');
-            const head = document.getElementById('spareHistReqListHead');
-            if (scroll && head) {
-                const sb = scroll.offsetWidth - scroll.clientWidth;
-                head.style.paddingRight = sb > 0 ? `${sb}px` : '';
-            }
-        });
     }
 
     async function renderReportHistory() {

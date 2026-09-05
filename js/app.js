@@ -13476,19 +13476,6 @@ const TVC_App = (function () {
         if (host) host.innerHTML = '<p class="muted" style="padding:16px">SPARE Report History is not available.</p>';
     }
 
-    function syncHistPmsListHeadPad() {
-        const scroll = document.getElementById('histPmsListScroll');
-        const head = document.getElementById('histPmsListHead');
-        if (!scroll || !head) return;
-        const sb = scroll.offsetWidth - scroll.clientWidth;
-        head.style.paddingRight = sb > 0 ? `${sb}px` : '';
-        if (scroll._histPmsPadBound) return;
-        scroll._histPmsPadBound = true;
-        scroll.addEventListener('scroll', () => {
-            head.scrollLeft = scroll.scrollLeft;
-        }, { passive: true });
-    }
-
     /** Work Plan에서 작성된 Work Report를 기반으로 이력 표시 */
     function renderWorkHistory() {
         syncHistoryScopeUi();
@@ -13499,7 +13486,6 @@ const TVC_App = (function () {
         const body = document.getElementById('historyBody');
         if (!body) return;
         bindWorkHistoryTableEvents();
-        syncHistPmsListHeadPad();
         pruneHistChecked();
         const all = workHistoryEntriesRaw();
         const entries = workHistoryEntries();

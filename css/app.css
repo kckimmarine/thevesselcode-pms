@@ -3708,7 +3708,8 @@ input.tvc-date-input::placeholder {
 .sheet-table-wrap { margin: 12px 20px 24px; background: #fff; border: 1px solid #e2e8f0; border-radius: 10px; overflow: auto; max-height: 68vh; }
 /* Work History / Defect Report — scrollable list (≈20 rows) */
 #tab-history .list-table-scroll-wrap,
-#tab-defect .list-table-scroll-wrap {
+#tab-defect .list-table-scroll-wrap,
+#histPmsPane .table-scroll-container {
     max-height: var(--hist-list-max-h);
     overflow-x: auto;
     overflow-y: auto;
@@ -3718,22 +3719,26 @@ input.tvc-date-input::placeholder {
     scrollbar-color: #a0aec0 #edf2f7;
 }
 #tab-history .list-table-scroll-wrap::-webkit-scrollbar,
-#tab-defect .list-table-scroll-wrap::-webkit-scrollbar {
+#tab-defect .list-table-scroll-wrap::-webkit-scrollbar,
+#histPmsPane .table-scroll-container::-webkit-scrollbar {
     width: 8px;
     height: 8px;
 }
 #tab-history .list-table-scroll-wrap::-webkit-scrollbar-track,
-#tab-defect .list-table-scroll-wrap::-webkit-scrollbar-track {
+#tab-defect .list-table-scroll-wrap::-webkit-scrollbar-track,
+#histPmsPane .table-scroll-container::-webkit-scrollbar-track {
     background: #edf2f7;
     border-radius: 4px;
 }
 #tab-history .list-table-scroll-wrap::-webkit-scrollbar-thumb,
-#tab-defect .list-table-scroll-wrap::-webkit-scrollbar-thumb {
+#tab-defect .list-table-scroll-wrap::-webkit-scrollbar-thumb,
+#histPmsPane .table-scroll-container::-webkit-scrollbar-thumb {
     background: #a0aec0;
     border-radius: 4px;
 }
 #tab-history .list-table-scroll-wrap::-webkit-scrollbar-thumb:hover,
-#tab-defect .list-table-scroll-wrap::-webkit-scrollbar-thumb:hover {
+#tab-defect .list-table-scroll-wrap::-webkit-scrollbar-thumb:hover,
+#histPmsPane .table-scroll-container::-webkit-scrollbar-thumb:hover {
     background: #718096;
 }
 .sheet-table-wrap.list-table-scroll-wrap {
@@ -3743,18 +3748,21 @@ input.tvc-date-input::placeholder {
     scrollbar-gutter: stable;
 }
 #tab-defect .list-table-scroll-wrap .hist-table tbody tr,
-#tab-history .list-table-scroll-wrap .hist-table tbody tr {
+#tab-history .list-table-scroll-wrap .hist-table tbody tr,
+#histPmsPane .table-scroll-container .hist-table tbody tr {
     height: var(--list-row-h);
 }
 #tab-defect .list-table-scroll-wrap .hist-table td,
-#tab-history .list-table-scroll-wrap .hist-table td {
+#tab-history .list-table-scroll-wrap .hist-table td,
+#histPmsPane .table-scroll-container .hist-table td {
     padding: 6px 10px;
     vertical-align: middle;
     line-height: 1.25;
     box-sizing: border-box;
 }
 #tab-defect .list-table-scroll-wrap .hist-table th,
-#tab-history .list-table-scroll-wrap .hist-table th {
+#tab-history .list-table-scroll-wrap .hist-table th,
+#histPmsPane .table-scroll-container .hist-table th {
     padding: 8px 10px;
     position: sticky;
     top: 0;
@@ -6678,7 +6686,8 @@ label.spare-file-pick input[type=file] { display: none; }
     overflow: hidden;
 }
 #tab-history .spare-hist-req-host .spare-req-list-main-wrap .spare-req-list-scroll,
-#tab-history .spare-hist-req-host .spare-req-list-scroll {
+#tab-history .spare-hist-req-host .spare-req-list-scroll,
+#tab-history .spare-hist-req-host .table-scroll-container {
     flex: 1 1 auto;
     height: auto;
     min-height: 0;
@@ -6687,34 +6696,10 @@ label.spare-file-pick input[type=file] { display: none; }
     -webkit-overflow-scrolling: touch;
     scrollbar-gutter: stable;
 }
-#tab-history .spare-hist-req-host .spare-req-list-head-wrap {
-    background: var(--navy);
-    border-bottom: none;
-    flex-shrink: 0;
-}
-#tab-history .spare-hist-req-host .spare-req-list-head-table thead th {
-    background: var(--navy);
-    color: #fff;
-    font-weight: 600;
-    font-size: var(--list-item-head-font);
-    font-family: inherit;
-    border-right-color: rgba(255, 255, 255, 0.16);
-    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
-}
-#tab-history .spare-hist-req-host .spare-req-list-head-table thead th.spare-req-list-th-sub,
-#tab-history .spare-hist-req-host .spare-req-list-head-table thead th.spare-col-head-stack .spare-head-sub {
-    color: rgba(255, 255, 255, 0.78);
-    font-weight: 600;
-    border-top-color: rgba(255, 255, 255, 0.2);
-}
-#tab-history .spare-hist-req-host .spare-req-list-head-table thead th.spare-req-list-chk .spare-req-list-head-chk,
-#tab-history .spare-hist-req-host .spare-req-list-table .spare-req-list-chk input {
-    accent-color: var(--navy);
-}
-#tab-history .spare-hist-req-host .spare-req-list-body-table tbody tr {
+#tab-history .spare-hist-req-host .report-history-table tbody tr {
     height: var(--list-row-h);
 }
-#tab-history .spare-hist-req-host .spare-req-list-body-table tbody td {
+#tab-history .spare-hist-req-host .report-history-table tbody td {
     height: var(--list-row-h);
     padding: 6px 10px;
 }
@@ -9858,20 +9843,31 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 #histPmsPane .hist-col-status { width: 96px; }
 #histPmsPane .hist-col-flag { width: 40px; }
 #histPmsPane .hist-col-spare { width: 56px; }
-#histPmsPane .spare-req-list-head-wrap .hist-table {
+#histPmsPane .table-scroll-container .report-history-table {
     min-width: 1200px;
 }
-#histPmsPane .spare-req-list-head-wrap .hist-table th {
-    position: static;
-    top: auto;
+#histPmsPane .table-scroll-container .report-history-table th {
     background: var(--navy);
     color: #fff;
 }
-#histPmsPane .spare-req-list-head-wrap {
-    overflow: hidden;
+#tab-history .spare-hist-req-host .report-history-table thead th {
+    background: var(--navy);
+    color: #fff;
+    font-weight: 600;
+    font-size: var(--list-item-head-font);
+    font-family: inherit;
+    border-right-color: rgba(255, 255, 255, 0.16);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.12);
 }
-#histPmsPane .spare-req-list-scroll .hist-table {
-    min-width: 1200px;
+#tab-history .spare-hist-req-host .report-history-table thead th.spare-req-list-th-sub,
+#tab-history .spare-hist-req-host .report-history-table thead th.spare-col-head-stack .spare-head-sub {
+    color: rgba(255, 255, 255, 0.78);
+    font-weight: 600;
+    border-top-color: rgba(255, 255, 255, 0.2);
+}
+#tab-history .spare-hist-req-host .report-history-table thead th.spare-req-list-chk .spare-req-list-head-chk,
+#tab-history .spare-hist-req-host .report-history-table .spare-req-list-chk input {
+    accent-color: var(--navy);
 }
 #tab-defect .list-tab-frame .hist-toolbar-filters.list-filter-stack,
 #tab-history .list-tab-frame .hist-toolbar-filters.list-filter-stack {
@@ -10822,9 +10818,42 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
         touch-action: manipulation;
     }
 
+    /* Report History (PMS + SPARE) — unified horizontal scroll; header moves with body */
+    #histPmsPane .table-scroll-container,
+    #tab-history .spare-hist-req-host .table-scroll-container {
+        width: 100%;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        display: block;
+    }
+    #histPmsPane .report-history-table,
+    #tab-history .spare-hist-req-host .report-history-table {
+        min-width: 650px;
+        width: 100%;
+        border-collapse: collapse;
+    }
+    #histPmsPane .report-history-table th,
+    #tab-history .spare-hist-req-host .report-history-table th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: #1e3a8a;
+        white-space: nowrap;
+    }
+    #histPmsPane .report-history-table td,
+    #tab-history .spare-hist-req-host .report-history-table td {
+        white-space: nowrap;
+    }
+    #histPmsPane .report-history-table th.hist-date-h,
+    #histPmsPane .report-history-table th.hist-at-ship-h,
+    #histPmsPane .report-history-table th.hist-at-company-h,
+    #histPmsPane .report-history-table th.hist-spare-data-h {
+        white-space: nowrap;
+    }
+
     /* Spare Report History — double-tap row target */
-    #tab-history .spare-hist-req-host .spare-req-list-body-table tbody tr.spare-req-list-row,
-    #spareHistReqListHost .spare-req-list-body-table tbody tr.spare-req-list-row {
+    #tab-history .spare-hist-req-host .report-history-table tbody tr.spare-req-list-row,
+    #spareHistReqListHost .report-history-table tbody tr.spare-req-list-row {
         touch-action: manipulation;
     }
 
