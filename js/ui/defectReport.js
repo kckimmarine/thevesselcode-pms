@@ -1905,7 +1905,7 @@ const TVC_DefectReport = (function () {
     function renderPhase1(row, readonly, opts = {}) {
         const { includeApproval = true, postAction = {}, forPrint = false } = opts;
         const canEditShipInitial = forPrint ? false : (postAction.canEditShipInitial ?? !readonly);
-        const canEditShipAttach = forPrint ? false : (postAction.hqBothAttach || postAction.canEditShipAttach ?? canEditShipInitial);
+        const canEditShipAttach = forPrint ? false : ((postAction.hqBothAttach || postAction.canEditShipAttach) ?? canEditShipInitial);
         ensureDfDraft(row);
         ensureDfJobItems(row);
         const s = getState();
@@ -2197,7 +2197,7 @@ const TVC_DefectReport = (function () {
                 <div class="df-modal-actions-center">${centerBtns}</div>
                 <div class="df-modal-actions-right">${printBtn}${closeBtn}</div>`;
         } else {
-            actionsHtml = `${canSave ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">💾 Save</button>` : ''}
+            actionsHtml = `${canSave ? `<button type="button" class="btn btn-green" onclick="TVC_DefectReport.saveModal()">Save</button>` : ''}
                 <button type="button" class="btn" onclick="TVC_DefectReport.requestCloseModal()">Cancel</button>`;
         }
 

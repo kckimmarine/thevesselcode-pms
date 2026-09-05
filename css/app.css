@@ -1853,11 +1853,18 @@ body {
 #workReportBody > .wr-tabsel,
 #workReportBody > .wr-pagetabs-bar,
 #workReportBody > .modal-actions,
+#workReportBody > .df-modal-inner > .wr-titlebar,
+#workReportBody > .df-modal-inner > .batch-wr-jobs,
+#workReportBody > .df-modal-inner > .wr-tabsel,
+#workReportBody > .df-modal-inner > .wr-pagetabs-bar,
+#workReportBody > .df-modal-inner > .modal-actions,
 #defectReportBody > .df-modal-inner > .wr-titlebar,
 #defectReportBody > .df-modal-inner > .wr-pagetabs-bar,
+#defectReportBody > .df-modal-inner > .wr-tabsel,
 #defectReportBody > .df-modal-inner > .modal-actions,
 #workPermitBody > .df-modal-inner > .wr-titlebar,
 #workPermitBody > .df-modal-inner > .wr-pagetabs-bar,
+#workPermitBody > .df-modal-inner > .wr-tabsel,
 #workPermitBody > .df-modal-inner > .modal-actions {
     flex-shrink: 0;
 }
@@ -1918,6 +1925,18 @@ body {
     color: #fff;
 }
 #workReportBody > .wr-page {
+    flex: 1;
+    min-height: 0;
+    max-height: none;
+}
+#workReportBody > .df-modal-inner {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+#workReportBody > .df-modal-inner > .wr-page {
     flex: 1;
     min-height: 0;
     max-height: none;
@@ -2173,7 +2192,8 @@ body {
 .wr-page.tone-repair,
 .wr-page.tone-trouble,
 .wr-page.tone-postpone,
-.wr-page.tone-defect { background: #eef1f5; padding: 12px 14px; }
+.wr-page.tone-defect,
+.wr-page.tone-permit { background: #eef1f5; padding: 12px 14px; }
 
 /* Repair & Maintenance — Maintenance Report form */
 .wr-maint-form { display: flex; flex-direction: column; gap: 10px; }
@@ -11183,6 +11203,228 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     .feedback-footer .btn {
         flex: 1 1 calc(50% - 4px);
         min-height: 44px;
+    }
+
+    /* Report modals (Work Permit / Maintenance / Defect / Postpone) — unified mobile shell */
+    #workReportModal,
+    #defectReportModal,
+    #workPermitModal {
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 12px !important;
+    }
+
+    #workReportModal .modal-box.wr-modal,
+    #defectReportModal .modal-box.wr-modal,
+    #workPermitModal .modal-box.wr-modal {
+        width: 95vw !important;
+        min-width: 0 !important;
+        max-width: 95vw !important;
+        max-height: 90vh !important;
+        min-height: 0 !important;
+        height: auto !important;
+        margin: auto;
+        border-radius: 12px;
+    }
+
+    #workReportBody > .df-modal-inner > .wr-pagetabs-bar,
+    #defectReportBody > .df-modal-inner > .wr-pagetabs-bar,
+    #workPermitBody > .df-modal-inner > .wr-pagetabs-bar {
+        margin-bottom: 4px;
+    }
+
+    #workReportBody > .df-modal-inner > .wr-page,
+    #defectReportBody > .df-modal-inner > .wr-page,
+    #workPermitBody > .df-modal-inner > .wr-page,
+    #workReportBody > .wr-page {
+        padding-top: 8px;
+        overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #workReportBody .wr-page > .wr-maint-approval,
+    #workReportBody .wr-maint-form > .wr-maint-approval,
+    #defectReportBody .wr-page > .wr-maint-approval,
+    #defectReportBody .wr-maint-form > .wr-maint-approval,
+    #workPermitBody .wr-page > .wr-maint-approval,
+    #workPermitBody .wr-maint-form > .wr-maint-approval {
+        padding-top: 8px;
+        margin-top: 10px;
+        flex-wrap: wrap;
+        align-items: flex-start;
+        gap: 10px 16px;
+    }
+
+    #workReportBody .wr-maint-approval-item,
+    #defectReportBody .wr-maint-approval-item,
+    #workPermitBody .wr-maint-approval-item {
+        flex-wrap: wrap;
+        width: 100%;
+        max-width: 100%;
+    }
+
+    #workReportBody .wr-maint-grid-4,
+    #workReportBody .wr-maint-grid-3,
+    #workReportBody .wr-maint-grid-2,
+    #defectReportBody .wr-maint-grid-4,
+    #defectReportBody .wr-maint-grid-3,
+    #defectReportBody .wr-maint-grid-2,
+    #workPermitBody .wr-maint-grid-4,
+    #workPermitBody .wr-maint-grid-3,
+    #workPermitBody .wr-maint-grid-2 {
+        grid-template-columns: 1fr;
+    }
+
+    #workReportBody .wr-maint-field,
+    #defectReportBody .wr-maint-field,
+    #workPermitBody .wr-maint-field {
+        display: flex;
+        flex-direction: column;
+        width: 100% !important;
+        margin-bottom: 12px;
+        min-width: 0;
+    }
+
+    #workReportBody .wr-maint-field input,
+    #workReportBody .wr-maint-field select,
+    #workReportBody .wr-maint-field textarea,
+    #workReportBody .wr-maint-field .wr-maint-job-pick,
+    #workReportBody .wr-maint-field .spare-consume-job-pick-trigger,
+    #defectReportBody .wr-maint-field input,
+    #defectReportBody .wr-maint-field select,
+    #defectReportBody .wr-maint-field textarea,
+    #defectReportBody .wr-maint-field .wr-maint-job-pick,
+    #defectReportBody .wr-maint-field .spare-consume-job-pick-trigger,
+    #workPermitBody .wr-maint-field input,
+    #workPermitBody .wr-maint-field select,
+    #workPermitBody .wr-maint-field textarea,
+    #workPermitBody .wr-maint-field .wr-maint-job-pick,
+    #workPermitBody .wr-maint-field .spare-consume-job-pick-trigger {
+        width: 100% !important;
+        box-sizing: border-box;
+        min-height: 40px;
+    }
+
+    #workReportBody .wr-maint-job-rows-header,
+    #defectReportBody .wr-maint-job-rows-header,
+    #workPermitBody .wr-maint-job-rows-header {
+        display: none !important;
+    }
+
+    #workReportBody .df-page1-job-rows .df-maint-job-row,
+    #workReportBody #wrPage2JobRows .wr-page2-job-row,
+    #defectReportBody .df-page1-job-rows .df-maint-job-row,
+    #defectReportBody #page2JobRows .wr-page2-job-row,
+    #workPermitBody #wpJobRowsSection .df-maint-job-row {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100%;
+        margin-bottom: 12px;
+        grid-template-columns: none !important;
+    }
+
+    #workReportBody .df-page1-job-rows .wr-maint-field-nolabel:nth-child(1)::before,
+    #workReportBody #wrPage2JobRows .wr-maint-field-nolabel:nth-child(1)::before,
+    #defectReportBody .df-page1-job-rows .wr-maint-field-nolabel:nth-child(1)::before,
+    #defectReportBody #page2JobRows .wr-maint-field-nolabel:nth-child(1)::before,
+    #workPermitBody #wpJobRowsSection .wr-maint-field-nolabel:nth-child(1)::before {
+        content: 'JOB CODE';
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #4a5568;
+        margin-bottom: 4px;
+        line-height: 1.3;
+    }
+
+    #workReportBody .df-page1-job-rows .wr-maint-field-nolabel:nth-child(2)::before,
+    #workReportBody #wrPage2JobRows .wr-maint-field-nolabel:nth-child(2)::before,
+    #defectReportBody .df-page1-job-rows .wr-maint-field-nolabel:nth-child(2)::before,
+    #defectReportBody #page2JobRows .wr-maint-field-nolabel:nth-child(2)::before,
+    #workPermitBody #wpJobRowsSection .wr-maint-field-nolabel:nth-child(2)::before {
+        content: 'SORT-1';
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #4a5568;
+        margin-bottom: 4px;
+        line-height: 1.3;
+    }
+
+    #workReportBody .df-page1-job-rows .wr-maint-field-nolabel:nth-child(3)::before,
+    #workReportBody #wrPage2JobRows .wr-maint-field-nolabel:nth-child(3)::before,
+    #defectReportBody .df-page1-job-rows .wr-maint-field-nolabel:nth-child(3)::before,
+    #defectReportBody #page2JobRows .wr-maint-field-nolabel:nth-child(3)::before,
+    #workPermitBody #wpJobRowsSection .wr-maint-field-nolabel:nth-child(3)::before {
+        content: 'SORT-2';
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #4a5568;
+        margin-bottom: 4px;
+        line-height: 1.3;
+    }
+
+    #workReportBody .df-page1-job-rows .wr-maint-field-nolabel:nth-child(4)::before,
+    #workReportBody #wrPage2JobRows .wr-maint-field-nolabel:nth-child(4)::before,
+    #defectReportBody .df-page1-job-rows .wr-maint-field-nolabel:nth-child(4)::before,
+    #defectReportBody #page2JobRows .wr-maint-field-nolabel:nth-child(4)::before,
+    #workPermitBody #wpJobRowsSection .wr-maint-field-nolabel:nth-child(4)::before {
+        content: 'JOB DETAIL';
+        display: block;
+        font-size: 11px;
+        font-weight: 600;
+        color: #4a5568;
+        margin-bottom: 4px;
+        line-height: 1.3;
+    }
+
+    #workReportBody .wr-spare-work-layout .spare-req-table-hscroll,
+    #defectReportBody .wr-spare-work-layout .spare-req-table-hscroll,
+    #workPermitBody .wr-spare-work-layout .spare-req-table-hscroll {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch;
+        width: 100% !important;
+        display: block;
+    }
+
+    #workReportBody .wr-spare-work-layout .spare-req-table-wide,
+    #defectReportBody .wr-spare-work-layout .spare-req-table-wide,
+    #workPermitBody .wr-spare-work-layout .spare-req-table-wide {
+        min-width: 500px;
+        width: max-content;
+    }
+
+    #workReportBody .wr-spare-work-layout #wrSpareListScroll.virtual-scroll,
+    #workReportBody .wr-spare-work-layout #wrSpareListScroll,
+    #defectReportBody .wr-spare-work-layout #wrSpareListScroll.virtual-scroll,
+    #defectReportBody .wr-spare-work-layout #wrSpareListScroll,
+    #workPermitBody .wr-spare-work-layout #wrSpareListScroll.virtual-scroll,
+    #workPermitBody .wr-spare-work-layout #wrSpareListScroll {
+        overflow-x: visible !important;
+    }
+
+    #workReportBody .modal-actions.wr-actions,
+    #defectReportBody .modal-actions.wr-actions,
+    #workPermitBody .modal-actions.wr-actions,
+    #workReportBody .df-modal-actions,
+    #defectReportBody .df-modal-actions,
+    #workPermitBody .df-modal-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        justify-content: center;
+        padding: 12px;
+    }
+
+    #workReportBody .modal-actions.wr-actions .btn,
+    #defectReportBody .modal-actions.wr-actions .btn,
+    #workPermitBody .modal-actions.wr-actions .btn,
+    #workReportBody .df-modal-actions .btn,
+    #defectReportBody .df-modal-actions .btn,
+    #workPermitBody .df-modal-actions .btn {
+        min-height: 44px;
+        touch-action: manipulation;
     }
 }
 
