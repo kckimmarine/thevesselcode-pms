@@ -5,6 +5,7 @@ const TVC_SetupExport = (function () {
     const JSON_NAME = 'tvc_setup_handoff.json';
     const SETUPS_DIR = 'setups/';
     const HANDOFF_SKUS = ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+    const VESSEL_SETUP_SKUS = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
 
     function sanitizeSetupFilename(name) {
         return String(name || '')
@@ -282,6 +283,11 @@ const TVC_SetupExport = (function () {
 
     return {
         HANDOFF_SKUS,
+        VESSEL_SETUP_SKUS,
+        skuRoleLabel,
+        fetchPackageVersion,
+        probeWebSetup,
+        readSetupBytes,
         canSetupHandoffUser,
         getSourceStatus,
         ensureSource,

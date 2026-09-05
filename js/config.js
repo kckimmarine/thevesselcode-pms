@@ -99,13 +99,7 @@ const TVC_Config = (function () {
         const dl = document.getElementById('loginDownloadSection');
         if (dl) dl.classList.remove('hidden');
 
-        const dlLink = document.getElementById('loginDownloadLink');
-        if (dlLink && VESSEL_SETUP_DOWNLOAD_URL) {
-            dlLink.href = VESSEL_SETUP_DOWNLOAD_URL;
-            dlLink.target = '_blank';
-            dlLink.rel = 'noopener noreferrer';
-            dlLink.removeAttribute('download');
-        }
+        try { TVC_VesselDownload?.initLogin?.(); } catch (e) { console.warn('[TVC] vessel download', e); }
 
         const userInput = document.getElementById('loginUser');
         if (userInput) {
