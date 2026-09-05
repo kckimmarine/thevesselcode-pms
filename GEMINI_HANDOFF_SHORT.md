@@ -3,8 +3,8 @@
 ## 로그인
 engineer / 0000 / ENGINE
 
-## 완료 PR (최신 · master 반영 예정)
-- **#26 AI Help chat fix** — fuzzy guide matching + screenshot compression + feedback API hardening
+## 완료 PR (최신 · master 반영됨)
+- **#26 AI Help chat fix** — MERGED ✅ fuzzy guide matching + screenshot compression + feedback API hardening
 - **#24 AI Help dual-engine** — MERGED ✅
 - **#25 feedback API JSON validation** — MERGED ✅
 
