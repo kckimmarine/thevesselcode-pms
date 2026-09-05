@@ -1,6 +1,7 @@
 'use strict';
 
 const DEFAULT_REPO = 'kckimmarine/thevesselcode-pms';
+const QUEUE_PATH = 'FEEDBACK_QUEUE.json';
 const REVIEW_LABELS = ['pending-review', 'crew-feedback'];
 const MAX_BODY_BYTES = 4 * 1024 * 1024;
 
@@ -67,20 +68,94 @@ async function githubRequest(path, opts = {}) {
     return res.status === 204 ? null : res.json();
 }
 
+function makeFeedbackId(date = new Date()) {
+    const pad = (n) => String(n).padStart(2, '0');
+    const y = date.getUTCFullYear();
+    const m = pad(date.getUTCMonth() + 1);
+    const d = pad(date.getUTCDate());
+    const h = pad(date.getUTCHours());
+    const mi = pad(date.getUTCMinutes());
+    const s = pad(date.getUTCSeconds());
+    return `FB-${y}${m}${d}-${h}${mi}${s}`;
+}
+
 function excerpt(text, max = 72) {
     const s = String(text || '').replace(/\s+/g, ' ').trim();
     if (!s) return 'Crew feedback';
     return s.length <= max ? s : `${s.slice(0, max - 1)}…`;
 }
 
-function buildIssueBody({ comment, deviceInfo, images }) {
+function resolvePage(body, deviceInfo) {
+    const page = String(body.page || deviceInfo?.url || deviceInfo?.page || '').trim();
+    return page || 'Unknown';
+}
+
+function buildQueueEntry({ ticketId, timestamp, body, deviceInfo, images }) {
+    const title = String(body.title || '').trim();
+    const comment = String(body.comments || body.comment || '').trim();
+    return {
+        id: ticketId,
+        timestamp,
+        page: resolvePage(body, deviceInfo),
+        deviceInfo: deviceInfo && typeof deviceInfo === 'object' ? deviceInfo : String(body.deviceInfo || ''),
+        issue: comment || title,
+        hasImage: Array.isArray(images) && images.length > 0,
+        status: 'pending',
+    };
+}
+
+async function loadFeedbackQueue(c) {
+    try {
+        const data = await githubRequest(`/repos/${c.owner}/${c.repo}/contents/${QUEUE_PATH}`);
+        const raw = Buffer.from(String(data.content || ''), 'base64').toString('utf8');
+        const parsed = raw ? JSON.parse(raw) : [];
+        return {
+            queue: Array.isArray(parsed) ? parsed : [],
+            sha: data.sha || null,
+        };
+    } catch (e) {
+        if (e.status === 404) {
+            return { queue: [], sha: null };
+        }
+        throw e;
+    }
+}
+
+async function saveFeedbackQueue(c, queue, sha, ticketId) {
+    const content = Buffer.from(`${JSON.stringify(queue, null, 2)}\n`, 'utf8').toString('base64');
+    const putBody = {
+        message: `feedback: append ${ticketId}`,
+        content,
+        committer: {
+            name: 'TVC-PMS Feedback Collector',
+            email: 'feedback@thevesselcode.com',
+        },
+    };
+    if (sha) putBody.sha = sha;
+    await githubRequest(`/repos/${c.owner}/${c.repo}/contents/${QUEUE_PATH}`, {
+        method: 'PUT',
+        body: putBody,
+    });
+}
+
+async function appendFeedbackQueue(c, entry) {
+    const { queue, sha } = await loadFeedbackQueue(c);
+    queue.push(entry);
+    await saveFeedbackQueue(c, queue, sha, entry.id);
+    console.info('[feedback] queue appended', entry.id, `(${queue.length} total)`);
+    return entry;
+}
+
+function buildIssueBody({ ticketId, comment, titleInput, deviceInfo, images }) {
     const lines = [
         '## Crew field feedback (CEO review queue)',
         '',
         '> **No auto-patch** — this issue is tagged `pending-review` for superintendent approval before any code changes.',
         '',
+        `**Queue ID:** \`${ticketId}\` · See \`${QUEUE_PATH}\` on \`master\`.`,
+        '',
         '### Description',
-        String(comment || '').trim() || '_No description provided._',
+        String(comment || '').trim() || String(titleInput || '').trim() || '_No description provided._',
         '',
         '### Device info',
         '```json',
@@ -123,17 +198,31 @@ async function handler(req, res) {
 
     try {
         const body = await readJsonBody(req);
-        const comment = String(body.comment || '').trim();
+        const comment = String(body.comments || body.comment || '').trim();
         const titleInput = String(body.title || '').trim();
         const deviceInfo = body.deviceInfo && typeof body.deviceInfo === 'object' ? body.deviceInfo : {};
         const images = Array.isArray(body.images) ? body.images.slice(0, 4) : [];
 
-        if (!comment && !images.length) {
+        if (!comment && !titleInput && !images.length) {
             return res.status(400).json({ error: 'Comment or screenshot is required.' });
         }
 
+        const ticketId = makeFeedbackId();
+        const timestamp = new Date().toISOString();
+        const queueEntry = buildQueueEntry({ ticketId, timestamp, body, deviceInfo, images });
+
+        try {
+            await appendFeedbackQueue(c, queueEntry);
+        } catch (queueErr) {
+            console.error('[feedback] FEEDBACK_QUEUE.json append failed', queueErr.message || queueErr);
+            if (queueErr.code === 'GITHUB_TOKEN_MISSING' || queueErr.status === 401 || queueErr.status === 403) {
+                return res.status(500).json({ error: 'GitHub Token Missing', message: queueErr.message });
+            }
+            throw queueErr;
+        }
+
         const issueTitle = `[Field Feedback] ${excerpt(titleInput || comment)}`;
-        const issueBody = buildIssueBody({ comment, deviceInfo, images });
+        const issueBody = buildIssueBody({ ticketId, comment, titleInput, deviceInfo, images });
 
         let issue;
         try {
@@ -156,9 +245,10 @@ async function handler(req, res) {
             throw ghErr;
         }
 
-        console.info('[feedback] issue created', issue.number, issue.html_url);
+        console.info('[feedback] issue created', issue.number, issue.html_url, 'ticket', ticketId);
         return res.status(200).json({
             ok: true,
+            ticketId,
             issueNumber: issue.number,
             issueUrl: issue.html_url,
         });
