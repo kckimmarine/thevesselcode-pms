@@ -14,6 +14,10 @@
             TVC_MaritimeToolkit.init();
         }
 
+        if (typeof TVC_StorePublicLead !== 'undefined') {
+            TVC_StorePublicLead.init();
+        }
+
         try {
             await TVC_StoreManager.loadCatalog();
             await TVC_StoreManager.buildMemoryIndex();

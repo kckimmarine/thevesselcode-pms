@@ -31,7 +31,9 @@ const TVC_StoreMenu = (function () {
 
     function ensureImpaDetailModal() {
         const existing = document.getElementById('impaDetailModal');
-        if (existing && !existing.querySelector('.impa-detail-plate-viewport')) {
+        if (existing && (!existing.querySelector('.impa-detail-plate-viewport')
+            || !existing.querySelector('#impaDetailLockedPreview')
+            || !existing.querySelector('.impa-detail-public-actions'))) {
             existing.remove();
             _modalReady = false;
             _plateZoom = null;
@@ -66,6 +68,17 @@ const TVC_StoreMenu = (function () {
                         </div>
                         <p class="impa-detail-plate-hint">Pinch or scroll to zoom · drag to pan when enlarged</p>
                     </section>
+                    <section class="impa-detail-locked-preview hidden" id="impaDetailLockedPreview" aria-label="Enterprise PMS features preview">
+                        <h3 class="impa-detail-locked-title">Enterprise PMS Features</h3>
+                        <button type="button" class="impa-locked-row" data-lead-trigger="rob">
+                            <span class="impa-locked-label">⚓ Vessel ROB (Stock)</span>
+                            <span class="impa-locked-value">🔒 Locked — Available in TVC-PMS</span>
+                        </button>
+                        <button type="button" class="impa-locked-row" data-lead-trigger="requisition">
+                            <span class="impa-locked-label">📋 1-Click Requisition</span>
+                            <span class="impa-locked-value">🔒 Locked — Available in TVC-PMS</span>
+                        </button>
+                    </section>
                     <section class="impa-detail-spec-section" aria-label="Technical specifications">
                         <div class="impa-detail-rob-banner" id="impaDetailRobBanner">
                             <span class="impa-detail-rob-label">Current Vessel ROB</span>
@@ -93,11 +106,19 @@ const TVC_StoreMenu = (function () {
                         <button type="button" class="impa-detail-close-btn impa-detail-close-bottom">Close / 닫기</button>
                     </footer>
                 </div>
-                <footer class="impa-detail-public-footer hidden" id="impaDetailPublicFooter" aria-label="TVC-PMS demo">
-                    <a href="https://thevesselcode.com/#contact" target="_blank" rel="noopener noreferrer" class="impa-detail-public-cta-link">
-                        <span class="impa-detail-public-cta-lead">⚓ Looking to automate Requisitions &amp; ROB for your fleet?</span>
-                        <span class="impa-detail-public-cta-action">Experience TVC-PMS Demo →</span>
-                    </a>
+                <footer class="impa-detail-public-footer hidden" id="impaDetailPublicFooter" aria-label="TVC-PMS conversion">
+                    <p class="impa-detail-public-banner-text">
+                        Tired of managing inventory &amp; requisitions manually in Excel? TVC-PMS automates your fleet maintenance and store tracking seamlessly.
+                    </p>
+                    <div class="impa-detail-public-actions">
+                        <button type="button" class="impa-lead-btn impa-lead-btn-primary" data-lead-action="trial">
+                            🚀 Request 1-Ship Free Trial / Demo
+                        </button>
+                        <a href="https://thevesselcode.com/#contact" target="_blank" rel="noopener noreferrer"
+                            class="impa-lead-btn impa-lead-btn-secondary">
+                            📞 Contact Superintendent Team
+                        </a>
+                    </div>
                 </footer>
             </div>
             <div id="impaPlateFullscreen" class="impa-plate-fullscreen hidden" aria-hidden="true">
@@ -159,12 +180,14 @@ const TVC_StoreMenu = (function () {
         const cart = document.querySelector('#impaDetailModal .impa-detail-cart');
         const cta = document.getElementById('impaDetailPublicCta');
         const footerCta = document.getElementById('impaDetailPublicFooter');
+        const lockedPreview = document.getElementById('impaDetailLockedPreview');
         const bottomClose = document.querySelector('#impaDetailModal .impa-detail-close-bottom');
         if (_publicMode) {
             rob?.classList.add('hidden');
             cart?.classList.add('hidden');
             cta?.classList.add('hidden');
             footerCta?.classList.remove('hidden');
+            lockedPreview?.classList.remove('hidden');
             bottomClose?.classList.add('hidden');
             document.getElementById('impaDetailModal')?.classList.add('impa-detail-modal-public');
         } else {
@@ -172,6 +195,7 @@ const TVC_StoreMenu = (function () {
             cart?.classList.remove('hidden');
             cta?.classList.add('hidden');
             footerCta?.classList.add('hidden');
+            lockedPreview?.classList.add('hidden');
             bottomClose?.classList.remove('hidden');
             document.getElementById('impaDetailModal')?.classList.remove('impa-detail-modal-public');
         }

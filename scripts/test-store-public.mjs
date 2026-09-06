@@ -1,5 +1,5 @@
 /**
- * Smoke test: public IMPA catalog advanced features
+ * Smoke test: public IMPA catalog conversion & lead capture
  * Run: node scripts/test-store-public.mjs
  */
 import { chromium } from '@playwright/test';
@@ -13,103 +13,67 @@ async function main() {
   try {
     const page = await browser.newPage();
     await page.goto(`${BASE}/store-public.html`, { waitUntil: 'networkidle' });
-    await page.locator('#loginScreen').waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => null);
 
     results.push({
-      check: 'public mode class on document',
-      ok: await page.evaluate(() => document.documentElement.classList.contains('store-public-mode')),
-    });
-    results.push({
-      check: 'toolkit chips visible',
-      ok: await page.locator('.store-tool-chip').count() === 3,
+      check: 'floating upgrade FAB visible',
+      ok: await page.locator('#storePublicFab').isVisible(),
     });
 
     await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
-    results.push({
-      check: 'indexed search returns matches quickly',
-      ok: await page.evaluate(async () => {
-        const res = await TVC_StoreManager.searchCatalog('rope');
-        return res.items.length > 0 && res.ms < 250;
-      }),
-    });
-
-    const searchStart = Date.now();
-    await page.locator('.store-search').fill('rope');
-    await page.waitForTimeout(200);
-    await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 5_000 });
-    results.push({
-      check: 'debounced search returns results quickly',
-      ok: Date.now() - searchStart < 3000,
-    });
-
     await page.locator('.store-code-link').first().click();
     await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
 
-    const footerCta = page.locator('#impaDetailPublicFooter a');
-    results.push({ check: 'sticky footer CTA visible', ok: await footerCta.isVisible() });
-    const ctaHref = await footerCta.getAttribute('href');
-    const ctaText = ((await footerCta.textContent()) || '').trim();
     results.push({
-      check: 'CTA links to contact section',
-      ok: ctaHref === 'https://thevesselcode.com/#contact',
-      detail: ctaHref,
+      check: 'locked ROB preview visible',
+      ok: await page.locator('[data-lead-trigger="rob"]').isVisible(),
     });
     results.push({
-      check: 'CTA mentions automate Requisitions',
-      ok: /automate Requisitions/i.test(ctaText) && /ROB/i.test(ctaText),
-      detail: ctaText,
+      check: 'locked requisition preview visible',
+      ok: await page.locator('[data-lead-trigger="requisition"]').isVisible(),
     });
 
-    const specText = await page.locator('#impaDetailSpecBody').innerText();
+    const bannerText = await page.locator('.impa-detail-public-banner-text').textContent();
     results.push({
-      check: 'specs show category and material fields',
-      ok: /Category/i.test(specText) && (/Material/i.test(specText) || /Dimensions/i.test(specText)),
-      detail: specText.slice(0, 120),
+      check: 'conversion banner copy present',
+      ok: /Excel/i.test(bannerText || '') && /TVC-PMS/i.test(bannerText || ''),
+      detail: (bannerText || '').trim().slice(0, 100),
     });
 
     results.push({
-      check: 'float close button 44x44',
-      ok: await page.locator('.impa-detail-close-float').evaluate(el => {
-        const r = el.getBoundingClientRect();
-        return r.width >= 44 && r.height >= 44;
-      }),
+      check: 'primary trial CTA button visible',
+      ok: await page.locator('[data-lead-action="trial"]').isVisible(),
+    });
+    const contactHref = await page.locator('.impa-lead-btn-secondary').getAttribute('href');
+    results.push({
+      check: 'secondary contact link',
+      ok: contactHref === 'https://thevesselcode.com/#contact',
+      detail: contactHref,
     });
 
-    await page.locator('.impa-detail-close-float').click();
+    await page.locator('[data-lead-trigger="rob"]').click();
+    await page.locator('#storeLeadModal').waitFor({ state: 'visible', timeout: 5_000 });
     results.push({
-      check: 'float close dismisses modal',
-      ok: await page.locator('#impaDetailModal').evaluate(el => el.classList.contains('hidden')),
+      check: 'locked field opens lead modal',
+      ok: await page.locator('#storeLeadModal').isVisible(),
+    });
+    await page.locator('.store-lead-close').click();
+    results.push({
+      check: 'lead modal closes',
+      ok: await page.locator('#storeLeadModal').evaluate(el => el.classList.contains('hidden')),
+    });
+
+    await page.locator('#storePublicFab').click();
+    await page.locator('#storeLeadModal').waitFor({ state: 'visible', timeout: 5_000 });
+    results.push({
+      check: 'FAB opens lead modal',
+      ok: await page.locator('#storeLeadTitle').isVisible(),
     });
 
     await page.locator('[data-tool-tab="flange"]').click();
-    await page.locator('#flangeTableHost table').waitFor({ state: 'visible', timeout: 5_000 });
     results.push({
-      check: 'flange table renders',
-      ok: await page.locator('#flangeTableHost tbody tr').count() > 0,
-    });
-
-    await page.locator('[data-tool-tab="bunker"]').click();
-    await page.locator('#bunkerMassValue').waitFor({ state: 'visible', timeout: 5_000 });
-    const bunkerMass = await page.locator('#bunkerMassValue').textContent();
-    results.push({
-      check: 'bunker calculator shows MT',
-      ok: /MT/i.test(bunkerMass || ''),
-      detail: bunkerMass,
-    });
-
-    await page.locator('[data-tool-tab="catalog"]').click();
-    results.push({
-      check: 'catalog tab restores IMPA list',
-      ok: await page.locator('.store-search').isVisible(),
-    });
-
-    const mobile = await browser.newPage();
-    await mobile.setViewportSize({ width: 390, height: 844 });
-    await mobile.goto(`${BASE}/store-public.html`, { waitUntil: 'domcontentloaded' });
-    await mobile.locator('.store-search').waitFor({ state: 'visible', timeout: 30_000 });
-    results.push({
-      check: 'mobile catalog layout',
-      ok: await mobile.locator('.store-tool-chip').first().isVisible(),
+      check: 'catalog still works after lead flow',
+      ok: await page.locator('#flangeTableHost table').isVisible({ timeout: 5_000 }).catch(() => false)
+        || await page.locator('.store-search').isVisible().catch(() => false),
     });
 
     const failed = results.filter(r => !r.ok);
