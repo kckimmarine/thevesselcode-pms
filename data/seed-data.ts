@@ -7,6 +7,7 @@ export type ImpaSeedItem = {
   category: string;
   rob: number;
   plate_no: string;
+  plate_image: string;
   catalog_page: string;
   specs: Record<string, string>;
 };
@@ -20,12 +21,15 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Rigging",
     "rob": 4,
     "plate_no": "PL-33-01",
+    "plate_image": "/data/impa-plates/items/330101.svg",
     "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Rigging",
-      "Material": "Manila hemp",
-      "Standard": "ISO 1140 / ISO 2408"
+      "Material": "Manila hemp 3-strand",
+      "Standard": "ISO 1140 / ISO 2408",
+      "Dimensions": "Ø32 mm × 220 m coil",
+      "Breaking Load": "≥ 32 kN"
     }
   },
   {
@@ -36,12 +40,15 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Rigging",
     "rob": 120,
     "plate_no": "PL-33-01",
+    "plate_image": "/data/impa-plates/items/330102.svg",
     "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Rigging",
-      "Material": "Galvanized steel",
-      "Standard": "ISO 1140 / ISO 2408"
+      "Material": "Galvanized steel wire",
+      "Standard": "ISO 1140 / ISO 2408",
+      "Dimensions": "Ø12 mm × coil",
+      "Breaking Load": "≥ 78 kN"
     }
   },
   {
@@ -52,12 +59,15 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Rigging",
     "rob": 12,
     "plate_no": "PL-33-02",
+    "plate_image": "/data/impa-plates/items/330201.svg",
     "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Rigging",
-      "Material": "Manila hemp",
-      "Standard": "ISO 1140 / ISO 2408"
+      "Material": "Alloy steel, hot-dip galvanized",
+      "Standard": "ISO 1140 / ISO 2408",
+      "Dimensions": "WLL 25 t · bow type",
+      "Breaking Load": "SWL 25 t"
     }
   },
   {
@@ -68,10 +78,14 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Paint",
     "rob": 80,
     "plate_no": "PL-33-03",
+    "plate_image": "/data/impa-plates/items/330301.svg",
     "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Paint",
+      "Material": "Marine-grade coating",
+      "Standard": "IMO PSPC / ISO 12944",
+      "Dimensions": "20 L pail",
       "Finish": "Matte antifouling",
       "Coverage": "8–10 m²/L",
       "VOC": "< 400 g/L"
@@ -85,10 +99,14 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Paint",
     "rob": 45,
     "plate_no": "PL-33-03",
+    "plate_image": "/data/impa-plates/items/330302.svg",
     "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Paint",
+      "Material": "Marine-grade coating",
+      "Standard": "IMO PSPC / ISO 12944",
+      "Dimensions": "20 L pail",
       "Finish": "Epoxy primer",
       "Coverage": "8–10 m²/L",
       "VOC": "< 400 g/L"
@@ -102,13 +120,17 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Paint",
     "rob": 24,
     "plate_no": "PL-33-04",
+    "plate_image": "/data/impa-plates/items/330401.svg",
     "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Paint",
-      "Finish": "Epoxy primer",
-      "Coverage": "8–10 m²/L",
-      "VOC": "< 400 g/L"
+      "Material": "Hog bristle / hardwood handle",
+      "Standard": "IMO PSPC / ISO 12944",
+      "Dimensions": "100 mm bristle width",
+      "Finish": "Application tool",
+      "Coverage": "—",
+      "VOC": "—"
     }
   },
   {
@@ -119,10 +141,14 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Lubricants",
     "rob": 36,
     "plate_no": "PL-33-05",
+    "plate_image": "/data/impa-plates/items/330501.svg",
     "catalog_page": "/data/impa-catalog-pages/lubricants.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Lubricants",
+      "Material": "Lithium complex grease",
+      "Standard": "NLGI GC-LB",
+      "Dimensions": "18 kg pail",
       "Grade": "NLGI 2",
       "Operating Temp": "-20°C to +120°C"
     }
@@ -135,10 +161,14 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Lubricants",
     "rob": 200,
     "plate_no": "PL-33-05",
+    "plate_image": "/data/impa-plates/items/330502.svg",
     "catalog_page": "/data/impa-catalog-pages/lubricants.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Lubricants",
+      "Material": "Mineral hydraulic base oil",
+      "Standard": "ISO 6743-4 / DIN 51524",
+      "Dimensions": "208 L drum / bulk",
       "Grade": "ISO VG 46",
       "Operating Temp": "-20°C to +120°C"
     }
@@ -151,12 +181,17 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Engine",
     "rob": 6,
     "plate_no": "PL-33-06",
+    "plate_image": "/data/impa-plates/items/330601.svg",
     "catalog_page": "/data/impa-catalog-pages/engine.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Engine",
-      "Application": "Primary filtration",
-      "Service Interval": "Per PMS"
+      "Material": "Cellulose / synthetic media",
+      "Standard": "OEM / ISO 4548 (filters)",
+      "Dimensions": "OEM spin-on cartridge",
+      "Voltage": "—",
+      "Application": "Engine lube / fuel filtration",
+      "Service Interval": "Per PMS running hours"
     }
   },
   {
@@ -167,12 +202,17 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Engine",
     "rob": 4,
     "plate_no": "PL-33-06",
+    "plate_image": "/data/impa-plates/items/330602.svg",
     "catalog_page": "/data/impa-catalog-pages/engine.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Engine",
-      "Application": "Primary filtration",
-      "Service Interval": "Per PMS"
+      "Material": "Cellulose / synthetic media",
+      "Standard": "OEM / ISO 4548 (filters)",
+      "Dimensions": "OEM spin-on cartridge",
+      "Voltage": "—",
+      "Application": "Engine lube / fuel filtration",
+      "Service Interval": "Per PMS running hours"
     }
   },
   {
@@ -183,12 +223,17 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Engine",
     "rob": 1,
     "plate_no": "PL-33-07",
+    "plate_image": "/data/impa-plates/items/330701.svg",
     "catalog_page": "/data/impa-catalog-pages/engine.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Engine",
+      "Material": "Multi-layer steel & composite",
+      "Standard": "OEM / ISO 4548 (filters)",
+      "Dimensions": "Cylinder head set",
+      "Voltage": "—",
       "Application": "OEM replacement",
-      "Service Interval": "Per PMS"
+      "Service Interval": "Per PMS running hours"
     }
   },
   {
@@ -199,12 +244,17 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Engine",
     "rob": 3,
     "plate_no": "PL-33-08",
+    "plate_image": "/data/impa-plates/items/330801.svg",
     "catalog_page": "/data/impa-catalog-pages/engine.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Engine",
+      "Material": "Chloroprene rubber",
+      "Standard": "OEM / ISO 4548 (filters)",
+      "Dimensions": "A-65 V-belt profile",
+      "Voltage": "—",
       "Application": "OEM replacement",
-      "Service Interval": "Per PMS"
+      "Service Interval": "Per PMS running hours"
     }
   },
   {
@@ -215,12 +265,16 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Safety",
     "rob": 18,
     "plate_no": "PL-33-09",
+    "plate_image": "/data/impa-plates/items/330901.svg",
     "catalog_page": "/data/impa-catalog-pages/safety.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Safety",
-      "Certification": "ISO 12402",
-      "Colour": "White"
+      "Material": "ABS / HDPE shell",
+      "Standard": "ISO 12402",
+      "Dimensions": "Standard size",
+      "Certification": "ISO / CE marked",
+      "Voltage": "—"
     }
   },
   {
@@ -231,12 +285,16 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Safety",
     "rob": 30,
     "plate_no": "PL-33-09",
+    "plate_image": "/data/impa-plates/items/330902.svg",
     "catalog_page": "/data/impa-catalog-pages/safety.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Safety",
-      "Certification": "ISO 12402",
-      "Colour": "Standard"
+      "Material": "Split leather",
+      "Standard": "ISO 12402",
+      "Dimensions": "Standard size",
+      "Certification": "ISO / CE marked",
+      "Voltage": "—"
     }
   },
   {
@@ -247,12 +305,16 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Safety",
     "rob": 28,
     "plate_no": "PL-33-10",
+    "plate_image": "/data/impa-plates/items/331001.svg",
     "catalog_page": "/data/impa-catalog-pages/safety.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Safety",
-      "Certification": "SOLAS / MED",
-      "Colour": "Standard"
+      "Material": "ABS / HDPE shell",
+      "Standard": "SOLAS / MED",
+      "Dimensions": "Adult universal",
+      "Certification": "SOLAS Ch. III",
+      "Voltage": "—"
     }
   },
   {
@@ -263,12 +325,16 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Safety",
     "rob": 8,
     "plate_no": "PL-33-11",
+    "plate_image": "/data/impa-plates/items/331101.svg",
     "catalog_page": "/data/impa-catalog-pages/safety.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Safety",
-      "Certification": "ISO 12402",
-      "Colour": "Standard"
+      "Material": "Steel cylinder / brass valve",
+      "Standard": "EN 3 / MED",
+      "Dimensions": "CO₂ 5 kg portable",
+      "Certification": "ISO / CE marked",
+      "Voltage": "—"
     }
   },
   {
@@ -279,13 +345,16 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Piping",
     "rob": 5,
     "plate_no": "PL-33-12",
+    "plate_image": "/data/impa-plates/items/331201.svg",
     "catalog_page": "/data/impa-catalog-pages/piping.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Piping",
-      "Nominal Size": "DN50 (2\")",
+      "Material": "Bronze body / stainless trim",
+      "Standard": "ISO 7005 / PN16",
+      "Dimensions": "DN50 (2\") · face-to-face 180 mm",
       "Pressure Class": "PN16",
-      "Body Material": "Bronze / Steel"
+      "Body Material": "Bronze / gunmetal"
     }
   },
   {
@@ -296,13 +365,16 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Piping",
     "rob": 4,
     "plate_no": "PL-33-12",
+    "plate_image": "/data/impa-plates/items/331202.svg",
     "catalog_page": "/data/impa-catalog-pages/piping.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Piping",
-      "Nominal Size": "DN50 (2\")",
+      "Material": "Bronze body / stainless trim",
+      "Standard": "ISO 7005 / PN16",
+      "Dimensions": "DN50 (2\") · face-to-face 180 mm",
       "Pressure Class": "PN16",
-      "Body Material": "Bronze / Steel"
+      "Body Material": "Bronze / gunmetal"
     }
   },
   {
@@ -313,12 +385,15 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Fasteners",
     "rob": 150,
     "plate_no": "PL-33-13",
+    "plate_image": "/data/impa-plates/items/331301.svg",
     "catalog_page": "/data/impa-catalog-pages/fasteners.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Fasteners",
+      "Material": "Alloy steel, zinc plated",
+      "Standard": "ISO 4014 / DIN 931",
+      "Dimensions": "M16 × 60 mm hex",
       "Thread": "M16 × 2.0",
-      "Length": "60 mm",
       "Grade": "8.8 / A4-80"
     }
   },
@@ -330,12 +405,15 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Fasteners",
     "rob": 160,
     "plate_no": "PL-33-13",
+    "plate_image": "/data/impa-plates/items/331302.svg",
     "catalog_page": "/data/impa-catalog-pages/fasteners.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Fasteners",
+      "Material": "Alloy steel, zinc plated",
+      "Standard": "ISO 4014 / DIN 931",
+      "Dimensions": "M16 hex nut",
       "Thread": "M16 × 2.0",
-      "Length": "—",
       "Grade": "8.8 / A4-80"
     }
   },
@@ -347,13 +425,17 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Electrical",
     "rob": 250,
     "plate_no": "PL-33-14",
+    "plate_image": "/data/impa-plates/items/331401.svg",
     "catalog_page": "/data/impa-catalog-pages/electrical.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Electrical",
-      "Voltage": "220 V AC",
-      "Insulation": "PVC 3C",
-      "Rating": "2.5 mm²"
+      "Material": "Copper conductor, PVC sheath",
+      "Standard": "IEC 60227 / IEC 60092",
+      "Dimensions": "3C × 2.5 mm²",
+      "Voltage": "220 V AC / 60 Hz",
+      "Insulation": "PVC 3-core",
+      "Rating": "2.5 mm² / 20 A"
     }
   },
   {
@@ -364,11 +446,15 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Electrical",
     "rob": 20,
     "plate_no": "PL-33-14",
+    "plate_image": "/data/impa-plates/items/331402.svg",
     "catalog_page": "/data/impa-catalog-pages/electrical.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Electrical",
-      "Voltage": "220 V AC",
+      "Material": "Glass tube / phosphor coating",
+      "Standard": "IEC 60227 / IEC 60092",
+      "Dimensions": "T8 20 W tube",
+      "Voltage": "220 V AC / 60 Hz",
       "Insulation": "—",
       "Rating": "20 W"
     }
@@ -381,13 +467,16 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Cleaning",
     "rob": 60,
     "plate_no": "PL-33-15",
+    "plate_image": "/data/impa-plates/items/331501.svg",
     "catalog_page": "/data/impa-catalog-pages/cleaning.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Cleaning",
-      "Form": "Liquid / bulk",
+      "Material": "Industrial degreaser base",
+      "Standard": "IMO / MARPOL compliant",
+      "Dimensions": "Bulk liquid",
       "Flash Point": "> 60°C",
-      "Dilution": "Ready to use"
+      "Form": "Ready to use"
     }
   },
   {
@@ -398,13 +487,16 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Cleaning",
     "rob": 25,
     "plate_no": "PL-33-15",
+    "plate_image": "/data/impa-plates/items/331502.svg",
     "catalog_page": "/data/impa-catalog-pages/cleaning.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Cleaning",
-      "Form": "Liquid / bulk",
+      "Material": "Industrial degreaser base",
+      "Standard": "IMO / MARPOL compliant",
+      "Dimensions": "Bulk liquid",
       "Flash Point": "> 60°C",
-      "Dilution": "Ready to use"
+      "Form": "Ready to use"
     }
   }
 ];

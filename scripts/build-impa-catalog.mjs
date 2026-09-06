@@ -1,5 +1,5 @@
 /**
- * Build enriched IMPA catalog JSON + category catalog-page SVGs + plate_no assets.
+ * Build enriched IMPA catalog JSON + Space-Marine style plate SVGs.
  * Run: node scripts/build-impa-catalog.mjs
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -10,6 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const pagesDir = join(root, 'data/impa-catalog-pages');
 const platesDir = join(root, 'data/impa-plates');
+const itemsDir = join(platesDir, 'items');
 
 const CATEGORY_PAGE = {
   Rigging: 'rigging.svg',
@@ -56,34 +57,202 @@ function derivePlateNo(code) {
   return `PL-${c.slice(0, 2)}-${c.slice(2, 4)}`;
 }
 
+function escXml(s) {
+  return String(s || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
 function specsFor(item) {
   const cat = item.category;
-  const common = { 'IMPA Edition': '7th', 'Catalog Section': cat };
+  const common = {
+    'IMPA Edition': '7th',
+    'Catalog Section': cat,
+    Material: 'Per manufacturer datasheet',
+    Standard: 'IMPA / ISO marine supply',
+  };
+
   if (cat === 'Rigging') {
-    return { ...common, Material: item.name.includes('Wire') ? 'Galvanized steel' : 'Manila hemp', Standard: 'ISO 1140 / ISO 2408' };
+    const isWire = item.name.includes('Wire');
+    const isShackle = item.name.includes('Shackle');
+    return {
+      ...common,
+      Dimensions: isWire ? 'Ø12 mm × coil' : (isShackle ? 'WLL 25 t · bow type' : 'Ø32 mm × 220 m coil'),
+      Material: isWire ? 'Galvanized steel wire' : (isShackle ? 'Alloy steel, hot-dip galvanized' : 'Manila hemp 3-strand'),
+      Standard: 'ISO 1140 / ISO 2408',
+      'Breaking Load': isWire ? '≥ 78 kN' : (isShackle ? 'SWL 25 t' : '≥ 32 kN'),
+    };
   }
   if (cat === 'Paint') {
-    return { ...common, Finish: item.name.includes('Antifouling') ? 'Matte antifouling' : 'Epoxy primer', Coverage: '8–10 m²/L', VOC: '< 400 g/L' };
+    const isBrush = item.name.includes('Brush');
+    return {
+      ...common,
+      Dimensions: isBrush ? '100 mm bristle width' : '20 L pail',
+      Material: isBrush ? 'Hog bristle / hardwood handle' : 'Marine-grade coating',
+      Finish: item.name.includes('Antifouling') ? 'Matte antifouling' : (item.name.includes('Primer') ? 'Epoxy primer' : 'Application tool'),
+      Standard: 'IMO PSPC / ISO 12944',
+      Coverage: isBrush ? '—' : '8–10 m²/L',
+      VOC: isBrush ? '—' : '< 400 g/L',
+    };
   }
   if (cat === 'Lubricants') {
-    return { ...common, Grade: item.name.includes('ISO') ? 'ISO VG 46' : 'NLGI 2', 'Operating Temp': '-20°C to +120°C' };
+    const isOil = item.name.includes('ISO');
+    return {
+      ...common,
+      Dimensions: isOil ? '208 L drum / bulk' : '18 kg pail',
+      Material: isOil ? 'Mineral hydraulic base oil' : 'Lithium complex grease',
+      Grade: isOil ? 'ISO VG 46' : 'NLGI 2',
+      Standard: isOil ? 'ISO 6743-4 / DIN 51524' : 'NLGI GC-LB',
+      'Operating Temp': '-20°C to +120°C',
+    };
   }
   if (cat === 'Engine') {
-    return { ...common, Application: item.name.includes('Filter') ? 'Primary filtration' : 'OEM replacement', 'Service Interval': 'Per PMS' };
+    const isFilter = item.name.includes('Filter');
+    const isBelt = item.name.includes('Belt');
+    const isGasket = item.name.includes('Gasket');
+    return {
+      ...common,
+      Dimensions: isFilter ? 'OEM spin-on cartridge' : (isBelt ? 'A-65 V-belt profile' : (isGasket ? 'Cylinder head set' : 'OEM fit')),
+      Material: isFilter ? 'Cellulose / synthetic media' : (isBelt ? 'Chloroprene rubber' : 'Multi-layer steel & composite'),
+      Voltage: '—',
+      Standard: 'OEM / ISO 4548 (filters)',
+      Application: isFilter ? 'Engine lube / fuel filtration' : 'OEM replacement',
+      'Service Interval': 'Per PMS running hours',
+    };
   }
   if (cat === 'Safety') {
-    return { ...common, Certification: item.name.includes('SOLAS') ? 'SOLAS / MED' : 'ISO 12402', Colour: item.name.includes('White') ? 'White' : 'Standard' };
+    const isSol = item.name.includes('SOLAS');
+    const isCo2 = item.name.includes('CO2');
+    return {
+      ...common,
+      Dimensions: isCo2 ? 'CO₂ 5 kg portable' : (isSol ? 'Adult universal' : 'Standard size'),
+      Material: isCo2 ? 'Steel cylinder / brass valve' : (item.name.includes('Gloves') ? 'Split leather' : 'ABS / HDPE shell'),
+      Standard: isSol ? 'SOLAS / MED' : (isCo2 ? 'EN 3 / MED' : 'ISO 12402'),
+      Certification: isSol ? 'SOLAS Ch. III' : 'ISO / CE marked',
+      Voltage: '—',
+    };
   }
   if (cat === 'Piping') {
-    return { ...common, 'Nominal Size': 'DN50 (2")', 'Pressure Class': 'PN16', 'Body Material': 'Bronze / Steel' };
+    return {
+      ...common,
+      Dimensions: 'DN50 (2") · face-to-face 180 mm',
+      Material: 'Bronze body / stainless trim',
+      Standard: 'ISO 7005 / PN16',
+      'Pressure Class': 'PN16',
+      'Body Material': 'Bronze / gunmetal',
+    };
   }
   if (cat === 'Fasteners') {
-    return { ...common, Thread: 'M16 × 2.0', Length: item.name.includes('Bolt') ? '60 mm' : '—', Grade: '8.8 / A4-80' };
+    const isBolt = item.name.includes('Bolt');
+    return {
+      ...common,
+      Dimensions: isBolt ? 'M16 × 60 mm hex' : 'M16 hex nut',
+      Material: 'Alloy steel, zinc plated',
+      Standard: 'ISO 4014 / DIN 931',
+      Thread: 'M16 × 2.0',
+      Grade: '8.8 / A4-80',
+    };
   }
   if (cat === 'Electrical') {
-    return { ...common, Voltage: '220 V AC', Insulation: item.name.includes('Cable') ? 'PVC 3C' : '—', Rating: item.name.includes('Lamp') ? '20 W' : '2.5 mm²' };
+    const isCable = item.name.includes('Cable');
+    return {
+      ...common,
+      Dimensions: isCable ? '3C × 2.5 mm²' : 'T8 20 W tube',
+      Material: isCable ? 'Copper conductor, PVC sheath' : 'Glass tube / phosphor coating',
+      Voltage: '220 V AC / 60 Hz',
+      Standard: 'IEC 60227 / IEC 60092',
+      Insulation: isCable ? 'PVC 3-core' : '—',
+      Rating: isCable ? '2.5 mm² / 20 A' : '20 W',
+    };
   }
-  return { ...common, Form: 'Liquid / bulk', 'Flash Point': '> 60°C', Dilution: 'Ready to use' };
+  return {
+    ...common,
+    Dimensions: 'Bulk liquid',
+    Material: 'Industrial degreaser base',
+    Standard: 'IMO / MARPOL compliant',
+    'Flash Point': '> 60°C',
+    Form: 'Ready to use',
+  };
+}
+
+function categoryIllustration(category) {
+  switch (category) {
+    case 'Rigging':
+      return `
+        <path d="M200 420 Q280 360 360 420 Q440 480 520 420" fill="none" stroke="#2d3748" stroke-width="3"/>
+        <ellipse cx="360" cy="420" rx="28" ry="18" fill="none" stroke="#2d3748" stroke-width="2"/>
+        <line x1="160" y1="420" x2="560" y2="420" stroke="#718096" stroke-width="1" stroke-dasharray="4 3"/>
+        <text x="360" y="405" text-anchor="middle" font-family="ui-monospace,monospace" font-size="11" fill="#4a5568">Ø / WLL</text>`;
+    case 'Paint':
+      return `
+        <rect x="300" y="360" width="120" height="140" rx="8" fill="none" stroke="#2d3748" stroke-width="2"/>
+        <rect x="330" y="330" width="60" height="36" rx="4" fill="#c53030" stroke="#2d3748" stroke-width="1.5"/>
+        <line x1="250" y1="500" x2="470" y2="500" stroke="#718096" stroke-width="1"/>`;
+    case 'Electrical':
+      return `
+        <path d="M180 460 L300 380 L420 460 L540 380" fill="none" stroke="#2d3748" stroke-width="2.5"/>
+        <circle cx="300" cy="380" r="6" fill="#2b6cb0"/>
+        <circle cx="420" cy="460" r="6" fill="#2b6cb0"/>
+        <text x="360" y="520" text-anchor="middle" font-size="11" fill="#4a5568" font-family="ui-monospace,monospace">220V 3C</text>`;
+    case 'Engine':
+      return `
+        <rect x="280" y="360" width="160" height="120" rx="6" fill="none" stroke="#2d3748" stroke-width="2"/>
+        <circle cx="360" cy="420" r="36" fill="none" stroke="#2d3748" stroke-width="1.5"/>
+        <line x1="324" y1="420" x2="396" y2="420" stroke="#718096" stroke-width="1"/>
+        <line x1="360" y1="384" x2="360" y2="456" stroke="#718096" stroke-width="1"/>`;
+    default:
+      return `
+        <circle cx="360" cy="430" r="90" fill="none" stroke="#2d3748" stroke-width="2" stroke-dasharray="8 6"/>
+        <line x1="270" y1="430" x2="450" y2="430" stroke="#718096" stroke-width="1"/>
+        <line x1="360" y1="340" x2="360" y2="520" stroke="#718096" stroke-width="1"/>`;
+  }
+}
+
+function itemPlateSvg(item, plateNo, specs) {
+  const title = escXml(item.category.toUpperCase());
+  const name = escXml(item.name);
+  const code = escXml(item.code);
+  const dim = escXml(specs.Dimensions || '—');
+  const mat = escXml(specs.Material || '—');
+  const std = escXml(specs.Standard || '—');
+  const illus = categoryIllustration(item.category);
+
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 960" role="img" aria-label="${name} catalog plate">
+  <defs>
+    <pattern id="grid-${code}" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#c5d4e8" stroke-width="0.5"/>
+    </pattern>
+    <linearGradient id="paper-${code}" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8f4ea"/>
+      <stop offset="100%" stop-color="#e8dfd0"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="960" fill="url(#paper-${code})"/>
+  <rect x="20" y="20" width="680" height="920" fill="none" stroke="#1a365d" stroke-width="4"/>
+  <rect x="36" y="36" width="648" height="110" fill="#1a365d"/>
+  <text x="360" y="78" text-anchor="middle" fill="#f7fafc" font-family="Georgia, serif" font-size="26" font-weight="700">IMPA CATALOG PLATE</text>
+  <text x="360" y="108" text-anchor="middle" fill="#bee3f8" font-family="ui-monospace, monospace" font-size="13" letter-spacing="3">${title} · ${escXml(plateNo)}</text>
+  <text x="48" y="175" fill="#2d3748" font-family="ui-monospace,monospace" font-size="14" font-weight="700">IMPA ${code}</text>
+  <text x="48" y="198" fill="#4a5568" font-family="Georgia,serif" font-size="16">${name}</text>
+  <rect x="40" y="220" width="640" height="500" fill="url(#grid-${code})" stroke="#2b6cb0" stroke-width="2"/>
+  ${illus}
+  <text x="360" y="560" text-anchor="middle" fill="#4a5568" font-family="Georgia, serif" font-size="18">TECHNICAL ILLUSTRATION</text>
+  <text x="360" y="586" text-anchor="middle" fill="#718096" font-family="ui-monospace, monospace" font-size="11">SCALE 1:5 · DIM. IN mm UNLESS NOTED</text>
+  <line x1="120" y1="620" x2="220" y2="620" stroke="#2d3748" stroke-width="1"/>
+  <text x="230" y="624" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">${dim}</text>
+  <line x1="400" y1="650" x2="500" y2="650" stroke="#2d3748" stroke-width="1"/>
+  <text x="510" y="654" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">${mat}</text>
+  <rect x="40" y="740" width="640" height="180" fill="#edf2f7" stroke="#a0aec0" stroke-width="1"/>
+  <text x="56" y="772" fill="#1a365d" font-family="ui-monospace,monospace" font-size="12" font-weight="700">SPECIFICATION DATASHEET</text>
+  <text x="56" y="798" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">DIMENSIONS: ${dim}</text>
+  <text x="56" y="820" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">MATERIAL: ${mat}</text>
+  <text x="56" y="842" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">STANDARD: ${std}</text>
+  <text x="56" y="872" fill="#718096" font-family="ui-sans-serif,system-ui" font-size="10">THE VESSEL CODE STORE · Space-Marine specification sheet</text>
+  <text x="56" y="894" fill="#718096" font-family="ui-sans-serif,system-ui" font-size="10">Verify onboard ROB before requisition.</text>
+</svg>`;
 }
 
 function catalogSvg(category, filename, plateNo) {
@@ -106,27 +275,26 @@ function catalogSvg(category, filename, plateNo) {
   <text x="320" y="88" text-anchor="middle" fill="#f7fafc" font-family="Georgia, serif" font-size="28" font-weight="700">IMPA CATALOG PLATE</text>
   <text x="320" y="118" text-anchor="middle" fill="#bee3f8" font-family="ui-monospace, monospace" font-size="14" letter-spacing="4">${title}</text>
   <rect x="48" y="180" width="544" height="520" fill="url(#grid)" stroke="#2b6cb0" stroke-width="2"/>
-  <circle cx="320" cy="440" r="140" fill="none" stroke="#2d3748" stroke-width="2" stroke-dasharray="8 6"/>
-  <line x1="180" y1="440" x2="460" y2="440" stroke="#2d3748" stroke-width="1.5"/>
-  <line x1="320" y1="300" x2="320" y2="580" stroke="#2d3748" stroke-width="1.5"/>
+  ${categoryIllustration(category)}
   <text x="320" y="450" text-anchor="middle" fill="#4a5568" font-family="Georgia, serif" font-size="22">TECHNICAL ILLUSTRATION</text>
-  <text x="320" y="478" text-anchor="middle" fill="#718096" font-family="ui-monospace, monospace" font-size="12">SCALE 1:5 · DIM. IN mm UNLESS NOTED</text>
   <rect x="48" y="720" width="544" height="120" fill="#edf2f7" stroke="#a0aec0" stroke-width="1"/>
   <text x="64" y="752" fill="#2d3748" font-family="ui-monospace, monospace" font-size="11">PLATE: ${ref}</text>
-  <text x="64" y="776" fill="#4a5568" font-family="ui-sans-serif, system-ui" font-size="12">Space-Marine style specification sheet · THE VESSEL CODE STORE</text>
-  <text x="64" y="800" fill="#718096" font-family="ui-sans-serif, system-ui" font-size="11">Dimensions and tolerances per manufacturer datasheet.</text>
-  <text x="64" y="824" fill="#718096" font-family="ui-sans-serif, system-ui" font-size="11">Verify onboard stock (ROB) before requisition.</text>
 </svg>`;
 }
 
 mkdirSync(pagesDir, { recursive: true });
 mkdirSync(platesDir, { recursive: true });
+mkdirSync(itemsDir, { recursive: true });
+
 for (const [cat, file] of Object.entries(CATEGORY_PAGE)) {
   writeFileSync(join(pagesDir, file), catalogSvg(cat, file), 'utf8');
 }
 
 const catalog = BASE.map(item => {
   const plate_no = derivePlateNo(item.code);
+  const specs = specsFor(item);
+  const plate_image = `/data/impa-plates/items/${item.code}.svg`;
+  writeFileSync(join(itemsDir, `${item.code}.svg`), itemPlateSvg(item, plate_no, specs), 'utf8');
   return {
     impa_code: item.code,
     code: item.code,
@@ -135,17 +303,16 @@ const catalog = BASE.map(item => {
     category: item.category,
     rob: item.rob,
     plate_no,
+    plate_image,
     catalog_page: `/data/impa-catalog-pages/${CATEGORY_PAGE[item.category]}`,
-    specs: specsFor(item),
+    specs,
   };
 });
 
 const plateNos = new Map();
 for (const item of catalog) {
   if (!item.plate_no) continue;
-  if (!plateNos.has(item.plate_no)) {
-    plateNos.set(item.plate_no, item.category);
-  }
+  if (!plateNos.has(item.plate_no)) plateNos.set(item.plate_no, item.category);
 }
 for (const [plateNo, category] of plateNos) {
   writeFileSync(join(platesDir, `${plateNo}.svg`), catalogSvg(category, `${plateNo}.svg`, plateNo), 'utf8');
@@ -163,6 +330,7 @@ const tsLines = [
   '  category: string;',
   '  rob: number;',
   '  plate_no: string;',
+  '  plate_image: string;',
   '  catalog_page: string;',
   '  specs: Record<string, string>;',
   '};',
@@ -171,4 +339,4 @@ const tsLines = [
   '',
 ];
 writeFileSync(join(root, 'data/seed-data.ts'), tsLines.join('\n'), 'utf8');
-console.log(`Wrote ${catalog.length} items, ${Object.keys(CATEGORY_PAGE).length} catalog pages, ${plateNos.size} plate assets.`);
+console.log(`Wrote ${catalog.length} items, ${catalog.length} item plates, ${plateNos.size} shared plates.`);

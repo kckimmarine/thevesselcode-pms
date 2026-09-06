@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 960" role="img" aria-label="Belt V-Type A-65 catalog plate">
+  <defs>
+    <pattern id="grid-330801" width="20" height="20" patternUnits="userSpaceOnUse">
+      <path d="M 20 0 L 0 0 0 20" fill="none" stroke="#c5d4e8" stroke-width="0.5"/>
+    </pattern>
+    <linearGradient id="paper-330801" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f8f4ea"/>
+      <stop offset="100%" stop-color="#e8dfd0"/>
+    </linearGradient>
+  </defs>
+  <rect width="720" height="960" fill="url(#paper-330801)"/>
+  <rect x="20" y="20" width="680" height="920" fill="none" stroke="#1a365d" stroke-width="4"/>
+  <rect x="36" y="36" width="648" height="110" fill="#1a365d"/>
+  <text x="360" y="78" text-anchor="middle" fill="#f7fafc" font-family="Georgia, serif" font-size="26" font-weight="700">IMPA CATALOG PLATE</text>
+  <text x="360" y="108" text-anchor="middle" fill="#bee3f8" font-family="ui-monospace, monospace" font-size="13" letter-spacing="3">ENGINE · PL-33-08</text>
+  <text x="48" y="175" fill="#2d3748" font-family="ui-monospace,monospace" font-size="14" font-weight="700">IMPA 330801</text>
+  <text x="48" y="198" fill="#4a5568" font-family="Georgia,serif" font-size="16">Belt V-Type A-65</text>
+  <rect x="40" y="220" width="640" height="500" fill="url(#grid-330801)" stroke="#2b6cb0" stroke-width="2"/>
+  
+        <rect x="280" y="360" width="160" height="120" rx="6" fill="none" stroke="#2d3748" stroke-width="2"/>
+        <circle cx="360" cy="420" r="36" fill="none" stroke="#2d3748" stroke-width="1.5"/>
+        <line x1="324" y1="420" x2="396" y2="420" stroke="#718096" stroke-width="1"/>
+        <line x1="360" y1="384" x2="360" y2="456" stroke="#718096" stroke-width="1"/>
+  <text x="360" y="560" text-anchor="middle" fill="#4a5568" font-family="Georgia, serif" font-size="18">TECHNICAL ILLUSTRATION</text>
+  <text x="360" y="586" text-anchor="middle" fill="#718096" font-family="ui-monospace, monospace" font-size="11">SCALE 1:5 · DIM. IN mm UNLESS NOTED</text>
+  <line x1="120" y1="620" x2="220" y2="620" stroke="#2d3748" stroke-width="1"/>
+  <text x="230" y="624" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">A-65 V-belt profile</text>
+  <line x1="400" y1="650" x2="500" y2="650" stroke="#2d3748" stroke-width="1"/>
+  <text x="510" y="654" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">Chloroprene rubber</text>
+  <rect x="40" y="740" width="640" height="180" fill="#edf2f7" stroke="#a0aec0" stroke-width="1"/>
+  <text x="56" y="772" fill="#1a365d" font-family="ui-monospace,monospace" font-size="12" font-weight="700">SPECIFICATION DATASHEET</text>
+  <text x="56" y="798" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">DIMENSIONS: A-65 V-belt profile</text>
+  <text x="56" y="820" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">MATERIAL: Chloroprene rubber</text>
+  <text x="56" y="842" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">STANDARD: OEM / ISO 4548 (filters)</text>
+  <text x="56" y="872" fill="#718096" font-family="ui-sans-serif,system-ui" font-size="10">THE VESSEL CODE STORE · Space-Marine specification sheet</text>
+  <text x="56" y="894" fill="#718096" font-family="ui-sans-serif,system-ui" font-size="10">Verify onboard ROB before requisition.</text>
+</svg>

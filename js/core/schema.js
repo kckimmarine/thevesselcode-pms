@@ -1363,6 +1363,7 @@ const TVC_ImpaSchema = (function () {
         unit: ['unit', 'uom', 'unitofmeasure', 'unit_of_measure', 'measure'],
         category: ['category', 'cat', 'group', 'section', 'department', 'class'],
         plate_no: ['plate_no', 'plateno', 'plate', 'plateref', 'catalogplate'],
+        plate_image: ['plate_image', 'plateimage', 'plate_url', 'plateurl'],
         catalog_page: ['catalog_page', 'catalogpage', 'image', 'imageurl', 'img'],
         rob: ['rob', 'qty', 'quantity', 'stock', 'onboard'],
         spec: ['spec', 'specs', 'specification', 'dimensions'],
@@ -1422,6 +1423,8 @@ const TVC_ImpaSchema = (function () {
     }
 
     function resolvePlateImageUrl(item) {
+        const explicit = String(item?.plate_image || '').trim();
+        if (explicit) return explicit;
         const plateNo = String(item?.plate_no || '').trim();
         if (plateNo) {
             return `${PLATE_IMAGE_BASE}/${plateNo}.svg`;
@@ -1450,6 +1453,7 @@ const TVC_ImpaSchema = (function () {
         if (!impa_code) return null;
         const specRaw = pickField(row, FIELD_ALIASES.spec) || row.specs;
         const plateRaw = pickField(row, FIELD_ALIASES.plate_no) || row.plate_no;
+        const plateImage = String(pickField(row, FIELD_ALIASES.plate_image) || row.plate_image || '').trim();
         const base = {
             impa_code,
             name: String(pickField(row, FIELD_ALIASES.name) || impa_code).trim(),
@@ -1457,6 +1461,7 @@ const TVC_ImpaSchema = (function () {
             category: String(pickField(row, FIELD_ALIASES.category) || 'General').trim() || 'General',
             catalog_page: String(pickField(row, FIELD_ALIASES.catalog_page) || '').trim(),
             plate_no: derivePlateNo(impa_code, plateRaw),
+            plate_image: plateImage,
             specs: parseSpecsValue(specRaw, row),
             rob: Math.max(0, Math.floor(Number(pickField(row, FIELD_ALIASES.rob)) || 0)),
         };
@@ -1486,7 +1491,7 @@ const TVC_ImpaSchema = (function () {
             category: enriched.category || '',
             plate_no: enriched.plate_no || '',
             catalog_page: enriched.catalog_page || '',
-            plate_image: resolvePlateImageUrl(enriched),
+            plate_image: String(enriched.plate_image || '').trim() || resolvePlateImageUrl(enriched),
             specs: enriched.specs && typeof enriched.specs === 'object' ? { ...enriched.specs } : {},
             rob: Math.max(0, Math.floor(Number(enriched.rob) || 0)),
         };

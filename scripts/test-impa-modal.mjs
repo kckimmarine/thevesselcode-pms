@@ -47,6 +47,20 @@ async function main() {
     const page = await browser.newPage();
     await login(page);
     await openStoreModal(page);
+    results.push({
+      check: 'zoom button visible with plate',
+      ok: await page.locator('#impaDetailZoomBtn').isVisible(),
+    });
+    await page.locator('#impaDetailZoomBtn').click();
+    results.push({
+      check: 'fullscreen plate opens',
+      ok: await page.locator('#impaPlateFullscreen').isVisible(),
+    });
+    await page.locator('.impa-plate-fullscreen-close').click();
+    results.push({
+      check: 'fullscreen plate closes',
+      ok: await page.locator('#impaPlateFullscreen').evaluate(el => el.classList.contains('hidden')),
+    });
 
     const floatBtn = page.locator('.impa-detail-close-float');
     const floatSize = await floatBtn.boundingBox();
