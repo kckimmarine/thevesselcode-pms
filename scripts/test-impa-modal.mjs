@@ -33,6 +33,7 @@ async function openStoreModal(page) {
   await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 15_000 });
   await page.locator('.store-code-link').first().click();
   await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
+  await page.locator('#impaDetailZoomBtn').waitFor({ state: 'visible', timeout: 15_000 });
 }
 
 async function isModalHidden(page) {

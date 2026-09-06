@@ -45,9 +45,8 @@ const TVC_StoreManager = (function () {
             name: ui.name,
             unit: ui.unit,
             category: ui.category,
+            plate_id: ui.plate_id,
             plate_no: ui.plate_no,
-            catalog_page: ui.catalog_page,
-            plate_image: ui.plate_image,
             rob: ui.rob,
             specs: ui.specs,
         };
@@ -76,9 +75,9 @@ const TVC_StoreManager = (function () {
         const ts = new Date().toISOString();
         const patched = [];
         for (const row of rows) {
-            if (row.name_lower && row.code_prefix && row.plate_no) continue;
-            const enriched = TVC_ImpaSchema.enrichDbFields(row);
-            patched.push({ ...row, ...enriched, updated_at: ts });
+            if (row.name_lower && row.code_prefix && row.plate_id) continue;
+            const enriched = TVC_ImpaSchema.sanitizeImpaForDb(row);
+            patched.push({ ...enriched, updated_at: ts });
         }
         for (let i = 0; i < patched.length; i += CHUNK_SIZE) {
             await TVC_DB.bulkPut('impa_master', patched.slice(i, i + CHUNK_SIZE));
@@ -127,6 +126,23 @@ const TVC_StoreManager = (function () {
         return rows.length;
     }
 
+    async function migratePlatePipeline() {
+        const done = await TVC_DB.getMeta(TVC_META_KEYS.IMPA_PLATE_PIPELINE);
+        if (done) return;
+        const rows = await TVC_DB.getAll('impa_master');
+        if (!rows.length) {
+            await TVC_DB.setMeta(TVC_META_KEYS.IMPA_PLATE_PIPELINE, new Date().toISOString());
+            return;
+        }
+        const ts = new Date().toISOString();
+        const sanitized = rows.map(row => TVC_ImpaSchema.sanitizeImpaForDb({ ...row, updated_at: ts }));
+        for (let i = 0; i < sanitized.length; i += CHUNK_SIZE) {
+            await TVC_DB.bulkPut('impa_master', sanitized.slice(i, i + CHUNK_SIZE));
+            await yieldToMain();
+        }
+        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_PLATE_PIPELINE, new Date().toISOString());
+    }
+
     async function ensureImpaMaster() {
         await TVC_DB.open();
         let count = await TVC_DB.countStore('impa_master');
@@ -140,6 +156,7 @@ const TVC_StoreManager = (function () {
                 count = await TVC_DB.countStore('impa_master');
             }
         }
+        await migratePlatePipeline();
         _totalCount = count;
         await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT, count);
         return count;

@@ -10,6 +10,8 @@ const TVC_StoreMenu = (function () {
     const _listState = { items: [] };
     let _plateZoom = null;
     let _plateFullscreen = null;
+    let _plateObjectUrl = null;
+    let _plateLoadToken = 0;
     const STORE_ROW_H = 44;
     const SEARCH_DEBOUNCE_MS = 180;
 
@@ -256,30 +258,144 @@ const TVC_StoreMenu = (function () {
         return { reset, apply };
     }
 
-    function platePlaceholderHtml(item) {
-        const code = esc(item.impa_code || item.code || '—');
-        const plateNo = esc(item.plate_no || TVC_ImpaSchema.derivePlateNo(item.impa_code || item.code) || '—');
-        const name = esc(item.name || 'IMPA Item');
+    function resolvePlateId(item) {
+        return item.plate_id || item.plate_no
+            || TVC_ImpaSchema.derivePlateId(item.impa_code || item.code);
+    }
+
+    function plateLoadingHtml(plateId) {
+        const id = esc(plateId || '—');
         return `
-            <svg class="impa-plate-placeholder-svg" viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Technical drawing placeholder">
-                <defs>
-                    <pattern id="ph-grid" width="16" height="16" patternUnits="userSpaceOnUse">
-                        <path d="M16 0H0V16" fill="none" stroke="#cbd5e0" stroke-width="0.5"/>
-                    </pattern>
-                </defs>
-                <rect width="480" height="360" fill="#f8f4ea"/>
-                <rect x="8" y="8" width="464" height="344" fill="url(#ph-grid)" stroke="#1a365d" stroke-width="2"/>
-                <rect x="24" y="24" width="436" height="48" fill="#1a365d"/>
-                <text x="242" y="54" text-anchor="middle" fill="#fff" font-family="Georgia,serif" font-size="16" font-weight="700">NO PLATE AVAILABLE</text>
-                <circle cx="240" cy="190" r="72" fill="none" stroke="#4a5568" stroke-width="1.5" stroke-dasharray="6 4"/>
-                <line x1="168" y1="190" x2="312" y2="190" stroke="#718096" stroke-width="1"/>
-                <line x1="240" y1="118" x2="240" y2="262" stroke="#718096" stroke-width="1"/>
-                <text x="240" y="196" text-anchor="middle" fill="#4a5568" font-family="ui-monospace,monospace" font-size="11">TECHNICAL DRAWING</text>
-                <text x="32" y="300" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">IMPA ${code}</text>
-                <text x="32" y="318" fill="#4a5568" font-family="ui-sans-serif,system-ui" font-size="10">${name}</text>
-                <text x="32" y="336" fill="#718096" font-family="ui-monospace,monospace" font-size="10">PLATE REF: ${plateNo}</text>
+            <div class="impa-plate-loading" role="status" aria-live="polite">
+                <div class="impa-plate-loading-spinner" aria-hidden="true"></div>
+                <p class="impa-plate-loading-text">도판 로딩 중… <span class="impa-plate-loading-id">${id}</span></p>
+            </div>`;
+    }
+
+    function platePendingHtml(item, plateId, reason) {
+        const code = esc(item.impa_code || item.code || '—');
+        const id = esc(plateId || '—');
+        const name = esc(item.name || 'IMPA Item');
+        const offline = reason === 'offline' || (typeof navigator !== 'undefined' && !navigator.onLine);
+        const title = offline ? '도판 다운로드 대기' : '도판을 불러올 수 없음';
+        const subtitle = offline
+            ? '오프라인 상태입니다. 네트워크 연결 후 다시 열어 주세요.'
+            : '도판 파일이 아직 캐시되지 않았습니다.';
+        return `
+            <svg class="impa-plate-placeholder-svg" viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${title}">
+                <rect width="480" height="360" fill="#f0f4f8"/>
+                <rect x="8" y="8" width="464" height="344" fill="none" stroke="#a0aec0" stroke-width="2" stroke-dasharray="8 6"/>
+                <rect x="24" y="24" width="436" height="52" fill="#4a5568"/>
+                <text x="242" y="56" text-anchor="middle" fill="#fff" font-family="ui-sans-serif,system-ui" font-size="15" font-weight="700">${title}</text>
+                <path d="M200 150 L240 190 L280 150" fill="none" stroke="#2b6cb0" stroke-width="3" stroke-linecap="round"/>
+                <line x1="240" y1="190" x2="240" y2="250" stroke="#2b6cb0" stroke-width="3" stroke-linecap="round"/>
+                <rect x="210" y="250" width="60" height="40" rx="4" fill="none" stroke="#2b6cb0" stroke-width="2"/>
+                <text x="240" y="218" text-anchor="middle" fill="#2b6cb0" font-family="ui-monospace,monospace" font-size="22">↓</text>
+                <text x="32" y="310" fill="#2d3748" font-family="ui-monospace,monospace" font-size="11">IMPA ${code} · ${id}</text>
+                <text x="32" y="328" fill="#4a5568" font-family="ui-sans-serif,system-ui" font-size="10">${name}</text>
             </svg>
-            <p class="impa-detail-plate-fallback-msg">No catalog plate on file for this IMPA code.</p>`;
+            <p class="impa-detail-plate-fallback-msg">${subtitle}</p>`;
+    }
+
+    function platePlaceholderHtml(item) {
+        return platePendingHtml(item, resolvePlateId(item), 'missing');
+    }
+
+    function revokePlateObjectUrl() {
+        if (_plateObjectUrl) {
+            URL.revokeObjectURL(_plateObjectUrl);
+            _plateObjectUrl = null;
+        }
+    }
+
+    function showPlatePending(item, img, fallback, zoomBtn, fsImg, plateId, reason) {
+        const viewport = document.getElementById('impaDetailPlateViewport');
+        viewport?.classList.remove('has-photo', 'is-loading');
+        revokePlateObjectUrl();
+        if (img) {
+            img.hidden = true;
+            img.removeAttribute('src');
+        }
+        if (fallback) {
+            fallback.innerHTML = platePendingHtml(item, plateId, reason);
+            fallback.hidden = false;
+        }
+        if (zoomBtn) zoomBtn.hidden = true;
+        if (fsImg) {
+            fsImg.removeAttribute('src');
+        }
+    }
+
+    async function bindPlateImage(item) {
+        const img = document.getElementById('impaDetailPlateImg');
+        const fallback = document.getElementById('impaDetailPlateFallback');
+        const caption = document.getElementById('impaDetailPlateCaption');
+        const zoomBtn = document.getElementById('impaDetailZoomBtn');
+        const fsImg = document.getElementById('impaPlateFullscreenImg');
+        const fsTitle = document.getElementById('impaPlateFullscreenTitle');
+        const viewport = document.getElementById('impaDetailPlateViewport');
+        if (!img || !fallback) return;
+
+        const loadToken = ++_plateLoadToken;
+        _plateZoom?.reset();
+        _plateFullscreen?.reset();
+        revokePlateObjectUrl();
+
+        const plateId = resolvePlateId(item);
+        const code = item.impa_code || item.code || '';
+        if (caption) {
+            caption.textContent = plateId
+                ? `Catalog Plate · ${plateId}`
+                : 'IMPA Catalog Plate';
+        }
+        if (fsTitle) fsTitle.textContent = `${code} — ${item.name || 'Catalog plate'}`;
+
+        img.hidden = true;
+        fallback.hidden = false;
+        fallback.innerHTML = plateLoadingHtml(plateId);
+        if (zoomBtn) zoomBtn.hidden = true;
+        img.alt = `${item.name || 'IMPA item'} catalog plate`;
+        viewport?.classList.remove('has-photo');
+        viewport?.classList.add('is-loading');
+
+        if (!plateId) {
+            viewport?.classList.remove('is-loading');
+            showPlatePending(item, img, fallback, zoomBtn, fsImg, plateId, 'no-id');
+            return;
+        }
+
+        const result = await TVC_PlateImageCache.fetchPlate(plateId);
+        if (loadToken !== _plateLoadToken) return;
+
+        viewport?.classList.remove('is-loading');
+
+        if (!result.ok || !result.objectUrl) {
+            showPlatePending(item, img, fallback, zoomBtn, fsImg, plateId, result.reason);
+            return;
+        }
+
+        _plateObjectUrl = result.objectUrl;
+        const onLoaded = () => {
+            if (loadToken !== _plateLoadToken) return;
+            viewport?.classList.add('has-photo');
+            img.hidden = false;
+            fallback.hidden = true;
+            if (zoomBtn) zoomBtn.hidden = false;
+            if (fsImg) {
+                fsImg.src = result.objectUrl;
+                fsImg.alt = img.alt;
+            }
+        };
+
+        img.onload = onLoaded;
+        img.onerror = () => {
+            if (loadToken !== _plateLoadToken) return;
+            showPlatePending(item, img, fallback, zoomBtn, fsImg, plateId, 'decode-failed');
+        };
+        img.src = result.objectUrl;
+        img.loading = 'eager';
+        img.decoding = 'async';
+        if (img.complete && img.naturalWidth > 0) onLoaded();
     }
 
     function specRows(item) {
@@ -297,8 +413,8 @@ const TVC_StoreMenu = (function () {
 
         rows.push(['Category', item.category || '—']);
         rows.push(['Unit of Measure', item.unit || 'PCS']);
-        const plateNo = item.plate_no || TVC_ImpaSchema.derivePlateNo(item.impa_code || item.code);
-        if (plateNo) rows.push(['Plate Reference', plateNo]);
+        const plateId = resolvePlateId(item);
+        if (plateId) rows.push(['Plate ID', plateId]);
 
         Object.entries(specs).forEach(([key, val]) => {
             if (used.has(key) || val == null || String(val).trim() === '') return;
@@ -313,84 +429,7 @@ const TVC_StoreMenu = (function () {
     }
 
     function isPhotoPlateUrl(url) {
-        const u = String(url || '').trim();
-        if (!u) return false;
-        if (/^https?:\/\//i.test(u)) return !/\.svg(\?|#|$)/i.test(u);
-        return /\.(jpe?g|png|webp|gif|avif)(\?|#|$)/i.test(u);
-    }
-
-    function resolvePlatePhotoUrl(item) {
-        const explicit = String(item?.plate_image || '').trim();
-        if (isPhotoPlateUrl(explicit)) return explicit;
-        return '';
-    }
-
-    function showPlatePlaceholder(item, img, fallback, zoomBtn, fsImg) {
-        const viewport = document.getElementById('impaDetailPlateViewport');
-        viewport?.classList.remove('has-photo');
-        if (img) {
-            img.hidden = true;
-            img.removeAttribute('src');
-        }
-        if (fallback) {
-            fallback.innerHTML = platePlaceholderHtml(item);
-            fallback.hidden = false;
-        }
-        if (zoomBtn) zoomBtn.hidden = true;
-        if (fsImg) fsImg.removeAttribute('src');
-    }
-
-    function bindPlateImage(item) {
-        const img = document.getElementById('impaDetailPlateImg');
-        const fallback = document.getElementById('impaDetailPlateFallback');
-        const caption = document.getElementById('impaDetailPlateCaption');
-        const zoomBtn = document.getElementById('impaDetailZoomBtn');
-        const fsImg = document.getElementById('impaPlateFullscreenImg');
-        const fsTitle = document.getElementById('impaPlateFullscreenTitle');
-        const viewport = document.getElementById('impaDetailPlateViewport');
-        if (!img || !fallback) return;
-
-        _plateZoom?.reset();
-        _plateFullscreen?.reset();
-
-        const plateNo = item.plate_no || TVC_ImpaSchema.derivePlateNo(item.impa_code || item.code);
-        const code = item.impa_code || item.code || '';
-        const photoUrl = resolvePlatePhotoUrl(item);
-        if (caption) {
-            caption.textContent = photoUrl
-                ? `Catalog Photo · ${plateNo || code}`
-                : (plateNo ? `IMPA Catalog Plate · ${plateNo}` : 'IMPA Catalog Plate');
-        }
-        if (fsTitle) fsTitle.textContent = `${code} — ${item.name || 'Catalog plate'}`;
-
-        img.hidden = true;
-        fallback.hidden = true;
-        fallback.innerHTML = '';
-        if (zoomBtn) zoomBtn.hidden = true;
-        img.alt = `${item.name || 'IMPA item'} catalog plate`;
-        viewport?.classList.remove('has-photo');
-
-        const onLoaded = src => {
-            viewport?.classList.add('has-photo');
-            img.hidden = false;
-            fallback.hidden = true;
-            if (zoomBtn) zoomBtn.hidden = false;
-            if (fsImg) {
-                fsImg.src = src;
-                fsImg.alt = img.alt;
-            }
-        };
-
-        if (!photoUrl) {
-            showPlatePlaceholder(item, img, fallback, zoomBtn, fsImg);
-            return;
-        }
-
-        img.onload = () => onLoaded(photoUrl);
-        img.onerror = () => showPlatePlaceholder(item, img, fallback, zoomBtn, fsImg);
-        img.src = photoUrl;
-        img.loading = 'eager';
-        img.decoding = 'async';
+        return /^blob:/i.test(String(url || ''));
     }
 
     function openPlateFullscreen() {
@@ -440,6 +479,8 @@ const TVC_StoreMenu = (function () {
 
     function closeImpaDetailModal() {
         closePlateFullscreen();
+        _plateLoadToken += 1;
+        revokePlateObjectUrl();
         document.getElementById('impaDetailModal')?.classList.add('hidden');
         _currentItem = null;
         _plateZoom?.reset();

@@ -6,9 +6,8 @@ export type ImpaSeedItem = {
   unit: string;
   category: string;
   rob: number;
+  plate_id: string;
   plate_no: string;
-  plate_image: string;
-  catalog_page: string;
   specs: Record<string, string>;
 };
 
@@ -20,9 +19,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "COIL",
     "category": "Rigging",
     "rob": 4,
+    "plate_id": "PL-33-01",
     "plate_no": "PL-33-01",
-    "plate_image": "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1600&q=90&auto=format&fit=crop",
-    "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Rigging",
@@ -39,9 +37,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "MTR",
     "category": "Rigging",
     "rob": 120,
+    "plate_id": "PL-33-01",
     "plate_no": "PL-33-01",
-    "plate_image": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1600&q=90&auto=format&fit=crop",
-    "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Rigging",
@@ -58,9 +55,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Rigging",
     "rob": 12,
+    "plate_id": "PL-33-02",
     "plate_no": "PL-33-02",
-    "plate_image": "https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=1600&q=90&auto=format&fit=crop",
-    "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Rigging",
@@ -77,9 +73,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "LTR",
     "category": "Paint",
     "rob": 80,
+    "plate_id": "PL-33-03",
     "plate_no": "PL-33-03",
-    "plate_image": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=1600&q=90&auto=format&fit=crop",
-    "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Paint",
@@ -98,9 +93,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "LTR",
     "category": "Paint",
     "rob": 45,
+    "plate_id": "PL-33-03",
     "plate_no": "PL-33-03",
-    "plate_image": "https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=1600&q=90&auto=format&fit=crop",
-    "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Paint",
@@ -119,9 +113,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Paint",
     "rob": 24,
+    "plate_id": "PL-33-04",
     "plate_no": "PL-33-04",
-    "plate_image": "https://images.unsplash.com/photo-1628177142898-93e36e4e3a50?w=1600&q=90&auto=format&fit=crop",
-    "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Paint",
@@ -140,9 +133,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "KG",
     "category": "Lubricants",
     "rob": 36,
+    "plate_id": "PL-33-05",
     "plate_no": "PL-33-05",
-    "plate_image": "/data/impa-plates/items/330501.svg",
-    "catalog_page": "/data/impa-catalog-pages/lubricants.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Lubricants",
@@ -160,9 +152,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "LTR",
     "category": "Lubricants",
     "rob": 200,
+    "plate_id": "PL-33-05",
     "plate_no": "PL-33-05",
-    "plate_image": "/data/impa-plates/items/330502.svg",
-    "catalog_page": "/data/impa-catalog-pages/lubricants.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Lubricants",
@@ -180,9 +171,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Engine",
     "rob": 6,
+    "plate_id": "PL-33-06",
     "plate_no": "PL-33-06",
-    "plate_image": "/data/impa-plates/items/330601.svg",
-    "catalog_page": "/data/impa-catalog-pages/engine.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Engine",
@@ -201,9 +191,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Engine",
     "rob": 4,
+    "plate_id": "PL-33-06",
     "plate_no": "PL-33-06",
-    "plate_image": "/data/impa-plates/items/330602.svg",
-    "catalog_page": "/data/impa-catalog-pages/engine.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Engine",
@@ -222,9 +211,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "SET",
     "category": "Engine",
     "rob": 1,
+    "plate_id": "PL-33-07",
     "plate_no": "PL-33-07",
-    "plate_image": "/data/impa-plates/items/330701.svg",
-    "catalog_page": "/data/impa-catalog-pages/engine.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Engine",
@@ -243,9 +231,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Engine",
     "rob": 3,
+    "plate_id": "PL-33-08",
     "plate_no": "PL-33-08",
-    "plate_image": "/data/impa-plates/items/330801.svg",
-    "catalog_page": "/data/impa-catalog-pages/engine.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Engine",
@@ -264,9 +251,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Safety",
     "rob": 18,
+    "plate_id": "PL-33-09",
     "plate_no": "PL-33-09",
-    "plate_image": "/data/impa-plates/items/330901.svg",
-    "catalog_page": "/data/impa-catalog-pages/safety.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Safety",
@@ -284,9 +270,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PR",
     "category": "Safety",
     "rob": 30,
+    "plate_id": "PL-33-09",
     "plate_no": "PL-33-09",
-    "plate_image": "/data/impa-plates/items/330902.svg",
-    "catalog_page": "/data/impa-catalog-pages/safety.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Safety",
@@ -304,9 +289,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Safety",
     "rob": 28,
+    "plate_id": "PL-33-10",
     "plate_no": "PL-33-10",
-    "plate_image": "/data/impa-plates/items/331001.svg",
-    "catalog_page": "/data/impa-catalog-pages/safety.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Safety",
@@ -324,9 +308,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Safety",
     "rob": 8,
+    "plate_id": "PL-33-11",
     "plate_no": "PL-33-11",
-    "plate_image": "/data/impa-plates/items/331101.svg",
-    "catalog_page": "/data/impa-catalog-pages/safety.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Safety",
@@ -344,9 +327,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Piping",
     "rob": 5,
+    "plate_id": "PL-33-12",
     "plate_no": "PL-33-12",
-    "plate_image": "/data/impa-plates/items/331201.svg",
-    "catalog_page": "/data/impa-catalog-pages/piping.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Piping",
@@ -364,9 +346,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Piping",
     "rob": 4,
+    "plate_id": "PL-33-12",
     "plate_no": "PL-33-12",
-    "plate_image": "/data/impa-plates/items/331202.svg",
-    "catalog_page": "/data/impa-catalog-pages/piping.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Piping",
@@ -384,9 +365,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Fasteners",
     "rob": 150,
+    "plate_id": "PL-33-13",
     "plate_no": "PL-33-13",
-    "plate_image": "/data/impa-plates/items/331301.svg",
-    "catalog_page": "/data/impa-catalog-pages/fasteners.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Fasteners",
@@ -404,9 +384,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Fasteners",
     "rob": 160,
+    "plate_id": "PL-33-13",
     "plate_no": "PL-33-13",
-    "plate_image": "/data/impa-plates/items/331302.svg",
-    "catalog_page": "/data/impa-catalog-pages/fasteners.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Fasteners",
@@ -424,9 +403,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "MTR",
     "category": "Electrical",
     "rob": 250,
+    "plate_id": "PL-33-14",
     "plate_no": "PL-33-14",
-    "plate_image": "/data/impa-plates/items/331401.svg",
-    "catalog_page": "/data/impa-catalog-pages/electrical.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Electrical",
@@ -445,9 +423,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "PCS",
     "category": "Electrical",
     "rob": 20,
+    "plate_id": "PL-33-14",
     "plate_no": "PL-33-14",
-    "plate_image": "/data/impa-plates/items/331402.svg",
-    "catalog_page": "/data/impa-catalog-pages/electrical.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Electrical",
@@ -466,9 +443,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "LTR",
     "category": "Cleaning",
     "rob": 60,
+    "plate_id": "PL-33-15",
     "plate_no": "PL-33-15",
-    "plate_image": "/data/impa-plates/items/331501.svg",
-    "catalog_page": "/data/impa-catalog-pages/cleaning.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Cleaning",
@@ -486,9 +462,8 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "unit": "KG",
     "category": "Cleaning",
     "rob": 25,
+    "plate_id": "PL-33-15",
     "plate_no": "PL-33-15",
-    "plate_image": "/data/impa-plates/items/331502.svg",
-    "catalog_page": "/data/impa-catalog-pages/cleaning.svg",
     "specs": {
       "IMPA Edition": "7th",
       "Catalog Section": "Cleaning",

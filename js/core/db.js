@@ -449,9 +449,17 @@ const TVC_DB = (function () {
         try { window.TVC_WebCloudState?.notifyLocalWrite?.(storeName); } catch (_) {}
     }
 
+    function prepareStoreRecord(storeName, value) {
+        if (storeName === 'impa_master' && typeof TVC_ImpaSchema?.sanitizeImpaForDb === 'function') {
+            return TVC_ImpaSchema.sanitizeImpaForDb(value);
+        }
+        return value;
+    }
+
     function put(storeName, value) {
+        const record = prepareStoreRecord(storeName, value);
         return open().then(() => new Promise((resolve, reject) => {
-            const r = tx(storeName, 'readwrite').objectStore(storeName).put(value);
+            const r = tx(storeName, 'readwrite').objectStore(storeName).put(record);
             r.onsuccess = () => {
                 notifyWebCloudWrite(storeName);
                 resolve(r.result);
@@ -472,10 +480,11 @@ const TVC_DB = (function () {
         return open().then(() => new Promise((resolve, reject) => {
             const t = tx(storeName, 'readwrite');
             const store = t.objectStore(storeName);
-            values.forEach(v => store.put(v));
+            const prepared = values.map(v => prepareStoreRecord(storeName, v));
+            prepared.forEach(v => store.put(v));
             t.oncomplete = () => {
                 notifyWebCloudWrite(storeName);
-                resolve(values.length);
+                resolve(prepared.length);
             };
             t.onerror = () => reject(t.error);
         }));

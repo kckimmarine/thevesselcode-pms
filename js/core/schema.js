@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 14, // v14: impa_master search indexes (code_prefix, name_lower, composite)
+    DB_VERSION: 15, // v15: impa_master plate_id only (no image blobs in IDB)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -117,6 +117,7 @@ const TVC_SCHEMA = {
             { name: 'by_code_prefix', keyPath: 'code_prefix' },
             { name: 'by_prefix_name', keyPath: ['code_prefix', 'name_lower'] },
             { name: 'by_plate_no', keyPath: 'plate_no' },
+            { name: 'by_plate_id', keyPath: 'plate_id' },
         ],
     },
 };
@@ -151,6 +152,7 @@ const TVC_META_KEYS = {
     SPARE_MASTER_RESTORE_LAST: 'spare_master_restore_last',
     IMPA_CATALOG_SEED: 'impa_catalog_seed_v1',
     IMPA_CATALOG_PHOTOS: 'impa_catalog_photos_v1',
+    IMPA_PLATE_PIPELINE: 'impa_plate_pipeline_v1',
     IMPA_CATALOG_COUNT: 'impa_catalog_count_v1',
     IMPA_SEARCH_BACKFILL: 'impa_search_backfill_v1',
 };
@@ -1344,11 +1346,13 @@ const TVC_WorkPermit = (function () {
 
 /**
  * ImpaMaster — impa_master (STORE tab IMPA catalog)
- * catalog_page: catalog plate image URL/path
- * specs: optional key-value specification object
+ * plate_id: catalog plate identifier only (e.g. PL-33-01) — no image binary in IDB
+ * specs: optional key-value specification object (text only)
  */
 const TVC_ImpaSchema = (function () {
-    const SCHEMA_VERSION = 1;
+    const SCHEMA_VERSION = 2;
+    const PLATE_ASSET_BASE = '/data/plates';
+    const PLATE_ID_PATTERN = /^PL-\d{2}-\d{2}$/;
 
     function normalizeCode(v) {
         return String(v || '').trim();
@@ -1363,12 +1367,70 @@ const TVC_ImpaSchema = (function () {
         name: ['name', 'description', 'itemname', 'item_name', 'desc', 'title', 'productname'],
         unit: ['unit', 'uom', 'unitofmeasure', 'unit_of_measure', 'measure'],
         category: ['category', 'cat', 'group', 'section', 'department', 'class'],
-        plate_no: ['plate_no', 'plateno', 'plate', 'plateref', 'catalogplate'],
-        plate_image: ['plate_image', 'plateimage', 'plate_url', 'plateurl'],
-        catalog_page: ['catalog_page', 'catalogpage', 'image', 'imageurl', 'img'],
+        plate_id: ['plate_id', 'plateid', 'plate_no', 'plateno', 'plate', 'plateref', 'catalogplate'],
         rob: ['rob', 'qty', 'quantity', 'stock', 'onboard'],
         spec: ['spec', 'specs', 'specification', 'dimensions'],
     };
+
+    /** Strip image URLs / base64 from impa_master before IndexedDB write */
+    const IMPA_STRIP_FIELDS = new Set([
+        'plate_image', 'plateimage', 'catalog_page', 'catalogpage',
+        'image', 'imageurl', 'img', 'image_data', 'plate_image_data', 'thumbnail', 'photo',
+    ]);
+
+    function isLikelyBase64Image(val) {
+        const s = String(val || '').trim();
+        if (!s) return false;
+        if (/^data:image\//i.test(s)) return true;
+        return s.length > 2048 && /^[A-Za-z0-9+/=\r\n]+$/.test(s);
+    }
+
+    function derivePlateId(impa_code, explicit) {
+        const raw = String(explicit ?? '').trim();
+        if (raw && PLATE_ID_PATTERN.test(raw)) return raw;
+        if (raw) {
+            const cleaned = raw.replace(/\s+/g, '').toUpperCase();
+            if (PLATE_ID_PATTERN.test(cleaned)) return cleaned;
+        }
+        const c = normalizeCode(impa_code).replace(/\D/g, '').padStart(6, '0');
+        if (c.length < 4) return '';
+        return `PL-${c.slice(0, 2)}-${c.slice(2, 4)}`;
+    }
+
+    function normalizePlateId(explicit, impa_code) {
+        if (explicit != null && String(explicit).trim() !== '') {
+            return derivePlateId(impa_code, explicit);
+        }
+        if (impa_code && PLATE_ID_PATTERN.test(String(impa_code).trim())) {
+            return String(impa_code).trim();
+        }
+        return derivePlateId(impa_code);
+    }
+
+    function derivePlateNo(impa_code, explicit) {
+        return derivePlateId(impa_code, explicit);
+    }
+
+    function resolvePlateAssetUrl(plateId) {
+        const id = normalizePlateId(plateId, plateId);
+        if (!id || !PLATE_ID_PATTERN.test(id)) return '';
+        return `${PLATE_ASSET_BASE}/${id}.webp`;
+    }
+
+    function sanitizeImpaForDb(row) {
+        if (!row || typeof row !== 'object') return row;
+        const out = {};
+        Object.entries(row).forEach(([k, v]) => {
+            const nk = normalizeKey(k);
+            if (IMPA_STRIP_FIELDS.has(nk)) return;
+            if (typeof v === 'string' && isLikelyBase64Image(v)) return;
+            out[k] = v;
+        });
+        const enriched = enrichDbFields(out);
+        delete enriched.plate_image;
+        delete enriched.catalog_page;
+        return enriched;
+    }
 
     function pickField(row, aliases) {
         if (!row || typeof row !== 'object') return '';
@@ -1402,8 +1464,7 @@ const TVC_ImpaSchema = (function () {
                 ...FIELD_ALIASES.name,
                 ...FIELD_ALIASES.unit,
                 ...FIELD_ALIASES.category,
-                ...FIELD_ALIASES.catalog_page,
-                ...FIELD_ALIASES.plate_no,
+                ...FIELD_ALIASES.plate_id,
                 ...FIELD_ALIASES.rob,
             ].map(normalizeKey));
             if (reserved.has(nk)) return;
@@ -1413,94 +1474,72 @@ const TVC_ImpaSchema = (function () {
         return specs;
     }
 
-    const PLATE_IMAGE_BASE = '/data/impa-plates';
-
-    function derivePlateNo(impa_code, explicit) {
-        const explicitPlate = String(explicit || '').trim();
-        if (explicitPlate) return explicitPlate;
-        const c = normalizeCode(impa_code).replace(/\D/g, '').padStart(6, '0');
-        if (c.length < 4) return '';
-        return `PL-${c.slice(0, 2)}-${c.slice(2, 4)}`;
-    }
-
-    function resolvePlateImageUrl(item) {
-        const explicit = String(item?.plate_image || '').trim();
-        if (explicit) return explicit;
-        const plateNo = String(item?.plate_no || '').trim();
-        if (plateNo) {
-            return `${PLATE_IMAGE_BASE}/${plateNo}.svg`;
-        }
-        const page = String(item?.catalog_page || '').trim();
-        return page;
-    }
-
     function enrichDbFields(row) {
         const impa_code = normalizeCode(row.impa_code || row.code);
         const padded = impa_code.replace(/\D/g, '').padStart(6, '0');
-        const plate_no = derivePlateNo(impa_code, row.plate_no);
+        const plate_id = normalizePlateId(row.plate_id || row.plate_no, impa_code);
         return {
             ...row,
             impa_code,
             code_prefix: padded.slice(0, 2),
             name_lower: String(row.name || '').toLowerCase(),
-            plate_no,
+            plate_id,
+            plate_no: plate_id,
         };
     }
 
-    /** External CSV/JSON row → TVC-PMS impa_master fields */
+    /** External CSV/JSON row → TVC-PMS impa_master fields (text metadata only) */
     function normalizeImpaRow(row) {
         if (!row || typeof row !== 'object') return null;
         const impa_code = normalizeCode(pickField(row, FIELD_ALIASES.impa_code));
         if (!impa_code) return null;
         const specRaw = pickField(row, FIELD_ALIASES.spec) || row.specs;
-        const plateRaw = pickField(row, FIELD_ALIASES.plate_no) || row.plate_no;
-        const plateImage = String(pickField(row, FIELD_ALIASES.plate_image) || row.plate_image || '').trim();
-        const base = {
+        const plateRaw = pickField(row, FIELD_ALIASES.plate_id) || row.plate_id || row.plate_no;
+        const base = sanitizeImpaForDb({
             impa_code,
             name: String(pickField(row, FIELD_ALIASES.name) || impa_code).trim(),
             unit: String(pickField(row, FIELD_ALIASES.unit) || 'PCS').trim() || 'PCS',
             category: String(pickField(row, FIELD_ALIASES.category) || 'General').trim() || 'General',
-            catalog_page: String(pickField(row, FIELD_ALIASES.catalog_page) || '').trim(),
-            plate_no: derivePlateNo(impa_code, plateRaw),
-            plate_image: plateImage,
+            plate_id: normalizePlateId(plateRaw, impa_code),
             specs: parseSpecsValue(specRaw, row),
             rob: Math.max(0, Math.floor(Number(pickField(row, FIELD_ALIASES.rob)) || 0)),
-        };
-        return enrichDbFields(base);
+        });
+        return base;
     }
 
     function fromCatalogJson(item) {
         const normalized = normalizeImpaRow(item);
         if (!normalized?.impa_code) return null;
-        return {
+        return sanitizeImpaForDb({
             ...normalized,
             schema_version: SCHEMA_VERSION,
             sync_status: 'LOCAL',
             updated_at: new Date().toISOString(),
-        };
+        });
     }
 
     function toUi(row) {
         if (!row) return null;
         const enriched = enrichDbFields(row);
         const impa_code = enriched.impa_code;
+        const plate_id = enriched.plate_id || enriched.plate_no || '';
         return {
             impa_code,
             code: impa_code,
             name: enriched.name || '',
             unit: enriched.unit || 'PCS',
             category: enriched.category || '',
-            plate_no: enriched.plate_no || '',
-            catalog_page: enriched.catalog_page || '',
-            plate_image: String(enriched.plate_image || '').trim() || resolvePlateImageUrl(enriched),
+            plate_id,
+            plate_no: plate_id,
             specs: enriched.specs && typeof enriched.specs === 'object' ? { ...enriched.specs } : {},
             rob: Math.max(0, Math.floor(Number(enriched.rob) || 0)),
         };
     }
 
     return {
-        SCHEMA_VERSION, fromCatalogJson, toUi, normalizeCode, normalizeImpaRow, normalizeKey,
-        derivePlateNo, resolvePlateImageUrl, enrichDbFields, PLATE_IMAGE_BASE,
+        SCHEMA_VERSION, fromCatalogJson, toUi, normalizeCode, normalizeKey, normalizeImpaRow,
+        derivePlateId, derivePlateNo, normalizePlateId, resolvePlateAssetUrl, sanitizeImpaForDb,
+        enrichDbFields, PLATE_ASSET_BASE, isLikelyBase64Image,
     };
 })();
 

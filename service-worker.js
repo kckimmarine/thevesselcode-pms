@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260906-impa-modal';
+const CACHE_VERSION = 'tvc-pms-20260906-plate-pipeline';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -43,24 +43,7 @@ const PRECACHE_ASSETS = [
     '/data/impa-catalog-pages/fasteners.svg',
     '/data/impa-catalog-pages/electrical.svg',
     '/data/impa-catalog-pages/cleaning.svg',
-    '/data/impa-plates/PL-33-01.svg',
-    '/data/impa-plates/PL-33-02.svg',
-    '/data/impa-plates/PL-33-03.svg',
-    '/data/impa-plates/PL-33-04.svg',
-    '/data/impa-plates/PL-33-05.svg',
-    '/data/impa-plates/PL-33-06.svg',
-    '/data/impa-plates/PL-33-07.svg',
-    '/data/impa-plates/PL-33-08.svg',
-    '/data/impa-plates/PL-33-09.svg',
-    '/data/impa-plates/PL-33-10.svg',
-    '/data/impa-plates/PL-33-11.svg',
-    '/data/impa-plates/PL-33-12.svg',
-    '/data/impa-plates/PL-33-13.svg',
-    '/data/impa-plates/PL-33-14.svg',
-    '/data/impa-plates/PL-33-15.svg',
-    '/data/impa-plates/items/330101.svg',
-    '/data/impa-plates/items/330301.svg',
-    '/data/impa-plates/items/331401.svg',
+    '/js/services/plateImageCache.js',
     '/js/ui/spareRequest.js',
     '/js/services/jobMeta.js',
     '/js/services/inventory.js',
@@ -89,7 +72,7 @@ const PRECACHE_ASSETS = [
     '/js/app.js',
 ];
 
-const OFFLINE_EXTENSIONS = ['.js', '.css', '.json', '.svg', '.woff', '.woff2'];
+const OFFLINE_EXTENSIONS = ['.js', '.css', '.json', '.svg', '.webp', '.woff', '.woff2'];
 
 function isSameOrigin(url) {
     return url.origin === self.location.origin;
