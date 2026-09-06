@@ -1,6 +1,9 @@
 /* THE VESSEL CODE — Auth (IndexedDB users + session) */
 const TVC_Auth = (function () {
     const SESSION_KEY = 'tvc_session_v2';
+    const SAVED_ID_KEY = 'tvc_saved_id';
+    const AUTH_SESSION_KEY = 'tvc_auth_session';
+    const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     const DEMO_PASSWORD = '0000';
     const USERS_SEED_VERSION = 14;
 
@@ -216,8 +219,136 @@ const TVC_Auth = (function () {
         return { ok: true, user: session };
     }
 
+    function getSavedId() {
+        try { return localStorage.getItem(SAVED_ID_KEY) || ''; } catch { return ''; }
+    }
+
+    function setSavedId(userId) {
+        const id = String(userId || '').trim();
+        if (!id) return;
+        try { localStorage.setItem(SAVED_ID_KEY, id); } catch { /* ignore */ }
+    }
+
+    function clearSavedId() {
+        try { localStorage.removeItem(SAVED_ID_KEY); } catch { /* ignore */ }
+    }
+
+    function hasPersistedAuthSession() {
+        try { return !!localStorage.getItem(AUTH_SESSION_KEY); } catch { return false; }
+    }
+
+    function savePersistedAuthSession(session) {
+        if (!session?.username) return;
+        try {
+            localStorage.setItem(AUTH_SESSION_KEY, JSON.stringify({
+                userId: session.username,
+                role: session.role,
+                timestamp: Date.now(),
+                loginMode: session.login_mode || null,
+            }));
+        } catch { /* ignore */ }
+    }
+
+    function clearPersistedAuthSession() {
+        try { localStorage.removeItem(AUTH_SESSION_KEY); } catch { /* ignore */ }
+    }
+
+    function applySavedIdToLoginForm() {
+        const savedId = getSavedId();
+        const userInput = document.getElementById('loginUser');
+        const rememberCb = document.getElementById('loginRememberId');
+        const autoCb = document.getElementById('loginAutoLogin');
+        if (savedId && userInput) {
+            userInput.value = savedId;
+            if (rememberCb) rememberCb.checked = true;
+        }
+        if (hasPersistedAuthSession() && autoCb) autoCb.checked = true;
+    }
+
+    async function restorePersistedAuthSession() {
+        if (getCurrentUser()) return getCurrentUser();
+        let data;
+        try {
+            const raw = localStorage.getItem(AUTH_SESSION_KEY);
+            if (!raw) return null;
+            data = JSON.parse(raw);
+        } catch {
+            clearPersistedAuthSession();
+            return null;
+        }
+        const userId = String(data?.userId || '').trim();
+        if (!userId || !data?.timestamp) {
+            clearPersistedAuthSession();
+            return null;
+        }
+        if (Date.now() - Number(data.timestamp) > AUTH_SESSION_TTL_MS) {
+            clearPersistedAuthSession();
+            return null;
+        }
+
+        const users = await TVC_DB.getAll('users');
+        const template = DEFAULT_USERS.find(u => u.username === userId);
+        const user = template
+            ? (users.find(u => u.id === template.id && u.is_active)
+                || users.find(u => u.username === template.username && u.is_active))
+            : users.find(u => u.username === userId && u.is_active);
+        if (!user) {
+            clearPersistedAuthSession();
+            return null;
+        }
+
+        const sessionRole = user.role || (window.TVC_RBAC?.resolveUserRole?.(user));
+        const loginMode = data.loginMode ? String(data.loginMode) : '';
+
+        if (typeof TVC_License !== 'undefined') {
+            await TVC_License.refresh();
+            const licCheck = TVC_License.assertLoginMode(loginMode, user.account_type);
+            if (!licCheck.ok) {
+                clearPersistedAuthSession();
+                return null;
+            }
+        }
+
+        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
+            const session = {
+                id: user.id, username: user.username, display_name: user.display_name,
+                account_type: user.account_type, role: sessionRole,
+                department: null, vessel_id: user.vessel_id, company_id: user.company_id || null,
+                station: null, login_mode: null,
+            };
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+            return session;
+        }
+
+        if (!loginMode) {
+            clearPersistedAuthSession();
+            return null;
+        }
+
+        let station = null;
+        if (typeof TVC_Space !== 'undefined') {
+            const spaceCheck = TVC_Space.validateLogin(user, loginMode);
+            if (!spaceCheck.ok) {
+                clearPersistedAuthSession();
+                return null;
+            }
+            station = spaceCheck.station;
+        }
+
+        const session = {
+            id: user.id, username: user.username, display_name: user.display_name,
+            account_type: user.account_type, role: sessionRole,
+            department: user.department, vessel_id: user.vessel_id,
+            company_id: user.company_id || null,
+            station: station || null, login_mode: loginMode || null,
+        };
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        return session;
+    }
+
     function logout() {
         sessionStorage.removeItem(SESSION_KEY);
+        clearPersistedAuthSession();
     }
 
     async function changePassword(userId, currentPassword, newPassword) {
@@ -259,5 +390,10 @@ const TVC_Auth = (function () {
         return user;
     }
 
-    return { initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, changePassword, upsertProvisionedUser, hashPasswordForProvision, DEMO_PASSWORD, DEFAULT_USERS };
+    return {
+        initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, changePassword,
+        upsertProvisionedUser, hashPasswordForProvision, DEMO_PASSWORD, DEFAULT_USERS,
+        getSavedId, setSavedId, clearSavedId, savePersistedAuthSession, clearPersistedAuthSession,
+        hasPersistedAuthSession, applySavedIdToLoginForm, restorePersistedAuthSession,
+    };
 })();

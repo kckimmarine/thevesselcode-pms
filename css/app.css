@@ -150,6 +150,28 @@ body {
 }
 
 .login-form { display: flex; flex-direction: column; gap: 0; }
+.login-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    margin: 0 0 18px;
+}
+.login-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: #4a5568;
+    cursor: pointer;
+    user-select: none;
+}
+.login-check input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    accent-color: var(--navy);
+    cursor: pointer;
+}
 .login-field { margin-bottom: 18px; }
 .login-field label {
     display: block;

@@ -413,6 +413,8 @@ const TVC_App = (function () {
                 }
             } catch (e) { console.warn('[TVC] provisioned accounts sync', e); }
 
+            try { TVC_Auth.applySavedIdToLoginForm(); } catch (e) { console.warn('[TVC] saved login id', e); }
+
             ['loginUser', 'loginPass', 'loginDept'].forEach(id => {
                 document.getElementById(id)?.addEventListener('keydown', e => {
                     if (e.key === 'Enter') handleLogin();
@@ -422,7 +424,13 @@ const TVC_App = (function () {
             bindTabSearchClearInputs();
             try { TVC_ListFilters?.init(); } catch (e) { console.error('[TVC] ListFilters init', e); }
 
-        const sessionUser = await TVC_Auth.refreshSessionFromDb();
+        let sessionUser = await TVC_Auth.refreshSessionFromDb();
+            if (!sessionUser) {
+                try {
+                    await TVC_Auth.restorePersistedAuthSession();
+                    sessionUser = await TVC_Auth.refreshSessionFromDb();
+                } catch (e) { console.warn('[TVC] persisted auth restore', e); }
+            }
             try {
                 TVC_RunHours.init({
                     getState: () => state,
@@ -17685,8 +17693,16 @@ const TVC_App = (function () {
             );
             if (errEl) errEl.textContent = r.ok ? '' : (r.error || 'Sign in failed');
             if (r.ok) {
+                const rememberId = document.getElementById('loginRememberId')?.checked;
+                const autoLogin = document.getElementById('loginAutoLogin')?.checked;
+                const userId = document.getElementById('loginUser')?.value?.trim() || '';
+                if (rememberId) TVC_Auth.setSavedId(userId);
+                else TVC_Auth.clearSavedId();
                 const refreshed = await TVC_Auth.refreshSessionFromDb();
-                await onLogin(refreshed || r.user);
+                const session = refreshed || r.user;
+                if (autoLogin) TVC_Auth.savePersistedAuthSession(session);
+                else TVC_Auth.clearPersistedAuthSession();
+                await onLogin(session);
             }
         } catch (e) {
             console.error('[TVC] login failed', e);
