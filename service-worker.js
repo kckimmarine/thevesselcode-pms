@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260906-store-tab';
+const CACHE_VERSION = 'tvc-pms-20260906-impa-detail-modal';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -33,6 +33,15 @@ const PRECACHE_ASSETS = [
     '/js/ui/storeMenu.js',
     '/js/store-tab-init.js',
     '/data/impa-catalog.json',
+    '/data/impa-catalog-pages/rigging.svg',
+    '/data/impa-catalog-pages/paint.svg',
+    '/data/impa-catalog-pages/lubricants.svg',
+    '/data/impa-catalog-pages/engine.svg',
+    '/data/impa-catalog-pages/safety.svg',
+    '/data/impa-catalog-pages/piping.svg',
+    '/data/impa-catalog-pages/fasteners.svg',
+    '/data/impa-catalog-pages/electrical.svg',
+    '/data/impa-catalog-pages/cleaning.svg',
     '/js/ui/spareRequest.js',
     '/js/services/jobMeta.js',
     '/js/services/inventory.js',

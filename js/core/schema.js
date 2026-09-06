@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 12, // v12: vessel_documents (HQ Ship List — per-vessel attachments)
+    DB_VERSION: 13, // v13: impa_master (STORE tab — IMPA catalog)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -30,6 +30,7 @@ const TVC_SCHEMA = {
         defect_cases: { keyPath: 'id' },                   // Defect Report Case
         work_permits: { keyPath: 'id' },                   // Critical Equipment Work Permit
         vessel_documents: { keyPath: 'id' },               // HQ vessel documents (attachments)
+        impa_master: { keyPath: 'impa_code' },             // IMPA ship stores catalog (STORE tab)
     },
     INDEXES: {
         users: [{ name: 'username', keyPath: 'username', unique: true }],
@@ -109,6 +110,10 @@ const TVC_SCHEMA = {
             { name: 'by_vessel', keyPath: 'vessel_id' },
             { name: 'by_company', keyPath: 'company_id' },
         ],
+        impa_master: [
+            { name: 'by_category', keyPath: 'category' },
+            { name: 'by_name', keyPath: 'name' },
+        ],
     },
 };
 
@@ -140,6 +145,7 @@ const TVC_META_KEYS = {
     PMS_MASTER_RESTORE_LAST: 'pms_master_restore_last',
     SPARE_MASTER_BACKUP_LAST: 'spare_master_backup_last',
     SPARE_MASTER_RESTORE_LAST: 'spare_master_restore_last',
+    IMPA_CATALOG_SEED: 'impa_catalog_seed_v1',
 };
 
 function pmsMasterCanonicalMetaKey(vesselId, department) {
@@ -1327,6 +1333,54 @@ const TVC_WorkPermit = (function () {
         isHqReplyStationForwardPending, stampHqReplyStationForwarded,
         canModifyListWorkflow, canDeleteListWorkflow, belongsToDepartment,
     };
+})();
+
+/**
+ * ImpaMaster — impa_master (STORE tab IMPA catalog)
+ * catalog_page: catalog plate image URL/path
+ * specs: optional key-value specification object
+ */
+const TVC_ImpaSchema = (function () {
+    const SCHEMA_VERSION = 1;
+
+    function normalizeCode(v) {
+        return String(v || '').trim();
+    }
+
+    function fromCatalogJson(item) {
+        const impa_code = normalizeCode(item.impa_code || item.code);
+        return {
+            impa_code,
+            name: String(item.name || '').trim(),
+            unit: String(item.unit || 'PCS').trim() || 'PCS',
+            category: String(item.category || 'General').trim() || 'General',
+            catalog_page: String(item.catalog_page || '').trim(),
+            specs: (item.specs && typeof item.specs === 'object' && !Array.isArray(item.specs))
+                ? { ...item.specs }
+                : {},
+            rob: Math.max(0, Math.floor(Number(item.rob) || 0)),
+            schema_version: SCHEMA_VERSION,
+            sync_status: 'LOCAL',
+            updated_at: new Date().toISOString(),
+        };
+    }
+
+    function toUi(row) {
+        if (!row) return null;
+        const impa_code = normalizeCode(row.impa_code || row.code);
+        return {
+            impa_code,
+            code: impa_code,
+            name: row.name || '',
+            unit: row.unit || 'PCS',
+            category: row.category || '',
+            catalog_page: row.catalog_page || '',
+            specs: row.specs && typeof row.specs === 'object' ? { ...row.specs } : {},
+            rob: Math.max(0, Math.floor(Number(row.rob) || 0)),
+        };
+    }
+
+    return { SCHEMA_VERSION, fromCatalogJson, toUi, normalizeCode };
 })();
 
 /** 실행 환경 (file:// vs http:// vs Electron tvc-app://) */
