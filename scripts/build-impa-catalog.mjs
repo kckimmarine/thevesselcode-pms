@@ -1,5 +1,5 @@
 /**
- * Build enriched IMPA catalog JSON + category catalog-page SVGs.
+ * Build enriched IMPA catalog JSON + category catalog-page SVGs + plate_no assets.
  * Run: node scripts/build-impa-catalog.mjs
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, '..');
 const pagesDir = join(root, 'data/impa-catalog-pages');
+const platesDir = join(root, 'data/impa-plates');
 
 const CATEGORY_PAGE = {
   Rigging: 'rigging.svg',
@@ -49,38 +50,45 @@ const BASE = [
   { code: '331502', name: 'Rag Cotton Industrial', unit: 'KG', category: 'Cleaning', rob: 25 },
 ];
 
+function derivePlateNo(code) {
+  const c = String(code || '').replace(/\D/g, '').padStart(6, '0');
+  if (c.length < 4) return '';
+  return `PL-${c.slice(0, 2)}-${c.slice(2, 4)}`;
+}
+
 function specsFor(item) {
   const cat = item.category;
   const common = { 'IMPA Edition': '7th', 'Catalog Section': cat };
   if (cat === 'Rigging') {
-    return { ...common, 'Material': item.name.includes('Wire') ? 'Galvanized steel' : 'Manila hemp', 'Standard': 'ISO 1140 / ISO 2408' };
+    return { ...common, Material: item.name.includes('Wire') ? 'Galvanized steel' : 'Manila hemp', Standard: 'ISO 1140 / ISO 2408' };
   }
   if (cat === 'Paint') {
-    return { ...common, 'Finish': item.name.includes('Antifouling') ? 'Matte antifouling' : 'Epoxy primer', 'Coverage': '8–10 m²/L', 'VOC': '< 400 g/L' };
+    return { ...common, Finish: item.name.includes('Antifouling') ? 'Matte antifouling' : 'Epoxy primer', Coverage: '8–10 m²/L', VOC: '< 400 g/L' };
   }
   if (cat === 'Lubricants') {
-    return { ...common, 'Grade': item.name.includes('ISO') ? 'ISO VG 46' : 'NLGI 2', 'Operating Temp': '-20°C to +120°C' };
+    return { ...common, Grade: item.name.includes('ISO') ? 'ISO VG 46' : 'NLGI 2', 'Operating Temp': '-20°C to +120°C' };
   }
   if (cat === 'Engine') {
-    return { ...common, 'Application': item.name.includes('Filter') ? 'Primary filtration' : 'OEM replacement', 'Service Interval': 'Per PMS' };
+    return { ...common, Application: item.name.includes('Filter') ? 'Primary filtration' : 'OEM replacement', 'Service Interval': 'Per PMS' };
   }
   if (cat === 'Safety') {
-    return { ...common, 'Certification': item.name.includes('SOLAS') ? 'SOLAS / MED' : 'ISO 12402', 'Colour': item.name.includes('White') ? 'White' : 'Standard' };
+    return { ...common, Certification: item.name.includes('SOLAS') ? 'SOLAS / MED' : 'ISO 12402', Colour: item.name.includes('White') ? 'White' : 'Standard' };
   }
   if (cat === 'Piping') {
     return { ...common, 'Nominal Size': 'DN50 (2")', 'Pressure Class': 'PN16', 'Body Material': 'Bronze / Steel' };
   }
   if (cat === 'Fasteners') {
-    return { ...common, 'Thread': 'M16 × 2.0', 'Length': item.name.includes('Bolt') ? '60 mm' : '—', 'Grade': '8.8 / A4-80' };
+    return { ...common, Thread: 'M16 × 2.0', Length: item.name.includes('Bolt') ? '60 mm' : '—', Grade: '8.8 / A4-80' };
   }
   if (cat === 'Electrical') {
-    return { ...common, 'Voltage': '220 V AC', 'Insulation': item.name.includes('Cable') ? 'PVC 3C' : '—', 'Rating': item.name.includes('Lamp') ? '20 W' : '2.5 mm²' };
+    return { ...common, Voltage: '220 V AC', Insulation: item.name.includes('Cable') ? 'PVC 3C' : '—', Rating: item.name.includes('Lamp') ? '20 W' : '2.5 mm²' };
   }
-  return { ...common, 'Form': 'Liquid / bulk', 'Flash Point': '> 60°C', 'Dilution': 'Ready to use' };
+  return { ...common, Form: 'Liquid / bulk', 'Flash Point': '> 60°C', Dilution: 'Ready to use' };
 }
 
-function catalogSvg(category, filename) {
+function catalogSvg(category, filename, plateNo) {
   const title = category.toUpperCase();
+  const ref = plateNo || filename.replace('.svg', '').toUpperCase();
   return `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 880" role="img" aria-label="${title} catalog plate">
   <defs>
@@ -104,7 +112,7 @@ function catalogSvg(category, filename) {
   <text x="320" y="450" text-anchor="middle" fill="#4a5568" font-family="Georgia, serif" font-size="22">TECHNICAL ILLUSTRATION</text>
   <text x="320" y="478" text-anchor="middle" fill="#718096" font-family="ui-monospace, monospace" font-size="12">SCALE 1:5 · DIM. IN mm UNLESS NOTED</text>
   <rect x="48" y="720" width="544" height="120" fill="#edf2f7" stroke="#a0aec0" stroke-width="1"/>
-  <text x="64" y="752" fill="#2d3748" font-family="ui-monospace, monospace" font-size="11">REF: ${filename.replace('.svg', '').toUpperCase()}</text>
+  <text x="64" y="752" fill="#2d3748" font-family="ui-monospace, monospace" font-size="11">PLATE: ${ref}</text>
   <text x="64" y="776" fill="#4a5568" font-family="ui-sans-serif, system-ui" font-size="12">Space-Marine style specification sheet · THE VESSEL CODE STORE</text>
   <text x="64" y="800" fill="#718096" font-family="ui-sans-serif, system-ui" font-size="11">Dimensions and tolerances per manufacturer datasheet.</text>
   <text x="64" y="824" fill="#718096" font-family="ui-sans-serif, system-ui" font-size="11">Verify onboard stock (ROB) before requisition.</text>
@@ -112,20 +120,36 @@ function catalogSvg(category, filename) {
 }
 
 mkdirSync(pagesDir, { recursive: true });
+mkdirSync(platesDir, { recursive: true });
 for (const [cat, file] of Object.entries(CATEGORY_PAGE)) {
   writeFileSync(join(pagesDir, file), catalogSvg(cat, file), 'utf8');
 }
 
-const catalog = BASE.map(item => ({
-  impa_code: item.code,
-  code: item.code,
-  name: item.name,
-  unit: item.unit,
-  category: item.category,
-  rob: item.rob,
-  catalog_page: `/data/impa-catalog-pages/${CATEGORY_PAGE[item.category]}`,
-  specs: specsFor(item),
-}));
+const catalog = BASE.map(item => {
+  const plate_no = derivePlateNo(item.code);
+  return {
+    impa_code: item.code,
+    code: item.code,
+    name: item.name,
+    unit: item.unit,
+    category: item.category,
+    rob: item.rob,
+    plate_no,
+    catalog_page: `/data/impa-catalog-pages/${CATEGORY_PAGE[item.category]}`,
+    specs: specsFor(item),
+  };
+});
+
+const plateNos = new Map();
+for (const item of catalog) {
+  if (!item.plate_no) continue;
+  if (!plateNos.has(item.plate_no)) {
+    plateNos.set(item.plate_no, item.category);
+  }
+}
+for (const [plateNo, category] of plateNos) {
+  writeFileSync(join(platesDir, `${plateNo}.svg`), catalogSvg(category, `${plateNo}.svg`, plateNo), 'utf8');
+}
 
 writeFileSync(join(root, 'data/impa-catalog.json'), JSON.stringify(catalog, null, 2) + '\n', 'utf8');
 
@@ -138,6 +162,7 @@ const tsLines = [
   '  unit: string;',
   '  category: string;',
   '  rob: number;',
+  '  plate_no: string;',
   '  catalog_page: string;',
   '  specs: Record<string, string>;',
   '};',
@@ -146,4 +171,4 @@ const tsLines = [
   '',
 ];
 writeFileSync(join(root, 'data/seed-data.ts'), tsLines.join('\n'), 'utf8');
-console.log(`Wrote ${catalog.length} items and ${Object.keys(CATEGORY_PAGE).length} catalog pages.`);
+console.log(`Wrote ${catalog.length} items, ${Object.keys(CATEGORY_PAGE).length} catalog pages, ${plateNos.size} plate assets.`);

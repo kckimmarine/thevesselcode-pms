@@ -499,6 +499,44 @@ const TVC_DB = (function () {
         }));
     }
 
+    /**
+     * Cursor iteration — avoids loading entire store into memory.
+     * @param {string} storeName
+     * @param {{ indexName?: string, range?: IDBKeyRange, limit?: number, map?: Function }} options
+     */
+    function cursorMap(storeName, options = {}) {
+        const { indexName, range, limit = Infinity, map } = options;
+        return open().then(() => new Promise((resolve, reject) => {
+            const t = tx(storeName);
+            const store = t.objectStore(storeName);
+            const source = indexName ? store.index(indexName) : store;
+            const req = source.openCursor(range || null);
+            const out = [];
+            req.onsuccess = (e) => {
+                const cur = e.target.result;
+                if (!cur || out.length >= limit) {
+                    resolve(out);
+                    return;
+                }
+                const val = map ? map(cur.value) : cur.value;
+                if (val != null) out.push(val);
+                cur.continue();
+            };
+            req.onerror = () => reject(req.error);
+            t.onerror = () => reject(t.error);
+        }));
+    }
+
+    async function countStore(storeName) {
+        await open();
+        return new Promise((resolve, reject) => {
+            const t = tx(storeName);
+            const req = t.objectStore(storeName).count();
+            req.onsuccess = () => resolve(req.result || 0);
+            req.onerror = () => reject(req.error);
+        });
+    }
+
     async function runTransaction(storeNames, fn) {
         await open();
         return new Promise((resolve, reject) => {
@@ -1059,7 +1097,8 @@ const TVC_DB = (function () {
     };
 
     return {
-        open, getAll, get, put, del, bulkPut, getMeta, setMeta, indexGetAll, runTransaction, clearAll, clearStore,
+        open, getAll, get, put, del, bulkPut, getMeta, setMeta, indexGetAll, cursorMap, countStore,
+        runTransaction, clearAll, clearStore,
         SparePart, InventoryHistory, SpareInventoryParser: TVC_SpareInventoryParser, InventoryDB,
         loadSpareInventory,
         importSpareInventory, importSpareInventoryFile,

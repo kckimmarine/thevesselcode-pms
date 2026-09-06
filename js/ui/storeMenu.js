@@ -1,9 +1,15 @@
-/* THE VESSEL CODE — STORE tab (IMPA catalog) */
+/* THE VESSEL CODE — STORE tab (IMPA catalog, 50k+ virtual scroll) */
 const TVC_StoreMenu = (function () {
     let _mounted = false;
     let _modalReady = false;
     let _currentItem = null;
     let _importBusy = false;
+    let _virtualList = null;
+    let _searchTimer = null;
+    let _searchSeq = 0;
+    const _listState = { items: [] };
+    const STORE_ROW_H = 44;
+    const SEARCH_DEBOUNCE_MS = 180;
 
     function formatNum(n) {
         return Number(n || 0).toLocaleString();
@@ -46,7 +52,7 @@ const TVC_StoreMenu = (function () {
                                     <p>No catalog plate available for this item.</p>
                                 </div>
                             </div>
-                            <p class="impa-detail-plate-caption">Catalog specification plate</p>
+                            <p class="impa-detail-plate-caption" id="impaDetailPlateCaption">Catalog specification plate</p>
                         </div>
                         <aside class="impa-detail-specs">
                             <h3 class="impa-detail-specs-title">Specifications</h3>
@@ -89,9 +95,11 @@ const TVC_StoreMenu = (function () {
     }
 
     function specRows(item) {
+        const plateNo = item.plate_no || TVC_ImpaSchema.derivePlateNo(item.impa_code || item.code);
         const rows = [
             ['Category', item.category],
             ['Unit', item.unit],
+            ['Plate No.', plateNo || '—'],
             ['ROB (On Board)', `${item.rob ?? 0} ${item.unit || ''}`.trim()],
         ];
         const specs = item.specs && typeof item.specs === 'object' ? item.specs : {};
@@ -108,27 +116,48 @@ const TVC_StoreMenu = (function () {
     function bindPlateImage(item) {
         const img = document.getElementById('impaDetailPlateImg');
         const fallback = document.getElementById('impaDetailPlateFallback');
+        const caption = document.getElementById('impaDetailPlateCaption');
         if (!img || !fallback) return;
 
-        const src = String(item.catalog_page || '').trim();
+        const plateNo = item.plate_no || TVC_ImpaSchema.derivePlateNo(item.impa_code || item.code);
+        if (caption) {
+            caption.textContent = plateNo
+                ? `Catalog plate · ${plateNo}`
+                : 'Catalog specification plate';
+        }
+
+        const candidates = [];
+        const primary = item.plate_image || TVC_ImpaSchema.resolvePlateImageUrl(item);
+        if (primary) candidates.push(primary);
+        const page = String(item.catalog_page || '').trim();
+        if (page && page !== primary) candidates.push(page);
+
         img.hidden = true;
         fallback.hidden = true;
+        img.alt = `${item.name || 'IMPA item'} catalog plate`;
 
-        if (!src) {
+        if (!candidates.length) {
             fallback.hidden = false;
             return;
         }
+
+        let idx = 0;
+        const tryNext = () => {
+            if (idx >= candidates.length) {
+                img.hidden = true;
+                img.removeAttribute('src');
+                fallback.hidden = false;
+                return;
+            }
+            img.src = candidates[idx++];
+        };
 
         img.onload = () => {
             img.hidden = false;
             fallback.hidden = true;
         };
-        img.onerror = () => {
-            img.hidden = true;
-            fallback.hidden = false;
-        };
-        img.src = src;
-        img.alt = `${item.name || 'IMPA item'} catalog plate`;
+        img.onerror = tryNext;
+        tryNext();
     }
 
     function openImpaDetailModal(item) {
@@ -228,9 +257,9 @@ const TVC_StoreMenu = (function () {
             });
 
             root.innerHTML = '<p class="store-loading">Refreshing catalog…</p>';
-            const items = await TVC_StoreManager.reloadCatalog();
+            const search = await TVC_StoreManager.reloadCatalog();
             _mounted = true;
-            renderCatalog(root, items);
+            renderCatalog(root, search);
             setImportProgress(true, 100,
                 `Import complete — ${formatNum(result.catalogTotal)} items (${formatNum(result.imported)} upserted, ${formatNum(result.skipped)} skipped)`);
             setTimeout(() => setImportProgress(false, 0, ''), 4000);
@@ -243,17 +272,39 @@ const TVC_StoreMenu = (function () {
         }
     }
 
-    function toolbarHtml(query, display, cartCount) {
-        const { filtered, total, capped } = display;
-        const countLabel = query.trim()
-            ? `${formatNum(filtered)} of ${formatNum(total)} items`
-            : `${formatNum(total)} items`;
+    function countLabel(search) {
+        const { query = '', items = [], total = 0, ms = 0, capped, browseLimited } = search;
+        if (query.trim()) {
+            const match = formatNum(items.length);
+            const suffix = capped ? '+' : '';
+            const timing = ms > 0 ? ` · ${ms.toFixed(0)} ms` : '';
+            return `${match}${suffix} of ${formatNum(total)} items${timing}`;
+        }
+        if (browseLimited) {
+            return `${formatNum(total)} items (preview ${formatNum(items.length)})`;
+        }
+        return `${formatNum(total)} items`;
+    }
+
+    function capNoteText(search) {
+        const { query = '', items = [], total = 0, capped, browseLimited } = search;
+        if (capped) {
+            return `Showing first ${formatNum(items.length)} matches — refine search to narrow results.`;
+        }
+        if (!query && browseLimited) {
+            return `Browsing first ${formatNum(items.length)} of ${formatNum(total)} items — search by IMPA code or description.`;
+        }
+        return '';
+    }
+
+    function toolbarHtml(search, cartCount) {
+        const query = search?.query || '';
         return `
             <div class="store-toolbar">
-                <input type="search" class="store-search" placeholder="Search IMPA code, name, or category…"
-                    aria-label="Search catalog" value="${esc(query)}">
+                <input type="search" class="store-search" placeholder="Search IMPA code (6-digit) or description…"
+                    aria-label="Search catalog" value="${esc(query)}" autocomplete="off">
                 <button type="button" class="btn-sm store-import-btn" id="storeImportBtn">Import CSV/JSON</button>
-                <span class="store-count" id="storeCatalogCount">${countLabel}</span>
+                <span class="store-count" id="storeCatalogCount">${countLabel(search)}</span>
                 <span class="store-cart-pill">Cart <span class="store-cart-count${cartCount ? '' : ' hidden'}">${cartCount}</span></span>
             </div>
             <div id="storeImportProgress" class="store-import-panel hidden" aria-live="polite">
@@ -264,23 +315,140 @@ const TVC_StoreMenu = (function () {
             </div>`;
     }
 
-    function bindCatalogEvents(root, items) {
-        root.querySelectorAll('.store-code-link').forEach(btn => {
-            btn.addEventListener('click', () => {
-                const code = btn.dataset.impaCode;
-                const item = TVC_StoreManager.getItemByCode(code) || items.find(i => i.impa_code === code || i.code === code);
-                if (item) openImpaDetailModal(item);
-            });
+    function rowHtml(item) {
+        const code = item.impa_code || item.code;
+        return `
+            <div class="store-vl-row" role="row">
+                <span class="store-vl-cell store-code" role="cell">
+                    <button type="button" class="store-code-link" data-impa-code="${esc(code)}">${esc(code)}</button>
+                </span>
+                <span class="store-vl-cell store-vl-name" role="cell" title="${esc(item.name)}">${esc(item.name)}</span>
+                <span class="store-vl-cell store-vl-cat" role="cell">
+                    <span class="store-category">${esc(item.category)}</span>
+                </span>
+                <span class="store-vl-cell store-vl-unit" role="cell">${esc(item.unit)}</span>
+            </div>`;
+    }
+
+    function catalogShellHtml(search, cartCount) {
+        const cap = capNoteText(search);
+        const hasItems = (search.items || []).length > 0;
+        const emptyMsg = (search.query || '').trim()
+            ? 'No items match your search.'
+            : 'No catalog items yet. Use Import CSV/JSON to load IMPA master data.';
+        return `
+            ${toolbarHtml(search, cartCount)}
+            <p id="storeCapNote" class="store-cap-note${cap ? '' : ' hidden'}">${esc(cap)}</p>
+            <p id="storeEmpty" class="store-empty${hasItems ? ' hidden' : ''}">${emptyMsg}</p>
+            <div id="storeVlWrap" class="store-vl-wrap${hasItems ? '' : ' hidden'}" role="table" aria-label="IMPA catalog">
+                <div class="store-vl-head" role="row">
+                    <span role="columnheader">IMPA Code</span>
+                    <span role="columnheader">Description</span>
+                    <span role="columnheader">Category</span>
+                    <span class="store-vl-unit-head" role="columnheader">Unit</span>
+                </div>
+                <div id="storeVlScroll" class="store-vl-scroll" tabindex="0"></div>
+            </div>`;
+    }
+
+    function destroyVirtualList() {
+        _virtualList?.destroy();
+        _virtualList = null;
+    }
+
+    function mountVirtualList(root) {
+        const scroll = root.querySelector('#storeVlScroll');
+        if (!scroll) return;
+        destroyVirtualList();
+        _virtualList = TVC_VirtualList.mount(scroll, {
+            rowHeight: STORE_ROW_H,
+            getCount: () => _listState.items.length,
+            renderRow: i => (_listState.items[i] ? rowHtml(_listState.items[i]) : ''),
+            overflowX: 'hidden',
+            overflowY: 'auto',
+        });
+    }
+
+    function paintSearchResults(root, search) {
+        const countEl = root.querySelector('#storeCatalogCount');
+        if (countEl) countEl.textContent = countLabel(search);
+
+        const capNote = root.querySelector('#storeCapNote');
+        const cap = capNoteText(search);
+        if (capNote) {
+            capNote.textContent = cap;
+            capNote.classList.toggle('hidden', !cap);
+        }
+
+        const items = search.items || [];
+        const empty = root.querySelector('#storeEmpty');
+        const wrap = root.querySelector('#storeVlWrap');
+
+        if (!items.length) {
+            wrap?.classList.add('hidden');
+            empty?.classList.remove('hidden');
+            if (empty) {
+                empty.textContent = (search.query || '').trim()
+                    ? 'No items match your search.'
+                    : 'No catalog items yet. Use Import CSV/JSON to load IMPA master data.';
+            }
+            _listState.items = [];
+            destroyVirtualList();
+            return;
+        }
+
+        empty?.classList.add('hidden');
+        wrap?.classList.remove('hidden');
+        _listState.items = items;
+        if (_virtualList) {
+            const scroll = root.querySelector('#storeVlScroll');
+            if (scroll) scroll.scrollTop = 0;
+            _virtualList.refresh();
+        } else {
+            mountVirtualList(root);
+        }
+    }
+
+    async function runSearch(root, query) {
+        const seq = ++_searchSeq;
+        const countEl = root.querySelector('#storeCatalogCount');
+        if (countEl) countEl.textContent = 'Searching…';
+        try {
+            const search = await TVC_StoreManager.searchCatalog(query);
+            if (seq !== _searchSeq) return;
+            paintSearchResults(root, search);
+        } catch (err) {
+            if (seq !== _searchSeq) return;
+            const empty = root.querySelector('#storeEmpty');
+            if (empty) {
+                empty.classList.remove('hidden');
+                empty.textContent = err.message || 'Search failed.';
+            }
+        }
+    }
+
+    function scheduleSearch(root, query) {
+        if (_searchTimer) clearTimeout(_searchTimer);
+        _searchTimer = setTimeout(() => {
+            _searchTimer = null;
+            runSearch(root, query);
+        }, SEARCH_DEBOUNCE_MS);
+    }
+
+    function bindCatalogEvents(root) {
+        root.querySelector('#storeVlScroll')?.addEventListener('click', async e => {
+            const btn = e.target.closest('.store-code-link');
+            if (!btn) return;
+            const code = btn.dataset.impaCode;
+            const cached = _listState.items.find(i => (i.impa_code || i.code) === code);
+            const item = cached?.specs ? cached : await TVC_StoreManager.getItemByCode(code);
+            if (item) openImpaDetailModal(item);
         });
 
         const searchInput = root.querySelector('.store-search');
         searchInput?.addEventListener('input', e => {
-            renderCatalog(root, items, e.target.value);
-            const updated = root.querySelector('.store-search');
-            if (updated) {
-                updated.focus();
-                updated.setSelectionRange(updated.value.length, updated.value.length);
-            }
+            const q = e.target.value;
+            scheduleSearch(root, q);
         });
 
         ensureImportFileInput();
@@ -290,73 +458,33 @@ const TVC_StoreMenu = (function () {
         });
     }
 
-    function renderCatalog(root, allItems, query = '') {
-        const display = TVC_StoreManager.getDisplayItems(query, allItems);
-        const { items, filtered, total, capped } = display;
+    function renderCatalog(root, search) {
+        const state = search?.items ? search : TVC_StoreManager.getLastSearch();
+        _listState.items = state.items || [];
         const cartCount = TVC_StoreManager.getCartCount();
 
-        if (!filtered) {
-            const msg = total
-                ? 'No items match your search.'
-                : 'No catalog items yet. Use Import CSV/JSON to load IMPA master data.';
-            root.innerHTML = `
-                ${toolbarHtml(query, display, cartCount)}
-                <p class="store-empty">${msg}</p>`;
-            bindCatalogEvents(root, allItems);
-            return;
-        }
-
-        const rows = items.map(item => {
-            const code = item.impa_code || item.code;
-            return `
-            <tr>
-                <td class="store-code">
-                    <button type="button" class="store-code-link" data-impa-code="${esc(code)}">${esc(code)}</button>
-                </td>
-                <td>${esc(item.name)}</td>
-                <td><span class="store-category">${esc(item.category)}</span></td>
-                <td>${esc(item.unit)}</td>
-            </tr>`;
-        }).join('');
-
-        const capNote = capped
-            ? `<p class="store-cap-note">Showing first ${formatNum(items.length)} matches — refine search to narrow results.</p>`
-            : '';
-
-        root.innerHTML = `
-            ${toolbarHtml(query, display, cartCount)}
-            ${capNote}
-            <div class="store-table-wrap">
-                <table class="store-table">
-                    <thead>
-                        <tr>
-                            <th>IMPA Code</th>
-                            <th>Description</th>
-                            <th>Category</th>
-                            <th>Unit</th>
-                        </tr>
-                    </thead>
-                    <tbody>${rows}</tbody>
-                </table>
-            </div>`;
-
-        bindCatalogEvents(root, allItems);
+        destroyVirtualList();
+        root.innerHTML = catalogShellHtml(state, cartCount);
+        bindCatalogEvents(root);
+        if (_listState.items.length) mountVirtualList(root);
+        updateCartBadge();
     }
 
     async function render() {
         const root = document.getElementById('storeMenuBody');
         if (!root) return;
 
-        if (_mounted && TVC_StoreManager.getCatalog().length) {
-            renderCatalog(root, TVC_StoreManager.getCatalog());
+        if (_mounted && TVC_StoreManager.getTotalCount() > 0) {
+            const search = await TVC_StoreManager.searchCatalog(TVC_StoreManager.getLastSearch().query || '');
+            renderCatalog(root, search);
             return;
         }
 
         root.innerHTML = '<p class="store-loading">Loading catalog…</p>';
         try {
-            const items = await TVC_StoreManager.loadCatalog();
+            await TVC_StoreManager.loadCatalog();
             _mounted = true;
-            renderCatalog(root, items);
+            renderCatalog(root, TVC_StoreManager.getLastSearch());
         } catch (err) {
             root.innerHTML = `<p class="store-error">${esc(err.message || 'Failed to load catalog')}</p>`;
         }

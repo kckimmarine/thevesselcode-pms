@@ -1,13 +1,15 @@
-/* THE VESSEL CODE — IMPA ship stores catalog */
+/* THE VESSEL CODE — IMPA ship stores catalog (50k+ optimized) */
 const TVC_StoreManager = (function () {
     const CART_KEY = 'tvc_store_requisition_cart';
     const CHUNK_SIZE = 1000;
-    const DISPLAY_CAP = 500;
+    const SEARCH_LIMIT = 50000;
+    const BROWSE_PREVIEW = 500;
+    const SEARCH_TARGET_MS = 50;
 
-    let _catalog = null;
-    let _loadPromise = null;
     let _totalCount = 0;
+    let _loadPromise = null;
     let _importAbort = null;
+    let _lastSearch = { query: '', items: [], matched: 0, ms: 0 };
 
     function readCart() {
         try {
@@ -30,8 +32,59 @@ const TVC_StoreManager = (function () {
     }
 
     function invalidateCatalogCache() {
-        _catalog = null;
         _loadPromise = null;
+        _lastSearch = { query: '', items: [], matched: 0, ms: 0 };
+    }
+
+    function toLightRow(row) {
+        if (!row?.impa_code) return null;
+        const ui = TVC_ImpaSchema.toUi(row);
+        return {
+            impa_code: ui.impa_code,
+            code: ui.code,
+            name: ui.name,
+            unit: ui.unit,
+            category: ui.category,
+            plate_no: ui.plate_no,
+            catalog_page: ui.catalog_page,
+            plate_image: ui.plate_image,
+            rob: ui.rob,
+            specs: ui.specs,
+        };
+    }
+
+    async function refreshTotalCount() {
+        await TVC_DB.open();
+        const meta = await TVC_DB.getMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT);
+        const counted = await TVC_DB.countStore('impa_master');
+        _totalCount = Math.max(Number(meta) || 0, counted);
+        if (_totalCount !== counted) {
+            await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT, counted);
+            _totalCount = counted;
+        }
+        return _totalCount;
+    }
+
+    async function ensureSearchFieldsBackfill() {
+        const done = await TVC_DB.getMeta(TVC_META_KEYS.IMPA_SEARCH_BACKFILL);
+        if (done) return;
+        const rows = await TVC_DB.getAll('impa_master');
+        if (!rows.length) {
+            await TVC_DB.setMeta(TVC_META_KEYS.IMPA_SEARCH_BACKFILL, new Date().toISOString());
+            return;
+        }
+        const ts = new Date().toISOString();
+        const patched = [];
+        for (const row of rows) {
+            if (row.name_lower && row.code_prefix && row.plate_no) continue;
+            const enriched = TVC_ImpaSchema.enrichDbFields(row);
+            patched.push({ ...row, ...enriched, updated_at: ts });
+        }
+        for (let i = 0; i < patched.length; i += CHUNK_SIZE) {
+            await TVC_DB.bulkPut('impa_master', patched.slice(i, i + CHUNK_SIZE));
+            await yieldToMain();
+        }
+        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_SEARCH_BACKFILL, new Date().toISOString());
     }
 
     async function fetchCatalogJson() {
@@ -62,86 +115,155 @@ const TVC_StoreManager = (function () {
         const raw = await fetchCatalogJson();
         const rows = toDbRecords(raw);
         if (rows.length) await putImpaChunk(rows);
-        const count = rows.length;
         await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_SEED, new Date().toISOString());
-        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT, count);
-        _totalCount = count;
-        return rows;
-    }
-
-    async function readRowsFromDb() {
-        await TVC_DB.open();
-        const rows = await TVC_DB.getAll('impa_master');
-        _totalCount = rows.length;
-        const countMeta = await TVC_DB.getMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT);
-        if (countMeta != null && Number(countMeta) > _totalCount) {
-            _totalCount = Number(countMeta);
-        }
-        return rows;
+        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_SEARCH_BACKFILL, new Date().toISOString());
+        return rows.length;
     }
 
     async function ensureImpaMaster() {
         await TVC_DB.open();
-        let rows = await TVC_DB.getAll('impa_master');
-        if (!rows.length) {
-            rows = await seedImpaMasterFromJson();
-        } else {
-            _totalCount = rows.length;
-            const countMeta = await TVC_DB.getMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT);
-            if (countMeta != null) _totalCount = Number(countMeta) || rows.length;
+        let count = await TVC_DB.countStore('impa_master');
+        if (!count) {
+            count = await seedImpaMasterFromJson();
         }
-        return rows.map(TVC_ImpaSchema.toUi).filter(Boolean);
+        _totalCount = count;
+        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT, count);
+        return count;
     }
 
     async function loadCatalog(options = {}) {
-        if (!options.force && _catalog) return _catalog;
         if (!options.force && _loadPromise) return _loadPromise;
         _loadPromise = ensureImpaMaster()
-            .then(items => {
-                _catalog = items;
-                _totalCount = items.length;
-                return _catalog;
+            .then(async count => {
+                _totalCount = count;
+                return searchCatalog('', { limit: BROWSE_PREVIEW });
             })
-            .catch(async err => {
+            .catch(err => {
                 _loadPromise = null;
-                try {
-                    const raw = await fetchCatalogJson();
-                    _catalog = raw.map(item => TVC_ImpaSchema.toUi(TVC_ImpaSchema.fromCatalogJson(item))).filter(Boolean);
-                    _totalCount = _catalog.length;
-                    return _catalog;
-                } catch {
-                    throw err;
-                }
+                throw err;
             });
         return _loadPromise;
     }
 
     async function reloadCatalog() {
         invalidateCatalogCache();
-        const items = await loadCatalog({ force: true });
-        _totalCount = items.length;
-        return items;
+        await refreshTotalCount();
+        return searchCatalog(_lastSearch.query || '', { limit: SEARCH_LIMIT });
     }
 
     function getTotalCount() {
-        if (_totalCount > 0) return _totalCount;
-        return _catalog?.length || 0;
+        return _totalCount;
+    }
+
+    function getLastSearch() {
+        return _lastSearch;
+    }
+
+    /** Indexed search — code prefix (6-digit) or name_lower prefix index */
+    async function searchCatalog(query, { limit = SEARCH_LIMIT } = {}) {
+        const started = performance.now();
+        await TVC_DB.open();
+        await ensureSearchFieldsBackfill();
+        if (!_totalCount) await refreshTotalCount();
+
+        const q = String(query || '').trim();
+        const qLower = q.toLowerCase();
+        let items = [];
+
+        if (!q) {
+            items = await TVC_DB.cursorMap('impa_master', {
+                limit: Math.min(limit, BROWSE_PREVIEW),
+                map: toLightRow,
+            });
+        } else if (/^\d{1,6}$/.test(q)) {
+            const range = IDBKeyRange.bound(q, `${q}\uffff`);
+            items = await TVC_DB.cursorMap('impa_master', { range, limit, map: toLightRow });
+        } else if (q.length === 2 && /^\d{2}$/.test(q)) {
+            const range = IDBKeyRange.only(q);
+            items = await TVC_DB.cursorMap('impa_master', {
+                indexName: 'by_code_prefix',
+                range,
+                limit,
+                map: toLightRow,
+            });
+        } else {
+            const range = IDBKeyRange.bound(qLower, `${qLower}\uffff`);
+            items = await TVC_DB.cursorMap('impa_master', {
+                indexName: 'by_name_lower',
+                range,
+                limit,
+                map: toLightRow,
+            });
+            if (items.length < limit && qLower.length >= 2) {
+                const bucket = qLower.slice(0, 2);
+                const extra = await TVC_DB.cursorMap('impa_master', {
+                    indexName: 'by_name_lower',
+                    range: IDBKeyRange.bound(bucket, `${bucket}\uffff`),
+                    limit: limit * 2,
+                    map: row => {
+                        const name = String(row?.name_lower || row?.name || '').toLowerCase();
+                        if (!name.includes(qLower)) return null;
+                        return toLightRow(row);
+                    },
+                });
+                const seen = new Set(items.map(i => i.impa_code));
+                for (const row of extra) {
+                    if (!row || seen.has(row.impa_code)) continue;
+                    items.push(row);
+                    seen.add(row.impa_code);
+                    if (items.length >= limit) break;
+                }
+            }
+        }
+
+        const ms = performance.now() - started;
+        const matched = items.length;
+        const browseLimited = !q && _totalCount > items.length;
+
+        _lastSearch = {
+            query: q,
+            items,
+            matched,
+            total: _totalCount,
+            ms,
+            browseLimited,
+            capped: matched >= limit,
+        };
+
+        if (ms > SEARCH_TARGET_MS && q) {
+            console.info(`[TVC_Store] search "${q}" → ${matched} rows in ${ms.toFixed(1)}ms`);
+        }
+
+        return _lastSearch;
+    }
+
+    async function getItemByCode(code) {
+        const c = TVC_ImpaSchema.normalizeCode(code);
+        if (!c) return null;
+        const cached = _lastSearch.items.find(i => i.impa_code === c);
+        if (cached && cached.specs) return cached;
+        await TVC_DB.open();
+        const row = await TVC_DB.get('impa_master', c);
+        return TVC_ImpaSchema.toUi(row);
     }
 
     function getCatalog() {
-        return _catalog ? _catalog.slice() : [];
+        return _lastSearch.items.slice();
     }
 
     function getDisplayItems(query, items) {
-        const source = items || _catalog || [];
-        const filtered = filterCatalog(query, source);
-        const capped = filtered.length > DISPLAY_CAP ? filtered.slice(0, DISPLAY_CAP) : filtered;
-        return { items: capped, filtered: filtered.length, total: getTotalCount(), capped: filtered.length > DISPLAY_CAP };
-    }
-
-    function getItemByCode(code) {
-        const c = TVC_ImpaSchema.normalizeCode(code);
-        return (_catalog || []).find(item => item.impa_code === c || item.code === c) || null;
+        const source = items || _lastSearch.items || [];
+        const total = _totalCount || source.length;
+        const q = String(query || '').trim();
+        const filtered = q ? source.length : total;
+        return {
+            items: source,
+            filtered,
+            total,
+            capped: _lastSearch.capped,
+            browseLimited: _lastSearch.browseLimited,
+            searchMs: _lastSearch.ms,
+        };
     }
 
     function filterCatalog(query, items) {
@@ -196,7 +318,6 @@ const TVC_StoreManager = (function () {
             let total = 0;
             let buffer = [];
             const ts = new Date().toISOString();
-            let parserRef = null;
 
             const flushBuffer = async () => {
                 if (!buffer.length) return;
@@ -209,7 +330,7 @@ const TVC_StoreManager = (function () {
                 await yieldToMain();
             };
 
-            parserRef = Papa.parse(file, {
+            Papa.parse(file, {
                 header: true,
                 skipEmptyLines: 'greedy',
                 worker: false,
@@ -262,10 +383,9 @@ const TVC_StoreManager = (function () {
             throw new Error('Unsupported file type. Use .csv or .json');
         }
 
-        const countRows = await readRowsFromDb();
-        _totalCount = countRows.length;
+        await refreshTotalCount();
         await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_SEED, new Date().toISOString());
-        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT, _totalCount);
+        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_SEARCH_BACKFILL, new Date().toISOString());
         invalidateCatalogCache();
         _importAbort = null;
 
@@ -319,8 +439,10 @@ const TVC_StoreManager = (function () {
     return {
         loadCatalog,
         reloadCatalog,
+        searchCatalog,
         getCatalog,
         getTotalCount,
+        getLastSearch,
         getDisplayItems,
         getItemByCode,
         filterCatalog,
@@ -331,6 +453,7 @@ const TVC_StoreManager = (function () {
         getCartCount,
         addToCart,
         CHUNK_SIZE,
-        DISPLAY_CAP,
+        SEARCH_LIMIT,
+        BROWSE_PREVIEW,
     };
 })();
