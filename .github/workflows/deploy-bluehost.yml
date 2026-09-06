@@ -1,0 +1,24 @@
+name: Deploy Bluehost embed pages
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/deploy-bluehost.yml'
+      - 'bluehost/**'
+      - 'scripts/deploy-bluehost.mjs'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Deploy bluehost/* via FTP
+        run: npm run deploy:bluehost
+        env:
+          BLUEHOST_FTP_HOST: ${{ secrets.BLUEHOST_FTP_HOST }}
+          BLUEHOST_FTP_USER: ${{ secrets.BLUEHOST_FTP_USER }}
+          BLUEHOST_FTP_PASS: ${{ secrets.BLUEHOST_FTP_PASS }}
