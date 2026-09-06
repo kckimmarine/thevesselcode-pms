@@ -46,30 +46,42 @@ function listFiles(dir, base = dir) {
   return out;
 }
 
+function resolveCred(env, fileEnv, names) {
+  for (const name of names) {
+    const val = process.env[name] || fileEnv[name];
+    if (val) return { name, val };
+  }
+  return { name: names[0], val: '' };
+}
+
 async function uploadFile({ host, user, pass, localPath, remotePath }) {
   const url = `ftp://${host}/${remotePath}`;
-  await execFileAsync('curl', [
-    '--silent', '--show-error', '--fail',
-    '-T', localPath,
-    '--user', `${user}:${pass}`,
-    url,
-  ]);
+  const baseArgs = ['--silent', '--show-error', '--fail', '-T', localPath, '--user', `${user}:${pass}`];
+  try {
+    await execFileAsync('curl', [...baseArgs, '--ssl-reqd', '-k', url]);
+  } catch (err) {
+    await execFileAsync('curl', [...baseArgs, url]);
+  }
 }
 
 async function main() {
   const fileEnv = loadEnvFile();
-  const host = process.env.BLUEHOST_FTP_HOST || fileEnv.BLUEHOST_FTP_HOST;
-  const user = process.env.BLUEHOST_FTP_USER || fileEnv.BLUEHOST_FTP_USER;
-  const pass = process.env.BLUEHOST_FTP_PASS || fileEnv.BLUEHOST_FTP_PASS;
+  const host = resolveCred(process.env, fileEnv, ['TVC_FTP_HOST', 'BLUEHOST_FTP_HOST']).val;
+  const user = resolveCred(process.env, fileEnv, ['TVC_FTP_USER', 'BLUEHOST_FTP_USER']).val;
+  const pass = resolveCred(process.env, fileEnv, ['TVC_FTP_PASS', 'BLUEHOST_FTP_PASS']).val;
 
   if (!host || !user || !pass) {
     console.error('Bluehost FTP credentials not configured.');
     console.error('Add to deploy/.env.deploy.local (one time):');
-    console.error('  BLUEHOST_FTP_HOST=ftp.thevesselcode.com');
-    console.error('  BLUEHOST_FTP_USER=your_cpanel_username');
-    console.error('  BLUEHOST_FTP_PASS=your_cpanel_password');
-    console.error('\nOr add the same keys to Cursor Environment secrets.');
+    console.error('  TVC_FTP_HOST=your_ftp_server_hostname');
+    console.error('  TVC_FTP_USER=your_ftp_username_with_domain');
+    console.error('  TVC_FTP_PASS=your_ftp_password');
+    console.error('\nOr add TVC_FTP_* (preferred) or BLUEHOST_FTP_* to Cursor Environment secrets.');
     process.exit(1);
+  }
+
+  if (!user.includes('@')) {
+    console.warn('Warning: FTP user has no @ — use the cPanel Full Username (login@domain), not the main cPanel login.');
   }
 
   if (!existsSync(LOCAL_ROOT)) {
