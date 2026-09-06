@@ -14,7 +14,8 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const LOCAL_ROOT = join(ROOT, 'bluehost');
-const REMOTE_ROOT = 'public_html';
+// Main cPanel FTP accounts are chrooted to public_html (remote path = site root).
+// Sub-accounts may need BLUEHOST_FTP_REMOTE_ROOT=public_html.
 
 function loadEnvFile() {
   const env = {};
@@ -48,12 +49,28 @@ function listFiles(dir, base = dir) {
 
 async function uploadFile({ host, user, pass, localPath, remotePath }) {
   const url = `ftp://${host}/${remotePath}`;
-  await execFileAsync('curl', [
+  const args = [
     '--silent', '--show-error', '--fail',
+    '--ftp-pasv',
+    '--disable-epsv',
+    '--ftp-create-dirs',
+    '--connect-timeout', '20',
+    '--max-time', '120',
     '-T', localPath,
     '--user', `${user}:${pass}`,
     url,
-  ]);
+  ];
+  let lastErr;
+  for (let attempt = 1; attempt <= 3; attempt++) {
+    try {
+      await execFileAsync('curl', args);
+      return;
+    } catch (err) {
+      lastErr = err;
+      if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000));
+    }
+  }
+  throw lastErr;
 }
 
 async function main() {
@@ -61,6 +78,11 @@ async function main() {
   const host = process.env.BLUEHOST_FTP_HOST || fileEnv.BLUEHOST_FTP_HOST;
   const user = process.env.BLUEHOST_FTP_USER || fileEnv.BLUEHOST_FTP_USER;
   const pass = process.env.BLUEHOST_FTP_PASS || fileEnv.BLUEHOST_FTP_PASS;
+  const remoteRoot = (
+    process.env.BLUEHOST_FTP_REMOTE_ROOT ||
+    fileEnv.BLUEHOST_FTP_REMOTE_ROOT ||
+    ''
+  ).replace(/\/+$/, '');
 
   if (!host || !user || !pass) {
     console.error('Bluehost FTP credentials not configured.');
@@ -83,10 +105,11 @@ async function main() {
     process.exit(1);
   }
 
-  console.log(`Deploying ${files.length} file(s) to ${host}/${REMOTE_ROOT} ...`);
+  const remotePrefix = remoteRoot ? `${remoteRoot}/` : '';
+  console.log(`Deploying ${files.length} file(s) to ${host}/${remotePrefix || '(site root)'} ...`);
   for (const rel of files) {
     const localPath = join(LOCAL_ROOT, rel);
-    const remotePath = `${REMOTE_ROOT}/${rel}`;
+    const remotePath = posix.join(remoteRoot, rel);
     await uploadFile({ host, user, pass, localPath, remotePath });
     console.log('  OK', remotePath);
   }
