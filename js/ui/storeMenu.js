@@ -13,6 +13,11 @@ const TVC_StoreMenu = (function () {
     }
 
     function ensureImpaDetailModal() {
+        const existing = document.getElementById('impaDetailModal');
+        if (existing && !existing.querySelector('.impa-detail-close-float')) {
+            existing.remove();
+            _modalReady = false;
+        }
         if (_modalReady) return;
         const wrap = document.createElement('div');
         wrap.id = 'impaDetailModal';
@@ -24,35 +29,40 @@ const TVC_StoreMenu = (function () {
                         <span class="impa-detail-badge" id="impaDetailBadge">IMPA</span>
                         <h2 class="impa-detail-title" id="impaDetailTitle">—</h2>
                     </div>
-                    <button type="button" class="modal-x impa-detail-close" aria-label="Close">×</button>
+                    <button type="button" class="impa-detail-close-btn impa-detail-close-float" aria-label="Close">✕</button>
                 </header>
-                <div class="impa-detail-body">
-                    <div class="impa-detail-plate-wrap">
-                        <div class="impa-detail-plate-frame">
-                            <img id="impaDetailPlateImg" class="impa-detail-plate-img" alt="Catalog plate" hidden>
-                            <div id="impaDetailPlateFallback" class="impa-detail-plate-fallback" hidden>
-                                <span class="impa-detail-plate-fallback-icon" aria-hidden="true">📐</span>
-                                <p>No catalog plate available for this item.</p>
+                <div class="impa-detail-scroll">
+                    <div class="impa-detail-body">
+                        <div class="impa-detail-plate-wrap">
+                            <div class="impa-detail-plate-frame">
+                                <img id="impaDetailPlateImg" class="impa-detail-plate-img" alt="Catalog plate" hidden>
+                                <div id="impaDetailPlateFallback" class="impa-detail-plate-fallback" hidden>
+                                    <span class="impa-detail-plate-fallback-icon" aria-hidden="true">📐</span>
+                                    <p>No catalog plate available for this item.</p>
+                                </div>
                             </div>
+                            <p class="impa-detail-plate-caption">Catalog specification plate</p>
                         </div>
-                        <p class="impa-detail-plate-caption">Catalog specification plate</p>
+                        <aside class="impa-detail-specs">
+                            <h3 class="impa-detail-specs-title">Specifications</h3>
+                            <table class="impa-detail-spec-table">
+                                <tbody id="impaDetailSpecBody"></tbody>
+                            </table>
+                            <div class="impa-detail-cart">
+                                <label class="impa-detail-qty-label" for="impaDetailQty">Quantity</label>
+                                <div class="impa-detail-cart-row">
+                                    <input type="number" id="impaDetailQty" class="impa-detail-qty" min="1" step="1" value="1">
+                                    <button type="button" class="btn impa-detail-cart-btn" id="impaDetailCartBtn">
+                                        Add to Requisition Cart
+                                    </button>
+                                </div>
+                                <p class="impa-detail-cart-msg" id="impaDetailCartMsg" role="status" aria-live="polite"></p>
+                            </div>
+                        </aside>
                     </div>
-                    <aside class="impa-detail-specs">
-                        <h3 class="impa-detail-specs-title">Specifications</h3>
-                        <table class="impa-detail-spec-table">
-                            <tbody id="impaDetailSpecBody"></tbody>
-                        </table>
-                        <div class="impa-detail-cart">
-                            <label class="impa-detail-qty-label" for="impaDetailQty">Quantity</label>
-                            <div class="impa-detail-cart-row">
-                                <input type="number" id="impaDetailQty" class="impa-detail-qty" min="1" step="1" value="1">
-                                <button type="button" class="btn impa-detail-cart-btn" id="impaDetailCartBtn">
-                                    Add to Requisition Cart
-                                </button>
-                            </div>
-                            <p class="impa-detail-cart-msg" id="impaDetailCartMsg" role="status" aria-live="polite"></p>
-                        </div>
-                    </aside>
+                    <footer class="impa-detail-footer">
+                        <button type="button" class="impa-detail-close-btn impa-detail-close-bottom">Close / 닫기</button>
+                    </footer>
                 </div>
             </div>`;
         document.body.appendChild(wrap);
@@ -60,7 +70,9 @@ const TVC_StoreMenu = (function () {
         wrap.addEventListener('click', e => {
             if (e.target === wrap) closeImpaDetailModal();
         });
-        wrap.querySelector('.impa-detail-close')?.addEventListener('click', closeImpaDetailModal);
+        wrap.querySelectorAll('.impa-detail-close-btn').forEach(btn => {
+            btn.addEventListener('click', closeImpaDetailModal);
+        });
         wrap.querySelector('.impa-detail-box')?.addEventListener('click', e => e.stopPropagation());
         wrap.querySelector('#impaDetailCartBtn')?.addEventListener('click', onAddToCart);
 

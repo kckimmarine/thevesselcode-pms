@@ -136,28 +136,110 @@
 /* ── IMPA detail modal (catalog plate style) ── */
 .impa-detail-modal {
     z-index: 10120;
+    padding: 12px;
+    align-items: flex-end;
 }
 
 .impa-detail-box {
+    display: flex;
+    flex-direction: column;
     max-width: 960px;
-    width: 96%;
+    width: 100%;
+    max-height: min(92vh, 100dvh - 24px);
     padding: 0;
     overflow: hidden;
     border: 2px solid #1a365d;
+    position: relative;
 }
 
 .impa-detail-head {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 16px;
-    padding: 18px 22px;
+    gap: 12px;
+    flex-shrink: 0;
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    padding: 14px 56px 14px 18px;
     background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
     color: #fff;
+    box-shadow: 0 2px 8px rgba(26, 54, 93, 0.25);
+}
+
+.impa-detail-close-btn {
+    border: none;
+    cursor: pointer;
+    font-family: inherit;
+    line-height: 1;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.impa-detail-close-float {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 15;
+    width: 44px;
+    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.96);
+    color: #1a365d;
+    font-size: 1.35rem;
+    font-weight: 700;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.impa-detail-close-float:hover,
+.impa-detail-close-float:active {
+    background: #fff;
+    color: #c53030;
+}
+
+.impa-detail-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    background: #f7fafc;
+}
+
+.impa-detail-footer {
+    position: sticky;
+    bottom: 0;
+    z-index: 11;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(180deg, rgba(247, 250, 252, 0) 0%, #f7fafc 24%, #fff 100%);
+    border-top: 1px solid #e2e8f0;
+}
+
+.impa-detail-close-bottom {
+    width: 100%;
+    min-height: 48px;
+    padding: 12px 20px;
+    border-radius: 10px;
+    border: 1px solid #cbd5e0;
+    background: #fff;
+    color: #2d3748;
+    font-size: 0.9375rem;
+    font-weight: 600;
+}
+
+.impa-detail-close-bottom:hover,
+.impa-detail-close-bottom:active {
+    background: #edf2f7;
+    border-color: #a0aec0;
 }
 
 .impa-detail-head-main {
     min-width: 0;
+    padding-right: 4px;
 }
 
 .impa-detail-badge {
@@ -178,13 +260,6 @@
     font-weight: 700;
     line-height: 1.35;
     color: #fff;
-}
-
-.impa-detail-head .modal-x {
-    position: static;
-    flex-shrink: 0;
-    color: #fff;
-    opacity: 0.9;
 }
 
 .impa-detail-body {
@@ -348,6 +423,29 @@
 }
 
 @media (max-width: 768px) {
+    .impa-detail-modal {
+        padding: 0;
+        align-items: flex-end;
+    }
+
+    .impa-detail-box {
+        width: 100%;
+        max-width: none;
+        max-height: min(94dvh, 100dvh - 8px);
+        border-radius: 16px 16px 0 0;
+        border-bottom: none;
+    }
+
+    .impa-detail-head {
+        padding-top: calc(12px + env(safe-area-inset-top, 0px));
+        padding-right: 58px;
+    }
+
+    .impa-detail-close-float {
+        top: calc(8px + env(safe-area-inset-top, 0px));
+        right: 8px;
+    }
+
     .impa-detail-body {
         grid-template-columns: 1fr;
     }
