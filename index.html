@@ -17,7 +17,7 @@
             try {
                 var q = new URLSearchParams(location.search);
                 if (q.get('mode') === 'public') {
-                    var target = 'store-public.html';
+                    var target = '/toolkit';
                     if (location.hash) target += location.hash;
                     location.replace(target);
                 }

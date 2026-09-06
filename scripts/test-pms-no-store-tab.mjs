@@ -86,10 +86,10 @@ async function main() {
     });
 
     const publicPage = await browser.newPage();
-    await publicPage.goto(`${BASE}/store-public.html`, { waitUntil: 'domcontentloaded' });
+    await publicPage.goto(`${BASE}/toolkit.html`, { waitUntil: 'domcontentloaded' });
     await publicPage.locator('.store-search').waitFor({ state: 'visible', timeout: 30_000 });
     results.push({
-      check: 'store-public.html still loads',
+      check: 'toolkit.html still loads',
       ok: await publicPage.locator('.store-search').isVisible(),
     });
 

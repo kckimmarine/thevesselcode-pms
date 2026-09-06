@@ -29,7 +29,7 @@ async function login(page) {
 }
 
 async function openStoreModal(page) {
-  await page.goto(`${BASE}/store-public.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`${BASE}/toolkit.html`, { waitUntil: 'domcontentloaded' });
   await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
   await page.locator('.store-code-link').first().click();
   await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });

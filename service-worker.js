@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260906-maritime-toolkit';
+const CACHE_VERSION = 'tvc-pms-20260906-toolkit-url';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -7,6 +7,7 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const PRECACHE_ASSETS = [
     '/',
     '/index.html',
+    '/toolkit.html',
     '/store-public.html',
     '/manifest.json',
     '/css/app.css',

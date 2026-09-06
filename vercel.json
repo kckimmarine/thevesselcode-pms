@@ -2,8 +2,13 @@
   "version": 2,
   "buildCommand": "",
   "installCommand": "npm install --omit=dev --ignore-scripts",
+  "redirects": [
+    { "source": "/store-public.html", "destination": "/toolkit", "permanent": true },
+    { "source": "/store-public", "destination": "/toolkit", "permanent": true }
+  ],
   "rewrites": [
-        { "source": "/((?!vendor|js|css|icons|data|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|store-public.html).*)", "destination": "/index.html" }
+    { "source": "/toolkit", "destination": "/toolkit.html" },
+    { "source": "/((?!vendor|js|css|icons|data|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
@@ -21,6 +26,10 @@
     },
     {
       "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/toolkit.html",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     }
   ]

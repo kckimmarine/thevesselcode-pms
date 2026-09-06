@@ -6,6 +6,7 @@ import { join } from 'node:path';
 const root = process.cwd();
 const mustExist = [
   'index.html',
+  'toolkit.html',
   'store-public.html',
   'js/store-public-boot.js',
   'js/ui/maritimeToolkit.js',

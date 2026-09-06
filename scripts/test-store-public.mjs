@@ -12,7 +12,7 @@ async function main() {
 
   try {
     const page = await browser.newPage();
-    await page.goto(`${BASE}/store-public.html`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/toolkit.html`, { waitUntil: 'networkidle' });
 
     results.push({
       check: 'page title Maritime Toolkit',

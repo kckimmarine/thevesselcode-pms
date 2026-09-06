@@ -21,7 +21,7 @@
 <body>
     <iframe
         id="tvcImpaFrame"
-        src="https://app.thevesselcode.com/store-public.html"
+        src="https://app.thevesselcode.com/toolkit"
         title="THE VESSEL CODE — IMPA Catalog"
         allow="clipboard-read; clipboard-write"
         referrerpolicy="strict-origin-when-cross-origin"
@@ -29,7 +29,7 @@
     <noscript>
         <div class="load-fallback">
             <p>JavaScript is required for the embedded catalog.</p>
-            <p><a href="https://app.thevesselcode.com/store-public.html">Open IMPA catalog</a></p>
+            <p><a href="https://app.thevesselcode.com/toolkit">Open IMPA catalog</a></p>
         </div>
     </noscript>
     <script>
@@ -39,7 +39,7 @@
             try {
                 var q = new URLSearchParams(location.search);
                 if (q.get('local') === '1') {
-                    frame.src = 'http://localhost:3000/store-public.html';
+                    frame.src = 'http://localhost:3000/toolkit';
                 }
             } catch (_) {}
         })();
