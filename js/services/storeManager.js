@@ -45,6 +45,10 @@ const TVC_StoreManager = (function () {
         _useMemorySearch = !!enabled;
     }
 
+    function isMemorySearchReady() {
+        return _useMemorySearch && Array.isArray(_memoryIndex) && _memoryIndex.length > 0;
+    }
+
     function getMemoryCategories() {
         if (!_memoryIndex?.length) return [];
         const set = new Set();
