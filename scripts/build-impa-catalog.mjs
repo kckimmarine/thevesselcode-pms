@@ -51,6 +51,20 @@ const BASE = [
   { code: '331502', name: 'Rag Cotton Industrial', unit: 'KG', category: 'Cleaning', rob: 25 },
 ];
 
+/** Demo catalog plates — high-res Unsplash photos for STORE modal preview */
+const DEMO_PHOTO_PLATES = {
+  '330101': 'https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1600&q=90&auto=format&fit=crop',
+  '330102': 'https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1600&q=90&auto=format&fit=crop',
+  '330201': 'https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=1600&q=90&auto=format&fit=crop',
+  '330301': 'https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=1600&q=90&auto=format&fit=crop',
+  '330302': 'https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=1600&q=90&auto=format&fit=crop',
+  '330401': 'https://images.unsplash.com/photo-1628177142898-93e36e4e3a50?w=1600&q=90&auto=format&fit=crop',
+};
+
+function plateImageFor(item) {
+  return DEMO_PHOTO_PLATES[item.code] || `/data/impa-plates/items/${item.code}.svg`;
+}
+
 function derivePlateNo(code) {
   const c = String(code || '').replace(/\D/g, '').padStart(6, '0');
   if (c.length < 4) return '';
@@ -293,7 +307,7 @@ for (const [cat, file] of Object.entries(CATEGORY_PAGE)) {
 const catalog = BASE.map(item => {
   const plate_no = derivePlateNo(item.code);
   const specs = specsFor(item);
-  const plate_image = `/data/impa-plates/items/${item.code}.svg`;
+  const plate_image = plateImageFor(item);
   writeFileSync(join(itemsDir, `${item.code}.svg`), itemPlateSvg(item, plate_no, specs), 'utf8');
   return {
     impa_code: item.code,

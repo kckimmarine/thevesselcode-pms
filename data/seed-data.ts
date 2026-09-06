@@ -21,7 +21,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Rigging",
     "rob": 4,
     "plate_no": "PL-33-01",
-    "plate_image": "/data/impa-plates/items/330101.svg",
+    "plate_image": "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=1600&q=90&auto=format&fit=crop",
     "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
@@ -40,7 +40,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Rigging",
     "rob": 120,
     "plate_no": "PL-33-01",
-    "plate_image": "/data/impa-plates/items/330102.svg",
+    "plate_image": "https://images.unsplash.com/photo-1544551763-46a013bb70d5?w=1600&q=90&auto=format&fit=crop",
     "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
@@ -59,7 +59,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Rigging",
     "rob": 12,
     "plate_no": "PL-33-02",
-    "plate_image": "/data/impa-plates/items/330201.svg",
+    "plate_image": "https://images.unsplash.com/photo-1581092160562-40aa08e78837?w=1600&q=90&auto=format&fit=crop",
     "catalog_page": "/data/impa-catalog-pages/rigging.svg",
     "specs": {
       "IMPA Edition": "7th",
@@ -78,7 +78,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Paint",
     "rob": 80,
     "plate_no": "PL-33-03",
-    "plate_image": "/data/impa-plates/items/330301.svg",
+    "plate_image": "https://images.unsplash.com/photo-1565193566173-7a0ee3dbe261?w=1600&q=90&auto=format&fit=crop",
     "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",
@@ -99,7 +99,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Paint",
     "rob": 45,
     "plate_no": "PL-33-03",
-    "plate_image": "/data/impa-plates/items/330302.svg",
+    "plate_image": "https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=1600&q=90&auto=format&fit=crop",
     "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",
@@ -120,7 +120,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
     "category": "Paint",
     "rob": 24,
     "plate_no": "PL-33-04",
-    "plate_image": "/data/impa-plates/items/330401.svg",
+    "plate_image": "https://images.unsplash.com/photo-1628177142898-93e36e4e3a50?w=1600&q=90&auto=format&fit=crop",
     "catalog_page": "/data/impa-catalog-pages/paint.svg",
     "specs": {
       "IMPA Edition": "7th",

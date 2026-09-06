@@ -120,11 +120,25 @@ const TVC_StoreManager = (function () {
         return rows.length;
     }
 
+    async function upsertSeedCatalogFromJson() {
+        const raw = await fetchCatalogJson();
+        const rows = toDbRecords(raw);
+        if (rows.length) await putImpaChunk(rows);
+        return rows.length;
+    }
+
     async function ensureImpaMaster() {
         await TVC_DB.open();
         let count = await TVC_DB.countStore('impa_master');
         if (!count) {
             count = await seedImpaMasterFromJson();
+        } else {
+            const photosMigrated = await TVC_DB.getMeta(TVC_META_KEYS.IMPA_CATALOG_PHOTOS);
+            if (!photosMigrated) {
+                await upsertSeedCatalogFromJson();
+                await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_PHOTOS, new Date().toISOString());
+                count = await TVC_DB.countStore('impa_master');
+            }
         }
         _totalCount = count;
         await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_COUNT, count);

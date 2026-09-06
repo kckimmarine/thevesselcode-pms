@@ -150,6 +150,7 @@ const TVC_META_KEYS = {
     SPARE_MASTER_BACKUP_LAST: 'spare_master_backup_last',
     SPARE_MASTER_RESTORE_LAST: 'spare_master_restore_last',
     IMPA_CATALOG_SEED: 'impa_catalog_seed_v1',
+    IMPA_CATALOG_PHOTOS: 'impa_catalog_photos_v1',
     IMPA_CATALOG_COUNT: 'impa_catalog_count_v1',
     IMPA_SEARCH_BACKFILL: 'impa_search_backfill_v1',
 };

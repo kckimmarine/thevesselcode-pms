@@ -398,6 +398,27 @@
     pointer-events: none;
 }
 
+.impa-detail-plate-viewport.has-photo {
+    background: #0f172a;
+}
+
+.impa-detail-plate-viewport.has-photo .impa-detail-plate-img {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    object-fit: cover;
+    object-position: center;
+}
+
+.impa-plate-fullscreen-viewport.has-photo .impa-plate-fullscreen-img {
+    width: 100%;
+    height: 100%;
+    max-width: none;
+    max-height: none;
+    object-fit: contain;
+}
+
 .impa-detail-plate-fallback {
     display: flex;
     flex-direction: column;

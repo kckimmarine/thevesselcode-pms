@@ -312,6 +312,34 @@ const TVC_StoreMenu = (function () {
             </tr>`).join('');
     }
 
+    function isPhotoPlateUrl(url) {
+        const u = String(url || '').trim();
+        if (!u) return false;
+        if (/^https?:\/\//i.test(u)) return !/\.svg(\?|#|$)/i.test(u);
+        return /\.(jpe?g|png|webp|gif|avif)(\?|#|$)/i.test(u);
+    }
+
+    function resolvePlatePhotoUrl(item) {
+        const explicit = String(item?.plate_image || '').trim();
+        if (isPhotoPlateUrl(explicit)) return explicit;
+        return '';
+    }
+
+    function showPlatePlaceholder(item, img, fallback, zoomBtn, fsImg) {
+        const viewport = document.getElementById('impaDetailPlateViewport');
+        viewport?.classList.remove('has-photo');
+        if (img) {
+            img.hidden = true;
+            img.removeAttribute('src');
+        }
+        if (fallback) {
+            fallback.innerHTML = platePlaceholderHtml(item);
+            fallback.hidden = false;
+        }
+        if (zoomBtn) zoomBtn.hidden = true;
+        if (fsImg) fsImg.removeAttribute('src');
+    }
+
     function bindPlateImage(item) {
         const img = document.getElementById('impaDetailPlateImg');
         const fallback = document.getElementById('impaDetailPlateFallback');
@@ -319,6 +347,7 @@ const TVC_StoreMenu = (function () {
         const zoomBtn = document.getElementById('impaDetailZoomBtn');
         const fsImg = document.getElementById('impaPlateFullscreenImg');
         const fsTitle = document.getElementById('impaPlateFullscreenTitle');
+        const viewport = document.getElementById('impaDetailPlateViewport');
         if (!img || !fallback) return;
 
         _plateZoom?.reset();
@@ -326,26 +355,23 @@ const TVC_StoreMenu = (function () {
 
         const plateNo = item.plate_no || TVC_ImpaSchema.derivePlateNo(item.impa_code || item.code);
         const code = item.impa_code || item.code || '';
+        const photoUrl = resolvePlatePhotoUrl(item);
         if (caption) {
-            caption.textContent = plateNo
-                ? `IMPA Catalog Plate · ${plateNo}`
-                : 'IMPA Catalog Plate';
+            caption.textContent = photoUrl
+                ? `Catalog Photo · ${plateNo || code}`
+                : (plateNo ? `IMPA Catalog Plate · ${plateNo}` : 'IMPA Catalog Plate');
         }
         if (fsTitle) fsTitle.textContent = `${code} — ${item.name || 'Catalog plate'}`;
-
-        const candidates = [];
-        const primary = item.plate_image || TVC_ImpaSchema.resolvePlateImageUrl(item);
-        if (primary) candidates.push(primary);
-        const page = String(item.catalog_page || '').trim();
-        if (page && page !== primary) candidates.push(page);
 
         img.hidden = true;
         fallback.hidden = true;
         fallback.innerHTML = '';
         if (zoomBtn) zoomBtn.hidden = true;
         img.alt = `${item.name || 'IMPA item'} catalog plate`;
+        viewport?.classList.remove('has-photo');
 
         const onLoaded = src => {
+            viewport?.classList.add('has-photo');
             img.hidden = false;
             fallback.hidden = true;
             if (zoomBtn) zoomBtn.hidden = false;
@@ -355,37 +381,26 @@ const TVC_StoreMenu = (function () {
             }
         };
 
-        if (!candidates.length) {
-            fallback.innerHTML = platePlaceholderHtml(item);
-            fallback.hidden = false;
+        if (!photoUrl) {
+            showPlatePlaceholder(item, img, fallback, zoomBtn, fsImg);
             return;
         }
 
-        let idx = 0;
-        const tryNext = () => {
-            if (idx >= candidates.length) {
-                img.hidden = true;
-                img.removeAttribute('src');
-                fallback.innerHTML = platePlaceholderHtml(item);
-                fallback.hidden = false;
-                if (zoomBtn) zoomBtn.hidden = true;
-                if (fsImg) fsImg.removeAttribute('src');
-                return;
-            }
-            const src = candidates[idx++];
-            img.onload = () => onLoaded(src);
-            img.onerror = tryNext;
-            img.src = src;
-        };
-        tryNext();
+        img.onload = () => onLoaded(photoUrl);
+        img.onerror = () => showPlatePlaceholder(item, img, fallback, zoomBtn, fsImg);
+        img.src = photoUrl;
+        img.loading = 'eager';
+        img.decoding = 'async';
     }
 
     function openPlateFullscreen() {
         const fs = document.getElementById('impaPlateFullscreen');
         const img = document.getElementById('impaPlateFullscreenImg');
+        const fsViewport = document.getElementById('impaPlateFullscreenViewport');
         if (!fs || !img?.src) return;
         fs.classList.remove('hidden');
         fs.setAttribute('aria-hidden', 'false');
+        fsViewport?.classList.toggle('has-photo', isPhotoPlateUrl(img.src));
         _plateFullscreen?.reset();
     }
 
