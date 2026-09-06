@@ -146,6 +146,7 @@ const TVC_META_KEYS = {
     SPARE_MASTER_BACKUP_LAST: 'spare_master_backup_last',
     SPARE_MASTER_RESTORE_LAST: 'spare_master_restore_last',
     IMPA_CATALOG_SEED: 'impa_catalog_seed_v1',
+    IMPA_CATALOG_COUNT: 'impa_catalog_count_v1',
 };
 
 function pmsMasterCanonicalMetaKey(vesselId, department) {
@@ -1347,18 +1348,84 @@ const TVC_ImpaSchema = (function () {
         return String(v || '').trim();
     }
 
-    function fromCatalogJson(item) {
-        const impa_code = normalizeCode(item.impa_code || item.code);
+    function normalizeKey(key) {
+        return String(key || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+    }
+
+    const FIELD_ALIASES = {
+        impa_code: ['impa_code', 'code', 'impa', 'impano', 'itemno', 'item_no', 'itemnumber', 'impackcode'],
+        name: ['name', 'description', 'itemname', 'item_name', 'desc', 'title', 'productname'],
+        unit: ['unit', 'uom', 'unitofmeasure', 'unit_of_measure', 'measure'],
+        category: ['category', 'cat', 'group', 'section', 'department', 'class'],
+        catalog_page: ['catalog_page', 'catalogpage', 'plate', 'image', 'imageurl', 'img'],
+        rob: ['rob', 'qty', 'quantity', 'stock', 'onboard'],
+        spec: ['spec', 'specs', 'specification', 'dimensions'],
+    };
+
+    function pickField(row, aliases) {
+        if (!row || typeof row !== 'object') return '';
+        const map = {};
+        Object.entries(row).forEach(([k, v]) => {
+            const nk = normalizeKey(k);
+            if (nk && map[nk] === undefined) map[nk] = v;
+        });
+        for (const alias of aliases) {
+            const nk = normalizeKey(alias);
+            const val = map[nk];
+            if (val != null && String(val).trim() !== '') return val;
+        }
+        for (const alias of aliases) {
+            const nk = normalizeKey(alias);
+            const hit = Object.entries(map).find(([k]) => k.includes(nk) || nk.includes(k));
+            if (hit && hit[1] != null && String(hit[1]).trim() !== '') return hit[1];
+        }
+        return '';
+    }
+
+    function parseSpecsValue(raw, row) {
+        if (raw && typeof raw === 'object' && !Array.isArray(raw)) return { ...raw };
+        const specs = {};
+        if (raw != null && String(raw).trim()) specs.Spec = String(raw).trim();
+        Object.entries(row || {}).forEach(([k, v]) => {
+            const nk = normalizeKey(k);
+            if (!nk || v == null || String(v).trim() === '') return;
+            const reserved = new Set([
+                ...FIELD_ALIASES.impa_code,
+                ...FIELD_ALIASES.name,
+                ...FIELD_ALIASES.unit,
+                ...FIELD_ALIASES.category,
+                ...FIELD_ALIASES.catalog_page,
+                ...FIELD_ALIASES.rob,
+            ].map(normalizeKey));
+            if (reserved.has(nk)) return;
+            if (FIELD_ALIASES.spec.some(a => normalizeKey(a) === nk)) return;
+            specs[k] = String(v).trim();
+        });
+        return specs;
+    }
+
+    /** External CSV/JSON row → TVC-PMS impa_master fields */
+    function normalizeImpaRow(row) {
+        if (!row || typeof row !== 'object') return null;
+        const impa_code = normalizeCode(pickField(row, FIELD_ALIASES.impa_code));
+        if (!impa_code) return null;
+        const specRaw = pickField(row, FIELD_ALIASES.spec) || row.specs;
         return {
             impa_code,
-            name: String(item.name || '').trim(),
-            unit: String(item.unit || 'PCS').trim() || 'PCS',
-            category: String(item.category || 'General').trim() || 'General',
-            catalog_page: String(item.catalog_page || '').trim(),
-            specs: (item.specs && typeof item.specs === 'object' && !Array.isArray(item.specs))
-                ? { ...item.specs }
-                : {},
-            rob: Math.max(0, Math.floor(Number(item.rob) || 0)),
+            name: String(pickField(row, FIELD_ALIASES.name) || impa_code).trim(),
+            unit: String(pickField(row, FIELD_ALIASES.unit) || 'PCS').trim() || 'PCS',
+            category: String(pickField(row, FIELD_ALIASES.category) || 'General').trim() || 'General',
+            catalog_page: String(pickField(row, FIELD_ALIASES.catalog_page) || '').trim(),
+            specs: parseSpecsValue(specRaw, row),
+            rob: Math.max(0, Math.floor(Number(pickField(row, FIELD_ALIASES.rob)) || 0)),
+        };
+    }
+
+    function fromCatalogJson(item) {
+        const normalized = normalizeImpaRow(item);
+        if (!normalized?.impa_code) return null;
+        return {
+            ...normalized,
             schema_version: SCHEMA_VERSION,
             sync_status: 'LOCAL',
             updated_at: new Date().toISOString(),
@@ -1380,7 +1447,7 @@ const TVC_ImpaSchema = (function () {
         };
     }
 
-    return { SCHEMA_VERSION, fromCatalogJson, toUi, normalizeCode };
+    return { SCHEMA_VERSION, fromCatalogJson, toUi, normalizeCode, normalizeImpaRow, normalizeKey };
 })();
 
 /** 실행 환경 (file:// vs http:// vs Electron tvc-app://) */

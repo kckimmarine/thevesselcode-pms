@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260906-impa-close';
+const CACHE_VERSION = 'tvc-pms-20260906-impa-bulk';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -14,6 +14,7 @@ const PRECACHE_ASSETS = [
     '/js/pwa.js',
     '/icons/icon.svg',
     '/icons/icon-maskable.svg',
+    '/vendor/papaparse.min.js',
     '/vendor/jszip.min.js',
     '/vendor/exceljs.min.js',
     '/vendor/xlsx.full.min.js',

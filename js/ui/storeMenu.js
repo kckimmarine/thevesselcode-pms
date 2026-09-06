@@ -3,6 +3,11 @@ const TVC_StoreMenu = (function () {
     let _mounted = false;
     let _modalReady = false;
     let _currentItem = null;
+    let _importBusy = false;
+
+    function formatNum(n) {
+        return Number(n || 0).toLocaleString();
+    }
 
     function esc(text) {
         return String(text ?? '')
@@ -176,6 +181,89 @@ const TVC_StoreMenu = (function () {
         });
     }
 
+    function ensureImportFileInput() {
+        if (document.getElementById('storeImportFile')) return;
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.id = 'storeImportFile';
+        input.accept = '.csv,.json,application/json,text/csv';
+        input.hidden = true;
+        input.addEventListener('change', () => {
+            const file = input.files?.[0];
+            input.value = '';
+            if (file) handleBulkImport(file);
+        });
+        document.body.appendChild(input);
+    }
+
+    function setImportProgress(visible, percent, label) {
+        const panel = document.getElementById('storeImportProgress');
+        const fill = document.getElementById('storeImportProgressFill');
+        const text = document.getElementById('storeImportProgressLabel');
+        if (!panel) return;
+        panel.classList.toggle('hidden', !visible);
+        if (fill) fill.style.width = `${Math.max(0, Math.min(100, percent))}%`;
+        if (text) text.textContent = label || '';
+    }
+
+    async function handleBulkImport(file) {
+        if (_importBusy) return;
+        const root = document.getElementById('storeMenuBody');
+        if (!root) return;
+        _importBusy = true;
+        ensureImportFileInput();
+        setImportProgress(true, 0, 'Preparing import…');
+        const importBtn = root.querySelector('#storeImportBtn');
+        if (importBtn) importBtn.disabled = true;
+
+        try {
+            const result = await TVC_StoreManager.bulkImportCatalog(file, ({ imported, total, phase, catalogTotal }) => {
+                const denom = total || imported || 1;
+                const pct = phase === 'done' ? 100 : Math.round((imported / denom) * 100);
+                const phaseLabel = phase === 'parsing' ? 'Parsing' : (phase === 'reading' ? 'Reading' : 'Loading');
+                const label = phase === 'done'
+                    ? `Complete — ${formatNum(catalogTotal || imported)} items in catalog`
+                    : `${phaseLabel}: ${formatNum(imported)} / ${formatNum(total)} records…`;
+                setImportProgress(true, pct, label);
+            });
+
+            root.innerHTML = '<p class="store-loading">Refreshing catalog…</p>';
+            const items = await TVC_StoreManager.reloadCatalog();
+            _mounted = true;
+            renderCatalog(root, items);
+            setImportProgress(true, 100,
+                `Import complete — ${formatNum(result.catalogTotal)} items (${formatNum(result.imported)} upserted, ${formatNum(result.skipped)} skipped)`);
+            setTimeout(() => setImportProgress(false, 0, ''), 4000);
+        } catch (err) {
+            setImportProgress(true, 0, err.message || 'Import failed');
+            setTimeout(() => setImportProgress(false, 0, ''), 5000);
+        } finally {
+            _importBusy = false;
+            if (importBtn) importBtn.disabled = false;
+        }
+    }
+
+    function toolbarHtml(query, display, cartCount) {
+        const { filtered, total, capped } = display;
+        const countLabel = query.trim()
+            ? `${formatNum(filtered)} of ${formatNum(total)} items`
+            : `${formatNum(total)} items`;
+        return `
+            <div class="store-toolbar">
+                <input type="search" class="store-search" placeholder="Search IMPA code, name, or category…"
+                    aria-label="Search catalog" value="${esc(query)}">
+                <button type="button" class="btn-sm store-import-btn" id="storeImportBtn">Import CSV/JSON</button>
+                <span class="store-count" id="storeCatalogCount">${countLabel}</span>
+                <span class="store-cart-pill">Cart <span class="store-cart-count${cartCount ? '' : ' hidden'}">${cartCount}</span></span>
+            </div>
+            <div id="storeImportProgress" class="store-import-panel hidden" aria-live="polite">
+                <div class="store-import-progress-track">
+                    <div id="storeImportProgressFill" class="store-import-progress-fill"></div>
+                </div>
+                <p id="storeImportProgressLabel" class="store-import-progress-label"></p>
+            </div>`;
+    }
+
     function bindCatalogEvents(root, items) {
         root.querySelectorAll('.store-code-link').forEach(btn => {
             btn.addEventListener('click', () => {
@@ -194,26 +282,31 @@ const TVC_StoreMenu = (function () {
                 updated.setSelectionRange(updated.value.length, updated.value.length);
             }
         });
+
+        ensureImportFileInput();
+        root.querySelector('#storeImportBtn')?.addEventListener('click', () => {
+            if (_importBusy) return;
+            document.getElementById('storeImportFile')?.click();
+        });
     }
 
-    function renderCatalog(root, items, query = '') {
-        const filtered = TVC_StoreManager.filterCatalog(query, items);
+    function renderCatalog(root, allItems, query = '') {
+        const display = TVC_StoreManager.getDisplayItems(query, allItems);
+        const { items, filtered, total, capped } = display;
         const cartCount = TVC_StoreManager.getCartCount();
 
-        if (!filtered.length) {
+        if (!filtered) {
+            const msg = total
+                ? 'No items match your search.'
+                : 'No catalog items yet. Use Import CSV/JSON to load IMPA master data.';
             root.innerHTML = `
-                <div class="store-toolbar">
-                    <input type="search" class="store-search" placeholder="Search IMPA code, name, or category…"
-                        aria-label="Search catalog" value="${esc(query)}">
-                    <span class="store-count">0 of ${items.length} items</span>
-                    <span class="store-cart-pill">Cart <span class="store-cart-count${cartCount ? '' : ' hidden'}">${cartCount}</span></span>
-                </div>
-                <p class="store-empty">No items match your search.</p>`;
-            bindCatalogEvents(root, items);
+                ${toolbarHtml(query, display, cartCount)}
+                <p class="store-empty">${msg}</p>`;
+            bindCatalogEvents(root, allItems);
             return;
         }
 
-        const rows = filtered.map(item => {
+        const rows = items.map(item => {
             const code = item.impa_code || item.code;
             return `
             <tr>
@@ -226,13 +319,13 @@ const TVC_StoreMenu = (function () {
             </tr>`;
         }).join('');
 
+        const capNote = capped
+            ? `<p class="store-cap-note">Showing first ${formatNum(items.length)} matches — refine search to narrow results.</p>`
+            : '';
+
         root.innerHTML = `
-            <div class="store-toolbar">
-                <input type="search" class="store-search" placeholder="Search IMPA code, name, or category…"
-                    aria-label="Search catalog" value="${esc(query)}">
-                <span class="store-count">${filtered.length} of ${items.length} items</span>
-                <span class="store-cart-pill">Cart <span class="store-cart-count${cartCount ? '' : ' hidden'}">${cartCount}</span></span>
-            </div>
+            ${toolbarHtml(query, display, cartCount)}
+            ${capNote}
             <div class="store-table-wrap">
                 <table class="store-table">
                     <thead>
@@ -247,7 +340,7 @@ const TVC_StoreMenu = (function () {
                 </table>
             </div>`;
 
-        bindCatalogEvents(root, items);
+        bindCatalogEvents(root, allItems);
     }
 
     async function render() {

@@ -60,15 +60,16 @@
     "@supabase/supabase-js": "^2.112.4",
     "exceljs": "^4.4.0",
     "jszip": "^3.10.1",
+    "papaparse": "^5.7.0",
     "uuid": "^14.0.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@playwright/test": "^1.55.0",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
     "png-to-ico": "^3.0.2",
-    "sharp": "^0.35.3",
-    "@playwright/test": "^1.55.0"
+    "sharp": "^0.35.3"
   },
   "build": {
     "appId": "com.thevesselcode.tvc-pms",

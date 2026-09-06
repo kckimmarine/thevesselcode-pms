@@ -43,6 +43,51 @@
     align-self: center;
     font-size: 0.8125rem;
     color: #718096;
+    font-weight: 600;
+}
+
+.store-import-btn {
+    align-self: center;
+    white-space: nowrap;
+}
+
+.store-import-panel {
+    margin: 0 20px 12px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: #edf2f7;
+    border: 1px solid #cbd5e0;
+}
+
+.store-import-panel.hidden {
+    display: none;
+}
+
+.store-import-progress-track {
+    height: 10px;
+    border-radius: 999px;
+    background: #e2e8f0;
+    overflow: hidden;
+}
+
+.store-import-progress-fill {
+    height: 100%;
+    width: 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, #2b6cb0, #1a365d);
+    transition: width 0.15s ease;
+}
+
+.store-import-progress-label {
+    margin: 8px 0 0;
+    font-size: 0.8125rem;
+    color: #4a5568;
+}
+
+.store-cap-note {
+    margin: 0 20px 10px;
+    font-size: 0.8125rem;
+    color: #718096;
 }
 
 .store-table-wrap {
@@ -460,7 +505,9 @@
     }
 
     .store-toolbar,
-    .store-table-wrap {
+    .store-table-wrap,
+    .store-import-panel,
+    .store-cap-note {
         margin-left: 12px;
         margin-right: 12px;
     }

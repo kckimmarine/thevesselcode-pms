@@ -14,6 +14,7 @@ const MAP = [
     ['node_modules/jszip/dist/jszip.min.js', 'jszip.min.js'],
     ['node_modules/exceljs/dist/exceljs.min.js', 'exceljs.min.js'],
     ['node_modules/xlsx/dist/xlsx.full.min.js', 'xlsx.full.min.js'],
+    ['node_modules/papaparse/papaparse.min.js', 'papaparse.min.js'],
 ];
 
 fs.mkdirSync(VENDOR, { recursive: true });
