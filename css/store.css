@@ -1,0 +1,113 @@
+/* THE VESSEL CODE — STORE tab (IMPA catalog) */
+#tab-store .sheet-head h2 {
+    margin: 0;
+}
+
+.store-loading,
+.store-empty {
+    color: #718096;
+    font-size: 0.9375rem;
+    padding: 12px 4px;
+}
+
+.store-error {
+    color: #c53030;
+    font-size: 0.9375rem;
+    padding: 12px 4px;
+}
+
+.store-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 20px 16px;
+}
+
+.store-search {
+    flex: 1;
+    min-width: 180px;
+    padding: 10px 14px;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    background: #fff;
+    color: #2d3748;
+    font-size: 0.9375rem;
+}
+
+.store-search:focus {
+    outline: 2px solid #3182ce;
+    outline-offset: 1px;
+}
+
+.store-count {
+    align-self: center;
+    font-size: 0.8125rem;
+    color: #718096;
+}
+
+.store-table-wrap {
+    margin: 0 20px 24px;
+    overflow-x: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #fff;
+}
+
+.store-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.store-table th,
+.store-table td {
+    padding: 12px 14px;
+    text-align: left;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.store-table th {
+    background: #edf2f7;
+    font-weight: 600;
+    font-size: 0.8125rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #4a5568;
+    white-space: nowrap;
+}
+
+.store-table tr:last-child td {
+    border-bottom: none;
+}
+
+.store-table tbody tr:hover {
+    background: #f7fafc;
+}
+
+.store-code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    color: #2b6cb0;
+    font-weight: 600;
+}
+
+.store-category {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: #edf2f7;
+    font-size: 0.75rem;
+    color: #4a5568;
+}
+
+@media (max-width: 768px) {
+    .store-toolbar,
+    .store-table-wrap {
+        margin-left: 12px;
+        margin-right: 12px;
+    }
+
+    .store-table th:nth-child(4),
+    .store-table td:nth-child(4) {
+        display: none;
+    }
+}

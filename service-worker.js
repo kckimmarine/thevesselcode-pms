@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260903-web-cloud';
+const CACHE_VERSION = 'tvc-pms-20260906-store-tab';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -10,6 +10,7 @@ const PRECACHE_ASSETS = [
     '/manifest.json',
     '/css/app.css',
     '/css/responsive-scale.css',
+    '/css/store.css',
     '/js/pwa.js',
     '/icons/icon.svg',
     '/icons/icon-maskable.svg',
@@ -28,6 +29,10 @@ const PRECACHE_ASSETS = [
     '/js/ui/outstandingTasks.js',
     '/js/services/vendors.js',
     '/js/ui/spareMenu.js',
+    '/js/services/storeManager.js',
+    '/js/ui/storeMenu.js',
+    '/js/store-tab-init.js',
+    '/data/impa-catalog.json',
     '/js/ui/spareRequest.js',
     '/js/services/jobMeta.js',
     '/js/services/inventory.js',

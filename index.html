@@ -17,6 +17,7 @@
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="stylesheet" href="css/app.css?v=20260905-pms-tree-mobile">
     <link rel="stylesheet" href="css/responsive-scale.css?v=20260905-wr-hist-detail">
+    <link rel="stylesheet" href="css/store.css?v=20260906-store-tab">
 </head>
 <body>
 
@@ -150,6 +151,7 @@
         <button class="tab-btn" data-tab="actual" onclick="TVC_App.switchTab('actual')">📝 PMS</button>
         <button class="tab-btn" data-tab="spare" data-feature="showSpareTab" onclick="TVC_App.switchTab('spare')">🔩 SPARE</button>
         <button class="tab-btn" data-tab="history" onclick="TVC_App.switchTab('history')">📜 Report History</button>
+        <button class="tab-btn" data-tab="store" onclick="TVC_App.switchTab('store')">📦 STORE</button>
         <div class="tab-bar-end">
             <button type="button" id="btn-open-ai-help" class="btn-ai-help btn-feedback" onclick="TVC_App.openAiHelp()" title="AI Help">🤖 AI Help</button>
             <button type="button" id="settingsOpenBtn" class="tab-bar-settings" onclick="TVC_Settings.open()" title="Settings">⚙ Settings</button>
@@ -393,6 +395,12 @@
         <!-- TAB: SPARE (Unified — Inventory · Search · Requisition) -->
         <section id="tab-spare" class="tab-pane hidden">
             <div id="spareMenuBody"></div>
+        </section>
+
+        <!-- TAB: STORE (IMPA ship stores catalog) -->
+        <section id="tab-store" class="tab-pane hidden">
+            <div class="sheet-head"><h2>📦 STORE</h2></div>
+            <div id="storeMenuBody"></div>
         </section>
     </div>
 
@@ -850,6 +858,9 @@
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
 <script src="js/app.js?v=20260903-web-cloud"></script>
+<script src="js/services/storeManager.js?v=20260906-store-tab"></script>
+<script src="js/ui/storeMenu.js?v=20260906-store-tab"></script>
+<script src="js/store-tab-init.js?v=20260906-store-tab"></script>
 <script src="js/pwa.js?v=20260902-date-picker"></script>
 </body>
 </html>
