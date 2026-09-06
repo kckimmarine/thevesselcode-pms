@@ -16,7 +16,22 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v4
 
+      - name: Check FTP credentials
+        id: creds
+        run: |
+          if [ -z "$BLUEHOST_FTP_HOST" ] || [ -z "$BLUEHOST_FTP_USER" ] || [ -z "$BLUEHOST_FTP_PASS" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Bluehost FTP secrets missing. Add BLUEHOST_FTP_HOST, BLUEHOST_FTP_USER, and BLUEHOST_FTP_PASS in GitHub repository secrets to enable auto-deploy."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          BLUEHOST_FTP_HOST: ${{ secrets.BLUEHOST_FTP_HOST }}
+          BLUEHOST_FTP_USER: ${{ secrets.BLUEHOST_FTP_USER }}
+          BLUEHOST_FTP_PASS: ${{ secrets.BLUEHOST_FTP_PASS }}
+
       - name: Deploy bluehost/* via FTP
+        if: steps.creds.outputs.configured == 'true'
         run: npm run deploy:bluehost
         env:
           BLUEHOST_FTP_HOST: ${{ secrets.BLUEHOST_FTP_HOST }}
