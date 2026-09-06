@@ -45,8 +45,13 @@ const TVC_StoreManager = (function () {
         _useMemorySearch = !!enabled;
     }
 
-    function isMemorySearchReady() {
-        return Array.isArray(_memoryIndex) && _memoryIndex.length > 0;
+    function getMemoryCategories() {
+        if (!_memoryIndex?.length) return [];
+        const set = new Set();
+        for (const row of _memoryIndex) {
+            if (row?.category) set.add(row.category);
+        }
+        return [...set].sort((a, b) => a.localeCompare(b));
     }
 
     async function buildMemoryIndex() {
@@ -558,6 +563,7 @@ const TVC_StoreManager = (function () {
         enableMemorySearch,
         buildMemoryIndex,
         isMemorySearchReady,
+        getMemoryCategories,
         getCatalog,
         getTotalCount,
         getLastSearch,

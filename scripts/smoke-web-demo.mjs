@@ -47,6 +47,14 @@ if (existsSync(bluehostEmbed)) {
   ok = false;
 }
 
+const bluehostToolkit = join(root, 'bluehost/toolkit/index.html');
+if (existsSync(bluehostToolkit)) {
+  console.log('OK bluehost/toolkit/index.html');
+} else {
+  console.error('MISSING bluehost/toolkit/index.html');
+  ok = false;
+}
+
 if (readFileSync(join(root, 'js/config.js'), 'utf8').includes('isWebDeploy')) {
   console.log('OK web deploy config');
 } else {

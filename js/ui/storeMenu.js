@@ -13,6 +13,7 @@ const TVC_StoreMenu = (function () {
     let _plateObjectUrl = null;
     let _plateLoadToken = 0;
     let _publicMode = false;
+    let _categoryFilter = '';
     const STORE_ROW_H = 44;
     const SEARCH_DEBOUNCE_MS = 180;
     const PUBLIC_SEARCH_DEBOUNCE_MS = 100;
@@ -699,6 +700,15 @@ const TVC_StoreMenu = (function () {
         return '';
     }
 
+    function categoryOptionsHtml() {
+        const cats = typeof TVC_StoreManager.getMemoryCategories === 'function'
+            ? TVC_StoreManager.getMemoryCategories()
+            : [];
+        const opts = cats.map(c =>
+            `<option value="${esc(c)}"${c === _categoryFilter ? ' selected' : ''}>${esc(c)}</option>`).join('');
+        return `<option value="">All categories</option>${opts}`;
+    }
+
     function toolbarHtml(search, cartCount) {
         const query = search?.query || '';
         if (_publicMode) {
@@ -706,6 +716,9 @@ const TVC_StoreMenu = (function () {
             <div class="store-toolbar store-toolbar-public">
                 <input type="search" class="store-search" placeholder="Search IMPA code, description, or category…"
                     aria-label="Search catalog" value="${esc(query)}" autocomplete="off" spellcheck="false">
+                <select id="storeCategoryFilter" class="store-category-filter" aria-label="Filter by category">
+                    ${categoryOptionsHtml()}
+                </select>
                 <span class="store-count" id="storeCatalogCount">${countLabel(search)}</span>
             </div>`;
         }
@@ -777,25 +790,32 @@ const TVC_StoreMenu = (function () {
         });
     }
 
+    function applyCategoryFilter(search) {
+        if (!_categoryFilter) return search;
+        const items = (search.items || []).filter(i => i.category === _categoryFilter);
+        return { ...search, items, matched: items.length };
+    }
+
     function paintSearchResults(root, search) {
+        const filtered = _publicMode ? applyCategoryFilter(search) : search;
         const countEl = root.querySelector('#storeCatalogCount');
-        if (countEl) countEl.textContent = countLabel(search);
+        if (countEl) countEl.textContent = countLabel(filtered);
 
         const capNote = root.querySelector('#storeCapNote');
-        const cap = capNoteText(search);
+        const cap = capNoteText(filtered);
         if (capNote) {
             capNote.textContent = cap;
             capNote.classList.toggle('hidden', !cap);
         }
 
-        const items = search.items || [];
+        const items = filtered.items || [];
         const empty = root.querySelector('#storeEmpty');
         const wrap = root.querySelector('#storeVlWrap');
 
         if (!items.length) {
             wrap?.classList.add('hidden');
             empty?.classList.remove('hidden');
-            if (empty) empty.textContent = emptyCatalogMessage(search.query);
+            if (empty) empty.textContent = emptyCatalogMessage(filtered.query);
             _listState.items = [];
             destroyVirtualList();
             return;
@@ -854,6 +874,11 @@ const TVC_StoreMenu = (function () {
         searchInput?.addEventListener('input', e => {
             const q = e.target.value;
             scheduleSearch(root, q);
+        });
+
+        root.querySelector('#storeCategoryFilter')?.addEventListener('change', e => {
+            _categoryFilter = e.target.value || '';
+            paintSearchResults(root, TVC_StoreManager.getLastSearch());
         });
 
         if (!_publicMode) {

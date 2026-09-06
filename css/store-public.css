@@ -76,15 +76,28 @@ html:has(.store-public-body) {
 
 .store-public-toolkit {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 8px;
     padding: 12px 16px;
-    background: rgba(255, 255, 255, 0.92);
+    background: rgba(255, 255, 255, 0.96);
     border-bottom: 1px solid #cbd5e0;
     position: sticky;
     top: 0;
     z-index: 30;
     backdrop-filter: blur(8px);
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.store-public-toolkit::-webkit-scrollbar {
+    height: 6px;
+}
+
+.store-public-toolkit::-webkit-scrollbar-thumb {
+    background: #cbd5e0;
+    border-radius: 999px;
 }
 
 .store-tool-chip {
@@ -97,7 +110,8 @@ html:has(.store-public-body) {
     font-weight: 600;
     cursor: pointer;
     white-space: nowrap;
-    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+    flex-shrink: 0;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease, transform 0.15s ease;
 }
 
 .store-tool-chip:hover,
@@ -125,10 +139,109 @@ html:has(.store-public-body) {
     display: flex;
     flex-direction: column;
     min-height: 0;
+    animation: toolkit-panel-in 0.22s ease;
+}
+
+@keyframes toolkit-panel-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
 .store-public-panel.hidden {
     display: none;
+}
+
+.store-category-filter {
+    min-width: 140px;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    background: #fff;
+    color: #2d3748;
+    font-size: 0.875rem;
+}
+
+.toolkit-conversion-banner {
+    position: sticky;
+    bottom: 0;
+    z-index: 25;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 10px 16px;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+    color: #fff;
+    box-shadow: 0 -6px 24px rgba(26, 54, 93, 0.22);
+}
+
+.toolkit-conversion-text {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 600;
+    line-height: 1.4;
+    text-align: center;
+}
+
+.toolkit-conversion-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 10px 16px;
+    border-radius: 999px;
+    background: #fff;
+    color: #1a365d;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    transition: transform 0.15s ease;
+}
+
+.toolkit-conversion-btn:hover,
+.toolkit-conversion-btn:focus-visible {
+    transform: translateY(-1px);
+    outline: 2px solid #90cdf4;
+    outline-offset: 2px;
+}
+
+.store-public-footer-tag {
+    font-size: 0.75rem;
+    color: #718096;
+}
+
+.maritime-bunker-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    text-align: center;
+}
+
+.maritime-bunker-metrics span {
+    display: block;
+    font-size: 0.75rem;
+    color: #2c5282;
+    margin-bottom: 4px;
+}
+
+.maritime-bunker-metrics strong {
+    font-size: 1.125rem;
+    color: #1a365d;
+}
+
+.maritime-bunker-metrics strong:first-of-type {
+    font-size: 1.5rem;
+}
+
+#storeToolBunker,
+#storeToolLube,
+#storeToolPaint,
+#storeToolEngineering {
+    padding-top: 16px;
+    padding-bottom: 8px;
+    overflow-y: auto;
 }
 
 .maritime-panel-head {
@@ -481,14 +594,11 @@ html:has(.store-public-body) {
 }
 
 .store-tool-flange .store-public-main,
-.store-tool-bunker .store-public-main {
+.store-tool-bunker .store-public-main,
+.store-tool-lube .store-public-main,
+.store-tool-paint .store-public-main,
+.store-tool-engineering .store-public-main {
     display: none;
-}
-
-#storeToolFlange,
-#storeToolBunker {
-    padding-top: 16px;
-    padding-bottom: 8px;
 }
 
 @media (max-width: 640px) {
@@ -504,9 +614,17 @@ html:has(.store-public-body) {
         font-size: 0.75rem;
     }
 
+    .maritime-bunker-metrics {
+        grid-template-columns: 1fr;
+    }
+
+    .toolkit-conversion-banner {
+        flex-direction: column;
+        text-align: center;
+    }
+
     .store-public-toolkit {
         padding: 10px 12px;
-        gap: 6px;
     }
 
     .store-tool-chip {
