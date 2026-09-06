@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260906-plate-pipeline';
+const CACHE_VERSION = 'tvc-pms-20260906-public-catalog';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -7,10 +7,12 @@ const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 const PRECACHE_ASSETS = [
     '/',
     '/index.html',
+    '/store-public.html',
     '/manifest.json',
     '/css/app.css',
     '/css/responsive-scale.css',
     '/css/store.css',
+    '/css/store-public.css',
     '/js/pwa.js',
     '/icons/icon.svg',
     '/icons/icon-maskable.svg',
@@ -32,7 +34,7 @@ const PRECACHE_ASSETS = [
     '/js/ui/spareMenu.js',
     '/js/services/storeManager.js',
     '/js/ui/storeMenu.js',
-    '/js/store-tab-init.js',
+    '/js/store-public-boot.js',
     '/data/impa-catalog.json',
     '/data/impa-catalog-pages/rigging.svg',
     '/data/impa-catalog-pages/paint.svg',
