@@ -12,6 +12,18 @@
     <meta name="application-name" content="TVC-PMS">
     <meta name="description" content="THE VESSEL CODE — Offline-first Planned Maintenance System">
     <title>THE VESSEL CODE — TVC-PMS</title>
+    <script>
+        (function () {
+            try {
+                var q = new URLSearchParams(location.search);
+                if (q.get('mode') === 'public') {
+                    var target = 'store-public.html';
+                    if (location.hash) target += location.hash;
+                    location.replace(target);
+                }
+            } catch (_) {}
+        })();
+    </script>
     <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="apple-touch-icon" href="icons/company-logo.png?v=20260804-logo-no-ring">

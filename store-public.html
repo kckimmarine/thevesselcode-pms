@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta http-equiv="Cache-Control" content="no-cache">
+    <meta name="theme-color" content="#1a365d">
+    <meta name="description" content="Browse the IMPA ship stores catalog — search codes, view catalog plates and technical specifications.">
+    <title>IMPA Catalog — THE VESSEL CODE</title>
+    <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
+    <link rel="stylesheet" href="css/store.css?v=20260906-public-catalog">
+    <link rel="stylesheet" href="css/store-public.css?v=20260906-public-catalog">
+</head>
+<body class="store-public-body">
+    <div class="store-public-shell">
+        <header class="store-public-header" aria-label="IMPA catalog">
+            <div class="store-public-brand">
+                <img src="icons/company-logo.png?v=20260804-logo-no-ring" alt="" width="44" height="44" draggable="false">
+                <div class="store-public-brand-text">
+                    <h1 class="store-public-title">IMPA Ship Stores Catalog</h1>
+                    <p class="store-public-subtitle">Search IMPA codes and categories · read-only preview for fleet procurement teams</p>
+                </div>
+            </div>
+            <a class="store-public-site-link" href="https://thevesselcode.com" target="_blank" rel="noopener noreferrer">thevesselcode.com</a>
+        </header>
+
+        <main id="storeMenuBody" class="store-public-main" aria-live="polite">
+            <p class="store-loading">Loading catalog…</p>
+        </main>
+
+        <footer class="store-public-footer">
+            <span>© 2026 THE VESSEL CODE</span>
+            <a href="https://thevesselcode.com" target="_blank" rel="noopener noreferrer">Contact for PMS Demo</a>
+        </footer>
+    </div>
+
+    <script src="js/core/schema.js?v=20260906-plate-pipeline"></script>
+    <script src="js/core/db.js?v=20260906-plate-pipeline"></script>
+    <script src="js/ui/virtualList.js?v=20260723-readability"></script>
+    <script src="js/services/plateImageCache.js?v=20260906-plate-pipeline"></script>
+    <script src="js/services/storeManager.js?v=20260906-plate-pipeline"></script>
+    <script src="js/ui/storeMenu.js?v=20260906-public-catalog"></script>
+    <script src="js/store-public-boot.js?v=20260906-public-catalog"></script>
+</body>
+</html>

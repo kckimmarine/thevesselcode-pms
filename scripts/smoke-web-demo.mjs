@@ -6,6 +6,9 @@ import { join } from 'node:path';
 const root = process.cwd();
 const mustExist = [
   'index.html',
+  'store-public.html',
+  'js/store-public-boot.js',
+  'css/store-public.css',
   'vercel.json',
   'js/config.js',
   'js/auth.js',

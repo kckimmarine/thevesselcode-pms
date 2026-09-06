@@ -12,6 +12,7 @@ const TVC_StoreMenu = (function () {
     let _plateFullscreen = null;
     let _plateObjectUrl = null;
     let _plateLoadToken = 0;
+    let _publicMode = false;
     const STORE_ROW_H = 44;
     const SEARCH_DEBOUNCE_MS = 180;
 
@@ -85,6 +86,11 @@ const TVC_StoreMenu = (function () {
                             </div>
                             <p class="impa-detail-cart-msg" id="impaDetailCartMsg" role="status" aria-live="polite"></p>
                         </div>
+                        <div class="impa-detail-public-cta hidden" id="impaDetailPublicCta">
+                            <a href="https://thevesselcode.com" target="_blank" rel="noopener noreferrer" class="impa-detail-public-cta-link">
+                                Want to manage ROB &amp; create requisitions for your fleet? → Contact The Vessel Code (PMS Demo)
+                            </a>
+                        </div>
                     </section>
                     <footer class="impa-detail-footer">
                         <button type="button" class="impa-detail-close-btn impa-detail-close-bottom">Close / 닫기</button>
@@ -141,7 +147,41 @@ const TVC_StoreMenu = (function () {
             _plateFullscreen = createPlateZoomController(fsViewport, fsStage, { maxScale: 6 });
         }
 
+        applyModalPublicMode();
         _modalReady = true;
+    }
+
+    function applyModalPublicMode() {
+        const rob = document.getElementById('impaDetailRobBanner');
+        const cart = document.querySelector('#impaDetailModal .impa-detail-cart');
+        const cta = document.getElementById('impaDetailPublicCta');
+        if (_publicMode) {
+            rob?.classList.add('hidden');
+            cart?.classList.add('hidden');
+            cta?.classList.remove('hidden');
+        } else {
+            rob?.classList.remove('hidden');
+            cart?.classList.remove('hidden');
+            cta?.classList.add('hidden');
+        }
+    }
+
+    function setPublicMode(enabled) {
+        _publicMode = !!enabled;
+        if (_publicMode) {
+            document.documentElement.classList.add('store-public-mode');
+        }
+        applyModalPublicMode();
+    }
+
+    function isPublicMode() {
+        return _publicMode;
+    }
+
+    function emptyCatalogMessage(query) {
+        if ((query || '').trim()) return 'No items match your search.';
+        if (_publicMode) return 'No catalog items available.';
+        return 'No catalog items yet. Use Import CSV/JSON to load IMPA master data.';
     }
 
     function touchDistance(touches) {
@@ -472,9 +512,14 @@ const TVC_StoreMenu = (function () {
         const msg = document.getElementById('impaDetailCartMsg');
         if (msg) msg.textContent = '';
 
+        applyModalPublicMode();
         bindPlateImage(item);
         modal?.classList.remove('hidden');
-        document.getElementById('impaDetailQty')?.focus();
+        if (_publicMode) {
+            modal?.querySelector('.impa-detail-close-float')?.focus();
+        } else {
+            document.getElementById('impaDetailQty')?.focus();
+        }
     }
 
     function closeImpaDetailModal() {
@@ -598,6 +643,14 @@ const TVC_StoreMenu = (function () {
 
     function toolbarHtml(search, cartCount) {
         const query = search?.query || '';
+        if (_publicMode) {
+            return `
+            <div class="store-toolbar store-toolbar-public">
+                <input type="search" class="store-search" placeholder="Search IMPA code (6-digit) or description…"
+                    aria-label="Search catalog" value="${esc(query)}" autocomplete="off">
+                <span class="store-count" id="storeCatalogCount">${countLabel(search)}</span>
+            </div>`;
+        }
         return `
             <div class="store-toolbar">
                 <input type="search" class="store-search" placeholder="Search IMPA code (6-digit) or description…"
@@ -632,9 +685,7 @@ const TVC_StoreMenu = (function () {
     function catalogShellHtml(search, cartCount) {
         const cap = capNoteText(search);
         const hasItems = (search.items || []).length > 0;
-        const emptyMsg = (search.query || '').trim()
-            ? 'No items match your search.'
-            : 'No catalog items yet. Use Import CSV/JSON to load IMPA master data.';
+        const emptyMsg = emptyCatalogMessage(search.query);
         return `
             ${toolbarHtml(search, cartCount)}
             <p id="storeCapNote" class="store-cap-note${cap ? '' : ' hidden'}">${esc(cap)}</p>
@@ -686,11 +737,7 @@ const TVC_StoreMenu = (function () {
         if (!items.length) {
             wrap?.classList.add('hidden');
             empty?.classList.remove('hidden');
-            if (empty) {
-                empty.textContent = (search.query || '').trim()
-                    ? 'No items match your search.'
-                    : 'No catalog items yet. Use Import CSV/JSON to load IMPA master data.';
-            }
+            if (empty) empty.textContent = emptyCatalogMessage(search.query);
             _listState.items = [];
             destroyVirtualList();
             return;
@@ -750,23 +797,25 @@ const TVC_StoreMenu = (function () {
             scheduleSearch(root, q);
         });
 
-        ensureImportFileInput();
-        root.querySelector('#storeImportBtn')?.addEventListener('click', () => {
-            if (_importBusy) return;
-            document.getElementById('storeImportFile')?.click();
-        });
+        if (!_publicMode) {
+            ensureImportFileInput();
+            root.querySelector('#storeImportBtn')?.addEventListener('click', () => {
+                if (_importBusy) return;
+                document.getElementById('storeImportFile')?.click();
+            });
+        }
     }
 
     function renderCatalog(root, search) {
         const state = search?.items ? search : TVC_StoreManager.getLastSearch();
         _listState.items = state.items || [];
-        const cartCount = TVC_StoreManager.getCartCount();
+        const cartCount = _publicMode ? 0 : TVC_StoreManager.getCartCount();
 
         destroyVirtualList();
         root.innerHTML = catalogShellHtml(state, cartCount);
         bindCatalogEvents(root);
         if (_listState.items.length) mountVirtualList(root);
-        updateCartBadge();
+        if (!_publicMode) updateCartBadge();
     }
 
     async function render() {
@@ -789,5 +838,11 @@ const TVC_StoreMenu = (function () {
         }
     }
 
-    return { render, openImpaDetailModal, closeImpaDetailModal };
+    return {
+        render,
+        openImpaDetailModal,
+        closeImpaDetailModal,
+        setPublicMode,
+        isPublicMode,
+    };
 })();
