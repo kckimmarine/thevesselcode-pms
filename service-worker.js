@@ -1,5 +1,5 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260906-public-catalog';
+const CACHE_VERSION = 'tvc-pms-20260906-public-advanced';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
@@ -34,6 +34,7 @@ const PRECACHE_ASSETS = [
     '/js/ui/spareMenu.js',
     '/js/services/storeManager.js',
     '/js/ui/storeMenu.js',
+    '/js/ui/maritimeToolkit.js',
     '/js/store-public-boot.js',
     '/data/impa-catalog.json',
     '/data/impa-catalog-pages/rigging.svg',

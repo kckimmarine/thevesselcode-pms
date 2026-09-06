@@ -15,6 +15,7 @@ const TVC_StoreMenu = (function () {
     let _publicMode = false;
     const STORE_ROW_H = 44;
     const SEARCH_DEBOUNCE_MS = 180;
+    const PUBLIC_SEARCH_DEBOUNCE_MS = 100;
 
     function formatNum(n) {
         return Number(n || 0).toLocaleString();
@@ -86,16 +87,18 @@ const TVC_StoreMenu = (function () {
                             </div>
                             <p class="impa-detail-cart-msg" id="impaDetailCartMsg" role="status" aria-live="polite"></p>
                         </div>
-                        <div class="impa-detail-public-cta hidden" id="impaDetailPublicCta">
-                            <a href="https://thevesselcode.com" target="_blank" rel="noopener noreferrer" class="impa-detail-public-cta-link">
-                                Want to manage ROB &amp; create requisitions for your fleet? → Contact The Vessel Code (PMS Demo)
-                            </a>
-                        </div>
+                        <div class="impa-detail-public-cta hidden" id="impaDetailPublicCta" aria-hidden="true"></div>
                     </section>
                     <footer class="impa-detail-footer">
                         <button type="button" class="impa-detail-close-btn impa-detail-close-bottom">Close / 닫기</button>
                     </footer>
                 </div>
+                <footer class="impa-detail-public-footer hidden" id="impaDetailPublicFooter" aria-label="TVC-PMS demo">
+                    <a href="https://thevesselcode.com/#contact" target="_blank" rel="noopener noreferrer" class="impa-detail-public-cta-link">
+                        <span class="impa-detail-public-cta-lead">⚓ Looking to automate Requisitions &amp; ROB for your fleet?</span>
+                        <span class="impa-detail-public-cta-action">Experience TVC-PMS Demo →</span>
+                    </a>
+                </footer>
             </div>
             <div id="impaPlateFullscreen" class="impa-plate-fullscreen hidden" aria-hidden="true">
                 <div class="impa-plate-fullscreen-backdrop"></div>
@@ -155,14 +158,22 @@ const TVC_StoreMenu = (function () {
         const rob = document.getElementById('impaDetailRobBanner');
         const cart = document.querySelector('#impaDetailModal .impa-detail-cart');
         const cta = document.getElementById('impaDetailPublicCta');
+        const footerCta = document.getElementById('impaDetailPublicFooter');
+        const bottomClose = document.querySelector('#impaDetailModal .impa-detail-close-bottom');
         if (_publicMode) {
             rob?.classList.add('hidden');
             cart?.classList.add('hidden');
-            cta?.classList.remove('hidden');
+            cta?.classList.add('hidden');
+            footerCta?.classList.remove('hidden');
+            bottomClose?.classList.add('hidden');
+            document.getElementById('impaDetailModal')?.classList.add('impa-detail-modal-public');
         } else {
             rob?.classList.remove('hidden');
             cart?.classList.remove('hidden');
             cta?.classList.add('hidden');
+            footerCta?.classList.add('hidden');
+            bottomClose?.classList.remove('hidden');
+            document.getElementById('impaDetailModal')?.classList.remove('impa-detail-modal-public');
         }
     }
 
@@ -170,6 +181,7 @@ const TVC_StoreMenu = (function () {
         _publicMode = !!enabled;
         if (_publicMode) {
             document.documentElement.classList.add('store-public-mode');
+            TVC_StoreManager.enableMemorySearch(true);
         }
         applyModalPublicMode();
     }
@@ -440,19 +452,41 @@ const TVC_StoreMenu = (function () {
 
     function specRows(item) {
         const specs = item.specs && typeof item.specs === 'object' ? item.specs : {};
-        const priority = ['Dimensions', 'Material', 'Voltage', 'Standard', 'Grade', 'Finish', 'Certification'];
+        const priority = _publicMode
+            ? ['Category', 'Unit of Measure', 'Material', 'Dimensions', 'Standard', 'Voltage', 'Grade', 'Finish', 'Certification']
+            : ['Dimensions', 'Material', 'Voltage', 'Standard', 'Grade', 'Finish', 'Certification'];
         const rows = [];
         const used = new Set();
 
+        if (_publicMode) {
+            rows.push(['Category', item.category || '—']);
+            rows.push(['Unit of Measure', item.unit || 'PCS']);
+            used.add('Category');
+            used.add('Unit of Measure');
+        }
+
         priority.forEach(key => {
+            if (used.has(key)) return;
+            if (key === 'Category') {
+                if (!_publicMode) rows.push([key, item.category || '—']);
+                used.add(key);
+                return;
+            }
+            if (key === 'Unit of Measure') {
+                if (!_publicMode) rows.push([key, item.unit || 'PCS']);
+                used.add(key);
+                return;
+            }
             if (specs[key] != null && String(specs[key]).trim() !== '') {
                 rows.push([key, specs[key]]);
                 used.add(key);
             }
         });
 
-        rows.push(['Category', item.category || '—']);
-        rows.push(['Unit of Measure', item.unit || 'PCS']);
+        if (!_publicMode) {
+            rows.push(['Category', item.category || '—']);
+            rows.push(['Unit of Measure', item.unit || 'PCS']);
+        }
         const plateId = resolvePlateId(item);
         if (plateId) rows.push(['Plate ID', plateId]);
 
@@ -646,8 +680,8 @@ const TVC_StoreMenu = (function () {
         if (_publicMode) {
             return `
             <div class="store-toolbar store-toolbar-public">
-                <input type="search" class="store-search" placeholder="Search IMPA code (6-digit) or description…"
-                    aria-label="Search catalog" value="${esc(query)}" autocomplete="off">
+                <input type="search" class="store-search" placeholder="Search IMPA code, description, or category…"
+                    aria-label="Search catalog" value="${esc(query)}" autocomplete="off" spellcheck="false">
                 <span class="store-count" id="storeCatalogCount">${countLabel(search)}</span>
             </div>`;
         }
@@ -775,10 +809,11 @@ const TVC_StoreMenu = (function () {
 
     function scheduleSearch(root, query) {
         if (_searchTimer) clearTimeout(_searchTimer);
+        const delay = _publicMode ? PUBLIC_SEARCH_DEBOUNCE_MS : SEARCH_DEBOUNCE_MS;
         _searchTimer = setTimeout(() => {
             _searchTimer = null;
             runSearch(root, query);
-        }, SEARCH_DEBOUNCE_MS);
+        }, delay);
     }
 
     function bindCatalogEvents(root) {
@@ -831,6 +866,7 @@ const TVC_StoreMenu = (function () {
         root.innerHTML = '<p class="store-loading">Loading catalog…</p>';
         try {
             await TVC_StoreManager.loadCatalog();
+            if (_publicMode) await TVC_StoreManager.buildMemoryIndex();
             _mounted = true;
             renderCatalog(root, TVC_StoreManager.getLastSearch());
         } catch (err) {

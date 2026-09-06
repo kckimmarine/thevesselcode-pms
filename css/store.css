@@ -677,19 +677,59 @@
     padding: 0;
 }
 
+.impa-detail-public-footer {
+    flex-shrink: 0;
+    padding: 12px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+    background: #fff;
+    border-top: 2px solid #2b6cb0;
+    box-shadow: 0 -6px 20px rgba(26, 54, 93, 0.12);
+}
+
+.impa-detail-public-footer.hidden {
+    display: none;
+}
+
+.impa-detail-modal-public .impa-detail-box {
+    display: flex;
+    flex-direction: column;
+    max-height: min(94dvh, 100dvh - 12px);
+    padding-bottom: 0;
+}
+
+.impa-detail-modal-public .impa-detail-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+}
+
+.impa-detail-modal-public .impa-detail-footer {
+    display: none;
+}
+
 .impa-detail-public-cta-link {
-    display: block;
-    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 14px 16px;
     border-radius: 10px;
     background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
     color: #fff;
     font-size: 0.9375rem;
     font-weight: 600;
-    line-height: 1.45;
+    line-height: 1.4;
     text-align: center;
     text-decoration: none;
     box-shadow: 0 4px 14px rgba(26, 54, 93, 0.28);
     transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.impa-detail-public-cta-lead {
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.impa-detail-public-cta-action {
+    font-size: 1rem;
+    font-weight: 700;
 }
 
 .impa-detail-public-cta-link:hover,
@@ -699,6 +739,12 @@
     box-shadow: 0 6px 18px rgba(26, 54, 93, 0.35);
     outline: 2px solid #90cdf4;
     outline-offset: 2px;
+}
+
+.store-public-mode .impa-detail-head {
+    position: sticky;
+    top: 0;
+    z-index: 20;
 }
 
 .store-public-mode .impa-detail-rob-banner,

@@ -74,6 +74,189 @@ html:has(.store-public-body) {
     text-decoration: underline;
 }
 
+.store-public-toolkit {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px 16px;
+    background: rgba(255, 255, 255, 0.92);
+    border-bottom: 1px solid #cbd5e0;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    backdrop-filter: blur(8px);
+}
+
+.store-tool-chip {
+    border: 1px solid #cbd5e0;
+    background: #fff;
+    color: #2d3748;
+    border-radius: 999px;
+    padding: 8px 14px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.store-tool-chip:hover,
+.store-tool-chip:focus-visible {
+    border-color: #2b6cb0;
+    color: #1a365d;
+    outline: none;
+}
+
+.store-tool-chip.active {
+    background: #1a365d;
+    border-color: #1a365d;
+    color: #fff;
+}
+
+.store-public-panels {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.store-public-panel {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+
+.store-public-panel.hidden {
+    display: none;
+}
+
+.maritime-panel-head {
+    margin: 0 16px 12px;
+}
+
+.maritime-panel-title {
+    margin: 0;
+    font-size: 1.125rem;
+    color: #1a365d;
+}
+
+.maritime-panel-sub {
+    margin: 6px 0 0;
+    font-size: 0.875rem;
+    color: #4a5568;
+    line-height: 1.45;
+}
+
+.maritime-flange-controls,
+.maritime-bunker-form {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin: 0 16px 16px;
+}
+
+.maritime-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 140px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #4a5568;
+}
+
+.maritime-field-grow {
+    flex: 1;
+    min-width: 180px;
+}
+
+.maritime-field input,
+.maritime-field select {
+    padding: 10px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    font-size: 0.9375rem;
+    background: #fff;
+    color: #1a202c;
+}
+
+.maritime-field input:focus,
+.maritime-field select:focus {
+    outline: 2px solid #3182ce;
+    outline-offset: 1px;
+}
+
+.maritime-table-wrap {
+    margin: 0 16px 12px;
+    overflow: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    max-height: calc(100dvh - 320px);
+}
+
+.maritime-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+}
+
+.maritime-table th,
+.maritime-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #edf2f7;
+    text-align: left;
+}
+
+.maritime-table th {
+    position: sticky;
+    top: 0;
+    background: #edf2f7;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #4a5568;
+}
+
+.maritime-table tr:last-child td {
+    border-bottom: none;
+}
+
+.maritime-empty {
+    margin: 0 16px;
+    color: #718096;
+    font-size: 0.9375rem;
+}
+
+.maritime-note {
+    margin: 8px 16px 20px;
+    font-size: 0.75rem;
+    color: #718096;
+    line-height: 1.45;
+}
+
+.maritime-bunker-result {
+    margin: 0 16px 12px;
+    padding: 16px 18px;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #ebf8ff 0%, #e6fffa 100%);
+    border: 1px solid #90cdf4;
+    text-align: center;
+}
+
+.maritime-bunker-label {
+    display: block;
+    font-size: 0.8125rem;
+    color: #2c5282;
+    margin-bottom: 4px;
+}
+
+.maritime-bunker-value {
+    font-size: 1.75rem;
+    color: #1a365d;
+}
+
 .store-public-main {
     flex: 1;
     display: flex;
@@ -134,8 +317,19 @@ html:has(.store-public-body) {
 }
 
 .store-public-mode .store-vl-scroll {
-    max-height: calc(100dvh - 220px);
+    max-height: calc(100dvh - 280px);
     min-height: 240px;
+}
+
+.store-tool-flange .store-public-main,
+.store-tool-bunker .store-public-main {
+    display: none;
+}
+
+#storeToolFlange,
+#storeToolBunker {
+    padding-top: 16px;
+    padding-bottom: 8px;
 }
 
 @media (max-width: 640px) {
@@ -151,7 +345,17 @@ html:has(.store-public-body) {
         font-size: 0.75rem;
     }
 
+    .store-public-toolkit {
+        padding: 10px 12px;
+        gap: 6px;
+    }
+
+    .store-tool-chip {
+        font-size: 0.75rem;
+        padding: 7px 10px;
+    }
+
     .store-public-mode .store-vl-scroll {
-        max-height: calc(100dvh - 260px);
+        max-height: calc(100dvh - 300px);
     }
 }

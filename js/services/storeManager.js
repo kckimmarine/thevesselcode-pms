@@ -10,6 +10,9 @@ const TVC_StoreManager = (function () {
     let _loadPromise = null;
     let _importAbort = null;
     let _lastSearch = { query: '', items: [], matched: 0, ms: 0 };
+    let _memoryIndex = null;
+    let _memoryIndexPromise = null;
+    let _useMemorySearch = false;
 
     function readCart() {
         try {
@@ -34,6 +37,79 @@ const TVC_StoreManager = (function () {
     function invalidateCatalogCache() {
         _loadPromise = null;
         _lastSearch = { query: '', items: [], matched: 0, ms: 0 };
+        _memoryIndex = null;
+        _memoryIndexPromise = null;
+    }
+
+    function enableMemorySearch(enabled = true) {
+        _useMemorySearch = !!enabled;
+    }
+
+    function isMemorySearchReady() {
+        return Array.isArray(_memoryIndex) && _memoryIndex.length > 0;
+    }
+
+    async function buildMemoryIndex() {
+        if (_memoryIndex) return _memoryIndex;
+        if (_memoryIndexPromise) return _memoryIndexPromise;
+        _memoryIndexPromise = (async () => {
+            await TVC_DB.open();
+            await ensureSearchFieldsBackfill();
+            const rows = await TVC_DB.cursorMap('impa_master', { map: toLightRow });
+            _memoryIndex = rows.filter(Boolean);
+            return _memoryIndex;
+        })();
+        return _memoryIndexPromise;
+    }
+
+    function finalizeSearchResult(query, items, limit, started) {
+        const q = String(query || '').trim();
+        const ms = performance.now() - started;
+        const matched = items.length;
+        const browseLimited = !q && _totalCount > items.length;
+        _lastSearch = {
+            query: q,
+            items,
+            matched,
+            total: _totalCount,
+            ms,
+            browseLimited,
+            capped: matched >= limit,
+            engine: 'memory',
+        };
+        if (ms > SEARCH_TARGET_MS && q) {
+            console.info(`[TVC_Store] memory search "${q}" → ${matched} rows in ${ms.toFixed(1)}ms`);
+        }
+        return _lastSearch;
+    }
+
+    function searchCatalogMemory(query, { limit = SEARCH_LIMIT } = {}) {
+        const started = performance.now();
+        const q = String(query || '').trim();
+        const qLower = q.toLowerCase();
+        const idx = _memoryIndex || [];
+        let items = [];
+
+        if (!q) {
+            items = idx.slice(0, Math.min(limit, BROWSE_PREVIEW));
+        } else if (/^\d{1,6}$/.test(q)) {
+            for (let i = 0; i < idx.length && items.length < limit; i++) {
+                const code = String(idx[i].impa_code || idx[i].code || '');
+                if (code.startsWith(q)) items.push(idx[i]);
+            }
+        } else {
+            for (let i = 0; i < idx.length && items.length < limit; i++) {
+                const row = idx[i];
+                const code = String(row.impa_code || row.code || '');
+                const name = String(row.name || '').toLowerCase();
+                const cat = String(row.category || '').toLowerCase();
+                if (code.includes(q) || name.includes(qLower) || cat.includes(qLower)) {
+                    items.push(row);
+                }
+            }
+        }
+
+        return finalizeSearchResult(q, items, limit, started);
     }
 
     function toLightRow(row) {
@@ -167,6 +243,7 @@ const TVC_StoreManager = (function () {
         _loadPromise = ensureImpaMaster()
             .then(async count => {
                 _totalCount = count;
+                if (_useMemorySearch) await buildMemoryIndex();
                 return searchCatalog('', { limit: BROWSE_PREVIEW });
             })
             .catch(err => {
@@ -179,6 +256,7 @@ const TVC_StoreManager = (function () {
     async function reloadCatalog() {
         invalidateCatalogCache();
         await refreshTotalCount();
+        if (_useMemorySearch) await buildMemoryIndex();
         return searchCatalog(_lastSearch.query || '', { limit: SEARCH_LIMIT });
     }
 
@@ -192,6 +270,11 @@ const TVC_StoreManager = (function () {
 
     /** Indexed search — code prefix (6-digit) or name_lower prefix index */
     async function searchCatalog(query, { limit = SEARCH_LIMIT } = {}) {
+        if (_useMemorySearch) {
+            if (!_memoryIndex) await buildMemoryIndex();
+            if (_memoryIndex) return searchCatalogMemory(query, { limit });
+        }
+
         const started = performance.now();
         await TVC_DB.open();
         await ensureSearchFieldsBackfill();
@@ -259,6 +342,7 @@ const TVC_StoreManager = (function () {
             ms,
             browseLimited,
             capped: matched >= limit,
+            engine: 'indexeddb',
         };
 
         if (ms > SEARCH_TARGET_MS && q) {
@@ -471,6 +555,9 @@ const TVC_StoreManager = (function () {
         loadCatalog,
         reloadCatalog,
         searchCatalog,
+        enableMemorySearch,
+        buildMemoryIndex,
+        isMemorySearchReady,
         getCatalog,
         getTotalCount,
         getLastSearch,

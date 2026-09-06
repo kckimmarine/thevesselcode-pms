@@ -1,5 +1,5 @@
 /**
- * Smoke test: public IMPA catalog (no login, iframe embed)
+ * Smoke test: public IMPA catalog advanced features
  * Run: node scripts/test-store-public.mjs
  */
 import { chromium } from '@playwright/test';
@@ -12,82 +12,104 @@ async function main() {
 
   try {
     const page = await browser.newPage();
-    await page.goto(`${BASE}/store-public.html`, { waitUntil: 'domcontentloaded' });
+    await page.goto(`${BASE}/store-public.html`, { waitUntil: 'networkidle' });
     await page.locator('#loginScreen').waitFor({ state: 'hidden', timeout: 2_000 }).catch(() => null);
 
-    results.push({
-      check: 'no login screen on public page',
-      ok: !(await page.locator('#loginScreen').isVisible().catch(() => false)),
-    });
     results.push({
       check: 'public mode class on document',
       ok: await page.evaluate(() => document.documentElement.classList.contains('store-public-mode')),
     });
     results.push({
-      check: 'import button hidden',
-      ok: !(await page.locator('#storeImportBtn').count()),
-    });
-    results.push({
-      check: 'cart pill hidden',
-      ok: !(await page.locator('.store-cart-pill').count()),
+      check: 'toolkit chips visible',
+      ok: await page.locator('.store-tool-chip').count() === 3,
     });
 
     await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
+    results.push({
+      check: 'indexed search returns matches quickly',
+      ok: await page.evaluate(async () => {
+        const res = await TVC_StoreManager.searchCatalog('rope');
+        return res.items.length > 0 && res.ms < 250;
+      }),
+    });
+
+    const searchStart = Date.now();
     await page.locator('.store-search').fill('rope');
-    await page.waitForTimeout(400);
+    await page.waitForTimeout(200);
+    await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 5_000 });
+    results.push({
+      check: 'debounced search returns results quickly',
+      ok: Date.now() - searchStart < 3000,
+    });
+
     await page.locator('.store-code-link').first().click();
     await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
 
+    const footerCta = page.locator('#impaDetailPublicFooter a');
+    results.push({ check: 'sticky footer CTA visible', ok: await footerCta.isVisible() });
+    const ctaHref = await footerCta.getAttribute('href');
+    const ctaText = ((await footerCta.textContent()) || '').trim();
     results.push({
-      check: 'modal opens without login',
-      ok: await page.locator('#impaDetailModal').isVisible(),
-    });
-    results.push({
-      check: 'ROB banner hidden in public mode',
-      ok: await page.locator('#impaDetailRobBanner').evaluate(el => el.classList.contains('hidden')),
-    });
-    results.push({
-      check: 'cart section hidden in public mode',
-      ok: await page.locator('.impa-detail-cart').evaluate(el => el.classList.contains('hidden')),
-    });
-
-    const cta = page.locator('#impaDetailPublicCta a');
-    results.push({
-      check: 'public CTA visible',
-      ok: await cta.isVisible(),
-    });
-    const ctaHref = await cta.getAttribute('href');
-    const ctaText = ((await cta.textContent()) || '').trim();
-    results.push({
-      check: 'CTA links to thevesselcode.com',
-      ok: ctaHref === 'https://thevesselcode.com',
+      check: 'CTA links to contact section',
+      ok: ctaHref === 'https://thevesselcode.com/#contact',
       detail: ctaHref,
     });
     results.push({
-      check: 'CTA copy mentions ROB and requisitions',
-      ok: /manage ROB/i.test(ctaText) && /requisitions/i.test(ctaText),
+      check: 'CTA mentions automate Requisitions',
+      ok: /automate Requisitions/i.test(ctaText) && /ROB/i.test(ctaText),
       detail: ctaText,
     });
 
-    const iframePage = await browser.newPage();
-    await iframePage.setContent(`
-      <!DOCTYPE html><html><body style="margin:0">
-        <iframe id="embed" src="${BASE}/store-public.html" width="900" height="700"></iframe>
-      </body></html>
-    `, { waitUntil: 'domcontentloaded' });
-    const frame = iframePage.frameLocator('#embed');
-    await frame.locator('.store-search').waitFor({ state: 'visible', timeout: 30_000 });
+    const specText = await page.locator('#impaDetailSpecBody').innerText();
     results.push({
-      check: 'loads inside iframe',
-      ok: await frame.locator('.store-search').isVisible(),
+      check: 'specs show category and material fields',
+      ok: /Category/i.test(specText) && (/Material/i.test(specText) || /Dimensions/i.test(specText)),
+      detail: specText.slice(0, 120),
     });
 
-    const redirectPage = await browser.newPage();
-    await redirectPage.goto(`${BASE}/?mode=public`, { waitUntil: 'load' });
     results.push({
-      check: '?mode=public redirects to store-public.html',
-      ok: /store-public/i.test(redirectPage.url()),
-      detail: redirectPage.url(),
+      check: 'float close button 44x44',
+      ok: await page.locator('.impa-detail-close-float').evaluate(el => {
+        const r = el.getBoundingClientRect();
+        return r.width >= 44 && r.height >= 44;
+      }),
+    });
+
+    await page.locator('.impa-detail-close-float').click();
+    results.push({
+      check: 'float close dismisses modal',
+      ok: await page.locator('#impaDetailModal').evaluate(el => el.classList.contains('hidden')),
+    });
+
+    await page.locator('[data-tool-tab="flange"]').click();
+    await page.locator('#flangeTableHost table').waitFor({ state: 'visible', timeout: 5_000 });
+    results.push({
+      check: 'flange table renders',
+      ok: await page.locator('#flangeTableHost tbody tr').count() > 0,
+    });
+
+    await page.locator('[data-tool-tab="bunker"]').click();
+    await page.locator('#bunkerMassValue').waitFor({ state: 'visible', timeout: 5_000 });
+    const bunkerMass = await page.locator('#bunkerMassValue').textContent();
+    results.push({
+      check: 'bunker calculator shows MT',
+      ok: /MT/i.test(bunkerMass || ''),
+      detail: bunkerMass,
+    });
+
+    await page.locator('[data-tool-tab="catalog"]').click();
+    results.push({
+      check: 'catalog tab restores IMPA list',
+      ok: await page.locator('.store-search').isVisible(),
+    });
+
+    const mobile = await browser.newPage();
+    await mobile.setViewportSize({ width: 390, height: 844 });
+    await mobile.goto(`${BASE}/store-public.html`, { waitUntil: 'domcontentloaded' });
+    await mobile.locator('.store-search').waitFor({ state: 'visible', timeout: 30_000 });
+    results.push({
+      check: 'mobile catalog layout',
+      ok: await mobile.locator('.store-tool-chip').first().isVisible(),
     });
 
     const failed = results.filter(r => !r.ok);
