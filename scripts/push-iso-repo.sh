@@ -4,6 +4,9 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="${1:-/tmp/perfect-marine-solution-iso}"
 REMOTE="${ISO_REPO_REMOTE:-https://github.com/kckimmarine/perfect-marine-solution-iso.git}"
+if [[ -n "${ISO_REPO_PUSH_TOKEN:-}" ]]; then
+  REMOTE="https://x-access-token:${ISO_REPO_PUSH_TOKEN}@github.com/kckimmarine/perfect-marine-solution-iso.git"
+fi
 
 "$ROOT/scripts/bootstrap-perfect-marine-iso-repo.sh" "$TARGET"
 cp "$ROOT/templates/perfect-marine-solution-iso/START-HERE.md" "$TARGET/START-HERE.md"
