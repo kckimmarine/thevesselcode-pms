@@ -16,15 +16,9 @@
 
 ## 빠른 시작
 
-```bash
-npm install
-npm run setup:supabase   # 요약 안내
-# deploy/.env.local 채운 뒤:
-npm run setup:apply      # 스키마·버킷·config.js 자동
-npm start                # http://localhost:3010
-```
+**처음이시면 → [`docs/쉬운-설정.md`](docs/쉬운-설정.md)** (Supabase 화면만, 5분)
 
-상세: [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md)
+고급(자동): `npm run setup:apply` — [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md)
 
 ## 배포 (Vercel)
 

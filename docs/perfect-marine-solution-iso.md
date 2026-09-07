@@ -19,16 +19,9 @@ npm run setup:supabase
 
 ## 2. Supabase (전용 프로젝트)
 
-TVC-PMS 프로덕션 DB와 **분리**된 Supabase 프로젝트를 만듭니다.
+**쉬운 방법 (추천):** bootstrap 후 [`docs/쉬운-설정.md`](templates/perfect-marine-solution-iso/docs/쉬운-설정.md) — SQL Editor + Authentication만 사용. **DATABASE_URL 불필요.**
 
-**단계별 가이드:** bootstrap 후 `docs/SUPABASE-SETUP.md`
-
-```bash
-cp deploy/.env.example deploy/.env.local
-# Supabase Dashboard에서 URL·keys·DATABASE_URL 복사
-npm run setup:apply
-npm start
-```
+자동 설정: `npm run setup:apply` — [`docs/SUPABASE-SETUP.md`](templates/perfect-marine-solution-iso/docs/SUPABASE-SETUP.md)
 
 ## 4. 온라인 배포 (Vercel)
 
