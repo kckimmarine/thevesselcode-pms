@@ -6,9 +6,11 @@
   "scripts": {
     "start": "npx --yes serve portal -p 3010",
     "setup:supabase": "node scripts/print-setup.mjs",
+    "setup:apply": "node scripts/apply-supabase.mjs",
     "verify": "node scripts/verify-config.mjs"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.112.4"
+    "@supabase/supabase-js": "^2.112.4",
+    "pg": "^8.13.1"
   }
 }

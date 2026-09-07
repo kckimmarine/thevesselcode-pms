@@ -1,6 +1,8 @@
--- Storage bucket policies for iso-evidence (run after creating bucket in Dashboard)
+-- Storage bucket policies (run after bucket exists)
 
--- Bucket: iso-evidence, private
+DROP POLICY IF EXISTS "iso_evidence_storage_read" ON storage.objects;
+DROP POLICY IF EXISTS "iso_evidence_storage_insert" ON storage.objects;
+DROP POLICY IF EXISTS "iso_evidence_storage_delete" ON storage.objects;
 
 CREATE POLICY "iso_evidence_storage_read"
 ON storage.objects FOR SELECT TO authenticated

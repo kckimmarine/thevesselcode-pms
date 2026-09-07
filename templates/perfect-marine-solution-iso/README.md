@@ -18,10 +18,13 @@
 
 ```bash
 npm install
-npm run setup:supabase   # Supabase SQL·버킷 안내
-# portal/js/config.js 에 URL·anon key 입력
+npm run setup:supabase   # 요약 안내
+# deploy/.env.local 채운 뒤:
+npm run setup:apply      # 스키마·버킷·config.js 자동
 npm start                # http://localhost:3010
 ```
+
+상세: [`docs/SUPABASE-SETUP.md`](docs/SUPABASE-SETUP.md)
 
 ## 배포 (Vercel)
 

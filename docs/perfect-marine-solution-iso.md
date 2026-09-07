@@ -21,16 +21,13 @@ npm run setup:supabase
 
 TVC-PMS 프로덕션 DB와 **분리**된 Supabase 프로젝트를 만듭니다.
 
-1. SQL: `deploy/supabase-schema.sql`
-2. Storage 버킷: `iso-evidence` (Private)
-3. SQL: `deploy/supabase-storage.sql`
-4. Auth 사용자 생성 → `iso_profiles`에 `admin` 등록
-5. `portal/js/config.js`에 URL·anon key 입력
-
-## 3. 로컬 실행
+**단계별 가이드:** bootstrap 후 `docs/SUPABASE-SETUP.md`
 
 ```bash
-npm start   # http://localhost:3010
+cp deploy/.env.example deploy/.env.local
+# Supabase Dashboard에서 URL·keys·DATABASE_URL 복사
+npm run setup:apply
+npm start
 ```
 
 ## 4. 온라인 배포 (Vercel)

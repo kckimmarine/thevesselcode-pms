@@ -69,20 +69,28 @@ ALTER TABLE iso_evidence ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "iso_profiles_self" ON iso_profiles FOR SELECT USING (auth.uid() = id);
 CREATE POLICY "iso_profiles_self_update" ON iso_profiles FOR UPDATE USING (auth.uid() = id);
 
+DROP POLICY IF EXISTS "iso_docs_read" ON iso_documents;
+DROP POLICY IF EXISTS "iso_docs_write" ON iso_documents;
 CREATE POLICY "iso_docs_read" ON iso_documents FOR SELECT TO authenticated USING (true);
 CREATE POLICY "iso_docs_write" ON iso_documents FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM iso_profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'editor')))
   WITH CHECK (EXISTS (SELECT 1 FROM iso_profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'editor')));
 
+DROP POLICY IF EXISTS "iso_cars_read" ON iso_cars;
+DROP POLICY IF EXISTS "iso_cars_write" ON iso_cars;
 CREATE POLICY "iso_cars_read" ON iso_cars FOR SELECT TO authenticated USING (true);
 CREATE POLICY "iso_cars_write" ON iso_cars FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM iso_profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'editor')))
   WITH CHECK (EXISTS (SELECT 1 FROM iso_profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'editor')));
 
+DROP POLICY IF EXISTS "iso_checklist_read" ON iso_checklist_items;
+DROP POLICY IF EXISTS "iso_checklist_write" ON iso_checklist_items;
 CREATE POLICY "iso_checklist_read" ON iso_checklist_items FOR SELECT TO authenticated USING (true);
 CREATE POLICY "iso_checklist_write" ON iso_checklist_items FOR UPDATE TO authenticated
   USING (EXISTS (SELECT 1 FROM iso_profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'editor')));
 
+DROP POLICY IF EXISTS "iso_evidence_read" ON iso_evidence;
+DROP POLICY IF EXISTS "iso_evidence_write" ON iso_evidence;
 CREATE POLICY "iso_evidence_read" ON iso_evidence FOR SELECT TO authenticated USING (true);
 CREATE POLICY "iso_evidence_write" ON iso_evidence FOR ALL TO authenticated
   USING (EXISTS (SELECT 1 FROM iso_profiles p WHERE p.id = auth.uid() AND p.role IN ('admin', 'editor')))
