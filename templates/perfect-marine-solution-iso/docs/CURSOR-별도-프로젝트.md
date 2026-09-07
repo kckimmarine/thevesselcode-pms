@@ -88,11 +88,54 @@ npm start
 
 ---
 
+## Cursor Cloud Agents (로컬 PC 없이) — **권장**
+
+로컬이 아니라 **브라우저의 Cursor Cloud**만 쓸 때는 아래 순서입니다.
+
+### ① GitHub에 코드 push (먼저)
+
+빈 repo만 있으면 Environment를 만들 수 없습니다. **한 번** 코드를 올려야 합니다.
+
+- 방법 A: 이 채팅(thevesselcode-pms Cloud Agent)에서  
+  `./scripts/bootstrap-perfect-marine-iso-repo.sh` 후 `perfect-marine-solution-iso`로 push 요청  
+- 방법 B: GitHub 웹에서 파일 업로드 (비추천)
+
+### ② Cloud Agents → **Environments** → **New**
+
+| 항목 | 값 |
+|------|-----|
+| Repository | **`kckimmarine/perfect-marine-solution-iso`만** (`thevesselcode-pms` 선택 안 함) |
+| 이름 예 | `PMS ISO 심사 포털` |
+| install | `npm install` |
+| start / terminals | `npm start` (포트 **3010**) |
+
+repo에 `.cursor/environment.json`이 있으면 위 값이 자동 제안됩니다.
+
+**Guided setup**이 뜨면 Agent가 `npm install` → 포털(:3010) 기동까지 검증 → **Save**.
+
+### ③ Secrets (ISO Environment에만)
+
+- Supabase `DATABASE_URL` 등은 **이 Environment의 Secrets**에만 (PMS 앱과 분리)
+- Publishable key는 포털 첫 화면 localStorage (파일 수정 불필요)
+
+### ④ 매일 ISO 작업
+
+1. **Cloud Agents** → **New Agent**  
+2. Repo: `perfect-marine-solution-iso`  
+3. Environment: 방금 만든 **ISO Environment**  
+4. 채팅 주제: **「Pms iso 심사 서류」** (thevesselcode-pms Agent와 **별도**)
+
+### 하지 말 것
+
+- `thevesselcode-pms` Environment에 ISO repo를 multi-repo로 추가  
+- ISO 작업을 thevesselcode-pms Cloud Agent 채팅에 섞기  
+
+---
+
 ## 요약
 
-1. GitHub에 `perfect-marine-solution-iso` 생성 후 push  
-2. Cursor **Open Folder** → 그 repo만 열기  
-3. 새 채팅 **「Pms iso 심사 서류」**  
-4. 터미널: `npm install && npm start` → localhost:3010  
+**로컬 Cursor:** Open Folder → `perfect-marine-solution-iso` → `npm start` (:3010)
 
-이후 ISO 관련 요청은 **이 프로젝트 채팅**에만 보내 주세요.
+**Cursor Cloud:** Environments → New → ISO repo만 → New Agent → 「Pms iso 심사 서류」
+
+이후 ISO 관련 요청은 **ISO 전용 Agent 채팅**에만 보내 주세요.
