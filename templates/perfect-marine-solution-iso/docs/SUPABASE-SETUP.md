@@ -13,13 +13,26 @@
 
 ## 2. API 키 복사
 
-**Project Settings → API**
+**Project Settings → API Keys** (또는 Configuration → API Keys)
 
-| 항목 | `.env.local` 키 |
-|------|-----------------|
-| Project URL | `SUPABASE_URL` |
+### 새 형식 (권장 — 화면 기본 탭)
+
+| Supabase 화면 | Cursor Secret |
+|---------------|---------------|
+| Project URL (Settings → General) | `SUPABASE_URL` |
+| Publishable key (`sb_publishable_…`) | `SUPABASE_ANON_KEY` |
+| Secret key (`sb_secret_…`) — Reveal 후 복사 | `SUPABASE_SERVICE_ROLE_KEY` |
+
+### Legacy 탭 (호환용)
+
+**「Legacy anon, service_role API keys」** 탭에서:
+
+| Legacy | Cursor Secret |
+|--------|---------------|
 | anon public | `SUPABASE_ANON_KEY` |
-| service_role (secret) | `SUPABASE_SERVICE_ROLE_KEY` |
+| service_role | `SUPABASE_SERVICE_ROLE_KEY` |
+
+두 형식 모두 `npm run setup:apply` / 포털에서 사용 가능합니다.
 
 ## 3. Database URL
 
