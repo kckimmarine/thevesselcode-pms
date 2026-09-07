@@ -1,0 +1,11 @@
+# Local-only audit uploads (PDF, scans, contracts) — never commit
+06-records-evidence/incoming/**
+!06-records-evidence/incoming/.gitkeep
+
+# Drafts with personal or commercial secrets
+**/*.draft.*
+**/*-CONFIDENTIAL.*
+
+# OS / editor
+.DS_Store
+Thumbs.db
