@@ -1,0 +1,33 @@
+name: Sync ISO repo
+
+on:
+  workflow_dispatch:
+
+jobs:
+  push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bootstrap ISO repo
+        run: |
+          ./scripts/bootstrap-perfect-marine-iso-repo.sh /tmp/perfect-marine-solution-iso
+          cp templates/perfect-marine-solution-iso/START-HERE.md /tmp/perfect-marine-solution-iso/
+
+      - name: Push to perfect-marine-solution-iso
+        env:
+          ISO_REPO_PUSH_TOKEN: ${{ secrets.ISO_REPO_PUSH_TOKEN }}
+        run: |
+          if [[ -z "$ISO_REPO_PUSH_TOKEN" ]]; then
+            echo "::error::Add repository secret ISO_REPO_PUSH_TOKEN (PAT with repo scope for perfect-marine-solution-iso)"
+            exit 1
+          fi
+          cd /tmp/perfect-marine-solution-iso
+          git init
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "Initial PMS ISO online portal (sync from thevesselcode-pms)"
+          git branch -M main
+          git remote add origin "https://x-access-token:${ISO_REPO_PUSH_TOKEN}@github.com/kckimmarine/perfect-marine-solution-iso.git"
+          git push -u origin main --force

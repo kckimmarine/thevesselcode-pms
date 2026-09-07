@@ -1,0 +1,21 @@
+{
+  "name": "PMS ISO Audit Portal",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "iso-portal",
+      "command": "npm start",
+      "description": "ISO audit portal on http://localhost:3010"
+    }
+  ],
+  "ports": [
+    {
+      "name": "portal",
+      "port": 3010
+    }
+  ],
+  "egressAllowlist": [
+    "supabase.co",
+    "api.supabase.com"
+  ]
+}

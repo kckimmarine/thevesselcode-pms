@@ -22,7 +22,8 @@ This file helps **Cursor Cloud Agents**, **Cursor IDE**, and **Gemini** work on 
 **UI patterns:** [`docs/UI-PATTERNS.md`](docs/UI-PATTERNS.md)  
 **Mobile UX:** [`docs/MOBILE-UX.md`](docs/MOBILE-UX.md)  
 **Gemini handoff:** [`docs/GEMINI-COLLAB.md`](docs/GEMINI-COLLAB.md)  
-**Workflow (status/export):** [`docs/workflow-manual-v1.md`](docs/workflow-manual-v1.md)
+**Workflow (status/export):** [`docs/workflow-manual-v1.md`](docs/workflow-manual-v1.md)  
+**Company ISO audit (PMS):** separate **online** repo — [`docs/perfect-marine-solution-iso.md`](docs/perfect-marine-solution-iso.md) · template [`templates/perfect-marine-solution-iso/`](../templates/perfect-marine-solution-iso/)
 
 ---
 
