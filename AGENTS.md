@@ -23,7 +23,7 @@ This file helps **Cursor Cloud Agents**, **Cursor IDE**, and **Gemini** work on 
 **Mobile UX:** [`docs/MOBILE-UX.md`](docs/MOBILE-UX.md)  
 **Gemini handoff:** [`docs/GEMINI-COLLAB.md`](docs/GEMINI-COLLAB.md)  
 **Workflow (status/export):** [`docs/workflow-manual-v1.md`](docs/workflow-manual-v1.md)  
-**Company ISO audit (PMS):** [`pms-iso-audit/README.md`](pms-iso-audit/README.md) — PERFECT MARINE SOLUTION 심사 서류 (앱 코드·Bluehost와 분리)
+**Company ISO audit (PMS):** separate repo — see [`docs/perfect-marine-solution-iso.md`](docs/perfect-marine-solution-iso.md) (not in this codebase)
 
 ---
 
@@ -118,11 +118,3 @@ Use it as the **golden path** when validating UI changes.
 - `index.html` — modal shells; change only when adding a new modal id.
 - `js/auth.js` — login/session; change only for auth tasks.
 - `js/pms.js` — run-hour scheduling helpers, not report forms.
-
-## ISO audit documents (PERFECT MARINE SOLUTION)
-
-| Task | Change here | Do **not** assume |
-|------|-------------|-------------------|
-| ISO 심사 서류·절차·CAR | `pms-iso-audit/` | `js/`, `deploy/`, `bluehost/` |
-| 민감 PDF·계약·export ZIP | `pms-iso-audit/06-records-evidence/incoming/` (gitignored) | 커밋 금지 |
-| 문서 등록·Rev 관리 | `pms-iso-audit/DOCUMENT-REGISTER.md` | 채팅만으로 관리 |
