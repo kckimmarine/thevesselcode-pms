@@ -11,8 +11,8 @@ cp "$ROOT/templates/perfect-marine-solution-iso/START-HERE.md" "$TARGET/START-HE
 cd "$TARGET"
 if [[ ! -d .git ]]; then
   git init
-  git branch -M main
 fi
+git branch -M main
 git add -A
 if git diff --cached --quiet; then
   echo "No changes to commit."
