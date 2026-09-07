@@ -1,25 +1,26 @@
 #!/usr/bin/env bash
-# Create a standalone PERFECT MARINE SOLUTION ISO repo from git history (one-time).
+# Bootstrap standalone PERFECT MARINE SOLUTION ISO repo (online mode).
 # Usage: ./scripts/bootstrap-perfect-marine-iso-repo.sh /path/to/new-repo-dir
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TARGET="${1:?Usage: $0 /path/to/perfect-marine-solution-iso}"
-REF="${ISO_TEMPLATE_REF:-cursor/pms-iso-audit-folder-1cae}"
-mkdir -p "$TARGET"
-cd "$ROOT"
-if git cat-file -e "$REF:pms-iso-audit/README.md" 2>/dev/null; then
-  git archive "$REF" pms-iso-audit | tar -x -C "$TARGET" --strip-components=1
-else
-  echo "Ref $REF has no pms-iso-audit/. Checkout that branch or set ISO_TEMPLATE_REF."
+SRC="$ROOT/templates/perfect-marine-solution-iso"
+if [[ ! -d "$SRC" ]]; then
+  echo "Missing $SRC"
   exit 1
 fi
-cat > "$TARGET/AGENTS.md" << 'EOF'
-# AGENTS.md — PERFECT MARINE SOLUTION ISO Audit
-
-ISO certification documents only. Not TVC-PMS app code.
-Repository: separate from kckimmarine/thevesselcode-pms.
-EOF
-echo "Created $TARGET from $REF"
+mkdir -p "$TARGET"
+cp -a "$SRC/." "$TARGET/"
+chmod +x "$TARGET/scripts/"*.mjs 2>/dev/null || true
+echo "Created $TARGET (online mode: portal + Supabase)"
+echo ""
 echo "Next:"
-echo "  cd $TARGET && git init && git add -A && git commit -m 'Initial ISO audit structure'"
+echo "  cd $TARGET"
+echo "  npm install"
+echo "  npm run setup:supabase"
+echo "  # Edit portal/js/config.js with Supabase URL + anon key"
+echo "  npm start   # http://localhost:3010"
+echo ""
+echo "  git init && git add -A && git commit -m 'Initial PMS ISO online portal'"
 echo "  gh repo create kckimmarine/perfect-marine-solution-iso --private --source=. --push"
+echo "  # Vercel: import repo, Root Directory = portal"

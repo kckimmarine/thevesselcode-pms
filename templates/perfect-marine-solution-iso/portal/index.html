@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PMS ISO — 온라인 관리</title>
+  <!-- Vercel: inject at build or set in portal/js/config.js -->
+  <meta name="pms-iso-supabase-url" content="">
+  <meta name="pms-iso-supabase-anon-key" content="">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="login-screen" class="screen">
+    <div class="card login-card">
+      <h1>PERFECT MARINE SOLUTION</h1>
+      <p class="muted">ISO 심사 서류 — 온라인 모드</p>
+      <form id="login-form">
+        <label>이메일<input name="email" type="email" required autocomplete="username"></label>
+        <label>비밀번호<input name="password" type="password" required autocomplete="current-password"></label>
+        <button type="submit" class="btn primary">로그인</button>
+      </form>
+      <p id="login-error" class="error"></p>
+    </div>
+  </div>
+
+  <div id="app-shell" class="hidden">
+    <header class="topbar">
+      <div class="brand">PMS ISO <span class="badge">Online</span></div>
+      <nav class="nav">
+        <button type="button" class="nav-btn active" data-nav="dashboard">대시보드</button>
+        <button type="button" class="nav-btn" data-nav="documents">문서 대장</button>
+        <button type="button" class="nav-btn" data-nav="checklist">심사 체크리스트</button>
+        <button type="button" class="nav-btn" data-nav="cars">시정조치</button>
+        <button type="button" class="nav-btn" data-nav="evidence">증빙</button>
+      </nav>
+      <div class="user">
+        <span id="user-email"></span>
+        <button type="button" id="logout-btn" class="btn ghost">로그아웃</button>
+      </div>
+    </header>
+
+    <main class="main">
+      <section data-view="dashboard" class="view">
+        <h2>대시보드</h2>
+        <div class="stats">
+          <div class="stat"><span id="stat-docs">0</span><small>관리 문서</small></div>
+          <div class="stat"><span id="stat-cars">0</span><small>미결 CAR</small></div>
+          <div class="stat"><span id="stat-checklist">0/0</span><small>체크리스트</small></div>
+          <div class="stat"><span id="stat-evidence">0</span><small>증빙 파일</small></div>
+        </div>
+      </section>
+
+      <section data-view="documents" class="view hidden">
+        <h2>문서 대장</h2>
+        <form id="doc-form" class="inline-form">
+          <input name="doc_id" placeholder="PMS-SOP-001" required>
+          <input name="title" placeholder="제목" required>
+          <select name="doc_type"><option>QM</option><option>SOP</option><option>WI</option><option>FRM</option></select>
+          <input name="revision" placeholder="Rev" value="0.1">
+          <select name="status"><option>draft</option><option>approved</option></select>
+          <input name="folder" placeholder="폴더 (03-procedures)">
+          <button type="submit" class="btn primary">등록/갱신</button>
+        </form>
+        <table id="doc-table" class="data-table"><thead><tr><th>ID</th><th>제목</th><th>유형</th><th>Rev</th><th>상태</th></tr></thead><tbody></tbody></table>
+      </section>
+
+      <section data-view="checklist" class="view hidden">
+        <h2>심사 준비 체크리스트</h2>
+        <div id="checklist-root"></div>
+      </section>
+
+      <section data-view="cars" class="view hidden">
+        <h2>시정조치 (CAR)</h2>
+        <form id="car-form" class="inline-form">
+          <input name="car_id" placeholder="PMS-CAR-2026-001" required>
+          <input name="title" placeholder="제목" required>
+          <input name="source" placeholder="출처 (내부심사/외부심사)">
+          <select name="status"><option>open</option><option>closed</option></select>
+          <input name="description" placeholder="내용 요약">
+          <button type="submit" class="btn primary">등록</button>
+        </form>
+        <table id="car-table" class="data-table"><thead><tr><th>CAR No.</th><th>제목</th><th>출처</th><th>상태</th></tr></thead><tbody></tbody></table>
+      </section>
+
+      <section data-view="evidence" class="view hidden">
+        <h2>증빙 파일</h2>
+        <form id="evidence-form" class="stack-form">
+          <label>파일<input name="file" type="file" required></label>
+          <input name="description" placeholder="설명">
+          <input name="audit_clause" placeholder="심사 조항 (예: 8.5)">
+          <button type="submit" class="btn primary">업로드</button>
+        </form>
+        <table id="evidence-table" class="data-table"><thead><tr><th>파일</th><th>설명</th><th>조항</th><th></th></tr></thead><tbody></tbody></table>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/config.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
