@@ -29,10 +29,19 @@ npm run setup:supabase
 2. **Root Directory = `portal`**
 3. 팀원은 브라우저에서 로그인 → 문서·체크리스트·CAR·증빙 관리
 
-## 5. Cursor에서 분리
+## 5. Cursor에서 분리 (별도 터미널·채팅)
 
-- ISO 작업: **새 repo만** Open Folder → 채팅 「Pms iso 심사 서류」
-- 앱 작업: `thevesselcode-pms` (이 repo)
+**가이드:** [`templates/perfect-marine-solution-iso/docs/CURSOR-별도-프로젝트.md`](../templates/perfect-marine-solution-iso/docs/CURSOR-별도-프로젝트.md)
+
+1. GitHub에 `kckimmarine/perfect-marine-solution-iso` 생성 (Private)
+2. bootstrap 후 push, 또는 clone
+3. Cursor **File → Open Folder** → `perfect-marine-solution-iso` (**이 repo 아님**)
+4. 새 채팅 **「Pms iso 심사 서류」** → 터미널 `npm start` (:3010)
+
+- ISO 작업: **perfect-marine-solution-iso** 전용 Cursor 창
+- 앱 작업: `thevesselcode-pms` (이 repo, :3000)
+
+`pms-iso-online/`은 앱 repo 안 **빠른 테스트용** 복사본입니다. 장기 운영은 별도 repo를 사용하세요.
 
 ## 템플릿 위치 (이 repo)
 
