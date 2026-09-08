@@ -70,10 +70,28 @@ https://thevesselcode.com/toolkit/
 
 **1) 페이지 소스 확인 (가장 중요)**
 
-브라우저에서 `https://thevesselcode.com/toolkit/` → **우클릭 → 페이지 소스 보기**
+브라우저에서 `https://thevesselcode.com/toolkit/` 열기
+
+> ⚠️ **iframe 안에서 우클릭 → 페이지 소스** 하면 **아무것도 안 나옵니다** (다른 도메인 iframe이라 정상).
+> 전체 화면이 앱처럼 보여도, 소스 보기는 **부모 페이지**에서 해야 합니다.
+
+**올바른 방법 (하나만):**
+- 주소창 선택 후 **Ctrl+U** (Mac: **Cmd+Option+U**)
+- 또는 주소창에 `view-source:https://thevesselcode.com/toolkit/` 입력
 
 - ✅ 정상: `TVC-STATIC-TOOLKIT-EMBED-v2`, `tvcToolkitFrame`, `background: #1a365d` 보임
-- ❌ 문제: `wp-content`, `wordpress`, 테마 이름 등 WordPress HTML → **아래 2번**
+- ❌ 문제: `wp-content`, `wordpress` → WordPress가 응답
+- ❌ **완전 빈 소스**: `index.html` 없음/0 bytes → cPanel에서 파일 재업로드
+
+**1b) 테스트 파일 (선택)**
+
+`public_html/toolkit/test.html` 업로드 후 브라우저에서:
+
+```
+https://thevesselcode.com/toolkit/test.html
+```
+
+→ "✅ 정적 파일 정상" 보이면 폴더/업로드는 OK, `index.html`만 점검
 
 **2) WordPress Toolkit 페이지 휴지통**
 
@@ -83,12 +101,31 @@ https://thevesselcode.com/toolkit/
 
 **3) cPanel 파일 재확인**
 
-`public_html/toolkit/` 에 다음 **두 파일** 모두:
+`public_html/toolkit/` 에 다음 파일:
 
 | 파일 | 크기 |
 |------|------|
-| `index.html` | ~2KB (0 bytes 아님) |
-| `.htaccess` | ~100 bytes (WordPress 우회) |
+| `index.html` | ~3KB (0 bytes 아님) |
+| `.htaccess` | 선택 (~180 bytes) |
+
+**index.html 업로드:** `+ File` / Code Editor 말고 **Upload** 버튼 사용.
+
+**`.htaccess` 만들기** (cPanel +File이 안 될 때):
+
+1. File Manager → **Settings** → **Show Hidden Files (dotfiles)** 체크 → Save
+2. 방법 A: `htaccess.txt` 생성 → 내용 붙여넣기 → **Rename** → `.htaccess`
+3. 방법 B: PC에서 `.htaccess` 만든 뒤 **Upload**
+4. 방법 C: `.htaccess` 없이도 `index.html`만 있으면 동작 가능 (WP 페이지는 휴지통 필수)
+
+`.htaccess` 내용 (복사용):
+
+```
+DirectoryIndex index.html
+Options -Indexes
+<IfModule mod_rewrite.c>
+RewriteEngine Off
+</IfModule>
+```
 
 **4) PMS와 비교**
 
