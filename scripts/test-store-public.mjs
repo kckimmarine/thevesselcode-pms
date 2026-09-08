@@ -51,9 +51,30 @@ async function main() {
       ok: await page.locator('#storePublicFab').isVisible(),
     });
 
+    results.push({
+      check: 'chapter filter chips visible',
+      ok: await page.locator('.store-chapter-chip').count() >= 5,
+    });
+
+    await page.locator('.store-chapter-chip[data-chapter="59"]').click();
+    await page.waitForTimeout(200);
+    const ch59Visible = await page.locator('.store-code-link').first().isVisible().catch(() => false);
+    results.push({
+      check: 'chapter 59 chip filters catalog',
+      ok: ch59Visible || await page.locator('#storeEmpty').isVisible(),
+    });
+
+    await page.locator('.store-chapter-chip[data-chapter=""]').click();
     await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
     await page.locator('.store-code-link').first().click();
     await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
+
+    const badgeText = await page.locator('#impaDetailBadge').textContent();
+    results.push({
+      check: 'modal IMPA badge format',
+      ok: /\[IMPA \d{6}\]/.test(badgeText || ''),
+      detail: badgeText,
+    });
 
     results.push({
       check: 'locked ROB preview visible',

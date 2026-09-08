@@ -92,6 +92,23 @@ const TVC_StoreManager = (function () {
         return _lastSearch;
     }
 
+    function rowMatchesQuery(row, q, qLower) {
+        const code = String(row.impa_code || row.code || '');
+        const name = String(row.name || '').toLowerCase();
+        const cat = String(row.category || '').toLowerCase();
+
+        if (/^\d{1,6}$/.test(q)) {
+            return code.startsWith(q);
+        }
+
+        if (name.startsWith(qLower)) return true;
+
+        const tokens = qLower.split(/\s+/).filter(Boolean);
+        if (!tokens.length) return true;
+        return tokens.every(tok =>
+            code.includes(tok) || name.includes(tok) || cat.includes(tok));
+    }
+
     function searchCatalogMemory(query, { limit = SEARCH_LIMIT } = {}) {
         const started = performance.now();
         const q = String(query || '').trim();
@@ -101,20 +118,9 @@ const TVC_StoreManager = (function () {
 
         if (!q) {
             items = idx.slice(0, Math.min(limit, BROWSE_PREVIEW));
-        } else if (/^\d{1,6}$/.test(q)) {
-            for (let i = 0; i < idx.length && items.length < limit; i++) {
-                const code = String(idx[i].impa_code || idx[i].code || '');
-                if (code.startsWith(q)) items.push(idx[i]);
-            }
         } else {
             for (let i = 0; i < idx.length && items.length < limit; i++) {
-                const row = idx[i];
-                const code = String(row.impa_code || row.code || '');
-                const name = String(row.name || '').toLowerCase();
-                const cat = String(row.category || '').toLowerCase();
-                if (code.includes(q) || name.includes(qLower) || cat.includes(qLower)) {
-                    items.push(row);
-                }
+                if (rowMatchesQuery(idx[i], q, qLower)) items.push(idx[i]);
             }
         }
 

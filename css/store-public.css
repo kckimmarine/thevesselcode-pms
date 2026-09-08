@@ -168,6 +168,65 @@ html:has(.store-public-body) {
     font-size: 0.875rem;
 }
 
+.store-chapter-chips {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 16px 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.store-chapter-chip {
+    flex: 0 0 auto;
+    padding: 7px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 999px;
+    background: #fff;
+    color: #2d3748;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.store-chapter-chip:hover,
+.store-chapter-chip:focus-visible {
+    border-color: #3182ce;
+    outline: none;
+}
+
+.store-chapter-chip.active {
+    background: #1a365d;
+    border-color: #1a365d;
+    color: #fff;
+}
+
+.impa-detail-unit {
+    display: block;
+    margin: 0 0 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.impa-detail-conversion-note {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #ebf8ff;
+    border: 1px solid #90cdf4;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #2c5282;
+    text-align: center;
+}
+
 .toolkit-conversion-banner {
     position: sticky;
     bottom: 0;

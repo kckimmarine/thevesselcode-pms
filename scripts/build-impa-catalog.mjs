@@ -18,7 +18,9 @@ const CATEGORY_PAGE = {
   Lubricants: 'lubricants.svg',
   Engine: 'engine.svg',
   Safety: 'safety.svg',
+  'Safety & Fire Fighting': 'safety.svg',
   Piping: 'piping.svg',
+  'Valves & Cocks': 'piping.svg',
   Fasteners: 'fasteners.svg',
   Electrical: 'electrical.svg',
   Cleaning: 'cleaning.svg',
@@ -49,6 +51,16 @@ const BASE = [
   { code: '331402', name: 'Lamp Fluorescent 20W', unit: 'PCS', category: 'Electrical', rob: 20 },
   { code: '331501', name: 'Cleaning Compound Degreaser', unit: 'LTR', category: 'Cleaning', rob: 60 },
   { code: '331502', name: 'Rag Cotton Industrial', unit: 'KG', category: 'Cleaning', rob: 25 },
+  { code: '590101', name: 'Fire Hose Synthetic 2.5" x 20m with couplings', unit: 'PCS', category: 'Safety & Fire Fighting', rob: 4 },
+  { code: '590203', name: 'Fog/Jet Fire Nozzle 65A (Dual Purpose)', unit: 'PCS', category: 'Safety & Fire Fighting', rob: 6 },
+  { code: '590705', name: 'SCBA Self-Contained Breathing Apparatus 300 Bar', unit: 'SET', category: 'Safety & Fire Fighting', rob: 4 },
+  { code: '591211', name: 'EEBD Emergency Escape Breathing Device 15 Min', unit: 'PCS', category: 'Safety & Fire Fighting', rob: 12 },
+  { code: '591720', name: 'Immersion Suit Insulated (SOLAS/MED approved)', unit: 'PCS', category: 'Safety & Fire Fighting', rob: 6 },
+  { code: '812101', name: 'JIS Cast Iron Globe Valve 10K 50A Flanged', unit: 'PCS', category: 'Valves & Cocks', rob: 2 },
+  { code: '812105', name: 'JIS Cast Iron Globe Valve 10K 100A Flanged', unit: 'PCS', category: 'Valves & Cocks', rob: 1 },
+  { code: '812204', name: 'JIS Cast Iron Angle Valve 10K 80A Flanged', unit: 'PCS', category: 'Valves & Cocks', rob: 2 },
+  { code: '812312', name: 'Cast Steel Gate Valve 10K 150A Flanged', unit: 'PCS', category: 'Valves & Cocks', rob: 1 },
+  { code: '812851', name: 'Bronze Screw-Down Check Valve 16K 25A', unit: 'PCS', category: 'Valves & Cocks', rob: 3 },
 ];
 
 function derivePlateNo(code) {
@@ -122,16 +134,41 @@ function specsFor(item) {
       'Service Interval': 'Per PMS running hours',
     };
   }
-  if (cat === 'Safety') {
+  if (cat === 'Safety' || cat === 'Safety & Fire Fighting') {
     const isSol = item.name.includes('SOLAS');
     const isCo2 = item.name.includes('CO2');
+    const isHose = item.name.includes('Fire Hose');
+    const isNozzle = item.name.includes('Nozzle');
+    const isScba = item.name.includes('SCBA');
+    const isEebd = item.name.includes('EEBD');
+    const isSuit = item.name.includes('Immersion');
     return {
       ...common,
-      Dimensions: isCo2 ? 'CO₂ 5 kg portable' : (isSol ? 'Adult universal' : 'Standard size'),
-      Material: isCo2 ? 'Steel cylinder / brass valve' : (item.name.includes('Gloves') ? 'Split leather' : 'ABS / HDPE shell'),
-      Standard: isSol ? 'SOLAS / MED' : (isCo2 ? 'EN 3 / MED' : 'ISO 12402'),
-      Certification: isSol ? 'SOLAS Ch. III' : 'ISO / CE marked',
+      Dimensions: isHose ? '2.5" × 20 m with couplings' : (isNozzle ? '65A dual-purpose fog/jet' : (isScba ? '300 bar cylinder / full face mask' : (isEebd ? '15 min duration' : (isSuit ? 'Adult universal · insulated' : (isCo2 ? 'CO₂ 5 kg portable' : 'Standard size'))))),
+      Material: isHose ? 'Synthetic rubber lined' : (isScba || isEebd ? 'Composite cylinder / demand valve' : (isSuit ? 'Neoprene / nylon outer' : (isCo2 ? 'Steel cylinder / brass valve' : (item.name.includes('Gloves') ? 'Split leather' : 'ABS / HDPE shell')))),
+      Standard: isSol || isSuit ? 'SOLAS / MED' : (isScba || isEebd ? 'EN 137 / SOLAS' : (isCo2 ? 'EN 3 / MED' : (isHose ? 'EN 14540 / ISO 14557' : 'ISO 12402'))),
+      Certification: isSol || isSuit ? 'SOLAS Ch. III' : (isScba ? 'EN 137 Type 2' : (isEebd ? 'SOLAS Ch. II-2' : 'ISO / CE marked')),
+      Rating: isHose ? '2.5" working pressure' : (isNozzle ? '65A jet/fog' : '—'),
       Voltage: '—',
+    };
+  }
+  if (cat === 'Valves & Cocks') {
+    const isGlobe = item.name.includes('Globe');
+    const isAngle = item.name.includes('Angle');
+    const isGate = item.name.includes('Gate');
+    const isCheck = item.name.includes('Check');
+    const rating = item.name.includes('16K') ? 'JIS 16K' : 'JIS 10K';
+    const sizeMatch = item.name.match(/(\d+)A/);
+    const size = sizeMatch ? `${sizeMatch[1]}A` : '—';
+    return {
+      ...common,
+      Dimensions: `${size} flanged · face-to-face per JIS B2220`,
+      Material: isCheck ? 'Bronze body' : (isGate ? 'Cast steel body' : 'Cast iron body'),
+      Standard: 'JIS B2220 / JIS F 7300',
+      Rating: rating,
+      'Body Material': isCheck ? 'Bronze' : (isGate ? 'Cast steel' : 'Cast iron'),
+      'End Connection': 'Flanged RF',
+      Type: isGlobe ? 'Globe' : (isAngle ? 'Angle' : (isGate ? 'Gate' : 'Check (screw-down)')),
     };
   }
   if (cat === 'Piping') {
