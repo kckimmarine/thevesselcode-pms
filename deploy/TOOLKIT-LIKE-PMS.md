@@ -59,6 +59,48 @@ https://thevesselcode.com/toolkit/
 
 → 전체 화면 Maritime Toolkit (PMS처럼 헤더 없이 앱만)
 
+### 백지 화면이 계속 나올 때 (1.82KB 파일인데도)
+
+**먼저 색으로 구분하세요:**
+
+| 화면 | 의미 |
+|------|------|
+| **흰색** 백지 (+ WordPress 헤더/메뉴) | 정적 `index.html`이 **아님** → WordPress 페이지가 `/toolkit/` 을 가로챔 |
+| **남색** (#1a365d) + "로딩 중…" | 정적 embed는 맞음 → iframe 안 앱 로드 문제 |
+
+**1) 페이지 소스 확인 (가장 중요)**
+
+브라우저에서 `https://thevesselcode.com/toolkit/` → **우클릭 → 페이지 소스 보기**
+
+- ✅ 정상: `TVC-STATIC-TOOLKIT-EMBED-v2`, `tvcToolkitFrame`, `background: #1a365d` 보임
+- ❌ 문제: `wp-content`, `wordpress`, 테마 이름 등 WordPress HTML → **아래 2번**
+
+**2) WordPress Toolkit 페이지 휴지통**
+
+1. **Pages → Toolkit → Move to Trash**
+2. 메뉴는 **Custom Link** `https://thevesselcode.com/toolkit/` 만 사용 (WP Page 링크 아님)
+3. **Caching → Clear**
+
+**3) cPanel 파일 재확인**
+
+`public_html/toolkit/` 에 다음 **두 파일** 모두:
+
+| 파일 | 크기 |
+|------|------|
+| `index.html` | ~2KB (0 bytes 아님) |
+| `.htaccess` | ~100 bytes (WordPress 우회) |
+
+**4) PMS와 비교**
+
+- `https://thevesselcode.com/pms/` 가 되면 → Toolkit만 문제 → 위 1~3번
+- PMS도 안 되면 → Cloudflare/캐시/호스팅 전체 이슈
+
+**5) 임시 우회 (메뉴)**
+
+메뉴 Custom Link를 직접 앱으로:
+
+`https://app.thevesselcode.com/toolkit`
+
 ---
 
 ## 자동 배포 (선택)

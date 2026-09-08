@@ -1,0 +1,7 @@
+# Force static embed page (PMS pattern). Prevents WordPress from handling /toolkit/.
+DirectoryIndex index.html
+Options -Indexes
+
+<IfModule mod_rewrite.c>
+RewriteEngine Off
+</IfModule>
