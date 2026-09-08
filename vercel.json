@@ -1,7 +1,9 @@
 {
   "version": 2,
-  "buildCommand": "",
+  "framework": null,
   "installCommand": "npm install --omit=dev --ignore-scripts",
+  "buildCommand": "node scripts/vercel-static-build.mjs",
+  "outputDirectory": "dist",
   "redirects": [
     { "source": "/store-public.html", "destination": "/toolkit", "permanent": true },
     { "source": "/store-public", "destination": "/toolkit", "permanent": true }
