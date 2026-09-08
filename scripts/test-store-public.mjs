@@ -62,11 +62,9 @@ async function main() {
       ok: await page.locator('[data-lead-trigger="requisition"]').isVisible(),
     });
 
-    const bannerText = await page.locator('.impa-detail-public-banner-text').textContent();
     results.push({
-      check: 'modal conversion banner copy present',
-      ok: /Excel/i.test(bannerText || '') && /TVC-PMS/i.test(bannerText || ''),
-      detail: (bannerText || '').trim().slice(0, 100),
+      check: 'modal conversion footer removed',
+      ok: await page.locator('#impaDetailPublicFooter').count() === 0,
     });
 
     await page.keyboard.press('Escape');
