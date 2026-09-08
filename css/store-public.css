@@ -68,6 +68,13 @@ html:has(.store-public-body) {
     white-space: nowrap;
 }
 
+.store-public-header-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+}
+
 .store-public-site-link:hover,
 .store-public-site-link:focus-visible {
     color: #fff;
@@ -205,6 +212,32 @@ html:has(.store-public-body) {
     transform: translateY(-1px);
     outline: 2px solid #90cdf4;
     outline-offset: 2px;
+}
+
+.toolkit-conversion-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 12px;
+}
+
+.toolkit-conversion-btn-outline {
+    background: transparent;
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    box-shadow: none;
+}
+
+.toolkit-conversion-btn-outline:hover,
+.toolkit-conversion-btn-outline:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.store-public-footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
 }
 
 .store-public-footer-tag {
@@ -597,10 +630,6 @@ html:has(.store-public-body) {
 .store-tool-bunker .store-public-main,
 .store-tool-lube .store-public-main,
 .store-tool-paint .store-public-main,
-.store-tool-engineering .store-public-main {
-    display: none;
-}
-
 @media (max-width: 640px) {
     .store-public-header {
         padding: 12px 14px;
@@ -635,4 +664,31 @@ html:has(.store-public-body) {
     .store-public-mode .store-vl-scroll {
         max-height: calc(100dvh - 300px);
     }
+}
+
+/* Full-screen embed via thevesselcode.com/maritime-toolkit */
+html.store-embed-mode,
+html.store-embed-mode body.store-embed-mode {
+    height: 100%;
+}
+
+.store-embed-mode .store-public-shell {
+    max-width: none;
+    min-height: 100%;
+}
+
+.store-embed-mode .store-public-header-links .store-public-site-link[href*="thevesselcode.com"]:not([href*="/pms"]) {
+    display: none;
+}
+
+.store-embed-mode .store-public-footer-tag {
+    display: none;
+}
+
+.store-embed-mode .store-public-fab {
+    bottom: max(72px, calc(16px + env(safe-area-inset-bottom, 0px)));
+}
+
+.store-embed-mode .store-public-mode .store-vl-scroll {
+    max-height: calc(100dvh - 240px);
 }

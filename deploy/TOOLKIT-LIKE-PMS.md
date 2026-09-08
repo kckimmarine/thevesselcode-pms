@@ -4,9 +4,11 @@ PMS(`/pms/`)와 **똑같은 방식**입니다. WordPress 페이지에 iframe 넣
 
 | | PMS | Toolkit |
 |---|-----|---------|
-| 서버 파일 | `public_html/pms/index.html` | `public_html/toolkit/index.html` |
-| 메뉴 URL | `https://thevesselcode.com/pms/` | `https://thevesselcode.com/toolkit/` |
-| 앱 주소 | `app.thevesselcode.com/?embed=1` | `app.thevesselcode.com/toolkit` |
+| Server file | `public_html/pms/index.html` | `public_html/maritime-toolkit/index.html` |
+| 메뉴 URL | `https://thevesselcode.com/pms/` | `https://thevesselcode.com/maritime-toolkit/` |
+| 앱 주소 | `app.thevesselcode.com/?embed=1` | `app.thevesselcode.com/toolkit?embed=1` |
+
+> `/toolkit/` 은 WordPress slug와 충돌합니다. **`/maritime-toolkit/`** 만 사용하세요.
 
 ---
 
