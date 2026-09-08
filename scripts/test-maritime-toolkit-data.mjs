@@ -23,7 +23,6 @@ function main() {
     const data = loadToolkitData();
     const results = [];
 
-    // ASTM Table 54B worked examples (published reference values)
     const vcfCases = [
         { den15: 839, tempC: 32.5, vcf: 0.98515 },
         { den15: 903.5, tempC: 30.5, vcf: 0.988067 },
@@ -40,23 +39,30 @@ function main() {
         });
     }
 
-    // Practical bunker case: 500 m³ VLSFO @ 991 kg/m³, 40°C
-    const bunker = data.calcBunkerMassAstM54B(500, 991, 40);
+    const bunker = data.calculateBunkerMetric({
+        fuelType: 'VLSFO', tempC: 40, density15: 991, volumeM3: 500, inputMode: 'volume',
+    });
     results.push({
-        check: 'bunker VLSFO 500m³ @40°C yields MT',
-        ok: bunker.mt > 480 && bunker.mt < 500 && bunker.vcf < 1,
-        detail: { mt: bunker.mt, vcf: bunker.vcf },
+        check: 'bunker VLSFO 500m³ @40°C weight-in-air MT',
+        ok: bunker.mt > 475 && bunker.mt < 495 && bunker.vcf < 1,
+        detail: { mt: bunker.mt, vcf: bunker.vcf, co2Mt: bunker.co2Mt },
     });
 
-    // Flange table coverage
+    results.push({
+        check: 'bunker CO₂ factor applied',
+        ok: approx(bunker.co2Mt, bunker.mt * 3.151, 0.1),
+        detail: { co2Mt: bunker.co2Mt },
+    });
+
     const jis5k = data.FLANGE_ROWS.filter(r => r.standard === 'JIS 5K');
     const jis10k = data.FLANGE_ROWS.filter(r => r.standard === 'JIS 10K');
     const jis16k = data.FLANGE_ROWS.filter(r => r.standard === 'JIS 16K');
+    const dinPn10 = data.FLANGE_ROWS.filter(r => r.standard === 'DIN PN10');
     results.push({ check: 'JIS 5K rows >= 25', ok: jis5k.length >= 25, detail: jis5k.length });
     results.push({ check: 'JIS 10K rows >= 25', ok: jis10k.length >= 25, detail: jis10k.length });
     results.push({ check: 'JIS 16K rows >= 25', ok: jis16k.length >= 25, detail: jis16k.length });
+    results.push({ check: 'DIN PN10 rows >= 10', ok: dinPn10.length >= 10, detail: dinPn10.length });
 
-    // Spot-check JIS 10K 50A (common shipboard size)
     const jis50a = jis10k.find(r => r.nb === '50A');
     results.push({
         check: 'JIS 10K 50A OD/PCD',
@@ -64,9 +70,19 @@ function main() {
         detail: jis50a,
     });
 
-    // Cross-ref row counts
-    results.push({ check: 'lube rows >= 20', ok: data.LUB_OIL_ROWS.length >= 20, detail: data.LUB_OIL_ROWS.length });
-    results.push({ check: 'paint rows >= 12', ok: data.PAINT_ROWS.length >= 12, detail: data.PAINT_ROWS.length });
+    const sizes = data.flangeSizesForStandard('JIS 10K', 300);
+    results.push({
+        check: 'flange size filter 15A-300A',
+        ok: sizes.length >= 15 && sizes.every(s => {
+            const mm = parseInt(s.nb, 10);
+            return mm >= 15 && mm <= 300;
+        }),
+        detail: sizes.length,
+    });
+
+    results.push({ check: 'lube rows >= 15', ok: data.LUB_OIL_ROWS.length >= 15, detail: data.LUB_OIL_ROWS.length });
+    results.push({ check: 'PSC guard topics >= 5', ok: data.PSC_GUARD_ROWS.length >= 5, detail: data.PSC_GUARD_ROWS.length });
+    results.push({ check: 'gasket ref rows >= 5', ok: data.GASKET_REF_ROWS.length >= 5, detail: data.GASKET_REF_ROWS.length });
 
     const failed = results.filter(r => !r.ok);
     console.log(JSON.stringify({ passed: results.length - failed.length, total: results.length, results }, null, 2));

@@ -4,12 +4,15 @@ const TVC_MaritimeToolkit = (function () {
     const FLANGE_ROWS = DATA.FLANGE_ROWS || [];
     const LUB_OIL_ROWS = DATA.LUB_OIL_ROWS || [];
     const PAINT_ROWS = DATA.PAINT_ROWS || [];
-
-    const FUEL_TYPES = {
-        VLSFO: { label: 'VLSFO (0.50% S)', defaultDensity: 991 },
-        LSMGO: { label: 'LSMGO / MGO', defaultDensity: 850 },
-        HFO: { label: 'HFO / VLSHFO', defaultDensity: 980 },
+    const PSC_GUARD_ROWS = DATA.PSC_GUARD_ROWS || [];
+    const GASKET_REF_ROWS = DATA.GASKET_REF_ROWS || [];
+    const PACKING_REF_ROWS = DATA.PACKING_REF_ROWS || [];
+    const FUEL_TYPES = DATA.FUEL_TYPES || {
+        VLSFO: { label: 'VLSFO 0.5% S', defaultDensity: 991, co2Factor: 3.151 },
+        LSMGO: { label: 'LSMGO 0.1% S', defaultDensity: 865, co2Factor: 3.206 },
+        HSFO: { label: 'HSFO 380', defaultDensity: 980, co2Factor: 3.151 },
     };
+    const FLANGE_STANDARDS = DATA.FLANGE_STANDARDS || [...new Set(FLANGE_ROWS.map(r => r.standard))];
 
     let _activeTool = 'catalog';
 
@@ -21,30 +24,29 @@ const TVC_MaritimeToolkit = (function () {
             .replace(/"/g, '&quot;');
     }
 
-    function standards() {
-        return [...new Set(FLANGE_ROWS.map(r => r.standard))];
-    }
-
-    function filterFlanges(standard, query) {
-        const q = String(query || '').trim().toLowerCase();
+    function filterFlanges(standard, sizeKey) {
         return FLANGE_ROWS.filter(row => {
             if (row.standard !== standard) return false;
-            if (!q) return true;
-            return String(row.nb).toLowerCase().includes(q)
-                || String(row.od).includes(q)
-                || String(row.pcd).includes(q);
+            if (!sizeKey) return true;
+            return row.nb === sizeKey || row.sizeLabel === sizeKey;
         });
     }
 
     function calcBunkerMassAstM54B(volume, density15, tempC, fuelKey) {
-        if (DATA.calcBunkerMassAstM54B) {
-            return DATA.calcBunkerMassAstM54B(volume, density15, tempC);
+        if (DATA.calculateBunkerMetric) {
+            const r = DATA.calculateBunkerMetric({
+                fuelType: fuelKey || 'VLSFO',
+                tempC,
+                density15,
+                volumeM3: volume,
+                inputMode: 'volume',
+            });
+            return { mt: r.mt, v15: r.v15, rho15: Number(density15) || 0, vcf: r.vcf, alpha: r.alpha };
         }
         const vObs = Math.max(0, Number(volume) || 0);
         const rho15 = Math.max(0, Number(density15) || 0);
         if (!vObs || !rho15) return { mt: 0, v15: 0, rho15, vcf: 1, alpha: 0 };
-        const v15 = vObs;
-        return { mt: (v15 * rho15) / 1000, v15, rho15, vcf: 1, alpha: 0 };
+        return { mt: (vObs * rho15) / 1000, v15: vObs, rho15, vcf: 1, alpha: 0 };
     }
 
     function calcVolumeToMt(volume, density15, tempC, fuelKey) {
@@ -69,60 +71,108 @@ const TVC_MaritimeToolkit = (function () {
         return [...new Set(LUB_OIL_ROWS.map(r => r.category))];
     }
 
+    function flangeSizeOptions(standard) {
+        const sizes = DATA.flangeSizesForStandard
+            ? DATA.flangeSizesForStandard(standard, 300)
+            : FLANGE_ROWS.filter(r => r.standard === standard);
+        return sizes.map(r => ({
+            key: r.nb,
+            label: r.sizeLabel || r.nb,
+        }));
+    }
+
     function renderBunkerPanel(host) {
         const fuelOptions = Object.entries(FUEL_TYPES).map(([k, v]) =>
             `<option value="${k}">${esc(v.label)}</option>`).join('');
         host.innerHTML = `
             <div class="maritime-panel-head">
                 <h2 class="maritime-panel-title">⛽ Bunker &amp; Fuel Calculator</h2>
-                <p class="maritime-panel-sub">Volume to metric tons using ASTM Table 54B temperature correction to 15°C (density-based α).</p>
+                <p class="maritime-panel-sub">ASTM Table 54B volume correction, weight-in-air mass, and estimated CO₂ emission (IMO conversion factors).</p>
             </div>
             <form class="maritime-bunker-form" id="bunkerCalcForm">
                 <label class="maritime-field">
-                    <span>Fuel type</span>
-                    <select id="bunkerFuelType">${fuelOptions}</select>
+                    <span>Fuel grade</span>
+                    <select id="bunkerFuelType" title="Select fuel grade for default density and CO₂ factor">${fuelOptions}</select>
                 </label>
                 <label class="maritime-field">
-                    <span>Volume (m³ @ observed temp)</span>
-                    <input type="number" id="bunkerVolume" min="0" step="0.001" value="500" inputmode="decimal">
+                    <span>Input mode</span>
+                    <select id="bunkerInputMode" title="Calculate from observed volume or target mass">
+                        <option value="volume">Observed volume (m³)</option>
+                        <option value="mass">Target mass (MT)</option>
+                    </select>
+                </label>
+                <label class="maritime-field" id="bunkerVolumeField">
+                    <span>Observed volume (m³)</span>
+                    <input type="number" id="bunkerVolume" min="0" step="0.001" value="500" inputmode="decimal" title="Gross observed volume at tank temperature">
+                </label>
+                <label class="maritime-field hidden" id="bunkerMassField">
+                    <span>Target mass (MT in air)</span>
+                    <input type="number" id="bunkerMass" min="0" step="0.001" value="487" inputmode="decimal" title="Commercial mass in air">
                 </label>
                 <label class="maritime-field">
                     <span>Density at 15°C (kg/m³)</span>
-                    <input type="number" id="bunkerDensity" min="700" max="1100" step="0.1" value="991" inputmode="decimal">
+                    <input type="number" id="bunkerDensity" min="700" max="1100" step="0.1" value="991" inputmode="decimal" title="Laboratory density at 15°C reference">
                 </label>
                 <label class="maritime-field">
                     <span>Observed temperature (°C)</span>
-                    <input type="number" id="bunkerTemp" step="0.1" value="40" inputmode="decimal">
+                    <input type="number" id="bunkerTemp" step="0.1" value="40" inputmode="decimal" title="Cargo / tank temperature at measurement">
                 </label>
             </form>
             <div class="maritime-bunker-result" id="bunkerResult" aria-live="polite">
                 <div class="maritime-bunker-metrics">
-                    <div><span>Mass (MT)</span><strong id="bunkerMassValue">—</strong></div>
+                    <div><span>Mass in air (MT)</span><strong id="bunkerMassValue">—</strong></div>
                     <div><span>Vol @ 15°C (m³)</span><strong id="bunkerV15Value">—</strong></div>
                     <div><span>VCF (Table 54B)</span><strong id="bunkerVcfValue">—</strong></div>
+                    <div><span>Density @ obs. temp (kg/m³)</span><strong id="bunkerRhoObsValue">—</strong></div>
                     <div><span>α @ 15°C</span><strong id="bunkerAlphaValue">—</strong></div>
+                    <div><span>Est. CO₂ (MT)</span><strong id="bunkerCo2Value">—</strong></div>
                 </div>
             </div>
-            <p class="maritime-note">ASTM Table 54B: VCF = exp(−α·ΔT·(1 + 0.8·α·ΔT)); V<sub>15</sub> = V<sub>obs</sub> × VCF; MT = V<sub>15</sub> × ρ<sub>15</sub> ÷ 1000. Verify with shore lab before commercial settlement.</p>`;
+            <p class="maritime-note">VCF = exp(−α·ΔT·(1 + 0.8·α·ΔT)); weight-in-air uses ρ<sub>obs</sub> − 1.1 kg/m³ buoyancy correction. CO₂ factors: VLSFO/HSFO 3.151, LSMGO 3.206 t-CO₂/t-fuel (IMO). Verify with shore lab before commercial settlement.</p>`;
 
         const form = host.querySelector('#bunkerCalcForm');
         const fuelSelect = host.querySelector('#bunkerFuelType');
+        const modeSelect = host.querySelector('#bunkerInputMode');
+        const volField = host.querySelector('#bunkerVolumeField');
+        const massField = host.querySelector('#bunkerMassField');
+
         const paint = () => {
             const fuelKey = fuelSelect.value;
-            const vol = host.querySelector('#bunkerVolume')?.value;
+            const inputMode = modeSelect.value;
             const den = host.querySelector('#bunkerDensity')?.value;
             const temp = host.querySelector('#bunkerTemp')?.value;
-            const result = calcBunkerMassAstM54B(vol, den, temp, fuelKey);
+            const vol = host.querySelector('#bunkerVolume')?.value;
+            const mass = host.querySelector('#bunkerMass')?.value;
+
+            const result = DATA.calculateBunkerMetric
+                ? DATA.calculateBunkerMetric({ fuelType: fuelKey, tempC: temp, density15: den, volumeM3: vol, massMt: mass, inputMode })
+                : calcBunkerMassAstM54B(vol, den, temp, fuelKey);
+
             host.querySelector('#bunkerMassValue').textContent = `${result.mt.toFixed(3)} MT`;
             host.querySelector('#bunkerV15Value').textContent = result.v15.toFixed(3);
             host.querySelector('#bunkerVcfValue').textContent = result.vcf.toFixed(5);
+            host.querySelector('#bunkerRhoObsValue').textContent = (result.rhoObs || 0).toFixed(2);
             host.querySelector('#bunkerAlphaValue').textContent = result.alpha.toExponential(4);
+            host.querySelector('#bunkerCo2Value').textContent = result.co2Mt != null
+                ? `${result.co2Mt.toFixed(2)} MT`
+                : '—';
         };
-        fuelSelect.addEventListener('change', () => {
-            const fuel = FUEL_TYPES[fuelSelect.value];
-            host.querySelector('#bunkerDensity').value = String(fuel.defaultDensity);
+
+        modeSelect.addEventListener('change', () => {
+            const isMass = modeSelect.value === 'mass';
+            volField.classList.toggle('hidden', isMass);
+            massField.classList.toggle('hidden', !isMass);
             paint();
         });
+
+        fuelSelect.addEventListener('change', () => {
+            const fuel = FUEL_TYPES[fuelSelect.value];
+            if (fuel?.defaultDensity) {
+                host.querySelector('#bunkerDensity').value = String(fuel.defaultDensity);
+            }
+            paint();
+        });
+
         form.addEventListener('input', paint);
         paint();
     }
@@ -132,24 +182,24 @@ const TVC_MaritimeToolkit = (function () {
             `<option value="${esc(c)}">${esc(c)}</option>`).join('');
         host.innerHTML = `
             <div class="maritime-panel-head">
-                <h2 class="maritime-panel-title">🛢️ Lubricant Cross-Reference</h2>
-                <p class="maritime-panel-sub">Compare cylinder, system, hydraulic, gear, turbine, and compressor oil grades across Shell, Mobil, Castrol, and Total.</p>
+                <h2 class="maritime-panel-title">🛢️ Marine Lub-Oil Cross-Reference</h2>
+                <p class="maritime-panel-sub">Searchable matrix across Shell, ExxonMobil, Castrol, and TotalEnergies — cylinder, system, TPEO, hydraulic, compressor, and refrigeration grades.</p>
             </div>
             <div class="maritime-flange-controls">
                 <label class="maritime-field">
                     <span>Category</span>
-                    <select id="lubeCategoryFilter">
+                    <select id="lubeCategoryFilter" title="Filter by lubricant application">
                         <option value="">All categories</option>
                         ${catOptions}
                     </select>
                 </label>
                 <label class="maritime-field maritime-field-grow">
-                    <span>Search grade or product</span>
-                    <input type="search" id="lubeSearch" placeholder="e.g. 80BN, Tellus, Mobil Gard" autocomplete="off">
+                    <span>Search brand, product, or viscosity / BN</span>
+                    <input type="search" id="lubeSearch" placeholder="e.g. BN 40, Mobilgard, Tellus, TPEO" autocomplete="off" title="Keyword search across all makers">
                 </label>
             </div>
             <div id="lubeTableHost"></div>
-            <p class="maritime-note">Reference equivalents for procurement — always confirm OEM / maker approval before change-over.</p>`;
+            <p class="maritime-note">Reference equivalents for procurement — always confirm OEM / maker approval and lube analysis before change-over.</p>`;
 
         const catFilter = host.querySelector('#lubeCategoryFilter');
         const search = host.querySelector('#lubeSearch');
@@ -161,12 +211,12 @@ const TVC_MaritimeToolkit = (function () {
             const rows = LUB_OIL_ROWS.filter(r => {
                 if (cat && r.category !== cat) return false;
                 if (!q) return true;
-                const hay = [r.category, r.grade, r.shell, r.mobil, r.castrol, r.total].join(' ').toLowerCase();
+                const hay = [r.category, r.specs, r.shell, r.mobil, r.castrol, r.total].join(' ').toLowerCase();
                 return hay.includes(q);
             });
             tableHost.innerHTML = tableHtml(
-                ['Category', 'Grade', 'Shell', 'Mobil', 'Castrol', 'Total'],
-                rows.map(r => [r.category, r.grade, r.shell, r.mobil, r.castrol, r.total]),
+                ['Category', 'Specification', 'Shell', 'ExxonMobil', 'Castrol', 'TotalEnergies'],
+                rows.map(r => [r.category, r.specs, r.shell, r.mobil, r.castrol, r.total]),
             );
         };
         catFilter.addEventListener('change', paint);
@@ -228,40 +278,99 @@ const TVC_MaritimeToolkit = (function () {
     }
 
     function renderEngineeringPanel(host) {
-        const stdOptions = standards().map(s =>
+        const stdOptions = FLANGE_STANDARDS.map(s =>
             `<option value="${esc(s)}">${esc(s)}</option>`).join('');
         host.innerHTML = `
             <div class="maritime-panel-head">
-                <h2 class="maritime-panel-title">📐 Flange &amp; Engineering Tables</h2>
-                <p class="maritime-panel-sub">JIS B2220 (5K / 10K / 16K), DIN PN16, and ANSI 150# pipe flange dimensions.</p>
+                <h2 class="maritime-panel-title">📐 Piping &amp; Flange Lookup</h2>
+                <p class="maritime-panel-sub">JIS B2220 (5K / 10K / 16K), ANSI 150#, and DIN PN10/PN16 — instant dimensional lookup for 15A (1/2&quot;) to 300A (12&quot;).</p>
             </div>
             <div class="maritime-flange-controls">
                 <label class="maritime-field">
-                    <span>Standard</span>
-                    <select id="flangeStandardSelect">${stdOptions}</select>
+                    <span>Flange standard</span>
+                    <select id="flangeStandardSelect" title="Select piping flange standard">${stdOptions}</select>
                 </label>
                 <label class="maritime-field maritime-field-grow">
-                    <span>Filter nominal bore</span>
-                    <input type="search" id="flangeSizeSearch" placeholder="e.g. 50A, DN80, 4&quot;" autocomplete="off">
+                    <span>Nominal bore</span>
+                    <select id="flangeSizeSelect" title="Select nominal pipe size">
+                        <option value="">All sizes (table)</option>
+                    </select>
                 </label>
             </div>
             <div id="flangeTableHost"></div>
-            <p class="maritime-note">Dimensions in millimetres (JIS B2220 per wermac.org reference). Verify against yard drawing / class certificate before procurement.</p>`;
+            <div class="maritime-ref-cards">
+                <div class="maritime-ref-card">
+                    <h3 class="maritime-ref-card-title">Gasket Quick Reference</h3>
+                    <div id="gasketRefHost"></div>
+                </div>
+                <div class="maritime-ref-card">
+                    <h3 class="maritime-ref-card-title">Packing Quick Reference</h3>
+                    <div id="packingRefHost"></div>
+                </div>
+            </div>
+            <p class="maritime-note">Dimensions in millimetres (JIS B2220 per industry reference tables). Verify against yard drawing / class certificate before procurement.</p>`;
 
         const stdSelect = host.querySelector('#flangeStandardSelect');
-        const search = host.querySelector('#flangeSizeSearch');
+        const sizeSelect = host.querySelector('#flangeSizeSelect');
         const tableHost = host.querySelector('#flangeTableHost');
 
-        const paint = () => {
-            const rows = filterFlanges(stdSelect.value, search.value);
-            tableHost.innerHTML = tableHtml(
-                ['Nominal', 'OD (mm)', 'PCD (mm)', 'Bolts', 'Hole Ø (mm)', 'Bolt size'],
-                rows.map(r => [r.nb, r.od, r.pcd, r.bolts, `Ø${r.hole}`, r.bolt]),
+        const refillSizes = () => {
+            const sizes = flangeSizeOptions(stdSelect.value);
+            sizeSelect.innerHTML = '<option value="">All sizes (table)</option>'
+                + sizes.map(s => `<option value="${esc(s.key)}">${esc(s.label)}</option>`).join('');
+        };
+
+        const paintGasketCards = () => {
+            host.querySelector('#gasketRefHost').innerHTML = tableHtml(
+                ['Gasket type', 'Material', 'Temp range', 'Typical service'],
+                GASKET_REF_ROWS.map(r => [r.type, r.material, r.temp, r.service]),
+            );
+            host.querySelector('#packingRefHost').innerHTML = tableHtml(
+                ['Packing type', 'Material', 'Typical service'],
+                PACKING_REF_ROWS.map(r => [r.type, r.material, r.service]),
             );
         };
-        stdSelect.addEventListener('change', paint);
-        search.addEventListener('input', paint);
+
+        const paint = () => {
+            const sizeKey = sizeSelect.value;
+            const rows = filterFlanges(stdSelect.value, sizeKey);
+            const displayRows = sizeKey && rows.length === 1 ? rows : rows;
+            tableHost.innerHTML = tableHtml(
+                ['Nominal size (DN / inch)', 'OD (mm)', 'PCD (mm)', 'Bolt holes', 'Hole Ø (mm)', 'Bolt spec'],
+                displayRows.map(r => [
+                    r.sizeLabel || r.nb, r.od, r.pcd, r.bolts, `Ø${r.hole}`, r.bolt,
+                ]),
+            );
+        };
+
+        stdSelect.addEventListener('change', () => { refillSizes(); paint(); });
+        sizeSelect.addEventListener('change', paint);
+        refillSizes();
+        paintGasketCards();
         paint();
+    }
+
+    function renderPscGuardPanel(host) {
+        const cards = PSC_GUARD_ROWS.map(item => `
+            <article class="maritime-psc-card" id="psc-${esc(item.id)}">
+                <header class="maritime-psc-card-head">
+                    <h3 class="maritime-psc-card-title">${esc(item.title)}</h3>
+                    <span class="maritime-psc-mou">${esc(item.mou)}</span>
+                </header>
+                <p class="maritime-psc-focus"><strong>Inspection focus:</strong> ${esc(item.focus)}</p>
+                <ul class="maritime-psc-checks">
+                    ${item.checks.map(c => `<li>${esc(c)}</li>`).join('')}
+                </ul>
+                <p class="maritime-psc-accept"><strong>Acceptance criteria:</strong> ${esc(item.acceptance)}</p>
+            </article>`).join('');
+
+        host.innerHTML = `
+            <div class="maritime-panel-head">
+                <h2 class="maritime-panel-title">🛡️ Class &amp; PSC Guard</h2>
+                <p class="maritime-panel-sub">High-priority inspection matrix for Tokyo MoU and Paris MoU Concentrated Inspection Campaign (CIC) topics.</p>
+            </div>
+            <div class="maritime-psc-grid">${cards}</div>
+            <p class="maritime-note">Reference checklist for shipboard preparation — not a substitute for flag / class statutory requirements. Cross-check with current MoU circulars.</p>`;
     }
 
     function setActiveTool(tool) {
@@ -294,15 +403,17 @@ const TVC_MaritimeToolkit = (function () {
         });
 
         const hosts = {
-            bunker: document.getElementById('storeToolBunker'),
-            lube: document.getElementById('storeToolLube'),
+            bunker: document.getElementById('tab-bunker') || document.getElementById('storeToolBunker'),
+            lube: document.getElementById('tab-luboil') || document.getElementById('storeToolLube'),
             paint: document.getElementById('storeToolPaint'),
-            engineering: document.getElementById('storeToolEngineering'),
+            engineering: document.getElementById('tab-flange') || document.getElementById('storeToolEngineering'),
+            psc: document.getElementById('tab-psc-guard') || document.getElementById('storeToolPscGuard'),
         };
         if (hosts.bunker) renderBunkerPanel(hosts.bunker);
         if (hosts.lube) renderLubePanel(hosts.lube);
         if (hosts.paint) renderPaintPanel(hosts.paint);
         if (hosts.engineering) renderEngineeringPanel(hosts.engineering);
+        if (hosts.psc) renderPscGuardPanel(hosts.psc);
         setActiveTool('catalog');
     }
 

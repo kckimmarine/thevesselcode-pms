@@ -25,8 +25,8 @@ async function main() {
     });
 
     results.push({
-      check: 'five utility tab chips',
-      ok: await page.locator('[data-tool-tab]').count() === 5,
+      check: 'six utility tab chips',
+      ok: await page.locator('[data-tool-tab]').count() === 6,
     });
 
     results.push({
@@ -104,12 +104,24 @@ async function main() {
       ok: await page.locator('#paintTableHost table').isVisible(),
     });
 
-    // Engineering tab
+    // Engineering / flange tab
     await page.locator('[data-tool-tab="engineering"]').click();
     await page.locator('#flangeTableHost table').waitFor({ state: 'visible', timeout: 5_000 });
     results.push({
-      check: 'flange engineering table visible',
+      check: 'flange lookup table visible',
       ok: await page.locator('#flangeTableHost table').isVisible(),
+    });
+    results.push({
+      check: 'gasket quick reference visible',
+      ok: await page.locator('#gasketRefHost table').isVisible(),
+    });
+
+    // PSC Guard tab
+    await page.locator('[data-tool-tab="psc"]').click();
+    await page.locator('#tab-psc-guard .maritime-psc-card').first().waitFor({ state: 'visible', timeout: 5_000 });
+    results.push({
+      check: 'PSC guard inspection cards visible',
+      ok: await page.locator('.maritime-psc-card').count() >= 5,
     });
 
     // Mobile viewport tab scroll
