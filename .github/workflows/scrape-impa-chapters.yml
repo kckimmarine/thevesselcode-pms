@@ -1,0 +1,75 @@
+name: Scrape IMPA chapters
+
+# Regenerates public/data/chapters/*.json + impa-full.json, validates, commits to master.
+# Vercel auto-deploys on push. Manual run: Actions → Scrape IMPA chapters → Run workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      live:
+        description: 'Use IMPA_SCRAPER_BASE_URL (--live) instead of fixtures'
+        required: false
+        default: false
+        type: boolean
+  schedule:
+    # Weekly Monday 06:00 UTC
+    - cron: '0 6 * * 1'
+  push:
+    branches: [master]
+    paths:
+      - '.github/workflows/scrape-impa-chapters.yml'
+      - 'scripts/scrape-impa-chapters.mjs'
+      - 'scripts/test-scraper-output.mjs'
+      - 'scripts/lib/impa-scraper-schema.mjs'
+      - 'scripts/fixtures/impa-catalog/**'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: scrape-impa-chapters
+  cancel-in-progress: false
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Scrape all IMPA chapters
+        env:
+          IMPA_SCRAPER_BASE_URL: ${{ secrets.IMPA_SCRAPER_BASE_URL }}
+          IMPA_SCRAPER_DELAY_MS: '400'
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.live }}" = "true" ]; then
+            if [ -z "$IMPA_SCRAPER_BASE_URL" ]; then
+              echo "::error::Set repository secret IMPA_SCRAPER_BASE_URL for --live scrape"
+              exit 1
+            fi
+            npm run scrape:impa -- --all --live
+          elif [ -n "$IMPA_SCRAPER_BASE_URL" ] && [ "${{ github.event_name }}" = "schedule" ]; then
+            npm run scrape:impa -- --all --live
+          else
+            npm run scrape:impa -- --all
+          fi
+
+      - name: Validate scraper output
+        run: npm run test:scraper
+
+      - name: Commit and push refreshed data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public/data
+          if git diff --staged --quiet; then
+            echo "No catalog changes to commit."
+            exit 0
+          fi
+          git commit -m "chore(ci): refresh IMPA chapter data [skip ci]"
+          git push
