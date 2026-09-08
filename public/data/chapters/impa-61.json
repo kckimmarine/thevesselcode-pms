@@ -1,0 +1,41 @@
+{
+  "chapter": "61",
+  "title": "Hand Tools",
+  "category": "Tools",
+  "scraped_at": "2026-09-08T13:05:12.502Z",
+  "source": "fixture:chapter-61.html",
+  "count": 3,
+  "items": [
+    {
+      "c": "610101",
+      "n": "Hammer Ball Pein 500g",
+      "u": "PCS",
+      "g": "61",
+      "p": "PL-61-01",
+      "specs": {
+        "Size": "Hammer Ball Pein 500g",
+        "Material": "Carbon steel"
+      }
+    },
+    {
+      "c": "610205",
+      "n": "Screwdriver Set Insulated 7pc",
+      "u": "SET",
+      "g": "61",
+      "p": "PL-61-02",
+      "specs": {
+        "Rating": "VDE 1000V"
+      }
+    },
+    {
+      "c": "610410",
+      "n": "Adjustable Wrench 300mm",
+      "u": "PCS",
+      "g": "61",
+      "p": "PL-61-04",
+      "specs": {
+        "Size": "Adjustable Wrench 300mm"
+      }
+    }
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "chapter": "59",
+  "title": "Safety Equipment",
+  "category": "Safety",
+  "scraped_at": "2026-09-08T13:05:12.101Z",
+  "source": "fixture:chapter-59.html",
+  "count": 5,
+  "items": [
+    {
+      "c": "590101",
+      "n": "Safety Helmet White EN397",
+      "u": "PCS",
+      "g": "59",
+      "p": "PL-59-01",
+      "specs": {
+        "Rating": "Safety Helmet White EN397",
+        "Material": "ABS / HDPE"
+      }
+    },
+    {
+      "c": "590203",
+      "n": "Safety Goggles Clear Anti-Fog",
+      "u": "PCS",
+      "g": "59",
+      "p": "PL-59-02",
+      "specs": {
+        "Rating": "EN 166"
+      }
+    },
+    {
+      "c": "590705",
+      "n": "Safety Harness Full Body with Lanyard",
+      "u": "SET",
+      "g": "59",
+      "p": "PL-59-07",
+      "specs": {
+        "Rating": "EN 361",
+        "Material": "Polyester webbing"
+      }
+    },
+    {
+      "c": "591211",
+      "n": "Life Jacket SOLAS Adult 150N",
+      "u": "PCS",
+      "g": "59",
+      "p": "PL-59-12",
+      "specs": {
+        "Rating": "Life Jacket SOLAS Adult 150N"
+      }
+    },
+    {
+      "c": "591720",
+      "n": "Fire Extinguisher CO2 5kg Portable",
+      "u": "PCS",
+      "g": "59",
+      "p": "PL-59-17",
+      "specs": {
+        "Rating": "EN 3 / MED",
+        "Size": "Fire Extinguisher CO2 5kg Portable",
+        "Material": "Steel cylinder"
+      }
+    }
+  ]
+}
