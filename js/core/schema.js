@@ -1363,11 +1363,11 @@ const TVC_ImpaSchema = (function () {
     }
 
     const FIELD_ALIASES = {
-        impa_code: ['impa_code', 'code', 'impa', 'impano', 'itemno', 'item_no', 'itemnumber', 'impackcode'],
-        name: ['name', 'description', 'itemname', 'item_name', 'desc', 'title', 'productname'],
-        unit: ['unit', 'uom', 'unitofmeasure', 'unit_of_measure', 'measure'],
+        impa_code: ['impa_code', 'code', 'impa', 'impano', 'itemno', 'item_no', 'itemnumber', 'impackcode', 'c'],
+        name: ['name', 'description', 'itemname', 'item_name', 'desc', 'title', 'productname', 'n'],
+        unit: ['unit', 'uom', 'unitofmeasure', 'unit_of_measure', 'measure', 'u'],
         category: ['category', 'cat', 'group', 'section', 'department', 'class'],
-        plate_id: ['plate_id', 'plateid', 'plate_no', 'plateno', 'plate', 'plateref', 'catalogplate'],
+        plate_id: ['plate_id', 'plateid', 'plate_no', 'plateno', 'plate', 'plateref', 'catalogplate', 'p'],
         rob: ['rob', 'qty', 'quantity', 'stock', 'onboard'],
         spec: ['spec', 'specs', 'specification', 'dimensions'],
     };

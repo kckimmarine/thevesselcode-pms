@@ -1,0 +1,42 @@
+{
+  "chapter": "79",
+  "title": "Paints & Coatings",
+  "category": "Paint",
+  "scraped_at": "2026-09-08T13:05:12.903Z",
+  "source": "fixture:chapter-79.html",
+  "count": 3,
+  "items": [
+    {
+      "c": "790101",
+      "n": "Paint Antifouling Self-Polishing Red",
+      "u": "LTR",
+      "g": "79",
+      "p": "PL-79-01",
+      "specs": {
+        "Size": "20 L",
+        "Material": "Copper-free SPC"
+      }
+    },
+    {
+      "c": "790215",
+      "n": "Paint Primer Epoxy Grey",
+      "u": "LTR",
+      "g": "79",
+      "p": "PL-79-02",
+      "specs": {
+        "Size": "20 L",
+        "Material": "Paint Primer Epoxy Grey"
+      }
+    },
+    {
+      "c": "790330",
+      "n": "Paint Brush 100mm",
+      "u": "PCS",
+      "g": "79",
+      "p": "PL-79-03",
+      "specs": {
+        "Size": "Paint Brush 100mm"
+      }
+    }
+  ]
+}

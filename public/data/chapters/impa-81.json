@@ -1,0 +1,61 @@
+{
+  "chapter": "81",
+  "title": "Valves & Cocks",
+  "category": "Piping",
+  "scraped_at": "2026-09-08T13:05:13.304Z",
+  "source": "fixture:chapter-81.html",
+  "count": 5,
+  "items": [
+    {
+      "c": "812101",
+      "n": "Gate Valve Bronze Flanged DN50 PN16",
+      "u": "PCS",
+      "g": "81",
+      "p": "PL-81-21",
+      "specs": {
+        "Rating": "Gate Valve Bronze Flanged DN50 PN16",
+        "Material": "Gate Valve Bronze Flanged DN50 PN16"
+      }
+    },
+    {
+      "c": "812105",
+      "n": "Globe Valve Bronze Straight DN40",
+      "u": "PCS",
+      "g": "81",
+      "p": "PL-81-21",
+      "specs": {
+        "Material": "Globe Valve Bronze Straight DN40"
+      }
+    },
+    {
+      "c": "812204",
+      "n": "Butterfly Valve Lug Type DN80",
+      "u": "PCS",
+      "g": "81",
+      "p": "PL-81-22",
+      "specs": {
+        "Material": "Ductile iron"
+      }
+    },
+    {
+      "c": "812312",
+      "n": "Check Valve Swing Type Bronze DN65",
+      "u": "PCS",
+      "g": "81",
+      "p": "PL-81-23",
+      "specs": {
+        "Material": "Check Valve Swing Type Bronze DN65"
+      }
+    },
+    {
+      "c": "812851",
+      "n": "Ball Valve Full Bore Stainless DN25",
+      "u": "PCS",
+      "g": "81",
+      "p": "PL-81-28",
+      "specs": {
+        "Material": "Ball Valve Full Bore Stainless DN25"
+      }
+    }
+  ]
+}

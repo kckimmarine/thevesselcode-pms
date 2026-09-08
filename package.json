@@ -13,6 +13,8 @@
     "serve": "npx --yes serve . -p 3000",
     "start": "npx --yes serve . -p 3000",
     "smoke:web-demo": "node scripts/smoke-web-demo.mjs",
+    "scrape:impa": "node scripts/scrape-impa-chapters.mjs",
+    "test:scraper": "node scripts/test-scraper-output.mjs",
     "electron": "node scripts/run-electron.mjs HQ_OFFICE",
     "electron:dev": "node scripts/run-electron.mjs HQ_OFFICE",
     "electron:master": "node scripts/run-electron.mjs VESSEL_MASTER",
