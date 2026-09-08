@@ -1,0 +1,143 @@
+<!--
+  TVC Home — inline lead card (WordPress Custom HTML block)
+  Paste into Home page editor. See deploy/HOME-LEAD-GEN.md
+-->
+<style>
+  .tvc-home-lead-card-wrap {
+    max-width: 440px;
+    margin: 32px auto;
+    padding: 0 16px;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  .tvc-home-lead-card {
+    position: relative;
+    padding: 20px;
+    border: 2px solid #1a365d;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 12px 40px rgba(26, 54, 93, 0.15);
+  }
+  .tvc-home-lead-card .tvc-home-badge {
+    display: inline-block;
+    margin-bottom: 8px;
+    padding: 4px 10px;
+    border-radius: 999px;
+    background: #ebf8ff;
+    color: #2b6cb0;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .tvc-home-lead-card h3 { margin: 0; font-size: 20px; color: #1a365d; }
+  .tvc-home-lead-card .tvc-sub {
+    margin: 8px 0 16px;
+    font-size: 14px;
+    line-height: 1.45;
+    color: #4a5568;
+  }
+  .tvc-home-lead-card .tvc-home-field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #4a5568;
+  }
+  .tvc-home-lead-card .tvc-home-field input,
+  .tvc-home-lead-card .tvc-home-field select {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 8px;
+    font-size: 15px;
+    box-sizing: border-box;
+    font-family: inherit;
+  }
+  .tvc-home-lead-card .tvc-home-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    padding: 12px 14px;
+    border-radius: 10px;
+    font-size: 14px;
+    font-weight: 700;
+    text-decoration: none;
+    cursor: pointer;
+    border: none;
+    font-family: inherit;
+    box-sizing: border-box;
+  }
+  .tvc-home-lead-card .tvc-home-btn-primary {
+    background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
+    color: #fff;
+  }
+  .tvc-home-lead-card .tvc-home-btn-secondary {
+    background: #fff;
+    color: #1a365d;
+    border: 2px solid #2b6cb0;
+    margin-top: 8px;
+  }
+</style>
+
+<div class="tvc-home-lead-card-wrap">
+  <div class="tvc-home-lead-card">
+    <span class="tvc-home-badge">TVC-PMS Enterprise</span>
+    <h3>Request a fleet demo</h3>
+    <p class="tvc-sub">Automate ROB, requisitions, and maintenance workflows — no more Excel chaos.</p>
+    <form id="tvc-home-lead-card-form">
+      <label class="tvc-home-field">
+        <span>Full name</span>
+        <input type="text" name="name" required autocomplete="name" placeholder="Capt. John Doe">
+      </label>
+      <label class="tvc-home-field">
+        <span>Work email</span>
+        <input type="email" name="email" required autocomplete="email" placeholder="tech@shipping.com">
+      </label>
+      <label class="tvc-home-field">
+        <span>Company / fleet</span>
+        <input type="text" name="company" autocomplete="organization" placeholder="e.g. 5 Chemical Tankers">
+      </label>
+      <label class="tvc-home-field">
+        <span>Role</span>
+        <select name="role">
+          <option value="">— Select —</option>
+          <option value="superintendent">Superintendent</option>
+          <option value="technical">Technical Manager</option>
+          <option value="master">Master / Chief Engineer</option>
+          <option value="procurement">Procurement</option>
+          <option value="other">Other</option>
+        </select>
+      </label>
+      <button type="submit" class="tvc-home-btn tvc-home-btn-primary">
+        🚀 Request 1-Ship Free Trial / Demo
+      </button>
+      <a href="https://thevesselcode.com/#contact" class="tvc-home-btn tvc-home-btn-secondary" target="_blank" rel="noopener noreferrer">
+        📞 Contact Superintendent Team
+      </a>
+    </form>
+  </div>
+</div>
+
+<script>
+(function () {
+  var form = document.getElementById('tvc-home-lead-card-form');
+  if (!form) return;
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var fd = new FormData(form);
+    var subject = encodeURIComponent('TVC-PMS Demo Request (Homepage Card)');
+    var body = encodeURIComponent(
+      'Name: ' + (fd.get('name') || '') + '\n' +
+      'Email: ' + (fd.get('email') || '') + '\n' +
+      'Company: ' + (fd.get('company') || '') + '\n' +
+      'Role: ' + (fd.get('role') || '') + '\n' +
+      'Source: homepage-card'
+    );
+    window.open('mailto:contact@thevesselcode.com?subject=' + subject + '&body=' + body, '_blank');
+    window.open('https://thevesselcode.com/#contact', '_blank', 'noopener,noreferrer');
+  });
+})();
+</script>
