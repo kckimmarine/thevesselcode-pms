@@ -42,4 +42,10 @@ for (const rel of STATIC_PATHS) {
   console.log('OK', rel);
 }
 
+const publicData = join(root, 'public', 'data');
+if (existsSync(publicData)) {
+  cpSync(publicData, join(out, 'data'), { recursive: true });
+  console.log('OK public/data → data/');
+}
+
 console.log('\nVercel static build complete → dist/');

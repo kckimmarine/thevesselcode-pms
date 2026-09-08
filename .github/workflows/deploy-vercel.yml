@@ -17,6 +17,7 @@ on:
       - 'vendor/**'
       - 'icons/**'
       - 'data/**'
+      - 'public/**'
       - 'admin/**'
       - 'downloads/**'
       - 'manifest.json'
@@ -48,6 +49,8 @@ jobs:
           test -f dist/toolkit.html
           test -f dist/js/config.js
           test -f dist/data/pms-unified.json
+          test -f dist/data/chapters/impa-81.json
+          node -e "const d=require('./dist/data/chapters/impa-81.json'); if(!Array.isArray(d)||d.length<100) throw new Error('impa-81.json invalid')"
 
   deploy:
     needs: verify-build
