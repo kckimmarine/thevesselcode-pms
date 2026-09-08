@@ -18,6 +18,10 @@
             TVC_StorePublicLead.init();
         }
 
+        if (typeof TVC_StorePublicPullRefresh !== 'undefined') {
+            TVC_StorePublicPullRefresh.init();
+        }
+
         try {
             await TVC_StoreManager.loadCatalog();
             await TVC_StoreManager.buildMemoryIndex();
