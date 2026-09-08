@@ -1,5 +1,5 @@
 /**
- * Smoke test: Maritime Toolkit public shell (5 tabs, conversion CTA, lead capture)
+ * Smoke test: Maritime Toolkit public shell (5 tabs, lead capture)
  * Run: node scripts/test-store-public.mjs
  */
 import { chromium } from '@playwright/test';
@@ -35,20 +35,18 @@ async function main() {
     });
 
     results.push({
-      check: 'global conversion banner visible',
-      ok: await page.locator('#toolkitConversionBanner').isVisible(),
-    });
-
-    const demoHref = await page.locator('.toolkit-conversion-btn').getAttribute('href');
-    results.push({
-      check: 'global demo CTA link',
-      ok: demoHref === 'https://thevesselcode.com/#contact',
-      detail: demoHref,
+      check: 'global conversion banner removed',
+      ok: await page.locator('#toolkitConversionBanner').count() === 0,
     });
 
     results.push({
-      check: 'floating upgrade FAB visible',
-      ok: await page.locator('#storePublicFab').isVisible(),
+      check: 'floating upgrade FAB removed',
+      ok: await page.locator('#storePublicFab').count() === 0,
+    });
+
+    results.push({
+      check: 'footer copyright visible',
+      ok: /THE VESSEL CODE/i.test(await page.locator('.store-public-footer').textContent() || ''),
     });
 
     await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
@@ -188,11 +186,12 @@ async function main() {
     await page.locator('#modalCloseBtn').click();
     await page.locator('#impaDetailModal').waitFor({ state: 'hidden', timeout: 5_000 });
 
-    await page.locator('#storePublicFab').click({ force: true });
-    await page.locator('#storeLeadModal').waitFor({ state: 'visible', timeout: 5_000 });
+    await page.setViewportSize({ width: 390, height: 844 });
     results.push({
-      check: 'FAB opens lead modal',
-      ok: await page.locator('#storeLeadTitle').isVisible(),
+      check: 'mobile footer visible without banner obstruction',
+      ok: await page.locator('.store-public-footer').isVisible()
+        && await page.locator('#toolkitConversionBanner').count() === 0
+        && await page.locator('#storePublicFab').count() === 0,
     });
 
     const failed = results.filter(r => !r.ok);

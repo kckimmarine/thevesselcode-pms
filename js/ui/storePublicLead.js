@@ -90,17 +90,6 @@ const TVC_StorePublicLead = (function () {
         });
     }
 
-    function ensureFab() {
-        if (document.getElementById('storePublicFab')) return;
-        const fab = document.createElement('button');
-        fab.type = 'button';
-        fab.id = 'storePublicFab';
-        fab.className = 'store-public-fab';
-        fab.textContent = '🚢 Upgrade Your Fleet to TVC-PMS';
-        fab.addEventListener('click', () => openLeadModal('fab'));
-        document.body.appendChild(fab);
-    }
-
     function bindTriggers() {
         document.addEventListener('click', e => {
             const locked = e.target.closest('[data-lead-trigger]');
@@ -166,7 +155,6 @@ const TVC_StorePublicLead = (function () {
     function init() {
         if (_ready) return;
         _ready = true;
-        ensureFab();
         ensureLeadModal();
         bindTriggers();
     }

@@ -161,52 +161,6 @@ html:has(.store-public-body) {
     font-size: 0.875rem;
 }
 
-.toolkit-conversion-banner {
-    position: sticky;
-    bottom: 0;
-    z-index: 25;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: center;
-    gap: 10px 16px;
-    padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
-    background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
-    color: #fff;
-    box-shadow: 0 -6px 24px rgba(26, 54, 93, 0.22);
-}
-
-.toolkit-conversion-text {
-    margin: 0;
-    font-size: 0.875rem;
-    font-weight: 600;
-    line-height: 1.4;
-    text-align: center;
-}
-
-.toolkit-conversion-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 10px 16px;
-    border-radius: 999px;
-    background: #fff;
-    color: #1a365d;
-    font-size: 0.8125rem;
-    font-weight: 700;
-    text-decoration: none;
-    white-space: nowrap;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-    transition: transform 0.15s ease;
-}
-
-.toolkit-conversion-btn:hover,
-.toolkit-conversion-btn:focus-visible {
-    transform: translateY(-1px);
-    outline: 2px solid #90cdf4;
-    outline-offset: 2px;
-}
-
 .store-public-footer-tag {
     font-size: 0.75rem;
     color: #718096;
@@ -420,35 +374,6 @@ html:has(.store-public-body) {
     text-decoration: underline;
 }
 
-/* Floating lead-capture FAB */
-.store-public-fab {
-    position: fixed;
-    right: max(16px, env(safe-area-inset-right, 0px));
-    bottom: max(16px, env(safe-area-inset-bottom, 0px));
-    z-index: 9000;
-    padding: 12px 18px;
-    border: none;
-    border-radius: 999px;
-    background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%);
-    color: #fff;
-    font-size: 0.8125rem;
-    font-weight: 700;
-    line-height: 1.3;
-    box-shadow: 0 8px 28px rgba(26, 54, 93, 0.35);
-    cursor: pointer;
-    font-family: inherit;
-    max-width: min(92vw, 320px);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.store-public-fab:hover,
-.store-public-fab:focus-visible {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 32px rgba(26, 54, 93, 0.42);
-    outline: 2px solid #90cdf4;
-    outline-offset: 2px;
-}
-
 /* Lead-gen modal */
 .store-lead-modal {
     z-index: 100001;
@@ -624,11 +549,6 @@ html:has(.store-public-body) {
         grid-template-columns: 1fr;
     }
 
-    .toolkit-conversion-banner {
-        flex-direction: column;
-        text-align: center;
-    }
-
     .store-public-toolkit {
         padding: 10px 12px;
     }
@@ -684,7 +604,6 @@ html:has(.store-public-body) {
 
     .store-public-header,
     .store-public-toolkit,
-    .toolkit-conversion-banner,
     .store-public-footer {
         flex-shrink: 0;
     }
