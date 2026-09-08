@@ -50,7 +50,8 @@ jobs:
           test -f dist/js/config.js
           test -f dist/data/pms-unified.json
           test -f dist/data/chapters/impa-81.json
-          node -e "const d=require('./dist/data/chapters/impa-81.json'); if(!Array.isArray(d)||d.length<100) throw new Error('impa-81.json invalid')"
+          test -f dist/data/impa-full.json
+          node -e "const d=require('./dist/data/impa-full.json'); if(!d.items?.length||d.items.length<400) throw new Error('impa-full.json too small: '+d.items?.length)"
 
   deploy:
     needs: verify-build
