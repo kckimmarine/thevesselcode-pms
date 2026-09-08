@@ -33,7 +33,7 @@ const TVC_StoreMenu = (function () {
     function ensureImpaDetailModal() {
         const existing = document.getElementById('impaDetailModal');
         if (existing && (!existing.querySelector('.impa-detail-plate-viewport')
-            || !existing.querySelector('#impaDetailLockedPreview')
+            || !existing.querySelector('#impaDetailShipservLayout')
             || !existing.querySelector('#modalCloseBtn')
             || !existing.querySelector('.modal-body'))) {
             existing.remove();
@@ -46,7 +46,7 @@ const TVC_StoreMenu = (function () {
         wrap.id = 'impaDetailModal';
         wrap.className = 'modal hidden impa-detail-modal';
         wrap.innerHTML = `
-            <div class="modal-box impa-detail-box impa-modal-container modal-card" role="dialog" aria-modal="true" aria-labelledby="impaDetailTitle">
+            <div class="modal-box impa-detail-box impa-modal-container modal-card" role="dialog" aria-modal="true" aria-labelledby="impaDetailProductTitle">
                 <header class="impa-detail-head">
                     <div class="impa-detail-head-main">
                         <span class="impa-detail-badge" id="impaDetailBadge">IMPA</span>
@@ -55,6 +55,24 @@ const TVC_StoreMenu = (function () {
                     <button type="button" id="modalCloseBtn" class="impa-detail-close-btn impa-detail-close-float" aria-label="Close">✕</button>
                 </header>
                 <div class="modal-body impa-detail-scroll">
+                    <div id="impaDetailShipservLayout" class="impa-shipserv-layout hidden" aria-label="IMPA product details">
+                        <div class="impa-shipserv-photo" id="impaDetailProductPhoto">
+                            <img id="impaDetailProductImg" class="impa-shipserv-photo-img" alt="" hidden>
+                            <div id="impaDetailProductFallback" class="impa-shipserv-photo-fallback" hidden></div>
+                        </div>
+                        <h2 class="impa-shipserv-title" id="impaDetailProductTitle">—</h2>
+                        <p class="impa-shipserv-dims" id="impaDetailProductDims"></p>
+                        <div class="impa-shipserv-spec-wrap">
+                            <table class="impa-shipserv-spec-table">
+                                <tbody id="impaDetailShipservSpec"></tbody>
+                            </table>
+                        </div>
+                        <section class="impa-shipserv-desc" aria-label="Description and use">
+                            <h3 class="impa-shipserv-desc-title">Description / Use</h3>
+                            <p class="impa-shipserv-desc-text" id="impaDetailProductDesc"></p>
+                        </section>
+                    </div>
+                    <div id="impaDetailPmsLayout" class="impa-detail-pms-layout">
                     <section class="impa-detail-plate-section" aria-label="Catalog plate viewer">
                         <div class="impa-detail-plate-toolbar">
                             <p class="impa-detail-plate-caption" id="impaDetailPlateCaption">Catalog specification plate</p>
@@ -107,6 +125,7 @@ const TVC_StoreMenu = (function () {
                     <footer class="impa-detail-footer">
                         <button type="button" class="impa-detail-close-btn impa-detail-close-bottom">Close / 닫기</button>
                     </footer>
+                    </div>
                 </div>
             </div>
             <div id="impaPlateFullscreen" class="impa-plate-fullscreen hidden" aria-hidden="true">
@@ -170,12 +189,18 @@ const TVC_StoreMenu = (function () {
         const cta = document.getElementById('impaDetailPublicCta');
         const lockedPreview = document.getElementById('impaDetailLockedPreview');
         const bottomClose = document.querySelector('#impaDetailModal .impa-detail-close-bottom');
+        const shipservLayout = document.getElementById('impaDetailShipservLayout');
+        const pmsLayout = document.getElementById('impaDetailPmsLayout');
+        const headerTitle = document.getElementById('impaDetailTitle');
         if (_publicMode) {
             rob?.classList.add('hidden');
             cart?.classList.add('hidden');
             cta?.classList.add('hidden');
-            lockedPreview?.classList.remove('hidden');
+            lockedPreview?.classList.add('hidden');
             bottomClose?.classList.add('hidden');
+            shipservLayout?.classList.remove('hidden');
+            pmsLayout?.classList.add('hidden');
+            headerTitle?.classList.add('hidden');
             document.getElementById('impaDetailModal')?.classList.add('impa-detail-modal-public');
         } else {
             rob?.classList.remove('hidden');
@@ -183,6 +208,9 @@ const TVC_StoreMenu = (function () {
             cta?.classList.add('hidden');
             lockedPreview?.classList.add('hidden');
             bottomClose?.classList.remove('hidden');
+            shipservLayout?.classList.add('hidden');
+            pmsLayout?.classList.remove('hidden');
+            headerTitle?.classList.remove('hidden');
             document.getElementById('impaDetailModal')?.classList.remove('impa-detail-modal-public');
         }
     }
@@ -370,32 +398,27 @@ const TVC_StoreMenu = (function () {
         }
     }
 
-    function showPlatePending(item, img, fallback, zoomBtn, fsImg, plateId, reason) {
-        const viewport = document.getElementById('impaDetailPlateViewport');
-        viewport?.classList.remove('has-photo', 'is-loading');
+    function showPlatePending(item, targets, plateId, reason) {
+        const { img, fallback, viewport, zoomBtn, fsImg } = targets;
+        viewport?.classList?.remove('has-photo', 'is-loading');
         revokePlateObjectUrl();
         if (img) {
             img.hidden = true;
             img.removeAttribute('src');
         }
         if (fallback) {
-            fallback.innerHTML = platePendingHtml(item, plateId, reason);
+            fallback.innerHTML = fallback.id === 'impaDetailProductFallback'
+                ? productFallbackSvg(item)
+                : platePendingHtml(item, plateId, reason);
             fallback.hidden = false;
         }
         if (zoomBtn) zoomBtn.hidden = true;
-        if (fsImg) {
-            fsImg.removeAttribute('src');
-        }
+        if (fsImg) fsImg.removeAttribute('src');
     }
 
     async function bindPlateImage(item) {
-        const img = document.getElementById('impaDetailPlateImg');
-        const fallback = document.getElementById('impaDetailPlateFallback');
-        const caption = document.getElementById('impaDetailPlateCaption');
-        const zoomBtn = document.getElementById('impaDetailZoomBtn');
-        const fsImg = document.getElementById('impaPlateFullscreenImg');
-        const fsTitle = document.getElementById('impaPlateFullscreenTitle');
-        const viewport = document.getElementById('impaDetailPlateViewport');
+        const targets = _publicMode ? productPhotoTargets() : platePhotoTargets();
+        const { img, fallback, caption, zoomBtn, fsImg, fsTitle, viewport } = targets;
         if (!img || !fallback) return;
 
         const loadToken = ++_plateLoadToken;
@@ -414,15 +437,17 @@ const TVC_StoreMenu = (function () {
 
         img.hidden = true;
         fallback.hidden = false;
-        fallback.innerHTML = plateLoadingHtml(plateId);
+        fallback.innerHTML = fallback.id === 'impaDetailProductFallback'
+            ? '<p class="impa-shipserv-photo-loading" role="status">Loading product photo…</p>'
+            : plateLoadingHtml(plateId);
         if (zoomBtn) zoomBtn.hidden = true;
-        img.alt = `${item.name || 'IMPA item'} catalog plate`;
+        img.alt = `${item.name || 'IMPA item'}${_publicMode ? '' : ' catalog plate'}`;
         viewport?.classList.remove('has-photo');
         viewport?.classList.add('is-loading');
 
         if (!plateId) {
             viewport?.classList.remove('is-loading');
-            showPlatePending(item, img, fallback, zoomBtn, fsImg, plateId, 'no-id');
+            showPlatePending(item, targets, plateId, 'no-id');
             return;
         }
 
@@ -432,7 +457,7 @@ const TVC_StoreMenu = (function () {
         viewport?.classList.remove('is-loading');
 
         if (!result.ok || !result.objectUrl) {
-            showPlatePending(item, img, fallback, zoomBtn, fsImg, plateId, result.reason);
+            showPlatePending(item, targets, plateId, result.reason);
             return;
         }
 
@@ -452,12 +477,124 @@ const TVC_StoreMenu = (function () {
         img.onload = onLoaded;
         img.onerror = () => {
             if (loadToken !== _plateLoadToken) return;
-            showPlatePending(item, img, fallback, zoomBtn, fsImg, plateId, 'decode-failed');
+            showPlatePending(item, targets, plateId, 'decode-failed');
         };
         img.src = result.objectUrl;
         img.loading = 'eager';
         img.decoding = 'async';
         if (img.complete && img.naturalWidth > 0) onLoaded();
+    }
+
+    function productPhotoTargets() {
+        return {
+            img: document.getElementById('impaDetailProductImg'),
+            fallback: document.getElementById('impaDetailProductFallback'),
+            viewport: document.getElementById('impaDetailProductPhoto'),
+            zoomBtn: null,
+            fsImg: null,
+            caption: null,
+            fsTitle: null,
+        };
+    }
+
+    function platePhotoTargets() {
+        return {
+            img: document.getElementById('impaDetailPlateImg'),
+            fallback: document.getElementById('impaDetailPlateFallback'),
+            viewport: document.getElementById('impaDetailPlateViewport'),
+            zoomBtn: document.getElementById('impaDetailZoomBtn'),
+            fsImg: document.getElementById('impaPlateFullscreenImg'),
+            caption: document.getElementById('impaDetailPlateCaption'),
+            fsTitle: document.getElementById('impaPlateFullscreenTitle'),
+        };
+    }
+
+    function extractDimensions(item) {
+        const specs = item?.specs && typeof item.specs === 'object' ? item.specs : {};
+        if (specs.Dimensions) return String(specs.Dimensions).trim();
+        const name = String(item?.name || '');
+        const match = name.match(/\d+(?:\.\d+)?\s*(?:mm|cm|m|mtr|inch|in|")\s*(?:x\s*\d+(?:\.\d+)?\s*(?:mm|cm|m|mtr|inch|in|")*)+/i);
+        return match ? match[0].trim() : '';
+    }
+
+    function extractPackaging(item) {
+        const unit = String(item?.unit || 'PCS').trim() || 'PCS';
+        const name = String(item?.name || '');
+        const match = name.match(/(\d+\s*(?:rolls?|rols|pcs|pieces?|boxes?|sets?)(?:\s*per\s*box)?)/i);
+        return match ? `${unit} / ${match[1]}` : unit;
+    }
+
+    function extractMaterialSpec(item) {
+        const specs = item?.specs && typeof item.specs === 'object' ? item.specs : {};
+        if (specs.Material) return String(specs.Material).trim();
+        if (specs.Standard) return String(specs.Standard).trim();
+        const dims = extractDimensions(item);
+        return dims || '—';
+    }
+
+    function cleanProductTitle(item) {
+        let name = String(item?.name || '—');
+        name = name.replace(/\s+\d+(?:\.\d+)?\s*(?:mm|cm|m|mtr|inch|in|")\s*(?:x\s*.+)?$/i, '');
+        name = name.replace(/\s+\d+\s*(?:rolls?|rols|pcs|pieces?|boxes?|sets?)(?:\s*per\s*box)?.*$/i, '');
+        return name.trim() || String(item?.name || '—');
+    }
+
+    function buildProductDescription(item) {
+        const category = item?.category || 'Marine stores';
+        const name = item?.name || 'this IMPA item';
+        const dims = extractDimensions(item);
+        const dimsNote = dims ? ` Typical size/spec: ${dims}.` : '';
+        return `Shipboard ${category.toLowerCase()} — ${name}. Used for routine maintenance, provisioning, and spare inventory aboard commercial vessels.${dimsNote} Verify IMPA code and specifications against vessel needs before requisition.`;
+    }
+
+    function shipservSpecRows(item) {
+        return `
+            <tr>
+                <th scope="row">Category</th>
+                <td>${esc(item.category || '—')}</td>
+            </tr>
+            <tr>
+                <th scope="row">UOM / Packaging</th>
+                <td>${esc(extractPackaging(item))}</td>
+            </tr>
+            <tr>
+                <th scope="row">Material / Spec</th>
+                <td>${esc(extractMaterialSpec(item))}</td>
+            </tr>`;
+    }
+
+    function productFallbackSvg(item) {
+        const code = esc(item.impa_code || item.code || '—');
+        const name = esc(cleanProductTitle(item));
+        return `
+            <svg class="impa-shipserv-photo-svg" viewBox="0 0 320 220" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Product image unavailable">
+                <rect width="320" height="220" rx="8" fill="#f8fafc"/>
+                <rect x="12" y="12" width="296" height="196" rx="6" fill="none" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="6 4"/>
+                <circle cx="160" cy="92" r="28" fill="#e2e8f0"/>
+                <path d="M148 92 L160 104 L172 92" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round"/>
+                <rect x="146" y="104" width="28" height="20" rx="3" fill="none" stroke="#64748b" stroke-width="2"/>
+                <text x="160" y="150" text-anchor="middle" fill="#475569" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="600">No product photo</text>
+                <text x="160" y="170" text-anchor="middle" fill="#64748b" font-family="ui-monospace,monospace" font-size="11">IMPA ${code}</text>
+                <text x="160" y="188" text-anchor="middle" fill="#94a3b8" font-family="ui-sans-serif,system-ui" font-size="10">${name}</text>
+            </svg>`;
+    }
+
+    function populateShipservDetail(item) {
+        const code = item.impa_code || item.code || '';
+        const badge = document.getElementById('impaDetailBadge');
+        const title = document.getElementById('impaDetailProductTitle');
+        const dimsEl = document.getElementById('impaDetailProductDims');
+        const specBody = document.getElementById('impaDetailShipservSpec');
+        const desc = document.getElementById('impaDetailProductDesc');
+        if (badge) badge.textContent = code ? `IMPA ${code}` : 'IMPA';
+        if (title) title.textContent = cleanProductTitle(item);
+        const dims = extractDimensions(item);
+        if (dimsEl) {
+            dimsEl.textContent = dims;
+            dimsEl.classList.toggle('hidden', !dims);
+        }
+        if (specBody) specBody.innerHTML = shipservSpecRows(item);
+        if (desc) desc.textContent = buildProductDescription(item);
     }
 
     function specRows(item) {
@@ -546,13 +683,17 @@ const TVC_StoreMenu = (function () {
         const specBody = document.getElementById('impaDetailSpecBody');
         const robValue = document.getElementById('impaDetailRobValue');
         const qtyInput = document.getElementById('impaDetailQty');
-        if (badge) badge.textContent = item.impa_code || item.code || 'IMPA';
-        if (title) title.textContent = item.name || '—';
-        if (specBody) specBody.innerHTML = specRows(item);
-        if (robValue) {
-            robValue.textContent = `${formatNum(item.rob ?? 0)} ${item.unit || ''}`.trim();
+        if (_publicMode) {
+            populateShipservDetail(item);
+        } else {
+            if (badge) badge.textContent = item.impa_code || item.code || 'IMPA';
+            if (title) title.textContent = item.name || '—';
+            if (specBody) specBody.innerHTML = specRows(item);
+            if (robValue) {
+                robValue.textContent = `${formatNum(item.rob ?? 0)} ${item.unit || ''}`.trim();
+            }
+            if (qtyInput) qtyInput.value = '1';
         }
-        if (qtyInput) qtyInput.value = '1';
         const msg = document.getElementById('impaDetailCartMsg');
         if (msg) msg.textContent = '';
 

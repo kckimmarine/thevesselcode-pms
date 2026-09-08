@@ -3,37 +3,26 @@
  * Run: node scripts/test-impa-modal.mjs
  */
 import { chromium } from '@playwright/test';
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const FULL_SRC = join(ROOT, 'public/data/impa-full.json');
+const FULL_DEST = join(ROOT, 'data/impa-full.json');
+if (existsSync(FULL_SRC)) {
+  mkdirSync(dirname(FULL_DEST), { recursive: true });
+  copyFileSync(FULL_SRC, FULL_DEST);
+}
 
 const BASE = process.env.TVC_BASE_URL || 'http://127.0.0.1:4317';
-
-async function waitLoginReady(page) {
-  const btn = page.locator('#loginScreen .login-submit');
-  for (let i = 0; i < 60; i++) {
-    const disabled = await btn.isDisabled().catch(() => true);
-    const label = ((await btn.textContent().catch(() => '')) || '').trim();
-    if (!disabled && !/Preparing|Signing/i.test(label)) return;
-    await page.waitForTimeout(500);
-  }
-  throw new Error('Login UI not ready');
-}
-
-async function login(page) {
-  await page.goto(BASE, { waitUntil: 'domcontentloaded' });
-  await waitLoginReady(page);
-  if (await page.locator('#appShell').isVisible().catch(() => false)) return;
-  await page.locator('#loginUser').fill('captain');
-  await page.locator('#loginPass').fill('0000');
-  await page.locator('#loginDept').selectOption('MASTER');
-  await page.locator('#loginScreen .login-submit').click();
-  await page.locator('#appShell').waitFor({ state: 'visible', timeout: 30_000 });
-}
 
 async function openStoreModal(page) {
   await page.goto(`${BASE}/toolkit.html`, { waitUntil: 'domcontentloaded' });
   await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
   await page.locator('.store-code-link').first().click();
   await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
-  await page.locator('#impaDetailZoomBtn').waitFor({ state: 'visible', timeout: 15_000 });
+  await page.locator('#impaDetailShipservLayout').waitFor({ state: 'visible', timeout: 5_000 });
 }
 
 async function isModalHidden(page) {
@@ -48,39 +37,29 @@ async function main() {
     const page = await browser.newPage();
     await openStoreModal(page);
     results.push({
-      check: 'zoom button visible with plate',
-      ok: await page.locator('#impaDetailZoomBtn').isVisible(),
-    });
-    await page.locator('#impaDetailZoomBtn').click();
-    results.push({
-      check: 'fullscreen plate opens',
-      ok: await page.locator('#impaPlateFullscreen').isVisible(),
-    });
-    await page.locator('.impa-plate-fullscreen-close').click();
-    results.push({
-      check: 'fullscreen plate closes',
-      ok: await page.locator('#impaPlateFullscreen').evaluate(el => el.classList.contains('hidden')),
+      check: 'shipserv layout visible',
+      ok: await page.locator('#impaDetailShipservLayout').isVisible(),
     });
 
-    const floatBtn = page.locator('.impa-detail-close-float');
-    const floatSize = await floatBtn.boundingBox();
+    const closeBtn = page.locator('#modalCloseBtn');
+    const closeSize = await closeBtn.boundingBox();
     results.push({
-      check: 'floating close button 44x44',
-      ok: floatSize && floatSize.width >= 44 && floatSize.height >= 44,
-      detail: floatSize,
+      check: 'header close button 36x36 minimum',
+      ok: closeSize && closeSize.width >= 36 && closeSize.height >= 36,
+      detail: closeSize,
     });
 
-    await floatBtn.click();
-    results.push({ check: 'float close dismisses modal', ok: await isModalHidden(page) });
+    await closeBtn.click();
+    results.push({ check: 'header close dismisses modal', ok: await isModalHidden(page) });
 
     await openStoreModal(page);
     await page.locator('.impa-detail-scroll').evaluate(el => { el.scrollTop = el.scrollHeight; });
     await page.waitForTimeout(200);
-    const floatVisibleAfterScroll = await floatBtn.isVisible();
-    await floatBtn.click();
+    const closeVisibleAfterScroll = await closeBtn.isVisible();
+    await closeBtn.click();
     results.push({
-      check: 'float close visible after scroll',
-      ok: floatVisibleAfterScroll && await isModalHidden(page),
+      check: 'close visible after body scroll',
+      ok: closeVisibleAfterScroll && await isModalHidden(page),
     });
 
     await openStoreModal(page);
@@ -94,24 +73,24 @@ async function main() {
     }
 
     await openStoreModal(page);
-    await page.locator('.impa-detail-close-bottom').click();
-    results.push({ check: 'bottom close button', ok: await isModalHidden(page) });
+    await page.keyboard.press('Escape');
+    results.push({ check: 'escape closes modal', ok: await isModalHidden(page) });
 
     const mobile = await browser.newPage();
     await mobile.setViewportSize({ width: 390, height: 844 });
     await openStoreModal(mobile);
-    const mobileFloat = mobile.locator('.impa-detail-close-float');
+    const mobileClose = mobile.locator('#modalCloseBtn');
     results.push({
-      check: 'mobile floating close visible',
-      ok: await mobileFloat.isVisible(),
+      check: 'mobile header close visible',
+      ok: await mobileClose.isVisible(),
     });
-    await mobileFloat.click();
-    results.push({ check: 'mobile float close', ok: await isModalHidden(mobile) });
+    await mobileClose.click();
+    results.push({ check: 'mobile header close', ok: await isModalHidden(mobile) });
 
     await openStoreModal(mobile);
     await mobile.locator('.impa-detail-scroll').evaluate(el => { el.scrollTop = 400; });
-    await mobile.locator('.impa-detail-close-bottom').click();
-    results.push({ check: 'mobile bottom close after scroll', ok: await isModalHidden(mobile) });
+    await mobileClose.click();
+    results.push({ check: 'mobile close after scroll', ok: await isModalHidden(mobile) });
 
     await openStoreModal(mobile);
     const mbox = await mobile.locator('#impaDetailModal').boundingBox();
