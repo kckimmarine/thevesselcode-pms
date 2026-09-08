@@ -27,6 +27,22 @@ This repo only ships the embed pages under `bluehost/`:
 - Tap opens https://thevesselcode.com/toolkit/ with the Maritime Toolkit embed.
 - Old `/impa/` URL redirects to `/toolkit/`.
 
+## Troubleshooting: menu shows but page is blank / does not load
+
+Usually one of these:
+
+1. **Menu uses an empty WordPress Page** (not a Custom Link)  
+   - **Fix A:** Menus → Toolkit item → change URL to `https://thevesselcode.com/toolkit/` (Custom Link), save.  
+   - **Fix B:** Pages → Toolkit → add a **Custom HTML** block → paste contents of `deploy/wordpress-toolkit-embed.html` → Update.
+
+2. **`public_html/toolkit/index.html` missing on server** (FTP not uploaded)  
+   - cPanel → File Manager → `public_html/toolkit/` → upload `bluehost/toolkit/index.html` from this repo  
+   - Or run `npm run deploy:bluehost`
+
+3. **Menu URL wrong** — must be exactly `https://thevesselcode.com/toolkit/` (same pattern as PMS → `/pms/`).
+
+PMS works because `public_html/pms/index.html` exists **and** the menu points to `/pms/`. Toolkit needs the same.
+
 ## Deploy embed files (FTP)
 
 From repo root:
