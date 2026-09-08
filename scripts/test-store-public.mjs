@@ -194,6 +194,14 @@ async function main() {
         && await page.locator('#storePublicFab').count() === 0,
     });
 
+    results.push({
+      check: 'pull-to-refresh indicator initialized',
+      ok: await page.evaluate(() => (
+        typeof TVC_StorePublicPullRefresh !== 'undefined'
+        && !!document.getElementById('storePullRefresh')
+      )),
+    });
+
     const failed = results.filter(r => !r.ok);
     console.log(JSON.stringify({ passed: results.length - failed.length, total: results.length, results }, null, 2));
     if (failed.length) process.exit(1);

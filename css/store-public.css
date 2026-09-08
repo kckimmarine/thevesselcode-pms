@@ -166,6 +166,61 @@ html:has(.store-public-body) {
     color: #718096;
 }
 
+/* Mobile pull-to-refresh */
+.store-public-shell {
+    position: relative;
+}
+
+.store-pull-refresh {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 30;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    gap: 8px;
+    padding-bottom: 8px;
+    height: 0;
+    overflow: hidden;
+    color: #cbd5e1;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.12s ease;
+}
+
+.store-pull-refresh-icon {
+    display: inline-flex;
+    width: 1.25rem;
+    justify-content: center;
+    font-size: 1rem;
+    line-height: 1;
+}
+
+.store-pull-refresh-ready .store-pull-refresh-icon {
+    color: #90cdf4;
+}
+
+.store-pull-refresh-active .store-pull-refresh-icon {
+    animation: store-pull-spin 0.8s linear infinite;
+}
+
+@keyframes store-pull-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+body.store-pull-active .store-public-panel {
+    transition: transform 0.08s ease-out;
+}
+
+body.store-pull-active.store-pull-refreshing .store-public-panel {
+    transition: transform 0.2s ease;
+}
+
 .maritime-bunker-metrics {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
