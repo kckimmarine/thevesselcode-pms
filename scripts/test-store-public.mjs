@@ -25,8 +25,8 @@ async function main() {
     });
 
     results.push({
-      check: 'five utility tab chips',
-      ok: await page.locator('[data-tool-tab]').count() === 5,
+      check: 'six utility tab chips',
+      ok: await page.locator('[data-tool-tab]').count() === 6,
     });
 
     results.push({
@@ -39,7 +39,7 @@ async function main() {
       ok: await page.locator('#toolkitConversionBanner').isVisible(),
     });
 
-    const demoHref = await page.locator('.toolkit-conversion-btn').getAttribute('href');
+    const demoHref = await page.locator('.toolkit-conversion-btn-outline').getAttribute('href');
     results.push({
       check: 'global demo CTA link',
       ok: demoHref === 'https://thevesselcode.com/#contact',
@@ -51,9 +51,30 @@ async function main() {
       ok: await page.locator('#storePublicFab').isVisible(),
     });
 
+    results.push({
+      check: 'chapter filter chips visible',
+      ok: await page.locator('.store-chapter-chip').count() >= 5,
+    });
+
+    await page.locator('.store-chapter-chip[data-chapter="59"]').click();
+    await page.waitForTimeout(200);
+    const ch59Visible = await page.locator('.store-code-link').first().isVisible().catch(() => false);
+    results.push({
+      check: 'chapter 59 chip filters catalog',
+      ok: ch59Visible || await page.locator('#storeEmpty').isVisible(),
+    });
+
+    await page.locator('.store-chapter-chip[data-chapter=""]').click();
     await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
     await page.locator('.store-code-link').first().click();
     await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
+
+    const badgeText = await page.locator('#impaDetailBadge').textContent();
+    results.push({
+      check: 'modal IMPA badge format',
+      ok: /\[IMPA \d{6}\]/.test(badgeText || ''),
+      detail: badgeText,
+    });
 
     results.push({
       check: 'locked ROB preview visible',
@@ -104,12 +125,24 @@ async function main() {
       ok: await page.locator('#paintTableHost table').isVisible(),
     });
 
-    // Engineering tab
+    // Engineering / flange tab
     await page.locator('[data-tool-tab="engineering"]').click();
     await page.locator('#flangeTableHost table').waitFor({ state: 'visible', timeout: 5_000 });
     results.push({
-      check: 'flange engineering table visible',
+      check: 'flange lookup table visible',
       ok: await page.locator('#flangeTableHost table').isVisible(),
+    });
+    results.push({
+      check: 'gasket quick reference visible',
+      ok: await page.locator('#gasketRefHost table').isVisible(),
+    });
+
+    // PSC Guard tab
+    await page.locator('[data-tool-tab="psc"]').click();
+    await page.locator('#tab-psc-guard .maritime-psc-card').first().waitFor({ state: 'visible', timeout: 5_000 });
+    results.push({
+      check: 'PSC guard inspection cards visible',
+      ok: await page.locator('.maritime-psc-card').count() >= 5,
     });
 
     // Mobile viewport tab scroll

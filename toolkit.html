@@ -9,7 +9,7 @@
     <title>Maritime Toolkit | THE VESSEL CODE</title>
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="stylesheet" href="css/store.css?v=20260906-maritime-toolkit">
-    <link rel="stylesheet" href="css/store-public.css?v=20260906-maritime-toolkit">
+    <link rel="stylesheet" href="css/store-public.css?v=20260908-impa-ux">
 </head>
 <body class="store-public-body store-tool-catalog">
     <div class="store-public-shell">
@@ -21,15 +21,19 @@
                     <p class="store-public-subtitle">Instant Engineering Tools &amp; Global Marine Catalog</p>
                 </div>
             </div>
-            <a class="store-public-site-link" href="https://thevesselcode.com" target="_blank" rel="noopener noreferrer">thevesselcode.com</a>
+            <nav class="store-public-header-links" aria-label="Site links">
+                <a class="store-public-site-link" href="https://thevesselcode.com/pms/" target="_blank" rel="noopener noreferrer">PMS</a>
+                <a class="store-public-site-link" href="https://thevesselcode.com" target="_blank" rel="noopener noreferrer">thevesselcode.com</a>
+            </nav>
         </header>
 
         <nav class="store-public-toolkit" id="storePublicToolkit" role="tablist" aria-label="Maritime utility tabs">
             <button type="button" class="store-tool-chip active" data-tool-tab="catalog" role="tab" aria-selected="true">📦 IMPA Catalog</button>
-            <button type="button" class="store-tool-chip" data-tool-tab="bunker" role="tab" aria-selected="false">⛽ Bunker &amp; Fuel Calc</button>
-            <button type="button" class="store-tool-chip" data-tool-tab="lube" role="tab" aria-selected="false">🛢️ Lub-Oil Cross-Ref</button>
-            <button type="button" class="store-tool-chip" data-tool-tab="paint" role="tab" aria-selected="false">🎨 Paint Cross-Ref</button>
-            <button type="button" class="store-tool-chip" data-tool-tab="engineering" role="tab" aria-selected="false">📐 Flange &amp; Engineering</button>
+            <button type="button" class="store-tool-chip" data-tool-tab="bunker" role="tab" aria-selected="false">⛽ Bunker Calc</button>
+            <button type="button" class="store-tool-chip" data-tool-tab="lube" role="tab" aria-selected="false">🛢️ Lub-Oil</button>
+            <button type="button" class="store-tool-chip" data-tool-tab="engineering" role="tab" aria-selected="false">📐 Flanges</button>
+            <button type="button" class="store-tool-chip" data-tool-tab="psc" role="tab" aria-selected="false">🛡️ PSC Guard</button>
+            <button type="button" class="store-tool-chip" data-tool-tab="paint" role="tab" aria-selected="false">🎨 Paint</button>
         </nav>
 
         <div class="store-public-panels">
@@ -38,23 +42,34 @@
                     <p class="store-loading">Loading catalog…</p>
                 </main>
             </section>
-            <section class="store-public-panel hidden" data-tool-panel="bunker" id="storeToolBunker" aria-label="Bunker and fuel calculator"></section>
-            <section class="store-public-panel hidden" data-tool-panel="lube" id="storeToolLube" aria-label="Lubricant cross reference"></section>
+            <section class="store-public-panel hidden" data-tool-panel="bunker" id="tab-bunker" aria-label="Bunker and fuel calculator"></section>
+            <section class="store-public-panel hidden" data-tool-panel="lube" id="tab-luboil" aria-label="Marine lubricant cross reference"></section>
+            <section class="store-public-panel hidden" data-tool-panel="engineering" id="tab-flange" aria-label="Piping and flange lookup"></section>
+            <section class="store-public-panel hidden" data-tool-panel="psc" id="tab-psc-guard" aria-label="Class and PSC inspection guard"></section>
             <section class="store-public-panel hidden" data-tool-panel="paint" id="storeToolPaint" aria-label="Marine paint cross reference"></section>
-            <section class="store-public-panel hidden" data-tool-panel="engineering" id="storeToolEngineering" aria-label="Flange and engineering tables"></section>
         </div>
 
         <aside class="toolkit-conversion-banner" id="toolkitConversionBanner" aria-label="TVC-PMS demo">
             <p class="toolkit-conversion-text">
-                ⚓ Looking to automate your fleet maintenance, inventory (ROB), and requisitions?
+                ⚓ Automate fleet maintenance, ROB inventory, and IMPA requisitions with TVC-PMS
             </p>
-            <a href="https://thevesselcode.com/#contact" target="_blank" rel="noopener noreferrer" class="toolkit-conversion-btn">
-                🚀 Experience TVC-PMS Demo
-            </a>
+            <div class="toolkit-conversion-actions">
+                <a href="https://thevesselcode.com/pms/" target="_blank" rel="noopener noreferrer" class="toolkit-conversion-btn">
+                    📋 Open TVC-PMS
+                </a>
+                <a href="https://thevesselcode.com/#contact" target="_blank" rel="noopener noreferrer" class="toolkit-conversion-btn toolkit-conversion-btn-outline">
+                    🚀 Request Demo
+                </a>
+            </div>
         </aside>
 
         <footer class="store-public-footer">
             <span>© 2026 THE VESSEL CODE</span>
+            <span class="store-public-footer-links">
+                <a href="https://thevesselcode.com/maritime-toolkit/">Toolkit</a>
+                <a href="https://thevesselcode.com/pms/">PMS</a>
+                <a href="https://thevesselcode.com/#contact">Contact</a>
+            </span>
             <span class="store-public-footer-tag">Maritime Toolkit · Open utilities for ship engineers worldwide</span>
         </footer>
     </div>
@@ -64,9 +79,11 @@
     <script src="js/ui/virtualList.js?v=20260723-readability"></script>
     <script src="js/services/plateImageCache.js?v=20260906-plate-pipeline"></script>
     <script src="js/services/storeManager.js?v=20260906-maritime-toolkit"></script>
-    <script src="js/ui/storeMenu.js?v=20260906-maritime-toolkit"></script>
-    <script src="js/ui/maritimeToolkit.js?v=20260906-maritime-toolkit"></script>
+    <script src="js/ui/storeMenu.js?v=20260908-impa-ux"></script>
+    <script src="js/data/maritimeToolkitData.js?v=20260908-eng"></script>
+    <script src="js/ui/maritimeToolkit.js?v=20260908-eng"></script>
     <script src="js/ui/storePublicLead.js?v=20260906-maritime-toolkit"></script>
-    <script src="js/store-public-boot.js?v=20260906-maritime-toolkit"></script>
+    <script src="js/toolkit-embed.js?v=20260908-embed"></script>
+    <script src="js/store-public-boot.js?v=20260908-embed"></script>
 </body>
 </html>

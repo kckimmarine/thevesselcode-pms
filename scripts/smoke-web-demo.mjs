@@ -9,6 +9,7 @@ const mustExist = [
   'toolkit.html',
   'store-public.html',
   'js/store-public-boot.js',
+  'js/data/maritimeToolkitData.js',
   'js/ui/maritimeToolkit.js',
   'js/ui/storePublicLead.js',
   'css/store-public.css',

@@ -4,11 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maritime Toolkit — THE VESSEL CODE</title>
-    <!-- TVC-STATIC-TOOLKIT-EMBED-v2 — view-source에 이 줄이 보이면 정적 파일이 서빙된 것입니다 -->
     <!--
-      Bluehost 업로드: public_html/toolkit/index.html (+ .htaccess)
-      홈페이지 Toolkit 탭 링크: https://thevesselcode.com/toolkit/
-      (PMS와 동일 — WordPress 페이지 embed 불필요)
+      Bluehost: public_html/maritime-toolkit/index.html
+      Menu Custom Link: https://thevesselcode.com/maritime-toolkit/
+      App: https://app.thevesselcode.com/toolkit?embed=1
+      (Do not use /toolkit/ — WordPress slug conflict on Bluehost)
     -->
     <style>
         html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1a365d; }
@@ -21,18 +21,16 @@
         }
         .load-fallback.hidden { display: none; }
         .load-fallback a { color: #90cdf4; }
-        .load-fallback .hint { margin-top: 1rem; font-size: 0.9rem; opacity: 0.85; max-width: 28rem; }
     </style>
 </head>
 <body>
     <div id="tvcToolkitLoading" class="load-fallback" role="status" aria-live="polite">
         <p>Maritime Toolkit 로딩 중…</p>
-        <p class="hint">10초 이상 이 화면이면 아래 링크로 직접 열어 보세요.</p>
-        <p><a href="https://app.thevesselcode.com/toolkit" target="_blank" rel="noopener noreferrer">Toolkit 직접 열기</a></p>
+        <p><a href="https://app.thevesselcode.com/toolkit" target="_blank" rel="noopener noreferrer">직접 열기</a></p>
     </div>
     <iframe
         id="tvcToolkitFrame"
-        src="https://app.thevesselcode.com/toolkit"
+        src="https://app.thevesselcode.com/toolkit?embed=1"
         title="THE VESSEL CODE — Maritime Toolkit"
         allow="clipboard-read; clipboard-write"
         referrerpolicy="strict-origin-when-cross-origin"
@@ -48,29 +46,15 @@
             var frame = document.getElementById('tvcToolkitFrame');
             var loading = document.getElementById('tvcToolkitLoading');
             if (!frame) return;
-
-            function hideLoading() {
+            frame.addEventListener('load', function () {
                 if (loading) loading.classList.add('hidden');
-            }
-
-            frame.addEventListener('load', hideLoading);
-
-            // Local preview: thevesselcode.com/toolkit/?local=1
+            });
             try {
                 var q = new URLSearchParams(location.search);
                 if (q.get('local') === '1') {
-                    frame.src = 'http://localhost:3000/toolkit';
+                    frame.src = 'http://localhost:3000/toolkit?embed=1';
                 }
             } catch (_) {}
-
-            setTimeout(function () {
-                if (loading && !loading.classList.contains('hidden')) {
-                    var hint = loading.querySelector('.hint');
-                    if (hint) {
-                        hint.textContent = 'iframe 로드가 지연되고 있습니다. WordPress 페이지가 아닌 정적 embed인지 확인하세요 (페이지 소스에 TVC-STATIC-TOOLKIT-EMBED-v2).';
-                    }
-                }
-            }, 10000);
         })();
     </script>
 </body>

@@ -68,6 +68,13 @@ html:has(.store-public-body) {
     white-space: nowrap;
 }
 
+.store-public-header-links {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px 16px;
+}
+
 .store-public-site-link:hover,
 .store-public-site-link:focus-visible {
     color: #fff;
@@ -161,6 +168,65 @@ html:has(.store-public-body) {
     font-size: 0.875rem;
 }
 
+.store-chapter-chips {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow-x: auto;
+    padding: 10px 16px 0;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+}
+
+.store-chapter-chip {
+    flex: 0 0 auto;
+    padding: 7px 12px;
+    border: 1px solid #cbd5e0;
+    border-radius: 999px;
+    background: #fff;
+    color: #2d3748;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.store-chapter-chip:hover,
+.store-chapter-chip:focus-visible {
+    border-color: #3182ce;
+    outline: none;
+}
+
+.store-chapter-chip.active {
+    background: #1a365d;
+    border-color: #1a365d;
+    color: #fff;
+}
+
+.impa-detail-unit {
+    display: block;
+    margin: 0 0 6px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.impa-detail-conversion-note {
+    margin: 12px 0 0;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #ebf8ff;
+    border: 1px solid #90cdf4;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #2c5282;
+    text-align: center;
+}
+
 .toolkit-conversion-banner {
     position: sticky;
     bottom: 0;
@@ -207,6 +273,32 @@ html:has(.store-public-body) {
     outline-offset: 2px;
 }
 
+.toolkit-conversion-actions {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 12px;
+}
+
+.toolkit-conversion-btn-outline {
+    background: transparent;
+    color: #fff;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    box-shadow: none;
+}
+
+.toolkit-conversion-btn-outline:hover,
+.toolkit-conversion-btn-outline:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.store-public-footer-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+}
+
 .store-public-footer-tag {
     font-size: 0.75rem;
     color: #718096;
@@ -235,9 +327,13 @@ html:has(.store-public-body) {
     font-size: 1.5rem;
 }
 
+#tab-bunker,
+#tab-luboil,
+#tab-flange,
+#tab-psc-guard,
+#storeToolPaint,
 #storeToolBunker,
 #storeToolLube,
-#storeToolPaint,
 #storeToolEngineering {
     padding-top: 16px;
     padding-bottom: 8px;
@@ -347,6 +443,108 @@ html:has(.store-public-body) {
     font-size: 0.75rem;
     color: #718096;
     line-height: 1.45;
+}
+
+.maritime-ref-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+    margin: 0 16px 12px;
+}
+
+.maritime-ref-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f7fafc;
+    overflow: hidden;
+}
+
+.maritime-ref-card-title {
+    margin: 0;
+    padding: 10px 12px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+    color: #2c5282;
+    background: #edf2f7;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.maritime-ref-card .maritime-table-wrap {
+    margin: 0;
+    border: none;
+    border-radius: 0;
+    max-height: 220px;
+}
+
+.maritime-psc-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin: 0 16px 12px;
+}
+
+.maritime-psc-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #fff;
+    padding: 14px 16px;
+}
+
+.maritime-psc-card-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.maritime-psc-card-title {
+    margin: 0;
+    font-size: 1rem;
+    color: #1a365d;
+}
+
+.maritime-psc-mou {
+    font-size: 0.6875rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #c05621;
+    background: #fffaf0;
+    border: 1px solid #fbd38d;
+    border-radius: 4px;
+    padding: 2px 8px;
+}
+
+.maritime-psc-focus {
+    margin: 0 0 8px;
+    font-size: 0.875rem;
+    color: #4a5568;
+    line-height: 1.45;
+}
+
+.maritime-psc-checks {
+    margin: 0 0 10px;
+    padding-left: 1.25rem;
+    font-size: 0.8125rem;
+    color: #2d3748;
+    line-height: 1.5;
+}
+
+.maritime-psc-accept {
+    margin: 0;
+    font-size: 0.8125rem;
+    color: #276749;
+    background: #f0fff4;
+    border-left: 3px solid #48bb78;
+    padding: 8px 10px;
+    border-radius: 0 6px 6px 0;
+    line-height: 1.45;
+}
+
+.maritime-field.hidden {
+    display: none;
 }
 
 .maritime-bunker-result {
@@ -597,8 +795,23 @@ html:has(.store-public-body) {
 .store-tool-bunker .store-public-main,
 .store-tool-lube .store-public-main,
 .store-tool-paint .store-public-main,
-.store-tool-engineering .store-public-main {
-    display: none;
+.store-tool-psc .store-public-main {
+    min-height: 280px;
+}
+
+@media (max-width: 768px) {
+    .maritime-ref-cards {
+        grid-template-columns: 1fr;
+    }
+
+    .maritime-flange-controls,
+    .maritime-bunker-form {
+        flex-direction: column;
+    }
+
+    .maritime-field {
+        min-width: 100%;
+    }
 }
 
 @media (max-width: 640px) {
@@ -615,7 +828,7 @@ html:has(.store-public-body) {
     }
 
     .maritime-bunker-metrics {
-        grid-template-columns: 1fr;
+        grid-template-columns: 1fr 1fr;
     }
 
     .toolkit-conversion-banner {
@@ -635,4 +848,31 @@ html:has(.store-public-body) {
     .store-public-mode .store-vl-scroll {
         max-height: calc(100dvh - 300px);
     }
+}
+
+/* Full-screen embed via thevesselcode.com/maritime-toolkit */
+html.store-embed-mode,
+html.store-embed-mode body.store-embed-mode {
+    height: 100%;
+}
+
+.store-embed-mode .store-public-shell {
+    max-width: none;
+    min-height: 100%;
+}
+
+.store-embed-mode .store-public-header-links .store-public-site-link[href*="thevesselcode.com"]:not([href*="/pms"]) {
+    display: none;
+}
+
+.store-embed-mode .store-public-footer-tag {
+    display: none;
+}
+
+.store-embed-mode .store-public-fab {
+    bottom: max(72px, calc(16px + env(safe-area-inset-bottom, 0px)));
+}
+
+.store-embed-mode .store-public-mode .store-vl-scroll {
+    max-height: calc(100dvh - 240px);
 }
