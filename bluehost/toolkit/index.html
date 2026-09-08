@@ -1,22 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Maritime Toolkit — THE VESSEL CODE</title>
     <!--
       Bluehost 업로드: public_html/toolkit/index.html
-      홈페이지 메뉴 링크: https://thevesselcode.com/toolkit/
-      WordPress 메뉴 추가: deploy/BLUEHOST-HOMEPAGE-MENU.md
+      홈페이지 Toolkit 탭 링크: https://thevesselcode.com/toolkit/
+      (PMS와 동일 — WordPress 페이지 embed 불필요)
     -->
     <style>
-        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #edf2f7; }
+        html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1a365d; }
         iframe { border: 0; width: 100%; height: 100%; display: block; }
         .load-fallback {
-            color: #1a365d; font-family: system-ui, sans-serif; text-align: center;
+            color: #fff; font-family: system-ui, sans-serif; text-align: center;
             padding: 48px 24px; line-height: 1.6;
         }
-        .load-fallback a { color: #2b6cb0; }
+        .load-fallback a { color: #90cdf4; }
     </style>
 </head>
 <body>
@@ -29,17 +29,20 @@
     ></iframe>
     <noscript>
         <div class="load-fallback">
-            <p>JavaScript is required for the embedded toolkit.</p>
-            <p><a href="https://app.thevesselcode.com/toolkit">Open Maritime Toolkit</a></p>
+            <p>JavaScript가 필요합니다.</p>
+            <p><a href="https://app.thevesselcode.com/toolkit">Maritime Toolkit 직접 열기</a></p>
         </div>
     </noscript>
     <script>
         (function () {
             var frame = document.getElementById('tvcToolkitFrame');
             if (!frame) return;
+            // Local preview: thevesselcode.com/toolkit/?local=1
             try {
                 var q = new URLSearchParams(location.search);
-                if (q.get('local') === '1') frame.src = 'http://localhost:3000/toolkit';
+                if (q.get('local') === '1') {
+                    frame.src = 'http://localhost:3000/toolkit';
+                }
             } catch (_) {}
         })();
     </script>
