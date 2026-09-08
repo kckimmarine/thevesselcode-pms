@@ -583,6 +583,7 @@ html:has(.store-public-body) {
     min-width: 220px;
 }
 
+.store-public-mode #catalog-table-wrapper,
 .store-public-mode #storeVlWrap {
     flex: 1;
     min-height: 280px;
@@ -657,22 +658,107 @@ html:has(.store-public-body) {
         background-color: #0f172a !important;
         min-height: 100dvh !important;
         height: 100% !important;
+        overflow: hidden !important;
         overflow-x: hidden !important;
         width: 100%;
         max-width: 100vw;
+        position: relative;
     }
 
+    /* Main toolkit shell — no scroll chaining to document */
     .store-public-shell {
         width: 100%;
         max-width: 100vw;
-        overflow-x: hidden;
+        height: 100dvh;
+        max-height: 100dvh;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
         overscroll-behavior: none;
     }
 
-    .store-public-panels,
-    .store-public-main,
-    .store-public-mode .store-vl-scroll {
+    .store-public-header,
+    .store-public-toolkit,
+    .toolkit-conversion-banner,
+    .store-public-footer {
+        flex-shrink: 0;
+    }
+
+    .store-public-panels {
+        flex: 1;
+        min-height: 0;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
+    .store-public-panel {
+        height: 100%;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
+    .store-public-main {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        overscroll-behavior: none;
+        padding-bottom: 8px;
+    }
+
+    .store-public-main .store-toolbar,
+    .store-public-main .store-toolbar-public,
+    .store-public-main .store-cap-note {
+        flex-shrink: 0;
+    }
+
+    /* IMPA catalog — isolated vertical scroll */
+    #catalog-table-wrapper,
+    .store-vl-wrap {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 8px;
+        overflow: hidden;
+        overscroll-behavior: none;
+    }
+
+    #storeVlScroll.store-vl-scroll,
+    .store-vl-scroll.table-scroll-container,
+    .table-scroll-container {
+        flex: 1;
+        min-height: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        overscroll-behavior: contain;
         overscroll-behavior-y: contain;
+        touch-action: pan-y;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    /* Utility tab panels — own scroll, no body drift */
+    #storeToolBunker,
+    #storeToolLube,
+    #storeToolPaint,
+    #storeToolEngineering {
+        flex: 1;
+        min-height: 0;
+        overflow-y: auto;
+        overflow-x: hidden;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    .maritime-table-wrap {
+        overflow-x: auto;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        touch-action: pan-y;
         -webkit-overflow-scrolling: touch;
     }
 }
