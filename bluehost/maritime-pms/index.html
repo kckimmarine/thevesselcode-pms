@@ -5,21 +5,29 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PMS — THE VESSEL CODE</title>
     <!--
-      Bluehost 업로드: public_html/pms/index.html (legacy — WP slug /pms/ often conflicts)
-      Preferred: public_html/maritime-pms/index.html → https://thevesselcode.com/maritime-pms/
-      See deploy/PMS-BLANK-FIX.md
+      Bluehost: public_html/maritime-pms/index.html
+      Menu Custom Link: https://thevesselcode.com/maritime-pms/
+      App: https://app.thevesselcode.com/?embed=1
+      (Do not use /pms/ — WordPress slug conflict on Bluehost)
     -->
     <style>
         html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #1a365d; }
         iframe { border: 0; width: 100%; height: 100%; display: block; }
         .load-fallback {
+            position: fixed; inset: 0; z-index: 2;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
             color: #fff; font-family: system-ui, sans-serif; text-align: center;
-            padding: 48px 24px; line-height: 1.6;
+            padding: 48px 24px; line-height: 1.6; background: #1a365d;
         }
+        .load-fallback.hidden { display: none; }
         .load-fallback a { color: #90cdf4; }
     </style>
 </head>
 <body>
+    <div id="tvcPmsLoading" class="load-fallback" role="status" aria-live="polite">
+        <p>PMS 로딩 중…</p>
+        <p><a href="https://app.thevesselcode.com/?embed=1" target="_blank" rel="noopener noreferrer">직접 열기</a></p>
+    </div>
     <iframe
         id="tvcPmsFrame"
         src="https://app.thevesselcode.com/?embed=1"
@@ -36,8 +44,11 @@
     <script>
         (function () {
             var frame = document.getElementById('tvcPmsFrame');
+            var loading = document.getElementById('tvcPmsLoading');
             if (!frame) return;
-            // Local preview: thevesselcode.com/pms/?local=1
+            frame.addEventListener('load', function () {
+                if (loading) loading.classList.add('hidden');
+            });
             try {
                 var q = new URLSearchParams(location.search);
                 if (q.get('local') === '1') {

@@ -41,11 +41,11 @@ for (const u of ['dm_user@thevesselcode.com', "username: 'admin'"]) {
 if (auth.includes("seed_password: 'kimkc9363#@'")) console.log('OK admin seed password');
 else { console.error('MISSING admin seed password'); ok = false; }
 
-const bluehostEmbed = join(root, 'bluehost/pms/index.html');
-if (existsSync(bluehostEmbed)) {
-  console.log('OK bluehost/pms/index.html');
+const bluehostPms = join(root, 'bluehost/maritime-pms/index.html');
+if (existsSync(bluehostPms)) {
+  console.log('OK bluehost/maritime-pms/index.html');
 } else {
-  console.error('MISSING bluehost/pms/index.html');
+  console.error('MISSING bluehost/maritime-pms/index.html');
   ok = false;
 }
 

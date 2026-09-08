@@ -17,7 +17,9 @@ Do **not** use `/toolkit/` on Bluehost — WordPress page slug `toolkit` interce
 npm run deploy:bluehost
 ```
 
-Uploads `bluehost/maritime-toolkit/index.html` (and `pms/`, `impa/`).
+Uploads `bluehost/maritime-toolkit/index.html`, `bluehost/maritime-pms/index.html` (and `impa/`).
+
+PMS blank page fix: **[PMS-BLANK-FIX.md](./PMS-BLANK-FIX.md)** (use `/maritime-pms/`, not `/pms/`).
 
 ## Local preview
 
