@@ -39,7 +39,7 @@ async function main() {
       ok: await page.locator('#toolkitConversionBanner').isVisible(),
     });
 
-    const demoHref = await page.locator('.toolkit-conversion-btn').getAttribute('href');
+    const demoHref = await page.locator('.toolkit-conversion-btn-outline').getAttribute('href');
     results.push({
       check: 'global demo CTA link',
       ok: demoHref === 'https://thevesselcode.com/#contact',
