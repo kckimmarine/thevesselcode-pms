@@ -8,7 +8,7 @@
   ],
   "rewrites": [
     { "source": "/toolkit", "destination": "/toolkit.html" },
-    { "source": "/((?!vendor|js|css|icons|data|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html).*)", "destination": "/index.html" }
+    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html).*)", "destination": "/index.html" }
   ],
   "headers": [
     {
