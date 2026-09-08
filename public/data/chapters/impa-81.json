@@ -1,61 +1,212 @@
-{
-  "chapter": "81",
-  "title": "Valves & Cocks",
-  "category": "Piping",
-  "scraped_at": "2026-09-08T13:22:01.329Z",
-  "source": "fixture:chapter-81.html",
-  "count": 5,
-  "items": [
-    {
-      "c": "812101",
-      "n": "Gate Valve Bronze Flanged DN50 PN16",
-      "u": "PCS",
-      "g": "81",
-      "p": "PL-81-21",
-      "specs": {
-        "Rating": "Gate Valve Bronze Flanged DN50 PN16",
-        "Material": "Gate Valve Bronze Flanged DN50 PN16"
-      }
-    },
-    {
-      "c": "812105",
-      "n": "Globe Valve Bronze Straight DN40",
-      "u": "PCS",
-      "g": "81",
-      "p": "PL-81-21",
-      "specs": {
-        "Material": "Globe Valve Bronze Straight DN40"
-      }
-    },
-    {
-      "c": "812204",
-      "n": "Butterfly Valve Lug Type DN80",
-      "u": "PCS",
-      "g": "81",
-      "p": "PL-81-22",
-      "specs": {
-        "Material": "Ductile iron"
-      }
-    },
-    {
-      "c": "812312",
-      "n": "Check Valve Swing Type Bronze DN65",
-      "u": "PCS",
-      "g": "81",
-      "p": "PL-81-23",
-      "specs": {
-        "Material": "Check Valve Swing Type Bronze DN65"
-      }
-    },
-    {
-      "c": "812851",
-      "n": "Ball Valve Full Bore Stainless DN25",
-      "u": "PCS",
-      "g": "81",
-      "p": "PL-81-28",
-      "specs": {
-        "Material": "Ball Valve Full Bore Stainless DN25"
-      }
-    }
-  ]
-}
+[
+  {
+    "c": "150821",
+    "n": "Anti-Shatter Films (Blast Mitigation), 200 Micron, W:152 cm x L:15 Mtr",
+    "u": "ROL",
+    "g": "81",
+    "p": "81-670-01.jpg"
+  },
+  {
+    "c": "232422",
+    "n": "Used Bicycle Interior Tube",
+    "u": "PCS",
+    "g": "81",
+    "p": "81-570-01.jpg"
+  },
+  {
+    "c": "232435",
+    "n": "Hatch Cover Tape, \"Dry-Cargo x-Lam\" 100 mm x 1 mm x 20 Mtr 4 Rols",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232436",
+    "n": "Hatch Cover Tape, \"Dry-Cargo x-Lam\" 150 mm x 1 mm x 20 Mtr 4 Rols",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232437",
+    "n": "Hatch Cover Tape, \"Canseal-R Marine Tape\", 1.5 x 300 mm x 22 Mtr 1 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232441",
+    "n": "Hatch Cover Tape, \"Nemo\", T: 1.5 x W: 75 mm x 20 Mtr, 4 Roll/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232442",
+    "n": "Hatch Cover Tape, \"Nemo\", T: 1.5 x W: 100 mm x 20 Mtr, 3 Roll/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232443",
+    "n": "Hatch Cover Tape, \"Nemo\", T: 1.5 x W: 150 mm x 20 Mtr, 2 Roll/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232444",
+    "n": "Hatch Cover Tape, \"Dry Seal\", 100 x 2.0 mm x 23 Mtr 3 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232445",
+    "n": "Hatch Cover Tape, \"Optimo\", 2 x 101 mm x 20 Mtr, 2 Roll/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232446",
+    "n": "Hatch Cover Tape, \"Optimo\", 2 x 152 mm x 20 Mtr, 2 Roll/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232447",
+    "n": "Hatch Cover Tape, \"Dry Seal\", 150 x 2.0 mm x 23 Mtr 2 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232448",
+    "n": "Hatch Cover Tape, \"Dry-Cargo Standard Duty\", W 100 mm x 20 Mtr, 3 Roll/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232449",
+    "n": "Hatch Cover Tape, \"Dry-Cargo Standard Duty\", W 150 mm x 20 Mtr, 3 Roll/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232450",
+    "n": "Hatch Cover Tape, \"Dry Seal\", 300 x 1.8 mm x 23 Mtr 1 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232451",
+    "n": "Hatch Cover Tape, \"Dry-Cargo\" 75 mm x 20 Mtr 4 Rolls",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232452",
+    "n": "Hatch Cover Tape, \"Dry-Cargo\" 100 mm x 20 Mtr 3 Rolls",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232453",
+    "n": "Hatch Cover Tape, \"Dry-Cargo\" 150 mm x 20 Mtr 2 Rolls",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232454",
+    "n": "Hatch Cover Tape, \"Canseal-R Marine Tape\", 1.5 x 100 mm x 20 Mtr 3 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232455",
+    "n": "Hatch Cover Tape, \"Canseal-R Marine Tape\", 1.5 x 150 mm x 20 Mtr 2 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232456",
+    "n": "Hatch Cover Tape, \"Maritape\" 100 mm x 15.25 Mtr 4 Rolls",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232457",
+    "n": "Hatch Cover Tape, \"Maritape\" 150 mm x 15.25 Mtr 4 Rolls",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232458",
+    "n": "Old Model : Hatch Cover Tape,\"BC Marine Premium\", 3 x 76 mm x 24 Mtr 4 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232459",
+    "n": "Old Model, Hatch Cover Tape,\"BC Marine Premium\", 3 x 101 mm x 24 Mtr 3 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232460",
+    "n": "Old Model, Hatch Cover Tape,\"BC Marine Premium\", 3 x 152 mm x 24 Mtr 2 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232461",
+    "n": "Hatch Cover Tape, Strip Ty,\"Ram-Nek\", 76 mm x 1.22 Mtr x 60 Strips/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232462",
+    "n": "Hatch Cover Tape, Strip Ty,\"Ram-Nek\", 110 mm x 1.22 Mtr x 30 Strips/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232463",
+    "n": "Hatch Cover Tape, Strip Ty,\"Ram-Nek\", 152 mm x 1.22 Mtr x 30 Strips/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232464",
+    "n": "Old Model : Hatch Cover Tape,\"BC Marine Premium\" , 4 x 76 mm x 24 Mtr 4 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  },
+  {
+    "c": "232465",
+    "n": "Old Model, Hatch Cover Tape,\"BC Marine Premium\" , 4 x 101 mm x 18 Mtr 4 Rolls/Box",
+    "u": "BOX",
+    "g": "81",
+    "p": "81-650-01.jpg"
+  }
+]
