@@ -133,6 +133,7 @@ const TVC_StorePublicLead = (function () {
         }
         modal?.classList.remove('hidden');
         modal?.setAttribute('aria-hidden', 'false');
+        document.getElementById('impaDetailModal')?.classList.add('impa-detail-modal-behind');
         document.getElementById('storeLeadName')?.focus();
     }
 
@@ -140,6 +141,7 @@ const TVC_StorePublicLead = (function () {
         const modal = document.getElementById('storeLeadModal');
         modal?.classList.add('hidden');
         modal?.setAttribute('aria-hidden', 'true');
+        document.getElementById('impaDetailModal')?.classList.remove('impa-detail-modal-behind');
     }
 
     function onLeadSubmit(e) {

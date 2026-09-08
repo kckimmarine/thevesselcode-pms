@@ -74,7 +74,48 @@ async function main() {
     await page.keyboard.press('Escape');
     await page.locator('#impaDetailModal').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
 
-    // Bunker tab
+    // Mobile IMPA detail modal — centered overlay + scrollable body + close btn
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.locator('[data-tool-tab="catalog"]').click();
+    await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 15_000 });
+    await page.locator('.store-code-link').first().click();
+    await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
+
+    const modalLayout = await page.locator('#impaDetailModal').evaluate(el => {
+      const style = getComputedStyle(el);
+      return {
+        display: style.display,
+        alignItems: style.alignItems,
+        justifyContent: style.justifyContent,
+      };
+    });
+    results.push({
+      check: 'mobile modal uses centered flex overlay',
+      ok: modalLayout.display === 'flex'
+        && modalLayout.alignItems === 'center'
+        && modalLayout.justifyContent === 'center',
+      detail: modalLayout,
+    });
+
+    const bodyScroll = await page.locator('#impaDetailModal .modal-body').evaluate(el => {
+      const style = getComputedStyle(el);
+      return style.overflowY;
+    });
+    results.push({
+      check: 'mobile modal body scrollable',
+      ok: bodyScroll === 'auto' || bodyScroll === 'scroll',
+      detail: bodyScroll,
+    });
+
+    await page.locator('#modalCloseBtn').click();
+    await page.locator('#impaDetailModal').waitFor({ state: 'hidden', timeout: 5_000 });
+    results.push({
+      check: 'mobile modal close button dismisses overlay',
+      ok: await page.locator('#impaDetailModal').evaluate(el => el.classList.contains('hidden')),
+    });
+
+    // Bunker tab (desktop viewport)
+    await page.setViewportSize({ width: 1280, height: 800 });
     await page.locator('[data-tool-tab="bunker"]').click();
     await page.locator('#bunkerCalcForm').waitFor({ state: 'visible', timeout: 5_000 });
     results.push({
@@ -130,22 +171,24 @@ async function main() {
 
     // Lead modal flow
     await page.setViewportSize({ width: 1280, height: 800 });
-    await page.locator('[data-lead-trigger="rob"]').first().click({ force: true }).catch(async () => {
-      await page.locator('.store-code-link').first().click();
-      await page.locator('[data-lead-trigger="rob"]').click();
-    });
+    await page.locator('.store-code-link').first().click();
+    await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
+    await page.locator('[data-lead-trigger="rob"]').click();
     await page.locator('#storeLeadModal').waitFor({ state: 'visible', timeout: 5_000 });
     results.push({
       check: 'locked field opens lead modal',
       ok: await page.locator('#storeLeadModal').isVisible(),
     });
-    await page.locator('.store-lead-close').click();
+    await page.locator('.store-lead-close').click({ force: true });
     results.push({
       check: 'lead modal closes',
       ok: await page.locator('#storeLeadModal').evaluate(el => el.classList.contains('hidden')),
     });
 
-    await page.locator('#storePublicFab').click();
+    await page.locator('#modalCloseBtn').click();
+    await page.locator('#impaDetailModal').waitFor({ state: 'hidden', timeout: 5_000 });
+
+    await page.locator('#storePublicFab').click({ force: true });
     await page.locator('#storeLeadModal').waitFor({ state: 'visible', timeout: 5_000 });
     results.push({
       check: 'FAB opens lead modal',

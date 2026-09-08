@@ -34,7 +34,9 @@ const TVC_StoreMenu = (function () {
         const existing = document.getElementById('impaDetailModal');
         if (existing && (!existing.querySelector('.impa-detail-plate-viewport')
             || !existing.querySelector('#impaDetailLockedPreview')
-            || !existing.querySelector('.impa-detail-public-actions'))) {
+            || !existing.querySelector('.impa-detail-public-actions')
+            || !existing.querySelector('#modalCloseBtn')
+            || !existing.querySelector('.modal-body'))) {
             existing.remove();
             _modalReady = false;
             _plateZoom = null;
@@ -45,15 +47,15 @@ const TVC_StoreMenu = (function () {
         wrap.id = 'impaDetailModal';
         wrap.className = 'modal hidden impa-detail-modal';
         wrap.innerHTML = `
-            <div class="modal-box impa-detail-box" role="dialog" aria-modal="true" aria-labelledby="impaDetailTitle">
+            <div class="modal-box impa-detail-box impa-modal-container modal-card" role="dialog" aria-modal="true" aria-labelledby="impaDetailTitle">
                 <header class="impa-detail-head">
                     <div class="impa-detail-head-main">
                         <span class="impa-detail-badge" id="impaDetailBadge">IMPA</span>
                         <h2 class="impa-detail-title" id="impaDetailTitle">—</h2>
                     </div>
-                    <button type="button" class="impa-detail-close-btn impa-detail-close-float" aria-label="Close">✕</button>
+                    <button type="button" id="modalCloseBtn" class="impa-detail-close-btn impa-detail-close-float" aria-label="Close">✕</button>
                 </header>
-                <div class="impa-detail-scroll">
+                <div class="modal-body impa-detail-scroll">
                     <section class="impa-detail-plate-section" aria-label="Catalog plate viewer">
                         <div class="impa-detail-plate-toolbar">
                             <p class="impa-detail-plate-caption" id="impaDetailPlateCaption">Catalog specification plate</p>
@@ -141,10 +143,11 @@ const TVC_StoreMenu = (function () {
         wrap.addEventListener('click', e => {
             if (e.target === wrap) closeImpaDetailModal();
         });
-        wrap.querySelectorAll('.impa-detail-close-btn').forEach(btn => {
+        wrap.querySelector('#modalCloseBtn')?.addEventListener('click', closeImpaDetailModal);
+        wrap.querySelectorAll('.impa-detail-close-bottom').forEach(btn => {
             btn.addEventListener('click', closeImpaDetailModal);
         });
-        wrap.querySelector('.impa-detail-box')?.addEventListener('click', e => e.stopPropagation());
+        wrap.querySelector('.impa-modal-container, .impa-detail-box')?.addEventListener('click', e => e.stopPropagation());
         wrap.querySelector('#impaDetailCartBtn')?.addEventListener('click', onAddToCart);
         wrap.querySelector('#impaDetailZoomBtn')?.addEventListener('click', openPlateFullscreen);
 
@@ -574,8 +577,9 @@ const TVC_StoreMenu = (function () {
         applyModalPublicMode();
         bindPlateImage(item);
         modal?.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
         if (_publicMode) {
-            modal?.querySelector('.impa-detail-close-float')?.focus();
+            document.getElementById('modalCloseBtn')?.focus();
         } else {
             document.getElementById('impaDetailQty')?.focus();
         }
@@ -586,6 +590,7 @@ const TVC_StoreMenu = (function () {
         _plateLoadToken += 1;
         revokePlateObjectUrl();
         document.getElementById('impaDetailModal')?.classList.add('hidden');
+        document.body.style.overflow = '';
         _currentItem = null;
         _plateZoom?.reset();
     }
