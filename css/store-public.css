@@ -451,10 +451,15 @@ html:has(.store-public-body) {
 
 /* Lead-gen modal */
 .store-lead-modal {
-    z-index: 10300;
+    z-index: 100001;
     align-items: center;
     justify-content: center;
     padding: 16px;
+}
+
+.impa-detail-modal.impa-detail-modal-behind {
+    visibility: hidden;
+    pointer-events: none;
 }
 
 .store-lead-box {
@@ -761,4 +766,57 @@ html:has(.store-public-body) {
         touch-action: pan-y;
         -webkit-overflow-scrolling: touch;
     }
+
+    /* IMPA detail modal — stay centered; body scroll lock handled in JS */
+    .impa-detail-modal {
+        z-index: 99999;
+    }
+}
+
+/* Maritime Toolkit — dark centered IMPA detail modal */
+.impa-detail-modal-public .impa-detail-title {
+    color: #f8fafc;
+}
+
+.impa-detail-modal-public .impa-detail-badge {
+    background: rgba(148, 163, 184, 0.2);
+    color: #cbd5e1;
+}
+
+.impa-detail-modal-public .impa-detail-specs-title,
+.impa-detail-modal-public .impa-detail-locked-title {
+    color: #e2e8f0;
+}
+
+.impa-detail-modal-public .impa-detail-spec-table th {
+    background: #1e293b;
+    color: #cbd5e1;
+}
+
+.impa-detail-modal-public .impa-detail-spec-table td {
+    color: #e2e8f0;
+    border-color: #334155;
+}
+
+.impa-detail-modal-public .impa-detail-spec-table-wrap {
+    border-color: #334155;
+}
+
+.impa-detail-modal-public .impa-locked-row {
+    background: #131e36;
+    border-color: #334155;
+}
+
+.impa-detail-modal-public .impa-locked-label {
+    color: #e2e8f0;
+}
+
+.impa-detail-modal-public .impa-detail-public-footer {
+    background: #131e36;
+    border-top: 1px solid #1e2d4d;
+    box-shadow: none;
+}
+
+.impa-detail-modal-public .impa-detail-public-banner-text {
+    color: #cbd5e1;
 }
