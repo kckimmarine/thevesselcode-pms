@@ -5,6 +5,16 @@ const TVC_StoreManager = (function () {
     const SEARCH_LIMIT = 50000;
     const BROWSE_PREVIEW = 500;
     const SEARCH_TARGET_MS = 50;
+    const CATALOG_SOURCE_VERSION = '20260908-scraped-chapters';
+
+    const CHAPTER_CATEGORY = {
+        '33': 'Safety Equipment',
+        '59': 'Safety Equipment',
+        '61': 'Hand Tools',
+        '75': 'Valves & Cocks',
+        '79': 'Paints & Coatings',
+        '81': 'Packing & Jointing',
+    };
 
     let _totalCount = 0;
     let _loadPromise = null;
@@ -172,10 +182,64 @@ const TVC_StoreManager = (function () {
     }
 
     async function fetchCatalogJson() {
-        const res = await fetch('/data/impa-catalog.json', { cache: 'no-store' });
-        if (!res.ok) throw new Error(`Failed to load IMPA catalog (${res.status})`);
-        const data = await res.json();
-        return Array.isArray(data) ? data : [];
+        const sources = ['/data/impa-full.json', '/data/impa-catalog.json'];
+        for (const url of sources) {
+            try {
+                const res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) continue;
+                const data = await res.json();
+                const rows = normalizeCatalogPayload(data);
+                if (rows.length) return rows;
+            } catch {
+                /* try next source */
+            }
+        }
+        throw new Error('Failed to load IMPA catalog bundle');
+    }
+
+    function normalizeCatalogPayload(data) {
+        if (Array.isArray(data)) return data.map(expandCompactRow);
+        if (Array.isArray(data?.items)) return data.items.map(expandCompactRow);
+        if (Array.isArray(data?.records)) return data.records.map(expandCompactRow);
+        if (Array.isArray(data?.data)) return data.data.map(expandCompactRow);
+        return [];
+    }
+
+    function expandCompactRow(raw) {
+        if (!raw || typeof raw !== 'object') return raw;
+        if (raw.impa_code || raw.code) return raw;
+        const code = String(raw.c || '').trim();
+        if (!code) return raw;
+        const chapter = String(raw.g || code.slice(0, 2) || '').trim();
+        return {
+            impa_code: code,
+            code,
+            name: String(raw.n || '').trim(),
+            unit: String(raw.u || 'PCS').trim() || 'PCS',
+            category: CHAPTER_CATEGORY[chapter] || `Chapter ${chapter}`,
+            plate_id: raw.p || '',
+            plate_no: raw.p || '',
+            specs: raw.specs && typeof raw.specs === 'object' ? { ...raw.specs } : {},
+        };
+    }
+
+    async function syncCatalogFromSource() {
+        const raw = await fetchCatalogJson();
+        const rows = toDbRecords(raw);
+        if (!rows.length) return 0;
+        await putImpaChunk(rows);
+        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_SOURCE, CATALOG_SOURCE_VERSION);
+        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_SEED, new Date().toISOString());
+        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_SEARCH_BACKFILL, new Date().toISOString());
+        invalidateCatalogCache();
+        return rows.length;
+    }
+
+    async function ensureCatalogSourceCurrent() {
+        await TVC_DB.open();
+        const version = await TVC_DB.getMeta(TVC_META_KEYS.IMPA_CATALOG_SOURCE);
+        if (version === CATALOG_SOURCE_VERSION) return 0;
+        return syncCatalogFromSource();
     }
 
     async function putImpaChunk(records) {
@@ -196,12 +260,8 @@ const TVC_StoreManager = (function () {
     }
 
     async function seedImpaMasterFromJson() {
-        const raw = await fetchCatalogJson();
-        const rows = toDbRecords(raw);
-        if (rows.length) await putImpaChunk(rows);
-        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_CATALOG_SEED, new Date().toISOString());
-        await TVC_DB.setMeta(TVC_META_KEYS.IMPA_SEARCH_BACKFILL, new Date().toISOString());
-        return rows.length;
+        const count = await syncCatalogFromSource();
+        return count;
     }
 
     async function upsertSeedCatalogFromJson() {
@@ -231,7 +291,10 @@ const TVC_StoreManager = (function () {
     async function ensureImpaMaster() {
         await TVC_DB.open();
         let count = await TVC_DB.countStore('impa_master');
-        if (!count) {
+        const refreshed = await ensureCatalogSourceCurrent();
+        if (refreshed) {
+            count = await TVC_DB.countStore('impa_master');
+        } else if (!count) {
             count = await seedImpaMasterFromJson();
         } else {
             const photosMigrated = await TVC_DB.getMeta(TVC_META_KEYS.IMPA_CATALOG_PHOTOS);

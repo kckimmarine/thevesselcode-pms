@@ -29,6 +29,8 @@ const STATIC_PATHS = [
 const smoke = spawnSync('node', ['scripts/smoke-web-demo.mjs'], { cwd: root, stdio: 'inherit' });
 if (smoke.status !== 0) process.exit(smoke.status ?? 1);
 
+spawnSync('node', ['scripts/merge-impa-chapters.mjs'], { cwd: root, stdio: 'inherit' });
+
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 
