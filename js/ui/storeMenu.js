@@ -761,14 +761,14 @@ const TVC_StoreMenu = (function () {
             ${toolbarHtml(search, cartCount)}
             <p id="storeCapNote" class="store-cap-note${cap ? '' : ' hidden'}">${esc(cap)}</p>
             <p id="storeEmpty" class="store-empty${hasItems ? ' hidden' : ''}">${emptyMsg}</p>
-            <div id="storeVlWrap" class="store-vl-wrap${hasItems ? '' : ' hidden'}" role="table" aria-label="IMPA catalog">
+            <div id="catalog-table-wrapper" class="store-vl-wrap${hasItems ? '' : ' hidden'}" role="table" aria-label="IMPA catalog">
                 <div class="store-vl-head" role="row">
                     <span role="columnheader">IMPA Code</span>
                     <span role="columnheader">Description</span>
                     <span role="columnheader">Category</span>
                     <span class="store-vl-unit-head" role="columnheader">Unit</span>
                 </div>
-                <div id="storeVlScroll" class="store-vl-scroll" tabindex="0"></div>
+                <div id="storeVlScroll" class="store-vl-scroll table-scroll-container" tabindex="0"></div>
             </div>`;
     }
 
@@ -810,7 +810,7 @@ const TVC_StoreMenu = (function () {
 
         const items = filtered.items || [];
         const empty = root.querySelector('#storeEmpty');
-        const wrap = root.querySelector('#storeVlWrap');
+        const wrap = root.querySelector('#catalog-table-wrapper');
 
         if (!items.length) {
             wrap?.classList.add('hidden');
