@@ -113,7 +113,7 @@ async function main() {
     await uploadFile({ host, user, pass, localPath, remotePath });
     console.log('  OK', remotePath);
   }
-  console.log('\nDone. Check: https://thevesselcode.com/toolkit/');
+  console.log('\nDone. Check: https://thevesselcode.com/maritime-pms/ and /maritime-toolkit/');
 }
 
 main().catch(err => {

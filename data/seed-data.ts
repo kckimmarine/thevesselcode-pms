@@ -260,6 +260,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
       "Standard": "ISO 12402",
       "Dimensions": "Standard size",
       "Certification": "ISO / CE marked",
+      "Rating": "—",
       "Voltage": "—"
     }
   },
@@ -279,6 +280,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
       "Standard": "ISO 12402",
       "Dimensions": "Standard size",
       "Certification": "ISO / CE marked",
+      "Rating": "—",
       "Voltage": "—"
     }
   },
@@ -296,8 +298,9 @@ export const IMPA_SEED: ImpaSeedItem[] = [
       "Catalog Section": "Safety",
       "Material": "ABS / HDPE shell",
       "Standard": "SOLAS / MED",
-      "Dimensions": "Adult universal",
+      "Dimensions": "Standard size",
       "Certification": "SOLAS Ch. III",
+      "Rating": "—",
       "Voltage": "—"
     }
   },
@@ -317,6 +320,7 @@ export const IMPA_SEED: ImpaSeedItem[] = [
       "Standard": "EN 3 / MED",
       "Dimensions": "CO₂ 5 kg portable",
       "Certification": "ISO / CE marked",
+      "Rating": "—",
       "Voltage": "—"
     }
   },
@@ -472,6 +476,211 @@ export const IMPA_SEED: ImpaSeedItem[] = [
       "Dimensions": "Bulk liquid",
       "Flash Point": "> 60°C",
       "Form": "Ready to use"
+    }
+  },
+  {
+    "impa_code": "590101",
+    "code": "590101",
+    "name": "Fire Hose Synthetic 2.5\" x 20m with couplings",
+    "unit": "PCS",
+    "category": "Safety & Fire Fighting",
+    "rob": 4,
+    "plate_id": "PL-59-01",
+    "plate_no": "PL-59-01",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Safety & Fire Fighting",
+      "Material": "Synthetic rubber lined",
+      "Standard": "EN 14540 / ISO 14557",
+      "Dimensions": "2.5\" × 20 m with couplings",
+      "Certification": "ISO / CE marked",
+      "Rating": "2.5\" working pressure",
+      "Voltage": "—"
+    }
+  },
+  {
+    "impa_code": "590203",
+    "code": "590203",
+    "name": "Fog/Jet Fire Nozzle 65A (Dual Purpose)",
+    "unit": "PCS",
+    "category": "Safety & Fire Fighting",
+    "rob": 6,
+    "plate_id": "PL-59-02",
+    "plate_no": "PL-59-02",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Safety & Fire Fighting",
+      "Material": "ABS / HDPE shell",
+      "Standard": "ISO 12402",
+      "Dimensions": "65A dual-purpose fog/jet",
+      "Certification": "ISO / CE marked",
+      "Rating": "65A jet/fog",
+      "Voltage": "—"
+    }
+  },
+  {
+    "impa_code": "590705",
+    "code": "590705",
+    "name": "SCBA Self-Contained Breathing Apparatus 300 Bar",
+    "unit": "SET",
+    "category": "Safety & Fire Fighting",
+    "rob": 4,
+    "plate_id": "PL-59-07",
+    "plate_no": "PL-59-07",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Safety & Fire Fighting",
+      "Material": "Composite cylinder / demand valve",
+      "Standard": "EN 137 / SOLAS",
+      "Dimensions": "300 bar cylinder / full face mask",
+      "Certification": "EN 137 Type 2",
+      "Rating": "—",
+      "Voltage": "—"
+    }
+  },
+  {
+    "impa_code": "591211",
+    "code": "591211",
+    "name": "EEBD Emergency Escape Breathing Device 15 Min",
+    "unit": "PCS",
+    "category": "Safety & Fire Fighting",
+    "rob": 12,
+    "plate_id": "PL-59-12",
+    "plate_no": "PL-59-12",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Safety & Fire Fighting",
+      "Material": "Composite cylinder / demand valve",
+      "Standard": "EN 137 / SOLAS",
+      "Dimensions": "15 min duration",
+      "Certification": "SOLAS Ch. II-2",
+      "Rating": "—",
+      "Voltage": "—"
+    }
+  },
+  {
+    "impa_code": "591720",
+    "code": "591720",
+    "name": "Immersion Suit Insulated (SOLAS/MED approved)",
+    "unit": "PCS",
+    "category": "Safety & Fire Fighting",
+    "rob": 6,
+    "plate_id": "PL-59-17",
+    "plate_no": "PL-59-17",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Safety & Fire Fighting",
+      "Material": "Neoprene / nylon outer",
+      "Standard": "SOLAS / MED",
+      "Dimensions": "Adult universal · insulated",
+      "Certification": "SOLAS Ch. III",
+      "Rating": "—",
+      "Voltage": "—"
+    }
+  },
+  {
+    "impa_code": "812101",
+    "code": "812101",
+    "name": "JIS Cast Iron Globe Valve 10K 50A Flanged",
+    "unit": "PCS",
+    "category": "Valves & Cocks",
+    "rob": 2,
+    "plate_id": "PL-81-21",
+    "plate_no": "PL-81-21",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Valves & Cocks",
+      "Material": "Cast iron body",
+      "Standard": "JIS B2220 / JIS F 7300",
+      "Dimensions": "50A flanged · face-to-face per JIS B2220",
+      "Rating": "JIS 10K",
+      "Body Material": "Cast iron",
+      "End Connection": "Flanged RF",
+      "Type": "Globe"
+    }
+  },
+  {
+    "impa_code": "812105",
+    "code": "812105",
+    "name": "JIS Cast Iron Globe Valve 10K 100A Flanged",
+    "unit": "PCS",
+    "category": "Valves & Cocks",
+    "rob": 1,
+    "plate_id": "PL-81-21",
+    "plate_no": "PL-81-21",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Valves & Cocks",
+      "Material": "Cast iron body",
+      "Standard": "JIS B2220 / JIS F 7300",
+      "Dimensions": "100A flanged · face-to-face per JIS B2220",
+      "Rating": "JIS 10K",
+      "Body Material": "Cast iron",
+      "End Connection": "Flanged RF",
+      "Type": "Globe"
+    }
+  },
+  {
+    "impa_code": "812204",
+    "code": "812204",
+    "name": "JIS Cast Iron Angle Valve 10K 80A Flanged",
+    "unit": "PCS",
+    "category": "Valves & Cocks",
+    "rob": 2,
+    "plate_id": "PL-81-22",
+    "plate_no": "PL-81-22",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Valves & Cocks",
+      "Material": "Cast iron body",
+      "Standard": "JIS B2220 / JIS F 7300",
+      "Dimensions": "80A flanged · face-to-face per JIS B2220",
+      "Rating": "JIS 10K",
+      "Body Material": "Cast iron",
+      "End Connection": "Flanged RF",
+      "Type": "Angle"
+    }
+  },
+  {
+    "impa_code": "812312",
+    "code": "812312",
+    "name": "Cast Steel Gate Valve 10K 150A Flanged",
+    "unit": "PCS",
+    "category": "Valves & Cocks",
+    "rob": 1,
+    "plate_id": "PL-81-23",
+    "plate_no": "PL-81-23",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Valves & Cocks",
+      "Material": "Cast steel body",
+      "Standard": "JIS B2220 / JIS F 7300",
+      "Dimensions": "150A flanged · face-to-face per JIS B2220",
+      "Rating": "JIS 10K",
+      "Body Material": "Cast steel",
+      "End Connection": "Flanged RF",
+      "Type": "Gate"
+    }
+  },
+  {
+    "impa_code": "812851",
+    "code": "812851",
+    "name": "Bronze Screw-Down Check Valve 16K 25A",
+    "unit": "PCS",
+    "category": "Valves & Cocks",
+    "rob": 3,
+    "plate_id": "PL-81-28",
+    "plate_no": "PL-81-28",
+    "specs": {
+      "IMPA Edition": "7th",
+      "Catalog Section": "Valves & Cocks",
+      "Material": "Bronze body",
+      "Standard": "JIS B2220 / JIS F 7300",
+      "Dimensions": "25A flanged · face-to-face per JIS B2220",
+      "Rating": "JIS 16K",
+      "Body Material": "Bronze",
+      "End Connection": "Flanged RF",
+      "Type": "Check (screw-down)"
     }
   }
 ];

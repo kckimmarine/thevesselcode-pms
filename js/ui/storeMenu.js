@@ -13,10 +13,10 @@ const TVC_StoreMenu = (function () {
     let _plateObjectUrl = null;
     let _plateLoadToken = 0;
     let _publicMode = false;
-    let _categoryFilter = '';
+    let _chapterPrefix = '';
     const STORE_ROW_H = 44;
     const SEARCH_DEBOUNCE_MS = 180;
-    const PUBLIC_SEARCH_DEBOUNCE_MS = 100;
+    const PUBLIC_SEARCH_DEBOUNCE_MS = 150;
 
     function formatNum(n) {
         return Number(n || 0).toLocaleString();
@@ -49,6 +49,7 @@ const TVC_StoreMenu = (function () {
                 <header class="impa-detail-head">
                     <div class="impa-detail-head-main">
                         <span class="impa-detail-badge" id="impaDetailBadge">IMPA</span>
+                        <span class="impa-detail-unit" id="impaDetailUnit"></span>
                         <h2 class="impa-detail-title" id="impaDetailTitle">—</h2>
                     </div>
                     <button type="button" class="impa-detail-close-btn impa-detail-close-float" aria-label="Close">✕</button>
@@ -58,7 +59,7 @@ const TVC_StoreMenu = (function () {
                         <div class="impa-detail-plate-toolbar">
                             <p class="impa-detail-plate-caption" id="impaDetailPlateCaption">Catalog specification plate</p>
                             <button type="button" class="impa-detail-zoom-btn" id="impaDetailZoomBtn" hidden>
-                                🔍 도판 크게보기
+                                🔍 Enlarge plate
                             </button>
                         </div>
                         <div class="impa-detail-plate-viewport" id="impaDetailPlateViewport">
@@ -72,13 +73,14 @@ const TVC_StoreMenu = (function () {
                     <section class="impa-detail-locked-preview hidden" id="impaDetailLockedPreview" aria-label="Enterprise PMS features preview">
                         <h3 class="impa-detail-locked-title">Enterprise PMS Features</h3>
                         <button type="button" class="impa-locked-row" data-lead-trigger="rob">
-                            <span class="impa-locked-label">⚓ Vessel ROB (Stock)</span>
+                            <span class="impa-locked-label">⚓ Vessel ROB (Remaining On Board)</span>
                             <span class="impa-locked-value">🔒 Locked — Available in TVC-PMS</span>
                         </button>
                         <button type="button" class="impa-locked-row" data-lead-trigger="requisition">
                             <span class="impa-locked-label">📋 1-Click Requisition</span>
                             <span class="impa-locked-value">🔒 Locked — Available in TVC-PMS</span>
                         </button>
+                        <p class="impa-detail-conversion-note">🔒 ROB Tracking &amp; 1-Click Requisition available on TVC-PMS</p>
                     </section>
                     <section class="impa-detail-spec-section" aria-label="Technical specifications">
                         <div class="impa-detail-rob-banner" id="impaDetailRobBanner">
@@ -345,7 +347,7 @@ const TVC_StoreMenu = (function () {
         return `
             <div class="impa-plate-loading" role="status" aria-live="polite">
                 <div class="impa-plate-loading-spinner" aria-hidden="true"></div>
-                <p class="impa-plate-loading-text">도판 로딩 중… <span class="impa-plate-loading-id">${id}</span></p>
+                <p class="impa-plate-loading-text">Loading catalog plate… <span class="impa-plate-loading-id">${id}</span></p>
             </div>`;
     }
 
@@ -354,10 +356,10 @@ const TVC_StoreMenu = (function () {
         const id = esc(plateId || '—');
         const name = esc(item.name || 'IMPA Item');
         const offline = reason === 'offline' || (typeof navigator !== 'undefined' && !navigator.onLine);
-        const title = offline ? '도판 다운로드 대기' : '도판을 불러올 수 없음';
+        const title = offline ? 'Plate download pending' : 'Catalog plate unavailable';
         const subtitle = offline
-            ? '오프라인 상태입니다. 네트워크 연결 후 다시 열어 주세요.'
-            : '도판 파일이 아직 캐시되지 않았습니다.';
+            ? 'Offline — plate will load when network is available.'
+            : 'Engineering specification plate not yet cached.';
         return `
             <svg class="impa-plate-placeholder-svg" viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${title}">
                 <rect width="480" height="360" fill="#f0f4f8"/>
@@ -557,11 +559,14 @@ const TVC_StoreMenu = (function () {
 
         const modal = document.getElementById('impaDetailModal');
         const badge = document.getElementById('impaDetailBadge');
+        const unitEl = document.getElementById('impaDetailUnit');
         const title = document.getElementById('impaDetailTitle');
         const specBody = document.getElementById('impaDetailSpecBody');
         const robValue = document.getElementById('impaDetailRobValue');
         const qtyInput = document.getElementById('impaDetailQty');
-        if (badge) badge.textContent = item.impa_code || item.code || 'IMPA';
+        const code = item.impa_code || item.code || '';
+        if (badge) badge.textContent = `[IMPA ${code}]`;
+        if (unitEl) unitEl.textContent = item.unit ? `Unit: ${item.unit}` : '';
         if (title) title.textContent = item.name || '—';
         if (specBody) specBody.innerHTML = specRows(item);
         if (robValue) {
@@ -700,25 +705,34 @@ const TVC_StoreMenu = (function () {
         return '';
     }
 
-    function categoryOptionsHtml() {
-        const cats = typeof TVC_StoreManager.getMemoryCategories === 'function'
-            ? TVC_StoreManager.getMemoryCategories()
-            : [];
-        const opts = cats.map(c =>
-            `<option value="${esc(c)}"${c === _categoryFilter ? ' selected' : ''}>${esc(c)}</option>`).join('');
-        return `<option value="">All categories</option>${opts}`;
+    const CHAPTER_CHIPS = [
+        { prefix: '', label: 'All Chapters' },
+        { prefix: '59', label: 'Ch 59: Safety & Fire Fighting' },
+        { prefix: '81', label: 'Ch 81: Valves & Cocks' },
+        { prefix: '79', label: 'Ch 79: Paints & Chemicals' },
+        { prefix: '61', label: 'Ch 61: Hand Tools' },
+    ];
+
+    function chapterChipsHtml() {
+        return CHAPTER_CHIPS.map(chip => `
+            <button type="button"
+                class="store-chapter-chip${chip.prefix === _chapterPrefix ? ' active' : ''}"
+                data-chapter="${esc(chip.prefix)}"
+                aria-pressed="${chip.prefix === _chapterPrefix ? 'true' : 'false'}">
+                ${esc(chip.label)}
+            </button>`).join('');
     }
 
     function toolbarHtml(search, cartCount) {
         const query = search?.query || '';
         if (_publicMode) {
             return `
+            <div class="store-chapter-chips" role="group" aria-label="IMPA chapter filter">
+                ${chapterChipsHtml()}
+            </div>
             <div class="store-toolbar store-toolbar-public">
-                <input type="search" class="store-search" placeholder="Search IMPA code, description, or category…"
+                <input type="search" class="store-search" placeholder="Search IMPA code (6-digit), description, or keywords…"
                     aria-label="Search catalog" value="${esc(query)}" autocomplete="off" spellcheck="false">
-                <select id="storeCategoryFilter" class="store-category-filter" aria-label="Filter by category">
-                    ${categoryOptionsHtml()}
-                </select>
                 <span class="store-count" id="storeCatalogCount">${countLabel(search)}</span>
             </div>`;
         }
@@ -790,14 +804,17 @@ const TVC_StoreMenu = (function () {
         });
     }
 
-    function applyCategoryFilter(search) {
-        if (!_categoryFilter) return search;
-        const items = (search.items || []).filter(i => i.category === _categoryFilter);
+    function applyChapterFilter(search) {
+        if (!_chapterPrefix) return search;
+        const items = (search.items || []).filter(i => {
+            const code = String(i.impa_code || i.code || '');
+            return code.startsWith(_chapterPrefix);
+        });
         return { ...search, items, matched: items.length };
     }
 
     function paintSearchResults(root, search) {
-        const filtered = _publicMode ? applyCategoryFilter(search) : search;
+        const filtered = _publicMode ? applyChapterFilter(search) : search;
         const countEl = root.querySelector('#storeCatalogCount');
         if (countEl) countEl.textContent = countLabel(filtered);
 
@@ -876,9 +893,16 @@ const TVC_StoreMenu = (function () {
             scheduleSearch(root, q);
         });
 
-        root.querySelector('#storeCategoryFilter')?.addEventListener('change', e => {
-            _categoryFilter = e.target.value || '';
-            paintSearchResults(root, TVC_StoreManager.getLastSearch());
+        root.querySelectorAll('.store-chapter-chip').forEach(btn => {
+            btn.addEventListener('click', () => {
+                _chapterPrefix = btn.dataset.chapter || '';
+                root.querySelectorAll('.store-chapter-chip').forEach(chip => {
+                    const active = chip.dataset.chapter === _chapterPrefix;
+                    chip.classList.toggle('active', active);
+                    chip.setAttribute('aria-pressed', active ? 'true' : 'false');
+                });
+                paintSearchResults(root, TVC_StoreManager.getLastSearch());
+            });
         });
 
         if (!_publicMode) {
@@ -892,13 +916,12 @@ const TVC_StoreMenu = (function () {
 
     function renderCatalog(root, search) {
         const state = search?.items ? search : TVC_StoreManager.getLastSearch();
-        _listState.items = state.items || [];
         const cartCount = _publicMode ? 0 : TVC_StoreManager.getCartCount();
 
         destroyVirtualList();
         root.innerHTML = catalogShellHtml(state, cartCount);
         bindCatalogEvents(root);
-        if (_listState.items.length) mountVirtualList(root);
+        paintSearchResults(root, state);
         if (!_publicMode) updateCartBadge();
     }
 
