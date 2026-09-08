@@ -3,8 +3,77 @@
  * Run: node scripts/test-store-public.mjs
  */
 import { chromium } from '@playwright/test';
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
+import { dirname, join } from 'path';
+import { fileURLToPath } from 'url';
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const FULL_SRC = join(ROOT, 'public/data/impa-full.json');
+const FULL_DEST = join(ROOT, 'data/impa-full.json');
+if (existsSync(FULL_SRC)) {
+  mkdirSync(dirname(FULL_DEST), { recursive: true });
+  copyFileSync(FULL_SRC, FULL_DEST);
+}
 
 const BASE = process.env.TVC_BASE_URL || 'http://127.0.0.1:4317';
+
+async function openImpaCode(page, code) {
+  await page.locator('.store-search').fill(code);
+  await page.waitForTimeout(600);
+  await page.locator(`.store-code-link[data-impa-code="${code}"]`).first().click();
+  await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
+}
+
+async function assertShipservModal(page, code, results, viewportLabel = 'desktop') {
+  await openImpaCode(page, code);
+
+  const badge = await page.locator('#impaDetailBadge').textContent();
+  const desc = await page.locator('#impaDetailProductDesc').textContent();
+  const box = await page.locator('.impa-detail-box').boundingBox();
+  const viewport = page.viewportSize();
+
+  results.push({
+    check: `${code} ${viewportLabel} shipserv layout visible`,
+    ok: await page.locator('#impaDetailShipservLayout').isVisible(),
+  });
+  results.push({
+    check: `${code} ${viewportLabel} code pill`,
+    ok: (badge || '').includes(code),
+    detail: (badge || '').trim(),
+  });
+  results.push({
+    check: `${code} ${viewportLabel} spec table rows`,
+    ok: await page.locator('.impa-shipserv-spec-table tr').count() >= 3,
+  });
+  results.push({
+    check: `${code} ${viewportLabel} description present`,
+    ok: /shipboard/i.test(desc || ''),
+    detail: (desc || '').trim().slice(0, 80),
+  });
+  results.push({
+    check: `${code} ${viewportLabel} modal centered`,
+    ok: !!(box && viewport && box.y >= 8 && box.y + box.height <= viewport.height - 8),
+    detail: box,
+  });
+
+  const scrollInfo = await page.locator('#impaDetailModal .modal-body').evaluate(el => ({
+    scrollHeight: el.scrollHeight,
+    clientHeight: el.clientHeight,
+    overflowY: getComputedStyle(el).overflowY,
+  }));
+  results.push({
+    check: `${code} ${viewportLabel} body scrollable`,
+    ok: scrollInfo.overflowY === 'auto' || scrollInfo.overflowY === 'scroll',
+    detail: scrollInfo,
+  });
+
+  await page.locator('#modalCloseBtn').click();
+  await page.locator('#impaDetailModal').waitFor({ state: 'hidden', timeout: 5_000 });
+  results.push({
+    check: `${code} ${viewportLabel} close dismisses modal`,
+    ok: await page.locator('#impaDetailModal').evaluate(el => el.classList.contains('hidden')),
+  });
+}
 
 async function main() {
   const browser = await chromium.launch({ headless: true });
@@ -54,14 +123,13 @@ async function main() {
     await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
 
     results.push({
-      check: 'locked ROB preview visible',
-      ok: await page.locator('[data-lead-trigger="rob"]').isVisible(),
+      check: 'shipserv layout visible',
+      ok: await page.locator('#impaDetailShipservLayout').isVisible(),
     });
     results.push({
-      check: 'locked requisition preview visible',
-      ok: await page.locator('[data-lead-trigger="requisition"]').isVisible(),
+      check: 'product title in modal body',
+      ok: await page.locator('#impaDetailProductTitle').isVisible(),
     });
-
     results.push({
       check: 'modal conversion footer removed',
       ok: await page.locator('#impaDetailPublicFooter').count() === 0,
@@ -69,6 +137,10 @@ async function main() {
 
     await page.keyboard.press('Escape');
     await page.locator('#impaDetailModal').waitFor({ state: 'hidden', timeout: 5_000 }).catch(() => {});
+
+    await assertShipservModal(page, '232435', results, 'desktop');
+    await page.setViewportSize({ width: 390, height: 844 });
+    await assertShipservModal(page, '232453', results, 'mobile');
 
     // Mobile IMPA detail modal — centered overlay + scrollable body + close btn
     await page.setViewportSize({ width: 390, height: 844 });
@@ -164,25 +236,6 @@ async function main() {
       check: 'catalog still works after tab tour',
       ok: await page.locator('.store-search').isVisible(),
     });
-
-    // Lead modal flow
-    await page.setViewportSize({ width: 1280, height: 800 });
-    await page.locator('.store-code-link').first().click();
-    await page.locator('#impaDetailModal').waitFor({ state: 'visible', timeout: 5_000 });
-    await page.locator('[data-lead-trigger="rob"]').click();
-    await page.locator('#storeLeadModal').waitFor({ state: 'visible', timeout: 5_000 });
-    results.push({
-      check: 'locked field opens lead modal',
-      ok: await page.locator('#storeLeadModal').isVisible(),
-    });
-    await page.locator('.store-lead-close').click({ force: true });
-    results.push({
-      check: 'lead modal closes',
-      ok: await page.locator('#storeLeadModal').evaluate(el => el.classList.contains('hidden')),
-    });
-
-    await page.locator('#modalCloseBtn').click();
-    await page.locator('#impaDetailModal').waitFor({ state: 'hidden', timeout: 5_000 });
 
     await page.setViewportSize({ width: 390, height: 844 });
     results.push({
