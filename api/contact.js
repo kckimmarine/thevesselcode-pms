@@ -145,7 +145,6 @@ async function sendViaGitHubIssue(body) {
         body: {
             title,
             body: buildInquiryText(body),
-            labels: ['contact-inquiry'],
         },
     });
     return { issueNumber: issue.number, issueUrl: issue.html_url };
