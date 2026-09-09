@@ -10,7 +10,8 @@
   ],
   "rewrites": [
     { "source": "/toolkit", "destination": "/toolkit.html" },
-    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html).*)", "destination": "/index.html" }
+    { "source": "/about-contact", "destination": "/about-contact/index.html" },
+    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html|about-contact).*)", "destination": "/index.html" }
   ],
   "headers": [
     {

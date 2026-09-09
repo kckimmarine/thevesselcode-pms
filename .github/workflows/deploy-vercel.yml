@@ -11,6 +11,7 @@ on:
       - 'scripts/smoke-web-demo.mjs'
       - 'index.html'
       - 'toolkit.html'
+      - 'about-contact/**'
       - 'api/**'
       - 'css/**'
       - 'js/**'

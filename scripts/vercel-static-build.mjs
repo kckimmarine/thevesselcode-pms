@@ -13,6 +13,7 @@ const out = join(root, 'dist');
 const STATIC_PATHS = [
   'index.html',
   'toolkit.html',
+  'about-contact',
   'store-public.html',
   'gemini-handoff.html',
   'manifest.json',
