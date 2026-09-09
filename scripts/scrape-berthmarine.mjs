@@ -5,12 +5,13 @@
  * Usage:
  *   node scripts/scrape-berthmarine.mjs --category=11-welfare-items
  *   node scripts/scrape-berthmarine.mjs --category=11-welfare-items --limit=5 --dry-run
+ *   node scripts/scrape-berthmarine.mjs --codes=150821,232435,232448
  *
  * Output:
  *   public/data/berth-import-{category}.json
  *   public/data/plates/berth-{plateKey}.webp  (unique plate images only)
  */
-import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
@@ -24,6 +25,7 @@ const DEFAULT_DELAY_MS = 500;
 function parseArgs(argv) {
   const opts = {
     category: '',
+    codes: [],
     limit: 0,
     dryRun: false,
     delay: Number(process.env.BERTH_SCRAPER_DELAY_MS) || DEFAULT_DELAY_MS,
@@ -31,13 +33,16 @@ function parseArgs(argv) {
   };
   for (const arg of argv) {
     if (arg.startsWith('--category=')) opts.category = arg.slice('--category='.length).trim();
+    else if (arg.startsWith('--codes=')) {
+      opts.codes = arg.slice('--codes='.length).split(',').map(s => s.trim().replace(/\D/g, '')).filter(Boolean);
+    }
     else if (arg.startsWith('--limit=')) opts.limit = Math.max(0, Number(arg.slice('--limit='.length)) || 0);
     else if (arg === '--dry-run') opts.dryRun = true;
     else if (arg === '--skip-download') opts.skipDownload = true;
     else if (arg.startsWith('--delay=')) opts.delay = Math.max(200, Number(arg.slice('--delay='.length)) || DEFAULT_DELAY_MS);
   }
-  if (!opts.category) {
-    console.error('Usage: node scripts/scrape-berthmarine.mjs --category=11-welfare-items [--limit=N] [--dry-run]');
+  if (!opts.category && !opts.codes.length) {
+    console.error('Usage: node scripts/scrape-berthmarine.mjs --category=11-welfare-items OR --codes=150821,232435');
     process.exit(1);
   }
   return opts;
@@ -258,17 +263,74 @@ async function downloadPlateWebp(plate, outDir, dryRun) {
   return outPath;
 }
 
+async function collectCodeProducts(codes, { delay }) {
+  const items = [];
+  for (const raw of codes) {
+    const impa_code = String(raw).replace(/\D/g, '').padStart(6, '0');
+    const product_url = `${BASE}/product/impa-code-${impa_code}/`;
+    await sleep(delay);
+    console.log('FETCH product', impa_code);
+    try {
+      const html = await fetchText(product_url);
+      const imageGuess = `${BASE}/wp-content/uploads/2022/05/${impa_code}.jpg`;
+      items.push(parseProductDetail(html, {
+        impa_code,
+        product_url,
+        image_url: imageGuess,
+        plate_key: impa_code,
+        category: '',
+      }));
+    } catch (err) {
+      console.warn('WARN skip', impa_code, err.message);
+      items.push({
+        impa_code,
+        item_name: `IMPA ${impa_code}`,
+        product_url,
+        error: err.message,
+        skipped: true,
+      });
+    }
+  }
+  return { categoryName: 'IMPA code list', items };
+}
+
+function mergeBerthIndex(items) {
+  const indexPath = join(ROOT, 'public/data/berth-impa-index.json');
+  let payload = { updated_at: '', codes: {} };
+  if (existsSync(indexPath)) {
+    try {
+      payload = JSON.parse(readFileSync(indexPath, 'utf8'));
+      if (!payload.codes) payload.codes = {};
+    } catch { /* rebuild */ }
+  }
+  for (const item of items) {
+    if (item.skipped || !item.plate_key) continue;
+    const webp = join(ROOT, 'public/data/plates', `berth-${item.plate_key}.webp`);
+    if (existsSync(webp)) {
+      payload.codes[item.impa_code] = `berth-${item.plate_key}`;
+    }
+  }
+  payload.updated_at = new Date().toISOString();
+  if (!existsSync(dirname(indexPath))) mkdirSync(dirname(indexPath), { recursive: true });
+  writeFileSync(indexPath, JSON.stringify(payload, null, 2));
+  console.log('WROTE', indexPath, `(${Object.keys(payload.codes).length} codes)`);
+}
+
 async function main() {
   const opts = parseArgs(process.argv.slice(2));
-  const outJson = join(ROOT, 'public/data', `berth-import-${opts.category}.json`);
+  const slug = opts.category || `codes-${opts.codes.slice(0, 3).join('-')}`;
+  const outJson = join(ROOT, 'public/data', `berth-import-${slug}.json`);
   const platesDir = join(ROOT, 'public/data/plates');
 
-  const { categoryName, items } = await collectCategoryProducts(opts.category, opts);
-  const plates = groupPlates(items);
+  const { categoryName, items } = opts.codes.length
+    ? await collectCodeProducts(opts.codes, opts)
+    : await collectCategoryProducts(opts.category, opts);
+  const plates = groupPlates(items.filter(i => !i.skipped && i.image_url));
 
   const payload = {
     source: 'berthmarine.com',
-    category_slug: opts.category,
+    category_slug: opts.category || 'by-codes',
+    impa_codes: opts.codes.length ? opts.codes : undefined,
     category_name: categoryName,
     scraped_at: new Date().toISOString(),
     item_count: items.length,
@@ -296,6 +358,8 @@ async function main() {
       }
     }
   }
+
+  mergeBerthIndex(items.filter(i => !i.skipped));
 
   console.log(`\nBerth Marine scrape complete — ${items.length} items, ${plates.length} unique plates.`);
 }
