@@ -882,6 +882,32 @@ const TVC_StoreMenu = (function () {
             </div>`;
     }
 
+    function catalogTableHtml(hasItems) {
+        const head = `
+                    <div class="store-vl-head" role="row">
+                        <span role="columnheader">IMPA Code</span>
+                        <span role="columnheader">Description</span>
+                        <span role="columnheader">Category</span>
+                        <span class="store-vl-unit-head" role="columnheader">Unit</span>
+                    </div>`;
+        const scroll = `<div id="storeVlScroll" class="store-vl-scroll table-scroll-container" tabindex="0"></div>`;
+        const wrapClass = `store-vl-wrap${_publicMode ? ' store-catalog-wrap' : ''}${hasItems ? '' : ' hidden'}`;
+        if (_publicMode) {
+            return `
+            <div id="catalog-table-wrapper" class="${wrapClass}" role="table" aria-label="IMPA catalog">
+                <div id="storeCatalogHScroll" class="store-catalog-hscroll">
+                    ${head}
+                    ${scroll}
+                </div>
+            </div>`;
+        }
+        return `
+            <div id="catalog-table-wrapper" class="${wrapClass}" role="table" aria-label="IMPA catalog">
+                ${head}
+                ${scroll}
+            </div>`;
+    }
+
     function catalogShellHtml(search, cartCount) {
         const cap = capNoteText(search);
         const hasItems = (search.items || []).length > 0;
@@ -890,15 +916,7 @@ const TVC_StoreMenu = (function () {
             ${toolbarHtml(search, cartCount)}
             <p id="storeCapNote" class="store-cap-note${cap ? '' : ' hidden'}">${esc(cap)}</p>
             <p id="storeEmpty" class="store-empty${hasItems ? ' hidden' : ''}">${emptyMsg}</p>
-            <div id="catalog-table-wrapper" class="store-vl-wrap${hasItems ? '' : ' hidden'}" role="table" aria-label="IMPA catalog">
-                <div class="store-vl-head" role="row">
-                    <span role="columnheader">IMPA Code</span>
-                    <span role="columnheader">Description</span>
-                    <span role="columnheader">Category</span>
-                    <span class="store-vl-unit-head" role="columnheader">Unit</span>
-                </div>
-                <div id="storeVlScroll" class="store-vl-scroll table-scroll-container" tabindex="0"></div>
-            </div>`;
+            ${catalogTableHtml(hasItems)}`;
     }
 
     function destroyVirtualList() {
@@ -910,12 +928,14 @@ const TVC_StoreMenu = (function () {
         const scroll = root.querySelector('#storeVlScroll');
         if (!scroll) return;
         destroyVirtualList();
+        const mobilePublic = _publicMode && window.matchMedia('(max-width: 768px)').matches;
         _virtualList = TVC_VirtualList.mount(scroll, {
             rowHeight: STORE_ROW_H,
             getCount: () => _listState.items.length,
             renderRow: i => (_listState.items[i] ? rowHtml(_listState.items[i]) : ''),
-            overflowX: _publicMode ? 'auto' : 'hidden',
+            overflowX: 'hidden',
             overflowY: 'auto',
+            rowWidth: mobilePublic ? 500 : undefined,
         });
     }
 
@@ -954,8 +974,8 @@ const TVC_StoreMenu = (function () {
         wrap?.classList.remove('hidden');
         _listState.items = items;
         if (_virtualList) {
-            const scroll = root.querySelector('#storeVlScroll');
-            if (scroll) scroll.scrollTop = 0;
+            root.querySelector('#storeVlScroll')?.scrollTo(0, 0);
+            root.querySelector('#storeCatalogHScroll')?.scrollTo(0, 0);
             _virtualList.refresh();
         } else {
             mountVirtualList(root);
@@ -989,7 +1009,50 @@ const TVC_StoreMenu = (function () {
         }, delay);
     }
 
+    function bindCatalogHScroll(root) {
+        if (!_publicMode) return;
+        const hscroll = root.querySelector('#storeCatalogHScroll');
+        const vlScroll = root.querySelector('#storeVlScroll');
+        if (!hscroll || !vlScroll) return;
+
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let touchStartLeft = 0;
+        let tracking = false;
+        let axisLock = null;
+
+        vlScroll.addEventListener('touchstart', (e) => {
+            if (e.touches.length !== 1) return;
+            touchStartX = e.touches[0].clientX;
+            touchStartY = e.touches[0].clientY;
+            touchStartLeft = hscroll.scrollLeft;
+            tracking = true;
+            axisLock = null;
+        }, { passive: true });
+
+        vlScroll.addEventListener('touchmove', (e) => {
+            if (!tracking || e.touches.length !== 1) return;
+            const dx = e.touches[0].clientX - touchStartX;
+            const dy = e.touches[0].clientY - touchStartY;
+            if (!axisLock) {
+                if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+                axisLock = Math.abs(dx) > Math.abs(dy) ? 'x' : 'y';
+            }
+            if (axisLock === 'x') {
+                hscroll.scrollLeft = touchStartLeft - dx;
+            }
+        }, { passive: true });
+
+        const endTouch = () => {
+            tracking = false;
+            axisLock = null;
+        };
+        vlScroll.addEventListener('touchend', endTouch, { passive: true });
+        vlScroll.addEventListener('touchcancel', endTouch, { passive: true });
+    }
+
     function bindCatalogEvents(root) {
+        bindCatalogHScroll(root);
         root.querySelector('#storeVlScroll')?.addEventListener('click', async e => {
             const btn = e.target.closest('.store-code-link');
             if (!btn) return;

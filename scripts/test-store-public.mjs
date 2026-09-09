@@ -273,17 +273,26 @@ async function main() {
       ok: await page.evaluate(() => !document.getElementById('storePullRefresh')),
     });
 
-    const catalogScroll = await page.locator('#catalog-table-wrapper').evaluate((el) => {
+    const catalogScroll = await page.locator('#storeCatalogHScroll').evaluate((el) => {
       const style = getComputedStyle(el);
+      const head = el.querySelector('.store-vl-head');
+      const row = el.querySelector('.store-vl-row');
       return {
         overflowX: style.overflowX,
         scrollWidth: el.scrollWidth,
         clientWidth: el.clientWidth,
+        headWidth: head?.offsetWidth,
+        rowWidth: row?.offsetWidth,
       };
     });
     results.push({
-      check: 'mobile IMPA table wrapper allows horizontal scroll',
+      check: 'mobile IMPA table hscroll allows horizontal scroll',
       ok: catalogScroll.overflowX === 'auto' || catalogScroll.overflowX === 'scroll',
+      detail: catalogScroll,
+    });
+    results.push({
+      check: 'mobile IMPA header and row widths aligned',
+      ok: catalogScroll.headWidth === catalogScroll.rowWidth && catalogScroll.headWidth === 500,
       detail: catalogScroll,
     });
 
