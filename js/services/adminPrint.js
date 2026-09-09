@@ -49,7 +49,7 @@ const TVC_AdminPrint = (function () {
         out = out.replace(/\{\{company\.notes\}\}/g, esc(company.notes || '—'));
         out = out.replace(/\{\{contract\.start_date\}\}/g, esc(contract.start_date || '—'));
         out = out.replace(/\{\{contract\.term_months\}\}/g, esc(contract.term_months ? String(contract.term_months) : '—'));
-        out = out.replace(/\{\{contract\.fee_note\}\}/g, esc(contract.fee_note || '별첨 견적 참조'));
+        out = out.replace(/\{\{contract\.fee_note\}\}/g, esc(contract.fee_note || 'See attached quotation'));
         out = out.replace(/\{\{deploy\.setup_version\}\}/g, esc(deploy.setup_version || '—'));
         out = out.replace(/\{\{vessels_table\}\}/g, data.vessels_table || '');
         return out;

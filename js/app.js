@@ -929,12 +929,12 @@ const TVC_App = (function () {
                     state.spares = await TVC_DB.SparePart.listAll();
                     state._spareImportMsg = `ENGINE ${xls.stats?.spares || state.spares.length} parts loaded`;
                 } else if (xls.error) {
-                    state._spareImportMsg = `Import failed: ${xls.error} — SPARE 탭에서 Import XLS 클릭`;
+                    state._spareImportMsg = `Import failed: ${xls.error} — click Import XLS on the SPARE tab`;
                 } else if (xls.fileProtocol) {
-                    state._spareImportMsg = 'file:// 모드 — SPARE 탭 Import XLS → data/spare-inventory.xls 선택';
+                    state._spareImportMsg = 'file:// mode — SPARE tab Import XLS → select data/spare-inventory.xls';
                 }
             } catch (e) {
-                state._spareImportMsg = `Import failed — SPARE 탭에서 Import XLS 클릭`;
+                state._spareImportMsg = `Import failed — click Import XLS on the SPARE tab`;
             }
         }
 
@@ -1124,7 +1124,7 @@ const TVC_App = (function () {
         const jobLeaks = state.jobs.filter(j => j.department !== dept);
         const compLeaks = state.components.filter(c => c.path?.[0] && c.path[0] !== dept);
         if (jobLeaks.length || compLeaks.length) {
-            console.error(`[TVC] 부서 격리 위반 (${dept}): jobs=${jobLeaks.length}, components=${compLeaks.length}`);
+            console.error(`[TVC] department isolation violation (${dept}): jobs=${jobLeaks.length}, components=${compLeaks.length}`);
         }
     }
 
@@ -1677,7 +1677,7 @@ const TVC_App = (function () {
         host.innerHTML = `
             <div class="captain-dash-head">
                 <span class="captain-dash-title">⚓ Captain Hub — Vessel Overview</span>
-                <span class="captain-dash-sub">Deck / Engine 구역 모니터링</span>
+                <span class="captain-dash-sub">Deck / Engine zone monitoring</span>
             </div>
             <div class="captain-view-tabs" role="tablist" aria-label="Vessel view">
                 <button type="button" class="captain-view-btn${v === 'engine' ? ' active' : ''}" onclick="TVC_App.setCaptainView('engine')">Engine</button>
@@ -6075,7 +6075,7 @@ const TVC_App = (function () {
         if (!state.selectedVesselId) {
             return `
                 <p class="spare-sync-hint">Select a vessel in Fleet first.</p>
-                <p class="spare-sync-note muted">HQ Fleet에서 선박을 선택한 뒤 다시 Export하세요.</p>`;
+                <p class="spare-sync-note muted">Select a vessel in HQ Fleet, then Export again.</p>`;
         }
         let profile;
         try {
@@ -7223,13 +7223,13 @@ const TVC_App = (function () {
                 · <button type="button" class="btn-linkish" onclick="TVC_App.openAdminRegistryHub()">Registry</button></p>
             <div class="admin-deploy-workflow">
                 <div class="admin-deploy-path">
-                    <strong>범용 App Update</strong>
-                    <p class="spare-sync-note muted">기존 pool · 프로그램만 교체 (MR/License 불필요)</p>
+                    <strong>Universal App Update</strong>
+                    <p class="spare-sync-note muted">Existing pool · program-only replace (no MR/License)</p>
                     <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminAppUpdateModal()">Export pool App Update…</button>
                 </div>
                 <div class="admin-deploy-path">
-                    <strong>범용 Setup · 선사용 App Update</strong>
-                    <p class="spare-sync-note muted">신규 선사·선박 → Setup · 선박 추가 → Company App Update + HQ license</p>
+                    <strong>Universal Setup · Company App Update</strong>
+                    <p class="spare-sync-note muted">New company/vessel → Setup · add vessel → Company App Update + HQ license</p>
                     <div class="admin-deploy-path-actions">
                         <button type="button" class="btn btn-sm" onclick="TVC_App.openAdminRegistryHub()">Company &amp; Vessel Registry</button>
                         <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.openAdminDeliverModal()">Deliver files…</button>
@@ -7572,7 +7572,7 @@ const TVC_App = (function () {
         host.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminRegistryModal()" aria-label="Close">×</button>
             <h3 class="spare-sync-title">Company &amp; Vessel Registry</h3>
-            <p class="spare-sync-hint muted">Select · Add · Modify · Delete = <strong>Set inactive</strong> (registry files 유지)</p>
+            <p class="spare-sync-hint muted">Select · Add · Modify · Delete = <strong>Set inactive</strong> (registry files retained)</p>
             ${adminRegistryReferenceHint('all')}
             <label class="spare-sync-note admin-registry-field">Company
                 <div class="admin-registry-row">
@@ -7657,29 +7657,29 @@ const TVC_App = (function () {
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminDeliverModal()">×</button>
             <h3 class="spare-sync-title">Deliver files &amp; license</h3>
-            <p class="spare-sync-hint muted">Registry 등록 후 전달 파일 3종 · 신규 PC는 3–5단계(MR → License → Import) 필요</p>
+            <p class="spare-sync-hint muted">After registry: 3 delivery files · new PC needs steps 3–5 (MR → License → Import)</p>
             <div class="admin-deploy-workflow" style="margin:12px 0">
                 <div class="admin-deploy-path">
-                    <strong>① 범용 Setup</strong>
-                    <p class="spare-sync-note muted">신규 선사·선박 · Registry 확인 후 HQ + Vessel Setup.exe ZIP</p>
+                    <strong>① Universal Setup</strong>
+                    <p class="spare-sync-note muted">New company/vessel · verify Registry → HQ + Vessel Setup.exe ZIP</p>
                     <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminDeliverOpenSetup()">Export Setup handoff…</button>
                 </div>
                 <div class="admin-deploy-path">
-                    <strong>② 범용 App Update</strong>
-                    <p class="spare-sync-note muted">기존 pool · 프로그램만 교체 · MR/License 불필요</p>
+                    <strong>② Universal App Update</strong>
+                    <p class="spare-sync-note muted">Existing pool · program-only replace · no MR/License</p>
                     <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminDeliverOpenPoolUpdate()">Export pool App Update…</button>
                 </div>
                 <div class="admin-deploy-path">
-                    <strong>③ 선사용 App Update</strong>
-                    <p class="spare-sync-note muted">선박 추가 등 · manifest에 <strong>allowedVesselIds</strong> 반영 → HQ license 재발급</p>
+                    <strong>③ Company App Update</strong>
+                    <p class="spare-sync-note muted">Vessel add, etc. · manifest <strong>allowedVesselIds</strong> → reissue HQ license</p>
                     <button type="button" class="btn btn-green btn-sm" onclick="TVC_App.adminDeliverOpenCompanyUpdate()">Export company App Update…</button>
                 </div>
             </div>
-            <h4 class="admin-sop-h" style="margin-top:16px">Steps 3–5 (신규 PC · 선박 추가)</h4>
+            <h4 class="admin-sop-h" style="margin-top:16px">Steps 3–5 (new PC · vessel add)</h4>
             <ol class="admin-sop-ol">
-                <li>고객 PC → Machine Request JSON</li>
+                <li>Customer PC → Machine Request JSON</li>
                 <li>Admin → <strong>Issue seat license</strong> (HQ=Company · Vessel=Company+Vessel)</li>
-                <li>고객 PC → Import seat license · (선사용 App Update 후 HQ license 필수)</li>
+                <li>Customer PC → Import seat license · (HQ license required after Company App Update)</li>
             </ol>
             <div class="modal-actions spare-sync-footer">
                 <button type="button" class="btn btn-green" onclick="TVC_App.adminDeliverOpenSeatLicense()">Issue seat license…</button>
@@ -7775,7 +7775,7 @@ const TVC_App = (function () {
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminPrintRegistryModal()">×</button>
             <h3 class="spare-sync-title">Print Contract Registry</h3>
-            <p class="spare-sync-hint">계약 선사·선박 목록 + Setup / App 버전</p>
+            <p class="spare-sync-hint">Contract companies/vessels + Setup / App version</p>
             <label class="spare-sync-note" style="display:block;margin:12px 0">Company
                 <select class="admin-company-select" style="margin-top:4px"
                     onchange="TVC_App.adminPrintRegistrySetCompany(this.value)">
@@ -8252,7 +8252,7 @@ const TVC_App = (function () {
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminSetupExportModal()">×</button>
             <h3 class="spare-sync-title">Universal Setup.exe</h3>
-            <p class="spare-sync-hint muted">Registry에 등록된 Company / Vessel / SKU에 맞는 범용 Setup.exe를 내보냅니다. 설치 후 <strong>Seat License</strong> Import로 활성화합니다.</p>
+            <p class="spare-sync-hint muted">Export universal Setup.exe for registered Company / Vessel / SKU. Activate via <strong>Seat License</strong> Import after install.</p>
             <p class="spare-sync-note">${sourceNote}</p>
             ${isElectron ? `<p class="spare-sync-note muted" style="margin:4px 0"><button type="button" class="btn-linkish" onclick="TVC_App.adminSetupExportPickFolder()">Choose a different folder…</button></p>` : ''}
             <label class="spare-sync-note" style="display:block;margin:12px 0">Select Company
@@ -8510,11 +8510,11 @@ const TVC_App = (function () {
             : `<span class="muted">Setup folder not found. Run <code>Release</code> or <code>npm run dist</code>, then select the <code>dist</code> folder.</span>`;
         body.innerHTML = `
             <button type="button" class="modal-x" onclick="TVC_App.closeAdminAppUpdateModal()">×</button>
-            <h3 class="spare-sync-title">${isCompanyScope ? '선사용 App Update (allowedVesselIds)' : '범용 App Update (pool)'}</h3>
+            <h3 class="spare-sync-title">${isCompanyScope ? 'Company App Update (allowedVesselIds)' : 'Universal App Update (pool)'}</h3>
             <p class="spare-sync-hint">${isCompanyScope
-                ? '선박 추가 등 Registry 변경 후 · manifest에 active 선박 목록 포함 → <strong>HQ seat license 재발급</strong> 필수'
-                : '기존 pool 선박(이미 TVC-PMS 사용 중): <strong>공용 App Update ZIP</strong> 하나를 전달합니다.'}</p>
-            <p class="spare-sync-note muted">고객 PC: <strong>Data Export &amp; Import → App Update → Import → Install update</strong> · Master / History / IndexedDB 유지</p>
+                ? 'After vessel add / Registry change · manifest includes active vessels → <strong>reissue HQ seat license</strong> required'
+                : 'Existing pool vessels (already on TVC-PMS): deliver one <strong>shared App Update ZIP</strong>.'}</p>
+            <p class="spare-sync-note muted">Customer PC: <strong>Data Export &amp; Import → App Update → Import → Install update</strong> · Master / History / IndexedDB preserved</p>
             ${isCompanyScope ? `
             <label class="spare-sync-note" style="display:block;margin:8px 0">Company
                 <select class="admin-company-select" style="margin-top:4px;width:100%"
@@ -8729,7 +8729,7 @@ const TVC_App = (function () {
         body.innerHTML = `
             <h3 class="spare-sync-title">Release v${esc(version)} — Build &amp; Export</h3>
             <p class="spare-sync-hint">One click: <strong>npm run release</strong> → 4× Setup.exe + App Update ZIP + handoff.txt → export folder.</p>
-            <p class="spare-sync-note muted">A선사: App Update ZIP (data 유지) · B선사: Setup.exe (신규 설치) · 빌드 약 20–40분.</p>
+            <p class="spare-sync-note muted">Company A: App Update ZIP (data preserved) · Company B: Setup.exe (new install) · build takes ~20–40 minutes.</p>
             ${buildWarn}
             ${config?.label ? `<p class="spare-sync-note"><strong>${esc(config.label)}</strong></p>` : ''}
             ${changelog.length ? `<ul class="admin-release-artifacts">${changelog.map(c => `<li>${esc(c)}</li>`).join('')}${changelogMore}</ul>` : ''}
@@ -8756,10 +8756,10 @@ const TVC_App = (function () {
                 onchange="TVC_App.adminReleaseSetRecordDeploy(this.checked)"> Update deploy version in registry after export</label>
             <label class="spare-sync-note admin-release-deploy-detail"${_adminRelease.recordDeploy ? '' : ' hidden'}>
                 <input type="checkbox"${_adminRelease.recordSetup ? ' checked' : ''}${running ? ' disabled' : ''}
-                    onchange="TVC_App.adminReleaseSetRecordSetup(this.checked)"> Record Setup sent (B선사)</label>
+                    onchange="TVC_App.adminReleaseSetRecordSetup(this.checked)"> Record Setup sent (Company B)</label>
             <label class="spare-sync-note admin-release-deploy-detail"${_adminRelease.recordDeploy ? '' : ' hidden'}>
                 <input type="checkbox"${_adminRelease.recordUpdate !== false ? ' checked' : ''}${running ? ' disabled' : ''}
-                    onchange="TVC_App.adminReleaseSetRecordUpdate(this.checked)"> Record App Update (A선사 · all SKUs)</label>
+                    onchange="TVC_App.adminReleaseSetRecordUpdate(this.checked)"> Record App Update (Company A · all SKUs)</label>
             <pre id="adminReleaseLog" class="admin-release-log">${esc(_adminRelease.log || '')}</pre>
             <div class="spare-sync-actions">
                 <button type="button" class="btn btn-green spare-sync-btn" onclick="TVC_App.adminReleaseRun()"
@@ -9023,10 +9023,10 @@ const TVC_App = (function () {
                     <input name="name_en" placeholder="e.g. The Vessel Code" value="${escAttr(company?.name_en || '')}">
                 </label>
                 <label class="span2">Address
-                    <input name="address" placeholder="선사 주소" value="${escAttr(company?.address || '')}">
+                    <input name="address" placeholder="Company address" value="${escAttr(company?.address || '')}">
                 </label>
                 <label>Contact name
-                    <input name="contact_name" placeholder="담당자" value="${escAttr(company?.contact_name || '')}">
+                    <input name="contact_name" placeholder="Contact name" value="${escAttr(company?.contact_name || '')}">
                 </label>
                 <label>Contact email
                     <input name="contact_email" type="email" placeholder="email@…" value="${escAttr(company?.contact_email || '')}">
@@ -9039,7 +9039,7 @@ const TVC_App = (function () {
                         value="${escAttr(company?.contract?.term_months ? String(company.contract.term_months) : '')}">
                 </label>
                 <label class="span2">Fee note
-                    <input name="contract_fee_note" placeholder="별첨 견적 참조" value="${escAttr(company?.contract?.fee_note || '')}">
+                    <input name="contract_fee_note" placeholder="See attached quotation" value="${escAttr(company?.contract?.fee_note || '')}">
                 </label>
                 <label>HQ SKU
                     <input name="hq_sku" value="${escAttr(hqSku)}" placeholder="HQ_OFFICE">
@@ -9832,7 +9832,7 @@ const TVC_App = (function () {
                 <td>${overdue}</td>
                 <td>${due30}</td>
             </tr>
-            <tr><td colspan="5" class="muted hist-empty">최신 기준 Work Plan 집계 — 부서 필터 적용</td></tr>`;
+            <tr><td colspan="5" class="muted hist-empty">Work Plan totals (latest) — department filter applied</td></tr>`;
     }
 
     /** Import & Export History — Work Report / Original Plan / Outstanding Rate 뷰 */
@@ -10161,13 +10161,13 @@ const TVC_App = (function () {
         host.innerHTML = `
             <h3>${isRename ? '✏️ Rename GROUP' : '➕ Add GROUP'}</h3>
             <p class="muted group-editor-hint">${isRename
-                ? '선택한 GROUP 이름을 변경합니다. 해당 GROUP의 모든 작업 항목에 반영됩니다.'
-                : '새 GROUP을 추가합니다. 이후 Append로 작업 항목을 등록할 수 있습니다.'}</p>
+                ? 'Rename the selected GROUP. Applies to all jobs in that GROUP.'
+                : 'Add a new GROUP. Use Append to register jobs afterward.'}</p>
             <form class="orig-job-form" id="groupEditorForm" onsubmit="event.preventDefault();TVC_App.saveGroupEditor()">
                 ${deptField}
                 ${isRename ? `<label class="span2">Current Name<input value="${esc(node?.label || '')}" readonly class="wr-ro"></label>` : ''}
                 <label class="span2">${isRename ? 'New Name' : 'GROUP Name'}
-                    <input name="label" required placeholder="예: 06. AUX BOILER" value="${isRename ? '' : ''}">
+                    <input name="label" required placeholder="e.g. 06. AUX BOILER" value="${isRename ? '' : ''}">
                 </label>
                 <div class="orig-job-actions span2">
                     <button type="button" class="btn" onclick="TVC_App.closeModal('groupEditorModal')">Cancel</button>
@@ -10283,7 +10283,7 @@ const TVC_App = (function () {
 
         if (mod) {
             mod.disabled = !canEdit || (!hasSel && !isOrigJobInlineEditing());
-            mod.title = !canEdit ? tip : ((!hasSel && !isOrigJobInlineEditing()) ? '수정할 행을 선택하세요' : '');
+            mod.title = !canEdit ? tip : ((!hasSel && !isOrigJobInlineEditing()) ? 'Select a row to edit' : '');
         }
         if (app) {
             app.disabled = !canEdit || (isOrigJobInlineEditing() && !canEdit);
@@ -10291,7 +10291,7 @@ const TVC_App = (function () {
         }
         if (del) {
             del.disabled = !canEdit || !hasSel;
-            del.title = !canEdit ? tip : (!hasSel ? '삭제할 행을 선택하세요' : '');
+            del.title = !canEdit ? tip : (!hasSel ? 'Select a row to delete' : '');
         }
         if (pmsEx) {
             pmsEx.disabled = !canMaster;
@@ -11108,7 +11108,7 @@ const TVC_App = (function () {
         const hint = document.getElementById('planUpdatePendingHint');
         if (hint) {
             if (stats.pendingReports > 0) {
-                hint.textContent = `미완료 Work Report ${stats.pendingReports}건 — Cancel 선택 후 Work Plan에서 입력하세요.`;
+                hint.textContent = `Unfinished Work Report(s): ${stats.pendingReports} — select Cancel, then enter in Work Plan.`;
                 hint.classList.remove('hidden');
             } else {
                 hint.textContent = '';
@@ -11146,15 +11146,15 @@ const TVC_App = (function () {
             _planUpdateSnapshot = null;
             // Plan 확정 후 RH Revert 세션 종료 → Update 버튼이 계속 비활성인 상태 해제
             TVC_RunHours.clearRevertAfterPlanLock?.();
-            state._planCalcMsg = `Original Plan Update 확정 (${shipCode}) — Status On ${stats?.statusDate || ''}. 본사 Import 전까지 재변경 불가.`;
+            state._planCalcMsg = `Original Plan Update confirmed (${shipCode}) — Status On ${stats?.statusDate || ''}. Locked until HQ Import.`;
             syncPlanUpdateUi();
             if (state.currentTab === 'menu') renderMainMenu();
         } else {
             await revertPlanUpdateSnapshot();
             const pending = stats?.pendingReports || 0;
             state._planCalcMsg = pending
-                ? `Original Plan Update 취소 — Due Date 원복. 미완료 Work Report ${pending}건을 Work Plan에서 입력하세요.`
-                : 'Original Plan Update 취소 — Run-hour Due Date 변경을 되돌렸습니다.';
+                ? `Original Plan Update cancelled — Due Dates reverted. Enter ${pending} unfinished Work Report(s) in Work Plan.`
+                : 'Original Plan Update cancelled — reverted run-hour Due Date changes.';
             if (pending > 0) {
                 switchTab('actual');
                 setActualFilter('total');
@@ -11298,7 +11298,7 @@ const TVC_App = (function () {
             if (!collapsed) {
             nodes.forEach(n => {
                 const nJobs = n.jobIds?.length || 0;
-                const countTag = `<span class="tree-empty-tag" title="${nJobs ? nJobs + ' jobs' : '작업 항목 없음'}">${nJobs}</span>`;
+                const countTag = `<span class="tree-empty-tag" title="${nJobs ? nJobs + ' jobs' : 'no jobs'}">${nJobs}</span>`;
                 const sel = state.selectedGroupKey === n.key ? ' selected' : '';
                 html += `<div class="tree-node${sel}${nJobs ? '' : ' tree-node-empty'}" onclick="TVC_App.selectGroup('${escAttr(n.key)}')"><span>${esc(n.label)}</span>${countTag}</div>`;
             });
@@ -11838,7 +11838,7 @@ const TVC_App = (function () {
         if (elP) elP.innerHTML = reported.length ? reported.map(r => {
             const rd = reportDept(r);
             const canCf = state.user && TVC_RBAC.canConfirmDepartment(state.user, rd);
-            const dis = canCf ? '' : ' disabled title="타 부서 — Confirm 불가"';
+            const dis = canCf ? '' : ' disabled title="Other department — cannot Confirm"';
             return `<div class="queue-item"><strong>${esc(r.job_code)}</strong> <span class="q-dept">${esc(rd || '')}</span> — ${esc(reporterLabel(r.reporter_name))}
             <button class="btn-sm btn-green"${dis} onclick="TVC_App.doConfirm('${r.id}')">✅ Confirm</button></div>`;
         }).join('') : '<p class="muted">None</p>';
@@ -11895,7 +11895,7 @@ const TVC_App = (function () {
         const n = planContextCheckedJobIds().length;
         const selFilterOn = !!state.actualSelectedOnly;
         const selLabel = selFilterOn ? `Show All (${n})` : `Selected Items${n >= 1 ? ` (${n})` : ''}`;
-        const selTitle = selFilterOn ? '전체 작업 목록 표시' : (n >= 1 ? '선택된 작업만 목록에 표시' : '체크(ㅁ)로 작업을 선택하세요');
+        const selTitle = selFilterOn ? 'Show all jobs' : (n >= 1 ? 'Show selected jobs only' : 'Select jobs with the checkbox');
         const selectedItemsBtn = `<button type="button" id="planSelectedItemsBtn" class="btn btn-sm${selFilterOn ? ' plan-selected-filter-active' : ''}"${!selFilterOn && n < 1 ? ' disabled' : ''} title="${escAttr(selTitle)}" onclick="TVC_App.togglePlanSelectedOnly()">${selLabel}</button>`;
         const job = getPlanFocusJob();
         const noJob = !job;
@@ -13729,7 +13729,7 @@ const TVC_App = (function () {
         const modifyIds = spareActionIds('modify');
         const deleteIds = spareActionIds('delete');
         const tip = 'Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required';
-        const pickTip = '행을 클릭하거나 ㅁ에서 선택하세요';
+        const pickTip = 'Click a row or select with the checkbox';
         const mod = document.getElementById('spareModifyBtn');
         if (mod) {
             const on = canEdit && modifyIds.length === 1;
@@ -13748,7 +13748,7 @@ const TVC_App = (function () {
         if (appendBtn) {
             appendBtn.disabled = !canEdit;
             if (canEdit) appendBtn.removeAttribute('disabled');
-            appendBtn.title = canEdit ? '신규 부품 등록' : tip;
+            appendBtn.title = canEdit ? 'Register new spare part' : tip;
         }
     }
 
@@ -13826,7 +13826,7 @@ const TVC_App = (function () {
         el.classList.remove('hidden');
         el.innerHTML = `<strong>⚠ SPICS Low Stock</strong> — ${alerts.map(a =>
             `${esc(a.partNo)} (${a.stock}/${a.minStock ?? a.standard})`).join(' · ')}
-            <button class="btn-sm" onclick="TVC_App.openSpicsRequisition()">청구서 작성</button>
+            <button class="btn-sm" onclick="TVC_App.openSpicsRequisition()">Create requisition</button>
             <button class="btn-sm" onclick="TVC_App.dismissSpicsAlerts()">Dismiss</button>`;
     }
     function openSpicsRequisition() { TVC_SpareMenu.suggestRequisition(state.spicsAlerts || []); }
@@ -13856,7 +13856,7 @@ const TVC_App = (function () {
             console.error('[WorkProcedure]', err);
             const host = document.getElementById('workProcedureBody');
             if (host) {
-                host.innerHTML = `<p class="muted">Work Procedure 화면을 불러오지 못했습니다.</p>`;
+                host.innerHTML = `<p class="muted">Could not load Work Procedure screen.</p>`;
             }
         }
         showModal('workProcedureModal');
@@ -15968,7 +15968,7 @@ const TVC_App = (function () {
 
     function renderWrJobPick(ro) {
         const job = state.idx?.jobById.get(state._wrJobId);
-        const text = job?.job_code || '— JOB CODE 선택 —';
+        const text = job?.job_code || '— Select JOB CODE —';
         if (ro) return `<input class="wr-ro" value="${esc(job?.job_code || '')}" readonly>`;
         const dis = !wrGroupKeyFromForm();
         return `<div class="spare-consume-meta-pick" id="wrJobPick"><button type="button" class="spare-consume-pick-trigger"${dis ? ' disabled' : ''} onclick="TVC_App.toggleWrJobPick(event)">
@@ -17229,7 +17229,7 @@ const TVC_App = (function () {
             </dl>
             <label><strong>Report / Detail Input</strong></label>
             <textarea id="detailReportInput" rows="4" style="width:100%">${esc(meta.last_report || '')}</textarea>
-            <label><strong>첨부파일</strong></label>
+            <label><strong>Attachments</strong></label>
             <input type="file" id="detailFileInput" multiple onchange="TVC_App.uploadAttachment('${escAttr(job.job_code)}')">
             <ul id="attachmentList">${meta.attachments.map(a => `<li>📎 ${esc(a.name)} (${Math.round(a.size / 1024)}KB)</li>`).join('') || '<li class="muted">None</li>'}</ul>
             <div class="modal-actions">${buildActionButtons(job)}</div>`;
@@ -17250,10 +17250,10 @@ const TVC_App = (function () {
         const canAp = TVC_RBAC.canApproveDepartment(state.user, job.department);
         if (f.showDailyReportSubmit && canJob) h += `<button class="btn btn-green" onclick="TVC_App.doSubmit('${job.id}')">📋 Report (REPORTED)</button>`;
         if (f.showMaintenanceExecute && canJob && canAp) h += `<button class="btn btn-green" onclick="TVC_App.doExecute('${job.id}')">🛠️ Approve & Deduct</button>`;
-        if (f.showMaintenanceExecute && canJob && !canAp) h += `<button class="btn btn-green" disabled title="타 부서 — 승인 불가">🛠️ Approve & Deduct</button>`;
+        if (f.showMaintenanceExecute && canJob && !canAp) h += `<button class="btn btn-green" disabled title="Other department — cannot approve">🛠️ Approve & Deduct</button>`;
         h += `<button class="btn" onclick="TVC_App.saveDetailReport('${job.id}')">💾 Save Detail</button>`;
         h += `<button class="btn" onclick="TVC_App.openProcedureHistory('${job.id}')">📜 Procedure / History</button>`;
-        if (!canJob) h += `<span class="dept-warn">타 부서 항목 — 조작 불가</span>`;
+        if (!canJob) h += `<span class="dept-warn">Other department — read only</span>`;
         return h;
     }
 
@@ -18065,42 +18065,42 @@ const TVC_App = (function () {
     const AI_HELP_GUIDES = [
         {
             id: 'report-workflow',
-            keys: ['레포트', '리포트', 'report', '종류', '작성', '보고서', 'routine', 'incident', 'trouble', 'history', 'pms레포트', 'pms report', 'work report', 'defect', '승인', 'approve', 'make report'],
-            title: '📘 TVC-PMS 보고서 작성 및 확인',
+            keys: ['report', 'routine', 'incident', 'trouble', 'history', 'pms report', 'work report', 'defect', 'approve', 'make report', 'submit', 'confirm'],
+            title: '📘 TVC-PMS reports — create & review',
             steps: [
-                '일반 정비 작성: 상단 [PMS] 탭 → 기기 선택 → 상단 초록색 [Make Report] 버튼 클릭 후 [Save].',
-                '고장/수리 작성: [Make Report] 창 안에서 [☑ Trouble / Defect] 체크박스 선택 (고장 원인 및 지연 시간 입력창 확장).',
-                '작성 내역 확인: 상단 [Report History] 탭에서 이전 보고서 조회 및 승인(Approve).',
+                'Routine maintenance: [PMS] tab → select equipment → green [Make Report] → [Save].',
+                'Trouble / defect: in [Make Report], check [☑ Trouble / Defect] (cause and delay fields expand).',
+                'Review history: [Report History] tab → open prior reports and Approve when ready.',
             ],
         },
         {
             id: 'spare-workflow',
-            keys: ['스페어', '부품', 'spare', '재고', '소모', 'consume', 'requisition', '청구', 'spare parts', '소모 입력', 'consume log'],
-            title: '📦 부품 소모 및 청구',
+            keys: ['spare', 'stock', 'consume', 'requisition', 'spare parts', 'consume log', 'parts'],
+            title: '📦 Spare consumption & requisitions',
             steps: [
-                '소모 입력: [Make Report] 창 하단 부품 목록에서 수량 입력 후 저장 시 재고 자동 차감.',
-                '신규 청구: 상단 [SPARE] 탭 → [New Requisition] 버튼으로 청구서 작성.',
+                'Consumption: enter qty on parts list at bottom of [Make Report] → Save deducts stock automatically.',
+                'New requisition: [SPARE] tab → [New Requisition].',
             ],
         },
         {
             id: 'period-filter',
-            keys: ['달력', '기간', 'period', 'date', 'datepicker', '필터', '날짜'],
-            title: '📅 기간별 조회',
+            keys: ['period', 'date', 'datepicker', 'filter', 'calendar', 'range'],
+            title: '📅 Filter by period',
             steps: [
-                '상단 [Period] 날짜 칸(YYYY-MM-DD) 또는 달력(📅) 아이콘을 눌러 작업 일자 범위 지정.',
+                'Use [Period] date fields (YYYY-MM-DD) or the 📅 icon to set the work-date range.',
             ],
         },
         {
             id: 'sync-transfer',
-            keys: ['동기화', 'sync', 'export', 'import', '내보내기', '가져오기', '전송', 'xfer', 'hq', '선박', 'vessel', 'backup', '복원'],
-            title: '🔄 선박 ↔ HQ 데이터 동기화',
+            keys: ['sync', 'export', 'import', 'transfer', 'xfer', 'hq', 'vessel', 'backup', 'restore'],
+            title: '🔄 Vessel ↔ HQ data sync',
             steps: [
-                '[Menu] 탭 → [Transfer / Export] → 유형 선택 → [Export] 버튼으로 파일 저장.',
-                '[Menu] 탭 → [Import] → 저장한 파일 선택 후 가져오기.',
-                '[Menu] 탭 → [Online Sync] 또는 [Cloud Restore] (HQ Cloud 사용 시).',
+                '[Menu] → [Transfer / Export] → choose type → [Export] to save a file.',
+                '[Menu] → [Import] → select the saved file.',
+                '[Menu] → [Online Sync] or [Cloud Restore] (when HQ Cloud is enabled).',
             ],
         },
-    ];
+    ];;
 
     function aiHelpEl(id) { return document.getElementById(id); }
 
@@ -18134,7 +18134,7 @@ const TVC_App = (function () {
         const chat = aiHelpEl('ai-help-chat');
         if (!chat) return;
         chat.innerHTML = '';
-        appendAiHelpBubble('bot', '안녕하세요! 운영 방법이 궁금하시면 아래 칩을 누르거나 질문을 입력해 주세요. (GitHub 접수 없이 즉시 안내)');
+        appendAiHelpBubble('bot', 'Hello! Tap a chip below or type a question for instant in-app guidance (no GitHub ticket needed).');
     }
 
     function normalizeAiHelpQuery(query) {
@@ -18181,7 +18181,7 @@ const TVC_App = (function () {
     function formatGuideReply(guide) {
         const lines = [guide.title, ''];
         guide.steps.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
-        lines.push('', '다른 주제: [PMS] 보고서 · [SPARE] 부품 · [Period] 기간 · [Menu] Export/Import');
+        lines.push('', 'Other topics: [PMS] reports · [SPARE] parts · [Period] filter · [Menu] Export/Import');
         return lines.join('\n');
     }
 
@@ -18194,12 +18194,12 @@ const TVC_App = (function () {
             appendAiHelpBubble('bot', formatGuideReply(guide));
         } else {
             appendAiHelpBubble('bot', [
-                '관련 가이드를 찾지 못했습니다. 아래 주제 중 하나를 선택해 보세요:',
+                'No matching guide. Try one of these topics:',
                 '• [PMS] → [Make Report] → [Save] → [Report History]',
-                '• [SPARE] → [New Requisition] · [Make Report] 하단 부품 목록',
-                '• [Period] 날짜(YYYY-MM-DD) 또는 📅 아이콘',
+                '• [SPARE] → [New Requisition] · parts list at bottom of [Make Report]',
+                '• [Period] dates (YYYY-MM-DD) or 📅 icon',
                 '',
-                '버그/개선 제안은 "Report Issue / Idea" 탭에서 CEO 검토 대기열로 보내주세요.',
+                'Send bugs and ideas via the "Report Issue / Idea" tab (CEO review queue).',
             ].join('\n'));
         }
         const input = aiHelpEl('ai-help-query');
@@ -18398,7 +18398,7 @@ const TVC_App = (function () {
         const file = photoInput?.files?.[0] || aiHelpReportBlob;
 
         if (!comment && !file) {
-            showAiHelpToast('설명 또는 스크린샷을 입력해 주세요.');
+            showAiHelpToast('Enter a description or attach a screenshot.');
             return;
         }
 
@@ -18438,10 +18438,10 @@ const TVC_App = (function () {
             console.info('[TVC-AI-Help] CEO review queue', data);
             resetAiHelpReportForm();
             closeAiHelp();
-            showAiHelpToast('대표님(공무감독)의 검토 대기열로 안전하게 접수되었습니다.');
+            showAiHelpToast('Submitted to the superintendent review queue.');
         } catch (e) {
             console.error('[TVC-AI-Help] report failed', e);
-            showAiHelpToast('접수에 실패했습니다. 네트워크 또는 서버 설정을 확인해 주세요.');
+            showAiHelpToast('Submission failed. Check network or server settings.');
         } finally {
             if (sendBtn) sendBtn.disabled = false;
         }

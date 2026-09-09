@@ -102,9 +102,9 @@
                     <li><b>Master</b> · captain</li>
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / co</li>
-                    <li><b>HQ</b> · hq (해당 선사 선박만 · Department 불필요)</li>
-                    <li><b>HQ</b> · tvc (HQ Mode SKU · 선사 전체 조회)</li>
-                    <li><b>Admin</b> · tvc (Admin Mode SKU · Department 불필요)</li>
+                    <li><b>HQ</b> · hq (company vessels only · Department not required)</li>
+                    <li><b>HQ</b> · tvc (HQ Mode SKU · all company vessels)</li>
+                    <li><b>Admin</b> · tvc (Admin Mode SKU · Department not required)</li>
                 </ul>
             </div>
         </div>
@@ -626,12 +626,12 @@
         <div id="ai-help-panel-guide" class="ai-help-panel" role="tabpanel">
             <div id="ai-help-chat" class="ai-help-chat" aria-live="polite"></div>
             <div class="ai-help-chips" aria-label="Suggested questions">
-                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('부품 소모 입력법')">부품 소모 입력법</button>
-                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('작업 지시 승인 방법')">작업 지시 승인 방법</button>
-                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('달력/기간 설정')">달력/기간 설정</button>
+                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('How to log spare consumption')">Spare consumption</button>
+                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('How to approve work reports')">Approve work reports</button>
+                <button type="button" class="ai-help-chip" onclick="TVC_App.askAiHelp('Period / date filter')">Period / date filter</button>
             </div>
             <form class="ai-help-input-row" onsubmit="event.preventDefault();TVC_App.submitAiHelpQuery();">
-                <input type="text" id="ai-help-query" class="ai-help-query-input" placeholder="예: Period 필터 사용법" autocomplete="off">
+                <input type="text" id="ai-help-query" class="ai-help-query-input" placeholder="e.g. How to use Period filter" autocomplete="off">
                 <button type="submit" class="btn btn-sm btn-green">Ask</button>
             </form>
         </div>
@@ -639,7 +639,7 @@
         <div id="ai-help-panel-report" class="ai-help-panel hidden" role="tabpanel">
             <label class="ai-help-report-label">
                 <span class="ai-help-report-caption">Issue title (optional)</span>
-                <input type="text" id="ai-help-report-title" class="ai-help-report-title" placeholder="짧은 제목">
+                <input type="text" id="ai-help-report-title" class="ai-help-report-title" placeholder="Short title">
             </label>
             <div class="ai-help-report-photo-wrap">
                 <label class="feedback-photo-label">
@@ -653,7 +653,7 @@
             </div>
             <label class="feedback-comment-label">
                 <span class="feedback-comment-caption">Description</span>
-                <textarea id="ai-help-report-comment" class="feedback-comment" rows="4" placeholder="어떤 점이 어색하거나 개선이 필요한가요?"></textarea>
+                <textarea id="ai-help-report-comment" class="feedback-comment" rows="4" placeholder="What feels awkward or needs improvement?"></textarea>
             </label>
             <div class="ai-help-report-footer">
                 <button type="button" class="btn" onclick="TVC_App.closeAiHelp()">Cancel</button>

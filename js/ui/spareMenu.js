@@ -12326,7 +12326,7 @@ const TVC_SpareMenu = (function () {
             } catch (xlsErr) {
                 const xlsMsg = xlsErr.message || xlsErr.code || '';
                 if (xlsErr.code === 'NOT_FOUND' || /404|fetch|Failed to fetch/i.test(xlsMsg)) {
-                    showImportLoading('XLS 없음 — ENGINE CSV (loadSpareInventory)…');
+                    showImportLoading('No XLS — ENGINE CSV (loadSpareInventory)…');
                     res = await TVC_DB.loadSpareInventory(null, importOpts);
                 } else {
                     throw xlsErr;

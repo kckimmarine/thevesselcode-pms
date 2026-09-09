@@ -76,10 +76,10 @@ const TVC_RBAC = (function () {
     };
 
     const ROLE_LABELS = {
-        SHIP_OFFICER: '사관 (Officer)',
-        SHIP_CAPTAIN: '선장 (Captain)',
-        SHIP_CHIEF: '기관장 (Chief Engineer)',
-        HQ_SUPERVISOR: '본사 공무감독 (HQ)',
+        SHIP_OFFICER: 'Officer',
+        SHIP_CAPTAIN: 'Captain',
+        SHIP_CHIEF: 'Chief Engineer',
+        HQ_SUPERVISOR: 'HQ Superintendent',
         TVC_ADMIN: 'TVC Admin',
     };
 

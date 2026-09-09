@@ -11,12 +11,12 @@ const TVC_Auth = (function () {
         // Deck part
         { id: 'user-officer', username: 'officer', display_name: 'Kim 2/O (Deck Officer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'TVC No1' },
         { id: 'user-co', username: 'co', display_name: 'Park C/O (Chief Officer)', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'TVC No1' },
-        { id: 'user-captain', username: 'captain', display_name: 'Choi Captain (선장)', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'TVC No1' },
+        { id: 'user-captain', username: 'captain', display_name: 'Choi Captain', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'TVC No1' },
         // Engine part
         { id: 'user-engineer', username: 'engineer', display_name: 'Kim 3/E (Engineer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'ENGINE', vessel_id: 'TVC No1' },
         { id: 'user-chief', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'TVC No1' },
         // Head office
-        { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent (본사)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
+        { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
         // Web HQ pilot (thevesselcode.com)
         { id: 'user-dm-hq', username: 'dm_user@thevesselcode.com', display_name: 'TVC HQ (Pilot)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
         // THE VESSEL CODE — Admin Mode (app updates only)

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Smoke test: marketing landing page assets
+ * Smoke test: marketing site shell, routing, and shared header
  * Run: node scripts/test-home-landing.mjs
  */
 import { readFileSync, existsSync } from 'node:fs';
@@ -16,28 +16,49 @@ function check(name, ok, detail = '') {
 }
 
 check('home/index.html exists', existsSync(join(ROOT, 'home/index.html')));
-check('css/home.css exists', existsSync(join(ROOT, 'css/home.css')));
+check('services/index.html exists', existsSync(join(ROOT, 'services/index.html')));
+check('contact-us/index.html exists', existsSync(join(ROOT, 'contact-us/index.html')));
+check('js/marketing-shell.js exists', existsSync(join(ROOT, 'js/marketing-shell.js')));
+check('css/marketing-shell.css exists', existsSync(join(ROOT, 'css/marketing-shell.css')));
 
 const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8'));
-check('host-based root redirect', (vercel.redirects || []).some((r) => r.has?.some((h) => h.value === 'www.thevesselcode.com')));
-
-const html = readFileSync(join(ROOT, 'home/index.html'), 'utf8');
-check('hero slogan', html.includes('Decoding the Engineering, Operations, and Economics'));
-check('services section', html.includes('id="services"'));
-check('five service pillars', html.includes('Owner') && html.includes('Retrofit Project') && html.includes('Strategic Supply'));
-check('toolkit link', html.includes('href="/toolkit"'));
-check('pms link', html.includes('app.thevesselcode.com'));
-check('contact link', html.includes('href="/contact"'));
-check('nav services anchor', html.includes('href="#services"'));
-check('canonical tag', html.includes('https://thevesselcode.com/'));
 const redirects = vercel.redirects || [];
-check('maritime-toolkit redirect', redirects.some((r) => r.source === '/maritime-toolkit/'));
-check('contact redirect', redirects.some((r) => r.source === '/contact/'));
-check('home rewrite', (vercel.rewrites || []).some((r) => r.destination === '/home/index.html'));
+const rewrites = vercel.rewrites || [];
+
+check('home redirect to root', redirects.some((r) => r.source === '/home/' && r.destination === '/'));
+check('about-contact redirect', redirects.some((r) => r.source === '/about-contact/' && r.destination === '/contact-us'));
+check('no / -> /home/ redirect', !redirects.some((r) => r.destination === '/home/'));
+check('marketing root rewrite', rewrites.some((r) => r.source === '/' && r.destination === '/home/index.html'));
+check('services rewrite', rewrites.some((r) => r.destination === '/services/index.html'));
+check('contact-us rewrite', rewrites.some((r) => r.destination === '/contact-us/index.html'));
+
+const home = readFileSync(join(ROOT, 'home/index.html'), 'utf8');
+check('marketing topbar mount', home.includes('id="marketing-topbar"'));
+check('marketing shell script', home.includes('marketing-shell.js'));
+check('hero slogan', home.includes('Decoding the Engineering, Operations, and Economics'));
+check('services link', home.includes('href="/services"'));
+check('contact us link', home.includes('href="/contact-us"'));
+check('no inline services section on home', !home.includes('id="service-superintendent"'));
+check('canonical root', home.includes('https://thevesselcode.com/'));
+
+const services = readFileSync(join(ROOT, 'services/index.html'), 'utf8');
+check('services page pillars', services.includes('Owner') && services.includes('Strategic Supply'));
+check('services active nav', services.includes('data-mkt-active="services"'));
+
+const contact = readFileSync(join(ROOT, 'contact-us/index.html'), 'utf8');
+check('contact us title', contact.includes('Contact Us | THE VESSEL CODE'));
+check('contact form', contact.includes('id="acContactForm"'));
+
+const toolkit = readFileSync(join(ROOT, 'toolkit.html'), 'utf8');
+check('toolkit shared header', toolkit.includes('marketing-topbar'));
+check('toolkit no legacy header', !toolkit.includes('store-public-header'));
+
+const shell = readFileSync(join(ROOT, 'js/marketing-shell.js'), 'utf8');
+check('nav contact us label', shell.includes("label: 'Contact Us'"));
 
 const failed = results.filter((r) => !r.ok);
 if (failed.length) {
-    console.error('\nHome landing tests FAILED');
+    console.error('\nMarketing site tests FAILED');
     process.exit(1);
 }
-console.log('\nHome landing tests passed.');
+console.log('\nMarketing site tests passed.');

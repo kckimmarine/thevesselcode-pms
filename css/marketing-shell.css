@@ -1,0 +1,93 @@
+/* Shared marketing shell — toolkit & contact pages under unified topbar */
+body.mkt-page {
+    margin: 0;
+}
+
+.mkt-site-wrap {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+#marketing-topbar {
+    flex-shrink: 0;
+}
+
+#marketing-topbar .home-topbar {
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+.mkt-site-wrap > .home-shell,
+.mkt-site-wrap > .ac-shell,
+.mkt-site-wrap > .store-public-shell {
+    flex: 1;
+}
+
+/* Toolkit: marketing header + catalog workspace */
+body.mkt-toolkit-page {
+    background: #0f172a;
+    color: #e2e8f0;
+}
+
+body.mkt-toolkit-page .mkt-site-wrap {
+    background: #0f172a;
+}
+
+body.mkt-toolkit-page #marketing-topbar .home-topbar {
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    padding-left: 20px;
+    padding-right: 20px;
+    background: linear-gradient(180deg, rgba(5, 13, 24, 0.98), rgba(5, 13, 24, 0.88));
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+body.mkt-toolkit-page .store-public-shell {
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    padding: 0 16px 24px;
+}
+
+body.mkt-toolkit-page .store-public-toolkit {
+    margin-top: 8px;
+}
+
+body.mkt-toolkit-page .store-public-toolkit-intro {
+    padding: 12px 0 4px;
+}
+
+body.mkt-toolkit-page .store-public-title-inline {
+    margin: 0 0 4px;
+    font-size: 1.35rem;
+}
+
+body.mkt-toolkit-page .store-public-subtitle-inline {
+    margin: 0 0 8px;
+    font-size: 0.9rem;
+    color: #94a3b8;
+}
+
+/* Contact page under marketing shell */
+body.mkt-contact-page.ac-page {
+    background:
+        radial-gradient(ellipse 90% 55% at 15% -5%, rgba(14, 165, 233, 0.1), transparent 55%),
+        linear-gradient(180deg, #050d18 0%, #0c1a2e 100%);
+}
+
+body.mkt-contact-page #marketing-topbar .home-topbar {
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    padding-left: 20px;
+    padding-right: 20px;
+}
+
+body.mkt-contact-page .ac-shell {
+    width: min(100%, 1120px);
+}
+
+body.mkt-contact-page .ac-topbar {
+    display: none;
+}

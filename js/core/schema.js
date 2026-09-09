@@ -390,26 +390,26 @@ const TVC_SpareSchema = (function () {
         const errors = [];
         if (!partial || p.makerPartNo !== undefined) {
             const pn = String(p.makerPartNo || '').trim();
-            if (!pn) errors.push('Part No (Maker Part No)는 필수입니다.');
-            else if (pn.length > 64) errors.push('Part No는 64자 이하여야 합니다.');
-            else if (!/^[A-Za-z0-9._\-\/]+$/.test(pn)) errors.push('Part No는 영문·숫자·._-/ 만 사용 가능합니다.');
+            if (!pn) errors.push('Part No (Maker Part No) is required.');
+            else if (pn.length > 64) errors.push('Part No must be 64 characters or fewer.');
+            else if (!/^[A-Za-z0-9._\-\/]+$/.test(pn)) errors.push('Part No may only use letters, digits, and . _ - /');
         }
         if (!partial || p.name !== undefined) {
             const nm = String(p.name || '').trim();
-            if (!nm) errors.push('Description (Name)은 필수입니다.');
-            else if (nm.length > 200) errors.push('Description은 200자 이하여야 합니다.');
+            if (!nm) errors.push('Description (Name) is required.');
+            else if (nm.length > 200) errors.push('Description must be 200 characters or fewer.');
         }
         const uic = String(p.universalItemCode || p.universalCode || '').trim();
-        if (!partial && !uic) errors.push('UniversalItemCode는 필수입니다.');
+        if (!partial && !uic) errors.push('UniversalItemCode is required.');
         else if (uic && !/^(UNI-[A-Z0-9]{4,12}|U_[A-Z]{2,6}_\d{3,6})$/i.test(uic)) {
-            errors.push('UniversalItemCode 형식: UNI-XXXXXX 또는 U_ENG_001');
+            errors.push('UniversalItemCode format: UNI-XXXXXX or U_ENG_001');
         }
         ['currentStock', 'minStock', 'previousStock'].forEach(k => {
             const v = Number(p[k]);
-            if (isNaN(v) || v < 0 || !Number.isInteger(v)) errors.push(`${k}는 0 이상의 정수여야 합니다.`);
+            if (isNaN(v) || v < 0 || !Number.isInteger(v)) errors.push(`${k} must be an integer ≥ 0.`);
         });
         if (p.price != null && p.price !== '' && (isNaN(Number(p.price)) || Number(p.price) < 0)) {
-            errors.push('Price는 0 이상의 숫자여야 합니다.');
+            errors.push('Price must be a number ≥ 0.');
         }
         if (errors.length) {
             throw Object.assign(new Error(errors.join('\n')), { code: 'VALIDATION', errors });
@@ -1559,7 +1559,7 @@ const TVC_Env = (function () {
         return !isFileProtocol();
     }
     const FILE_HINT =
-        'index.html을 더블클릭(file://)으로 열면 재고 파일 자동 로드가 차단됩니다. ' +
-        'Electron 설치본, START-TVC-PMS.bat, 또는 npm start → http://localhost:3000 으로 실행하세요.';
+        'Opening index.html via file:// blocks automatic inventory loading. ' +
+        'Use the Electron app, START-TVC-PMS.bat, or npm start → http://localhost:3000.';
     return { isFileProtocol, canFetchBundledAssets, isElectronApp, FILE_HINT };
 })();

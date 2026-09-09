@@ -543,7 +543,7 @@ const TVC_SpareMasterExcel = (function () {
             `Vessel: ${vesselId}  ·  SPARE Master — ${department} — Group Headers`,
             'Format shared: Engine · Master · HQ (this DEPARTMENT). Deck uses a separate DECK file.',
             'Live DB snapshot — SPARE GROUP Tree (spare_groups) for this department only. Re-export after UI changes.',
-            'CRITICAL EQUIPMENT = Yes / No. Group에 Yes면 해당 그룹이 Critical로 표시됩니다.',
+            'CRITICAL EQUIPMENT = Yes / No. If Group is Yes, that group is marked Critical.',
         ]);
         ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Parts (ref)', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
             wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
@@ -567,8 +567,8 @@ const TVC_SpareMasterExcel = (function () {
         const wsE = wb.addWorksheet('Equipment Headers', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         addMetaRows(wsE, [
             `Vessel: ${vesselId}  ·  Equipment blocks (GG-EE-III middle segment)`,
-            'EQ No. = EE in Code (01–99, 필수). 노란색 셀 = Import 필수.',
-            'CRITICAL EQUIPMENT = Yes / No (Equipment별).',
+            'EQ No. = EE in Code (01–99, required). Yellow cells = required for Import.',
+            'CRITICAL EQUIPMENT = Yes / No (per Equipment).',
         ]);
         ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
             wsE.getRow(HDR_ROW).getCell(i + 1).value = h;
