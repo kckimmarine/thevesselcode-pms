@@ -55,7 +55,8 @@ check('toolkit shared header', toolkit.includes('marketing-topbar'));
 check('toolkit no legacy header', !toolkit.includes('store-public-header'));
 
 const shell = readFileSync(join(ROOT, 'js/marketing-shell.js'), 'utf8');
-check('nav contact us label', shell.includes("label: 'Contact Us'"));
+check('nav contact us removed from topbar', !shell.includes("label: 'Contact Us'"));
+check('header contact CTA removed', !shell.includes('home-topbar-cta'));
 
 const marketingCss = [
     join(ROOT, 'css/marketing-theme.css'),
