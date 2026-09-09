@@ -31,8 +31,8 @@ async function main() {
       ok: await page.locator('#acInquiryType').isVisible(),
     });
     results.push({
-      check: 'SLA badge visible',
-      ok: /12 business hours/i.test(await page.locator('.ac-sla').textContent() || ''),
+      check: 'SLA badge removed',
+      ok: await page.locator('.ac-sla').count() === 0,
     });
 
     const overflow = await page.evaluate(() => ({

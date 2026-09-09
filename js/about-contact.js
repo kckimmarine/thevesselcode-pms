@@ -1,6 +1,6 @@
 /* THE VESSEL CODE — About & Contact form handler */
 (function () {
-    const CONTACT_EMAIL = atob('a2NraW0ubWFyaW5lQGdtYWlsLmNvbQ==');
+    const CONTACT_EMAIL = 'ktechship@gmail.com';
 
     function qs(sel) {
         return document.querySelector(sel);
