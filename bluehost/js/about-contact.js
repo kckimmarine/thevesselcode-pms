@@ -37,7 +37,16 @@
         return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
     }
 
+    function applyEmbedMode() {
+        try {
+            const embed = new URLSearchParams(window.location.search).get('embed') === '1';
+            if (embed) document.body.classList.add('ac-embed');
+        } catch { /* ignore */ }
+    }
+
     function init() {
+        applyEmbedMode();
+
         const emailLink = qs('#acContactEmail');
         if (emailLink) {
             emailLink.textContent = CONTACT_EMAIL;

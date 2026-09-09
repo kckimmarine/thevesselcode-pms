@@ -34,6 +34,19 @@ body.ac-page {
     line-height: 1.5;
 }
 
+body.ac-page.ac-embed .ac-topbar,
+body.ac-page.ac-embed .ac-footer {
+    display: none;
+}
+
+body.ac-page.ac-embed .ac-shell {
+    padding-top: 12px;
+}
+
+body.ac-page.ac-embed .ac-hero {
+    padding-top: 8px;
+}
+
 .ac-shell {
     width: min(100%, 1120px);
     margin: 0 auto;
