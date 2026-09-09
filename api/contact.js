@@ -184,22 +184,29 @@ async function handler(req, res) {
         }
 
         let delivery = null;
+        let emailDebug = null;
 
-        try {
-            const emailResult = await sendViaResend(body);
-            if (emailResult) {
-                delivery = { method: 'email', ...emailResult };
-            }
-        } catch (emailErr) {
-            console.error('[contact] Resend failed', emailErr.message || emailErr);
-            if (!process.env.GITHUB_TOKEN && !process.env.GH_TOKEN) {
-                throw emailErr;
+        if (!String(process.env.RESEND_API_KEY || '').trim()) {
+            emailDebug = 'RESEND_API_KEY is not set on this deployment.';
+        } else {
+            try {
+                const emailResult = await sendViaResend(body);
+                if (emailResult) {
+                    delivery = { method: 'email', ...emailResult };
+                }
+            } catch (emailErr) {
+                emailDebug = String(emailErr.message || emailErr).slice(0, 500);
+                console.error('[contact] Resend failed', emailDebug);
+                if (!process.env.GITHUB_TOKEN && !process.env.GH_TOKEN) {
+                    throw emailErr;
+                }
             }
         }
 
         if (!delivery) {
             const issueResult = await sendViaGitHubIssue(body);
             delivery = { method: 'github', ...issueResult };
+            if (emailDebug) delivery.emailDebug = emailDebug;
         }
 
         console.info('[contact] delivered via', delivery.method, delivery.id || delivery.issueNumber);
