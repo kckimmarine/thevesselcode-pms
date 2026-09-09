@@ -87,3 +87,27 @@ body.mkt-contact-page .ac-shell {
 body.mkt-contact-page .ac-topbar {
     display: none;
 }
+
+/* Shared marketing footer — matches Home page */
+#marketing-footer {
+    flex-shrink: 0;
+}
+
+body.mkt-toolkit-page #marketing-footer {
+    width: min(100%, 1180px);
+    margin: 0 auto;
+    padding: 0 16px 24px;
+}
+
+body.mkt-toolkit-page #marketing-footer .home-footer {
+    margin-top: 24px;
+    border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+@media (max-width: 767px) {
+    #marketing-footer .home-footer {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+}
