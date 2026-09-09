@@ -3,4 +3,4 @@ Allow: /store/
 Allow: /toolkit
 Allow: /about-contact/
 
-Sitemap: https://app.thevesselcode.com/sitemap.xml
+Sitemap: https://thevesselcode.com/sitemap.xml

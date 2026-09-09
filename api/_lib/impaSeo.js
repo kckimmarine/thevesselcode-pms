@@ -22,7 +22,7 @@ let _indexCache = null;
 function storeSeoOrigin() {
     const fromEnv = String(process.env.STORE_SEO_ORIGIN || '').trim();
     if (fromEnv) return fromEnv.replace(/\/$/, '');
-    return 'https://app.thevesselcode.com';
+    return 'https://thevesselcode.com';
 }
 
 function escapeHtml(value) {

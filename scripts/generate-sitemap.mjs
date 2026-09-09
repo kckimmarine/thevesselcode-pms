@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 const root = process.cwd();
 const URLS_PER_SITEMAP = 10_000;
-const origin = String(process.env.STORE_SEO_ORIGIN || 'https://app.thevesselcode.com').replace(/\/$/, '');
+const origin = String(process.env.STORE_SEO_ORIGIN || 'https://thevesselcode.com').replace(/\/$/, '');
 
 const indexPath = join(root, 'api', '_data', 'impa-seo-index.json');
 const fallbackPath = join(root, 'public', 'data', 'impa-seo-index.json');
