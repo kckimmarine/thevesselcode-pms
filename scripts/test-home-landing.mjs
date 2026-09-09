@@ -57,6 +57,16 @@ check('toolkit no legacy header', !toolkit.includes('store-public-header'));
 const shell = readFileSync(join(ROOT, 'js/marketing-shell.js'), 'utf8');
 check('nav contact us label', shell.includes("label: 'Contact Us'"));
 
+const marketingCss = [
+    join(ROOT, 'css/marketing-theme.css'),
+    join(ROOT, 'home/index.html'),
+    join(ROOT, 'services/index.html'),
+    join(ROOT, 'contact-us/index.html'),
+].map((p) => readFileSync(p, 'utf8')).join('\n');
+check('no unsplash on marketing pages', !/unsplash\.com/i.test(marketingCss));
+check('marketing theme css exists', existsSync(join(ROOT, 'css/marketing-theme.css')));
+check('no marketing-photography css', !existsSync(join(ROOT, 'css/marketing-photography.css')));
+
 check('build skips dist/index.html', !existsSync(join(ROOT, 'dist/index.html')));
 check('build outputs pms app shell', existsSync(join(ROOT, 'dist/app.html')));
 check('build outputs marketing home', existsSync(join(ROOT, 'dist/home/index.html')));
