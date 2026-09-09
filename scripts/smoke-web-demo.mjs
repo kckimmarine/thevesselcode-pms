@@ -10,7 +10,6 @@ const mustExist = [
   'store-public.html',
   'js/store-public-boot.js',
   'js/ui/maritimeToolkit.js',
-  'js/ui/storePublicLead.js',
   'css/store-public.css',
   'vercel.json',
   'js/config.js',

@@ -94,6 +94,23 @@ async function main() {
     });
 
     results.push({
+      check: 'About & Contact header button present',
+      ok: await page.locator('.btn-header-contact').isVisible(),
+    });
+
+    const contactHref = await page.locator('.btn-header-contact').getAttribute('href');
+    results.push({
+      check: 'About & Contact links to contact section',
+      ok: contactHref === 'https://thevesselcode.com/#contact',
+      detail: contactHref,
+    });
+
+    results.push({
+      check: 'lead capture modal removed',
+      ok: await page.locator('#storeLeadModal').count() === 0,
+    });
+
+    results.push({
       check: 'five utility tab chips',
       ok: await page.locator('[data-tool-tab]').count() === 5,
     });

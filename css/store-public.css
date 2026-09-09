@@ -60,6 +60,36 @@ html:has(.store-public-body) {
     line-height: 1.35;
 }
 
+.store-public-header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.btn-header-contact {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 14px;
+    border: 1px solid rgba(144, 205, 244, 0.65);
+    border-radius: 999px;
+    background: transparent;
+    color: #fff;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+    transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.btn-header-contact:hover,
+.btn-header-contact:focus-visible {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: #90cdf4;
+    color: #fff;
+    outline: none;
+}
+
 .store-public-site-link {
     color: #90cdf4;
     font-size: 0.875rem;
@@ -429,141 +459,6 @@ body.store-pull-active.store-pull-refreshing .store-public-panel {
     text-decoration: underline;
 }
 
-/* Lead-gen modal */
-.store-lead-modal {
-    z-index: 100001;
-    align-items: center;
-    justify-content: center;
-    padding: 16px;
-}
-
-.impa-detail-modal.impa-detail-modal-behind {
-    visibility: hidden;
-    pointer-events: none;
-}
-
-.store-lead-box {
-    position: relative;
-    width: min(100%, 440px);
-    max-height: min(92dvh, 720px);
-    overflow-y: auto;
-    padding: 20px 20px 18px;
-    border: 2px solid #1a365d;
-    border-radius: 14px;
-    background: #fff;
-    box-shadow: 0 20px 56px rgba(26, 54, 93, 0.28);
-}
-
-.store-lead-close {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 40px;
-    height: 40px;
-    border: none;
-    border-radius: 8px;
-    background: #edf2f7;
-    color: #1a365d;
-    font-size: 1.25rem;
-    font-weight: 700;
-    cursor: pointer;
-}
-
-.store-lead-head {
-    padding-right: 36px;
-    margin-bottom: 16px;
-}
-
-.store-lead-badge {
-    display: inline-block;
-    margin-bottom: 8px;
-    padding: 4px 10px;
-    border-radius: 999px;
-    background: #ebf8ff;
-    color: #2b6cb0;
-    font-size: 0.6875rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.store-lead-title {
-    margin: 0;
-    font-size: 1.25rem;
-    color: #1a365d;
-}
-
-.store-lead-subtitle {
-    margin: 8px 0 0;
-    font-size: 0.875rem;
-    line-height: 1.45;
-    color: #4a5568;
-}
-
-.store-lead-form {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.store-lead-field {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    font-size: 0.8125rem;
-    font-weight: 600;
-    color: #4a5568;
-}
-
-.store-lead-field input,
-.store-lead-field select {
-    padding: 10px 12px;
-    border: 1px solid #cbd5e0;
-    border-radius: 8px;
-    font-size: 0.9375rem;
-    font-family: inherit;
-}
-
-.store-lead-field input:focus,
-.store-lead-field select:focus {
-    outline: 2px solid #3182ce;
-    outline-offset: 1px;
-}
-
-.store-lead-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 4px;
-}
-
-.store-lead-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    padding: 12px 14px;
-    border-radius: 10px;
-    font-size: 0.875rem;
-    font-weight: 700;
-    text-align: center;
-    text-decoration: none;
-    cursor: pointer;
-    border: none;
-    font-family: inherit;
-}
-
-.store-lead-btn-primary {
-    background: linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%);
-    color: #fff;
-}
-
-.store-lead-btn-secondary {
-    background: #fff;
-    color: #1a365d;
-    border: 2px solid #2b6cb0;
-}
-
 .store-public-mode .store-toolbar-public .store-search {
     min-width: 220px;
 }
@@ -590,6 +485,15 @@ body.store-pull-active.store-pull-refreshing .store-public-panel {
 @media (max-width: 640px) {
     .store-public-header {
         padding: 12px 14px;
+    }
+
+    .store-public-header-actions {
+        gap: 8px;
+    }
+
+    .btn-header-contact {
+        padding: 5px 10px;
+        font-size: 0.75rem;
     }
 
     .store-public-title {
