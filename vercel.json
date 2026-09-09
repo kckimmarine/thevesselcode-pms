@@ -11,8 +11,14 @@
   "rewrites": [
     { "source": "/toolkit", "destination": "/toolkit.html" },
     { "source": "/about-contact", "destination": "/about-contact/index.html" },
-    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html|about-contact).*)", "destination": "/index.html" }
+    { "source": "/store/:code", "destination": "/api/store/:code" },
+    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html|about-contact|store|sitemap|robots\\.txt).*)", "destination": "/index.html" }
   ],
+  "functions": {
+    "api/store/[code].js": {
+      "includeFiles": "api/_data/impa-seo-index.json"
+    }
+  },
   "headers": [
     {
       "source": "/(.*)",

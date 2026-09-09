@@ -9,6 +9,8 @@
     "export-pms-master-sample": "node scripts/export-pms-master-sample.mjs",
     "export-spare-master-sample": "node scripts/export-spare-master-sample.mjs",
     "build": "node scripts/vercel-static-build.mjs",
+    "generate:impa-seo": "node scripts/generate-impa-seo-index.mjs && node scripts/generate-sitemap.mjs",
+    "test:store-seo": "node scripts/test-store-seo.mjs",
     "deploy:bluehost": "node scripts/deploy-bluehost.mjs",
     "serve": "npx --yes serve . -p 3000",
     "start": "npx --yes serve . -p 3000",

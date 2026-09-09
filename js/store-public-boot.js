@@ -26,6 +26,21 @@
         }
 
         await TVC_StoreMenu.render();
+
+        const impaCode = new URLSearchParams(window.location.search).get('impa');
+        if (impaCode) {
+            try {
+                const item = await TVC_StoreManager.getItemByCode(impaCode);
+                if (item) {
+                    if (typeof TVC_MaritimeToolkit !== 'undefined') {
+                        TVC_MaritimeToolkit.setActiveTool('catalog');
+                    }
+                    TVC_StoreMenu.openImpaDetailModal(item);
+                }
+            } catch (err) {
+                console.warn('[store-public] impa deep link', err);
+            }
+        }
     }
 
     if (document.readyState === 'loading') {
