@@ -1,6 +1,7 @@
 /**
- * THE VESSEL CODE — shared marketing topbar (Home, Services, Toolkit, TVC-PMS).
- * Mount: <div id="marketing-topbar"></div> + body[data-mkt-active="home|services|toolkit|contact"]
+ * THE VESSEL CODE — shared marketing topbar + footer (Home, Services, Toolkit, TVC-PMS).
+ * Mount: <div id="marketing-topbar"></div> + <div id="marketing-footer"></div>
+ *        + body[data-mkt-active="home|services|toolkit|contact"]
  */
 (function () {
     'use strict';
@@ -10,6 +11,14 @@
         { id: 'services', href: '/services', label: 'Services' },
         { id: 'toolkit', href: '/toolkit', label: 'Maritime Toolkit' },
         { id: 'pms', href: 'https://app.thevesselcode.com', label: 'TVC-PMS', external: true },
+    ];
+
+    const FOOTER_LINKS = [
+        { href: '/', label: 'Home' },
+        { href: '/services', label: 'Services' },
+        { href: '/toolkit', label: 'Toolkit' },
+        { href: 'https://app.thevesselcode.com', label: 'PMS', external: true },
+        { href: '/contact-us', label: 'Contact' },
     ];
 
     const LOGO = '/icons/company-logo.png?v=20260804-logo-no-ring';
@@ -36,11 +45,27 @@
         </header>`;
     }
 
+    function renderFooter() {
+        const links = FOOTER_LINKS.map((item) => {
+            const ext = item.external ? ' target="_blank" rel="noopener noreferrer"' : '';
+            return `<a href="${item.href}"${ext}>${item.label}</a>`;
+        }).join(' ·\n                ');
+
+        return `
+        <footer class="home-footer">
+            <span>© 2026 THE VESSEL CODE (K-TECH) · Busan, Republic of Korea</span>
+            <span>
+                ${links}
+            </span>
+        </footer>`;
+    }
+
     function mount() {
-        const mountEl = document.getElementById('marketing-topbar');
-        if (!mountEl) return;
         const active = document.body.getAttribute('data-mkt-active') || '';
-        mountEl.innerHTML = renderTopbar(active);
+        const topbarEl = document.getElementById('marketing-topbar');
+        if (topbarEl) topbarEl.innerHTML = renderTopbar(active);
+        const footerEl = document.getElementById('marketing-footer');
+        if (footerEl) footerEl.innerHTML = renderFooter();
     }
 
     if (document.readyState === 'loading') {

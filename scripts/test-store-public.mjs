@@ -138,7 +138,7 @@ async function main() {
 
     results.push({
       check: 'footer copyright visible',
-      ok: /THE VESSEL CODE/i.test(await page.locator('.store-public-footer').textContent() || ''),
+      ok: /THE VESSEL CODE/i.test(await page.locator('.home-footer').textContent() || ''),
     });
 
     await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
@@ -263,7 +263,7 @@ async function main() {
     await page.setViewportSize({ width: 390, height: 844 });
     results.push({
       check: 'mobile footer visible without banner obstruction',
-      ok: await page.locator('.store-public-footer').isVisible()
+      ok: await page.locator('.home-footer').isVisible()
         && await page.locator('#toolkitConversionBanner').count() === 0
         && await page.locator('#storePublicFab').count() === 0,
     });
