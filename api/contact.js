@@ -42,10 +42,9 @@ function contactRecipients() {
     if (fromEnv) {
         return fromEnv.split(',').map(s => s.trim()).filter(Boolean);
     }
-    return [
-        'ktechship@gmail.com',
-        ['kckim', 'marine', 'gmail', 'com'].join('.').replace('.marine.', '.marine@'),
-    ];
+    // Default inbox until thevesselcode.com is verified in Resend.
+    // With onboarding@resend.dev, Resend only allows the account signup email.
+    return ['ktechship@gmail.com'];
 }
 
 function contactFromAddress() {
