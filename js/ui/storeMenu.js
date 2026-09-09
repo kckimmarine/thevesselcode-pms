@@ -573,7 +573,7 @@ const TVC_StoreMenu = (function () {
                 <circle cx="160" cy="92" r="28" fill="#e2e8f0"/>
                 <path d="M148 92 L160 104 L172 92" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linecap="round"/>
                 <rect x="146" y="104" width="28" height="20" rx="3" fill="none" stroke="#64748b" stroke-width="2"/>
-                <text x="160" y="150" text-anchor="middle" fill="#475569" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="600">No product photo</text>
+                <text x="160" y="150" text-anchor="middle" fill="#475569" font-family="ui-sans-serif,system-ui" font-size="12" font-weight="600">No product photo available</text>
                 <text x="160" y="170" text-anchor="middle" fill="#64748b" font-family="ui-monospace,monospace" font-size="11">IMPA ${code}</text>
                 <text x="160" y="188" text-anchor="middle" fill="#94a3b8" font-family="ui-sans-serif,system-ui" font-size="10">${name}</text>
             </svg>`;

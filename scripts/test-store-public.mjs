@@ -37,6 +37,14 @@ async function assertShipservModal(page, code, results, viewportLabel = 'desktop
     ok: await page.locator('#impaDetailShipservLayout').isVisible(),
   });
   results.push({
+    check: `${code} ${viewportLabel} legacy plate section hidden`,
+    ok: !(await page.locator('.impa-detail-plate-section').isVisible()),
+  });
+  results.push({
+    check: `${code} ${viewportLabel} product photo container visible`,
+    ok: await page.locator('#impaDetailProductPhoto').isVisible(),
+  });
+  results.push({
     check: `${code} ${viewportLabel} code pill`,
     ok: (badge || '').includes(code),
     detail: (badge || '').trim(),
@@ -94,13 +102,13 @@ async function main() {
     });
 
     results.push({
-      check: 'About & Contact header button present',
-      ok: await page.locator('.btn-header-contact').isVisible(),
+      check: 'Contact Us header button present',
+      ok: await page.locator('.home-topbar-cta').isVisible(),
     });
 
-    const contactHref = await page.locator('.btn-header-contact').getAttribute('href');
+    const contactHref = await page.locator('.home-topbar-cta').getAttribute('href');
     results.push({
-      check: 'About & Contact links to contact section',
+      check: 'Contact Us links to contact page',
       ok: contactHref === '/contact-us' || contactHref === '/contact' || contactHref === 'https://thevesselcode.com/contact-us',
       detail: contactHref,
     });
