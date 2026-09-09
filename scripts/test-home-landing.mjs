@@ -33,12 +33,13 @@ check('marketing host root rewrite', rewrites.some((r) => r.source === '/' && r.
 check('services rewrite', rewrites.some((r) => r.destination === '/services/index.html'));
 check('contact-us rewrite', rewrites.some((r) => r.destination === '/contact-us/index.html'));
 
+const shell = readFileSync(join(ROOT, 'js/marketing-shell.js'), 'utf8');
 const home = readFileSync(join(ROOT, 'home/index.html'), 'utf8');
 check('marketing topbar mount', home.includes('id="marketing-topbar"'));
 check('marketing shell script', home.includes('marketing-shell.js'));
 check('hero slogan', home.includes('Decoding the Engineering, Operations, and Economics'));
-check('services link', home.includes('href="/services"'));
-check('contact us link', home.includes('href="/contact-us"'));
+check('services link in marketing shell', shell.includes("href: '/services'"));
+check('contact us link in marketing footer', shell.includes("href: '/contact-us'"));
 check('no inline services section on home', !home.includes('id="service-superintendent"'));
 check('canonical root', home.includes('https://thevesselcode.com/'));
 
@@ -54,7 +55,6 @@ const toolkit = readFileSync(join(ROOT, 'toolkit.html'), 'utf8');
 check('toolkit shared header', toolkit.includes('marketing-topbar'));
 check('toolkit no legacy header', !toolkit.includes('store-public-header'));
 
-const shell = readFileSync(join(ROOT, 'js/marketing-shell.js'), 'utf8');
 check('nav contact us removed from topbar', !shell.includes("label: 'Contact Us'"));
 check('header contact CTA removed', !shell.includes('home-topbar-cta'));
 
