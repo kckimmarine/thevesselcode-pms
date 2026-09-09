@@ -17,15 +17,15 @@ function check(name, ok, detail = '') {
 
 check('home/index.html exists', existsSync(join(ROOT, 'home/index.html')));
 check('css/home.css exists', existsSync(join(ROOT, 'css/home.css')));
-check('middleware.js exists', existsSync(join(ROOT, 'middleware.js')));
+
+const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8'));
+check('host-based root rewrite', (vercel.rewrites || []).some((r) => r.has?.some((h) => h.value === 'www.thevesselcode.com')));
 
 const html = readFileSync(join(ROOT, 'home/index.html'), 'utf8');
 check('hero title', html.includes('Offline-first'));
 check('toolkit link', html.includes('href="/toolkit"'));
 check('contact link', html.includes('href="/contact"'));
 check('canonical tag', html.includes('https://thevesselcode.com/'));
-
-const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8'));
 const redirects = vercel.redirects || [];
 check('maritime-toolkit redirect', redirects.some((r) => r.source === '/maritime-toolkit/'));
 check('contact redirect', redirects.some((r) => r.source === '/contact/'));

@@ -19,6 +19,16 @@
     { "source": "/contact/", "destination": "/about-contact", "permanent": true }
   ],
   "rewrites": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "thevesselcode.com" }],
+      "destination": "/home/index.html"
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.thevesselcode.com" }],
+      "destination": "/home/index.html"
+    },
     { "source": "/home", "destination": "/home/index.html" },
     { "source": "/toolkit", "destination": "/toolkit.html" },
     { "source": "/about-contact", "destination": "/about-contact/index.html" },
