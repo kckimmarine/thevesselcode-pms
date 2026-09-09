@@ -5,6 +5,18 @@
   "buildCommand": "node scripts/vercel-static-build.mjs",
   "outputDirectory": "dist",
   "redirects": [
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "thevesselcode.com" }],
+      "destination": "/home/",
+      "permanent": false
+    },
+    {
+      "source": "/",
+      "has": [{ "type": "host", "value": "www.thevesselcode.com" }],
+      "destination": "/home/",
+      "permanent": false
+    },
     { "source": "/store-public.html", "destination": "/toolkit", "permanent": true },
     { "source": "/store-public", "destination": "/toolkit", "permanent": true },
     { "source": "/maritime-toolkit", "destination": "/toolkit", "permanent": true },
@@ -19,21 +31,11 @@
     { "source": "/contact/", "destination": "/about-contact", "permanent": true }
   ],
   "rewrites": [
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "thevesselcode.com" }],
-      "destination": "/home/index.html"
-    },
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "www.thevesselcode.com" }],
-      "destination": "/home/index.html"
-    },
     { "source": "/home", "destination": "/home/index.html" },
     { "source": "/toolkit", "destination": "/toolkit.html" },
     { "source": "/about-contact", "destination": "/about-contact/index.html" },
     { "source": "/store/:code", "destination": "/api/store/:code" },
-    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html|about-contact|home|store|sitemap|robots\\.txt).*)", "destination": "/index.html" }
+    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html|about-contact|home|store|sitemap|robots\\.txt).+)", "destination": "/index.html" }
   ],
   "functions": {
     "api/store/[code].js": {

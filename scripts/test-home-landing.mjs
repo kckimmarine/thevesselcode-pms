@@ -19,7 +19,7 @@ check('home/index.html exists', existsSync(join(ROOT, 'home/index.html')));
 check('css/home.css exists', existsSync(join(ROOT, 'css/home.css')));
 
 const vercel = JSON.parse(readFileSync(join(ROOT, 'vercel.json'), 'utf8'));
-check('host-based root rewrite', (vercel.rewrites || []).some((r) => r.has?.some((h) => h.value === 'www.thevesselcode.com')));
+check('host-based root redirect', (vercel.redirects || []).some((r) => r.has?.some((h) => h.value === 'www.thevesselcode.com')));
 
 const html = readFileSync(join(ROOT, 'home/index.html'), 'utf8');
 check('hero title', html.includes('Offline-first'));
