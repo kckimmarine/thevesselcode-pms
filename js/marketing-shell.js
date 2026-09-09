@@ -1,5 +1,5 @@
 /**
- * THE VESSEL CODE — shared marketing topbar + footer (Home, Services, Toolkit, Contact Us).
+ * THE VESSEL CODE — shared marketing topbar + footer (Home, Services, Toolkit, TVC-PMS).
  * Mount: <div id="marketing-topbar"></div> + <div id="marketing-footer"></div>
  *        + body[data-mkt-active="home|services|toolkit|contact"]
  */
@@ -11,7 +11,6 @@
         { id: 'services', href: '/services', label: 'Services' },
         { id: 'toolkit', href: '/toolkit', label: 'Maritime Toolkit' },
         { id: 'pms', href: 'https://app.thevesselcode.com', label: 'TVC-PMS', external: true },
-        { id: 'contact', href: '/contact-us', label: 'Contact Us' },
     ];
 
     const FOOTER_LINKS = [
@@ -43,7 +42,6 @@
             <nav class="home-topnav" aria-label="Primary">
                 ${nav}
             </nav>
-            <a class="home-btn home-btn-ghost home-topbar-cta" href="/contact-us">Contact</a>
         </header>`;
     }
 

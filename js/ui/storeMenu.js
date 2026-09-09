@@ -914,7 +914,7 @@ const TVC_StoreMenu = (function () {
             rowHeight: STORE_ROW_H,
             getCount: () => _listState.items.length,
             renderRow: i => (_listState.items[i] ? rowHtml(_listState.items[i]) : ''),
-            overflowX: 'hidden',
+            overflowX: _publicMode ? 'auto' : 'hidden',
             overflowY: 'auto',
         });
     }

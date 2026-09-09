@@ -102,15 +102,13 @@ async function main() {
     });
 
     results.push({
-      check: 'Contact Us header button present',
-      ok: await page.locator('.home-topbar-cta').isVisible(),
+      check: 'header Contact CTA removed',
+      ok: await page.locator('.home-topbar-cta').count() === 0,
     });
 
-    const contactHref = await page.locator('.home-topbar-cta').getAttribute('href');
     results.push({
-      check: 'Contact Us links to contact page',
-      ok: contactHref === '/contact-us' || contactHref === '/contact' || contactHref === 'https://thevesselcode.com/contact-us',
-      detail: contactHref,
+      check: 'nav Contact Us link removed',
+      ok: await page.locator('.home-topnav a[data-nav="contact"]').count() === 0,
     });
 
     results.push({
@@ -140,7 +138,7 @@ async function main() {
 
     results.push({
       check: 'footer copyright visible',
-      ok: /THE VESSEL CODE/i.test(await page.locator('.store-public-footer').textContent() || ''),
+      ok: /THE VESSEL CODE/i.test(await page.locator('.home-footer').textContent() || ''),
     });
 
     await page.locator('.store-code-link').first().waitFor({ state: 'visible', timeout: 30_000 });
@@ -265,17 +263,37 @@ async function main() {
     await page.setViewportSize({ width: 390, height: 844 });
     results.push({
       check: 'mobile footer visible without banner obstruction',
-      ok: await page.locator('.store-public-footer').isVisible()
+      ok: await page.locator('.home-footer').isVisible()
         && await page.locator('#toolkitConversionBanner').count() === 0
         && await page.locator('#storePublicFab').count() === 0,
     });
 
     results.push({
-      check: 'pull-to-refresh indicator initialized',
-      ok: await page.evaluate(() => (
-        typeof TVC_StorePublicPullRefresh !== 'undefined'
-        && !!document.getElementById('storePullRefresh')
-      )),
+      check: 'pull-to-refresh indicator not present',
+      ok: await page.evaluate(() => !document.getElementById('storePullRefresh')),
+    });
+
+    const catalogScroll = await page.locator('#catalog-table-wrapper').evaluate((el) => {
+      const style = getComputedStyle(el);
+      return {
+        overflowX: style.overflowX,
+        scrollWidth: el.scrollWidth,
+        clientWidth: el.clientWidth,
+      };
+    });
+    results.push({
+      check: 'mobile IMPA table wrapper allows horizontal scroll',
+      ok: catalogScroll.overflowX === 'auto' || catalogScroll.overflowX === 'scroll',
+      detail: catalogScroll,
+    });
+
+    const searchFontSize = await page.locator('.store-search').evaluate((el) => (
+      parseFloat(getComputedStyle(el).fontSize)
+    ));
+    results.push({
+      check: 'mobile search input font-size prevents iOS zoom',
+      ok: searchFontSize >= 16,
+      detail: searchFontSize,
     });
 
     const failed = results.filter(r => !r.ok);
