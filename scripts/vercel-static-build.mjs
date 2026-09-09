@@ -3,7 +3,7 @@
  * Vercel production build — copy static web assets into dist/.
  * Serverless routes stay in api/ at repo root (not copied here).
  */
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
@@ -76,5 +76,21 @@ if (existsSync(publicDir)) {
     }
   }
 }
+
+// Marketing site at / (dist/index.html) — PMS SPA at /app.html for app.thevesselcode.com
+cpSync(join(root, 'index.html'), join(out, 'app.html'));
+cpSync(join(root, 'home', 'index.html'), join(out, 'index.html'));
+const marketingRoot = readFileSync(join(out, 'index.html'), 'utf8');
+if (!marketingRoot.includes('marketing-shell.js')) {
+  console.error('FAIL dist/index.html is not marketing home');
+  process.exit(1);
+}
+const pmsShell = readFileSync(join(out, 'app.html'), 'utf8');
+if (!pmsShell.includes('TVC-PMS') && !pmsShell.includes('TVC_App')) {
+  console.error('FAIL dist/app.html is not PMS shell');
+  process.exit(1);
+}
+console.log('OK dist/index.html ← marketing home');
+console.log('OK dist/app.html ← PMS shell');
 
 console.log('\nVercel static build complete → dist/');
