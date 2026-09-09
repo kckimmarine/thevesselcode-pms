@@ -26,9 +26,7 @@ const TVC_StorePublicPullRefresh = (function () {
 
     function modalOpen() {
         const detail = document.getElementById('impaDetailModal');
-        const lead = document.getElementById('storeLeadModal');
-        return (detail && !detail.classList.contains('hidden'))
-            || (lead && !lead.classList.contains('hidden'));
+        return detail && !detail.classList.contains('hidden');
     }
 
     function resolveScrollContainer(target) {

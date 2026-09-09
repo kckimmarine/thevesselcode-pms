@@ -14,10 +14,6 @@
             TVC_MaritimeToolkit.init();
         }
 
-        if (typeof TVC_StorePublicLead !== 'undefined') {
-            TVC_StorePublicLead.init();
-        }
-
         if (typeof TVC_StorePublicPullRefresh !== 'undefined') {
             TVC_StorePublicPullRefresh.init();
         }

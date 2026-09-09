@@ -36,7 +36,6 @@ const PRECACHE_ASSETS = [
     '/js/services/storeManager.js',
     '/js/ui/storeMenu.js',
     '/js/ui/maritimeToolkit.js',
-    '/js/ui/storePublicLead.js',
     '/js/store-public-boot.js',
     '/data/impa-catalog.json',
     '/data/impa-catalog-pages/rigging.svg',
