@@ -56,6 +56,50 @@
         } catch { /* ignore */ }
     }
 
+    async function submitInquiry(form, data, status, submitBtn) {
+        if (submitBtn) submitBtn.disabled = true;
+        setStatus(status, 'success', 'Sending your inquiry…');
+
+        try {
+            const res = await fetch('/api/contact', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    companyName: data.companyName,
+                    yourName: data.yourName,
+                    email: data.email,
+                    inquiryType: data.inquiryType,
+                    message: data.message,
+                    source: 'about-contact',
+                }),
+            });
+            const payload = await res.json().catch(() => ({}));
+            if (!res.ok) {
+                throw new Error(payload.message || payload.error || 'Send failed');
+            }
+
+            if (payload.delivery?.method === 'email') {
+                setStatus(status, 'success', 'Thank you. Your inquiry was emailed to our team.');
+            } else {
+                setStatus(status, 'success', 'Thank you. Your inquiry was received by our team.');
+            }
+            form.reset();
+        } catch (err) {
+            console.warn('[about-contact] API send failed, falling back to mailto', err);
+            setStatus(status, 'success', 'Opening your email client with a pre-filled inquiry…');
+            window.location.href = buildMailtoUrl(data);
+            window.setTimeout(() => {
+                setStatus(
+                    status,
+                    'success',
+                    'If your email client did not open, use the email link in the contact card.'
+                );
+            }, 1200);
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    }
+
     function init() {
         applyEmbedMode();
 
@@ -97,20 +141,7 @@
                 return;
             }
 
-            if (submitBtn) submitBtn.disabled = true;
-            setStatus(status, 'success', 'Opening your email client with a pre-filled inquiry…');
-
-            const mailto = buildMailtoUrl(data);
-            window.location.href = mailto;
-
-            window.setTimeout(() => {
-                if (submitBtn) submitBtn.disabled = false;
-                setStatus(
-                    status,
-                    'success',
-                    'If your email client did not open, use the email link in the contact card.'
-                );
-            }, 1200);
+            submitInquiry(form, data, status, submitBtn);
         });
     }
 
