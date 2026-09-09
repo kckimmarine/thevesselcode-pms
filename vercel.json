@@ -6,13 +6,24 @@
   "outputDirectory": "dist",
   "redirects": [
     { "source": "/store-public.html", "destination": "/toolkit", "permanent": true },
-    { "source": "/store-public", "destination": "/toolkit", "permanent": true }
+    { "source": "/store-public", "destination": "/toolkit", "permanent": true },
+    { "source": "/maritime-toolkit", "destination": "/toolkit", "permanent": true },
+    { "source": "/maritime-toolkit/", "destination": "/toolkit", "permanent": true },
+    { "source": "/impa", "destination": "/toolkit", "permanent": true },
+    { "source": "/impa/", "destination": "/toolkit", "permanent": true },
+    { "source": "/maritime-pms", "destination": "https://app.thevesselcode.com", "permanent": false },
+    { "source": "/maritime-pms/", "destination": "https://app.thevesselcode.com", "permanent": false },
+    { "source": "/pms", "destination": "https://app.thevesselcode.com", "permanent": false },
+    { "source": "/pms/", "destination": "https://app.thevesselcode.com", "permanent": false },
+    { "source": "/contact", "destination": "/about-contact", "permanent": true },
+    { "source": "/contact/", "destination": "/about-contact", "permanent": true }
   ],
   "rewrites": [
+    { "source": "/home", "destination": "/home/index.html" },
     { "source": "/toolkit", "destination": "/toolkit.html" },
     { "source": "/about-contact", "destination": "/about-contact/index.html" },
     { "source": "/store/:code", "destination": "/api/store/:code" },
-    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html|about-contact|store|sitemap|robots\\.txt).*)", "destination": "/index.html" }
+    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html|about-contact|home|store|sitemap|robots\\.txt).*)", "destination": "/index.html" }
   ],
   "functions": {
     "api/store/[code].js": {

@@ -11,6 +11,7 @@
     "build": "node scripts/vercel-static-build.mjs",
     "generate:impa-seo": "node scripts/generate-impa-seo-index.mjs && node scripts/generate-sitemap.mjs",
     "test:store-seo": "node scripts/test-store-seo.mjs",
+    "test:home-landing": "node scripts/test-home-landing.mjs",
     "deploy:bluehost": "node scripts/deploy-bluehost.mjs",
     "serve": "npx --yes serve . -p 3000",
     "start": "npx --yes serve . -p 3000",

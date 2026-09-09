@@ -12,6 +12,7 @@ const out = join(root, 'dist');
 
 const STATIC_PATHS = [
   'index.html',
+  'home',
   'toolkit.html',
   'about-contact',
   'store-public.html',
