@@ -9,16 +9,12 @@ export default function middleware(request) {
     const url = new URL(request.url);
     const host = (request.headers.get('host') || '').split(':')[0].toLowerCase();
 
-    if (!MARKETING_HOSTS.has(host)) {
-        return;
-    }
-
-    if (url.pathname === '/' || url.pathname === '') {
+    if (MARKETING_HOSTS.has(host) && (url.pathname === '/' || url.pathname === '')) {
         url.pathname = '/home/index.html';
         return Response.rewrite(url);
     }
 
-    return;
+    return fetch(request);
 }
 
 export const config = {
