@@ -31,6 +31,15 @@ async function main() {
       ok: await page.locator('#acInquiryType').isVisible(),
     });
     results.push({
+      check: 'company name and your name fields',
+      ok: await page.locator('#acCompanyName').isVisible()
+        && await page.locator('#acYourName').isVisible(),
+    });
+    results.push({
+      check: 'work email confirm field present',
+      ok: await page.locator('#acEmailConfirm').isVisible(),
+    });
+    results.push({
       check: 'SLA badge removed',
       ok: await page.locator('.ac-sla').count() === 0,
     });

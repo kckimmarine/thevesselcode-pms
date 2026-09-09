@@ -1,6 +1,10 @@
 /* THE VESSEL CODE — About & Contact form handler */
 (function () {
-    const CONTACT_EMAIL = 'ktechship@gmail.com';
+    const CONTACT_RECIPIENTS = [
+        'ktechship@gmail.com',
+        ['kckim', 'marine', 'gmail', 'com'].join('.').replace('.marine.', '.marine@'),
+    ];
+    const CONTACT_DISPLAY = CONTACT_RECIPIENTS[0];
 
     function qs(sel) {
         return document.querySelector(sel);
@@ -16,6 +20,12 @@
         return map[value] || value || 'General Inquiries';
     }
 
+    function isValidEmail(value) {
+        const email = String(value || '').trim();
+        if (!email || email.length > 254) return false;
+        return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i.test(email);
+    }
+
     function setStatus(el, type, message) {
         if (!el) return;
         el.className = `ac-status visible ${type}`;
@@ -27,14 +37,16 @@
         const body = encodeURIComponent(
             [
                 `Inquiry Type: ${data.inquiryType}`,
-                `Name: ${data.firstName} ${data.lastName}`.trim(),
+                `Company: ${data.companyName}`,
+                `Your Name: ${data.yourName}`,
                 `Work Email: ${data.email}`,
                 '',
                 'Message:',
                 data.message,
             ].join('\n')
         );
-        return `mailto:${CONTACT_EMAIL}?subject=${subject}&body=${body}`;
+        const to = CONTACT_RECIPIENTS.map(encodeURIComponent).join(',');
+        return `mailto:${to}?subject=${subject}&body=${body}`;
     }
 
     function applyEmbedMode() {
@@ -49,8 +61,8 @@
 
         const emailLink = qs('#acContactEmail');
         if (emailLink) {
-            emailLink.textContent = CONTACT_EMAIL;
-            emailLink.href = `mailto:${CONTACT_EMAIL}`;
+            emailLink.textContent = CONTACT_DISPLAY;
+            emailLink.href = `mailto:${CONTACT_RECIPIENTS.join(',')}`;
         }
 
         const form = qs('#acContactForm');
@@ -62,15 +74,26 @@
             e.preventDefault();
             const fd = new FormData(form);
             const data = {
-                firstName: String(fd.get('firstName') || '').trim(),
-                lastName: String(fd.get('lastName') || '').trim(),
+                companyName: String(fd.get('companyName') || '').trim(),
+                yourName: String(fd.get('yourName') || '').trim(),
                 email: String(fd.get('email') || '').trim(),
+                emailConfirm: String(fd.get('emailConfirm') || '').trim(),
                 inquiryType: inquiryLabel(String(fd.get('inquiryType') || '')),
                 message: String(fd.get('message') || '').trim(),
             };
 
-            if (!data.firstName || !data.lastName || !data.email || !data.message) {
+            if (!data.companyName || !data.yourName || !data.email || !data.emailConfirm || !data.message) {
                 setStatus(status, 'error', 'Please complete all required fields.');
+                return;
+            }
+
+            if (!isValidEmail(data.email)) {
+                setStatus(status, 'error', 'Please enter a valid work email address.');
+                return;
+            }
+
+            if (data.email.toLowerCase() !== data.emailConfirm.toLowerCase()) {
+                setStatus(status, 'error', 'Work Email and Confirm Work Email do not match.');
                 return;
             }
 

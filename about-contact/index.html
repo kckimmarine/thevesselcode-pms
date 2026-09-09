@@ -92,19 +92,21 @@
                 <h3 id="acFormTitle">Send an Inquiry</h3>
                 <p class="ac-form-sub">Tell us about your fleet, operational goals, or technical questions.</p>
                 <form id="acContactForm" class="ac-form" novalidate>
-                    <div class="ac-row">
-                        <div class="ac-field">
-                            <label for="acFirstName">First Name *</label>
-                            <input id="acFirstName" name="firstName" type="text" autocomplete="given-name" required>
-                        </div>
-                        <div class="ac-field">
-                            <label for="acLastName">Last Name *</label>
-                            <input id="acLastName" name="lastName" type="text" autocomplete="family-name" required>
-                        </div>
+                    <div class="ac-field">
+                        <label for="acCompanyName">Company Name *</label>
+                        <input id="acCompanyName" name="companyName" type="text" autocomplete="organization" required>
+                    </div>
+                    <div class="ac-field">
+                        <label for="acYourName">Your Name *</label>
+                        <input id="acYourName" name="yourName" type="text" autocomplete="name" required>
                     </div>
                     <div class="ac-field">
                         <label for="acEmail">Work Email *</label>
-                        <input id="acEmail" name="email" type="email" autocomplete="email" required>
+                        <input id="acEmail" name="email" type="email" autocomplete="email" inputmode="email" required>
+                    </div>
+                    <div class="ac-field">
+                        <label for="acEmailConfirm">Confirm Work Email *</label>
+                        <input id="acEmailConfirm" name="emailConfirm" type="email" autocomplete="email" inputmode="email" required>
                     </div>
                     <div class="ac-field">
                         <label for="acInquiryType">Inquiry Type *</label>
