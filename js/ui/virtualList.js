@@ -3,7 +3,7 @@ const TVC_VirtualList = (function () {
     const ROW_H = 40;
 
     function mount(container, options) {
-        const { rowHeight = ROW_H, renderRow, getCount, overflowX, overflowY } = options;
+        const { rowHeight = ROW_H, renderRow, getCount, overflowX, overflowY, rowWidth } = options;
         container.innerHTML = '';
         if (overflowX != null || overflowY != null) {
             container.style.overflowX = overflowX ?? 'auto';
@@ -16,7 +16,8 @@ const TVC_VirtualList = (function () {
         const inner = document.createElement('div');
         inner.className = 'vl-inner';
         inner.style.position = 'relative';
-        inner.style.width = '100%';
+        inner.style.width = rowWidth ? `${rowWidth}px` : '100%';
+        if (rowWidth) inner.style.minWidth = `${rowWidth}px`;
         container.appendChild(inner);
 
         let raf = null;
@@ -34,7 +35,9 @@ const TVC_VirtualList = (function () {
             for (let i = start; i < end; i++) {
                 const row = document.createElement('div');
                 row.className = 'vl-row';
-                row.style.cssText = `position:absolute;top:${i * rowHeight}px;left:0;right:0;height:${rowHeight}px;`;
+                row.style.cssText = rowWidth
+                    ? `position:absolute;top:${i * rowHeight}px;left:0;width:${rowWidth}px;height:${rowHeight}px;`
+                    : `position:absolute;top:${i * rowHeight}px;left:0;right:0;height:${rowHeight}px;`;
                 row.innerHTML = renderRow(i);
                 inner.appendChild(row);
             }

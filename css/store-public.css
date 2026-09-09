@@ -469,6 +469,14 @@ body.store-pull-active.store-pull-refreshing .store-public-panel {
     min-height: 280px;
 }
 
+.store-public-mode .store-catalog-hscroll {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+}
+
 .store-public-mode .store-vl-scroll {
     max-height: calc(100dvh - 280px);
     min-height: 240px;
@@ -599,45 +607,62 @@ body.store-pull-active.store-pull-refreshing .store-public-panel {
         font-size: 16px !important;
     }
 
-    /* IMPA catalog — vertical list + horizontal table scroll */
-    #catalog-table-wrapper,
-    .store-vl-wrap {
+    /* IMPA catalog — header fixed on vertical scroll; shared horizontal scroll */
+    #catalog-table-wrapper.store-catalog-wrap {
         flex: 1;
         min-height: 0;
         display: flex;
         flex-direction: column;
         margin-bottom: 8px;
-        overflow-x: auto !important;
+        overflow: hidden;
+        overscroll-behavior: contain;
+    }
+
+    #storeCatalogHScroll.store-catalog-hscroll {
+        flex: 1;
+        min-height: 0;
+        display: flex;
+        flex-direction: column;
+        overflow-x: auto;
         overflow-y: hidden;
         overscroll-behavior: contain;
         -webkit-overflow-scrolling: touch;
-        touch-action: pan-x pan-y;
     }
 
-    #catalog-table-wrapper .store-vl-head,
-    #catalog-table-wrapper .store-vl-scroll .vl-inner,
-    #catalog-table-wrapper .store-vl-scroll .store-vl-row {
-        min-width: 480px;
-        width: max(100%, 480px);
+    #catalog-table-wrapper.store-catalog-wrap .store-vl-head {
+        flex-shrink: 0;
+        width: 500px;
+        min-width: 500px;
+        grid-template-columns: 96px 220px 140px;
     }
 
-    #catalog-table-wrapper .store-vl-head span,
-    #catalog-table-wrapper .store-vl-scroll .store-vl-cell {
+    #catalog-table-wrapper.store-catalog-wrap .store-vl-unit,
+    #catalog-table-wrapper.store-catalog-wrap .store-vl-unit-head {
+        display: none;
+    }
+
+    #catalog-table-wrapper.store-catalog-wrap .store-vl-head span,
+    #catalog-table-wrapper.store-catalog-wrap .store-vl-cell {
         white-space: nowrap;
     }
 
-    #storeVlScroll.store-vl-scroll,
-    .store-vl-scroll.table-scroll-container,
-    .table-scroll-container {
+    #catalog-table-wrapper.store-catalog-wrap #storeVlScroll.store-vl-scroll {
         flex: 1;
         min-height: 0 !important;
         height: auto !important;
         max-height: none !important;
         overflow-y: auto !important;
-        overflow-x: visible !important;
+        overflow-x: hidden !important;
         overscroll-behavior: contain;
-        touch-action: pan-x pan-y;
+        touch-action: pan-y;
         -webkit-overflow-scrolling: touch;
+    }
+
+    #catalog-table-wrapper.store-catalog-wrap #storeVlScroll .vl-inner,
+    #catalog-table-wrapper.store-catalog-wrap #storeVlScroll .store-vl-row {
+        width: 500px;
+        min-width: 500px;
+        grid-template-columns: 96px 220px 140px;
     }
 
     /* Utility tab panels — own scroll, no body drift */
