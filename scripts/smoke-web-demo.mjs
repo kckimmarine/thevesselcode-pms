@@ -55,6 +55,14 @@ if (existsSync(bluehostToolkit)) {
   ok = false;
 }
 
+const bluehostContact = join(root, 'bluehost/contact/index.html');
+if (existsSync(bluehostContact)) {
+  console.log('OK bluehost/contact/index.html');
+} else {
+  console.error('MISSING bluehost/contact/index.html');
+  ok = false;
+}
+
 if (readFileSync(join(root, 'js/config.js'), 'utf8').includes('isWebDeploy')) {
   console.log('OK web deploy config');
 } else {
