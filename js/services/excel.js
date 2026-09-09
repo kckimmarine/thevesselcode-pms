@@ -53,7 +53,7 @@ const TVC_Excel = (function () {
         ws.getCell('A1').value = `REQUISITION  ·  ${req.req_no || ''}`;
         ws.getCell('A1').font = { bold: true, size: 14 };
         ws.getCell('A2').value = `Vessel: ${req.vessel_id || '-'}    Dept: ${req.department || '-'}    Date: ${(req.created_at || '').slice(0, 10)}`;
-        ws.getCell('A3').value = '업체: [Unit Price], [Currency], [Vendor Comment] 셀만 입력 가능합니다. (나머지 셀은 보호됨)';
+        ws.getCell('A3').value = 'Vendor: enter [Unit Price], [Currency], and [Vendor Comment] only. (Other cells are protected)';
         ws.getCell('A3').font = { italic: true, color: { argb: 'FF9C4221' } };
 
         // 컬럼 헤더 (4행)

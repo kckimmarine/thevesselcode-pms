@@ -7,7 +7,7 @@ const TVC_VesselProfileSync = (function () {
 
     const FIELDS = [
         { key: 'vessel_id', label: 'vessel id' },
-        { key: 'name', label: '표시명' },
+        { key: 'name', label: 'Display name' },
         { key: 'company_id', label: 'company id' },
         { key: 'imo_no', label: 'IMO' },
         { key: 'delivery', label: 'delivery' },

@@ -351,7 +351,7 @@ const TVC_Transaction = (function () {
             await api.put('daily_work_reports', report);
             const scheduleNote = report.work_type === 'POSTPONE'
                 ? `NEXT DATE → ${postponeDate || '—'}`
-                : 'LAST DONE/NEXT DATE 갱신';
+                : 'LAST DONE/NEXT DATE updated';
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
                 log: `📋 [BATCH/${report.status}] ${codes} — ${scheduleNote} — ${user.display_name}`,
@@ -412,8 +412,8 @@ const TVC_Transaction = (function () {
             markPending(report);
             await api.put('daily_work_reports', report);
             const modScheduleNote = report.work_type === 'POSTPONE'
-                ? 'NEXT DATE 반영'
-                : 'LAST DONE/NEXT DATE 반영';
+                ? 'NEXT DATE applied'
+                : 'LAST DONE/NEXT DATE applied';
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
                 log: `✏️ [MODIFIED] ${report.job_code} (${report.work_type}) — ${modScheduleNote} — ${user.display_name}`,
@@ -469,7 +469,7 @@ const TVC_Transaction = (function () {
                 await api.del('daily_work_reports', reportId);
                 await api.put('audit_logs', {
                     timestamp: new Date().toLocaleString(),
-                    log: `🗑 [DELETED] ${rep.job_code} (${rep.work_type}) — LAST DONE/NEXT DATE 원복 — ${user.display_name}`,
+                    log: `🗑 [DELETED] ${rep.job_code} (${rep.work_type}) — LAST DONE/NEXT DATE reverted — ${user.display_name}`,
                     sync_status: 'LOCAL',
                 });
                 return true;
@@ -509,7 +509,7 @@ const TVC_Transaction = (function () {
             await api.del('daily_work_reports', reportId);
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
-                log: `🗑 [DELETED+ROLLBACK] ${rep.job_code} — 재고복원 · LAST DONE/NEXT DATE 원복 · ${user.display_name}`,
+                log: `🗑 [DELETED+ROLLBACK] ${rep.job_code} — stock restored · LAST DONE/NEXT DATE reverted · ${user.display_name}`,
                 sync_status: 'LOCAL',
             });
             return true;
@@ -660,7 +660,7 @@ const TVC_Transaction = (function () {
             }
             await api.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
-                log: `✅ [CONFIRMED] ${codes} — ${isPostpone ? scheduleNote : '재고차감 · ' + scheduleNote}`,
+                log: `✅ [CONFIRMED] ${codes} — ${isPostpone ? scheduleNote : 'stock deducted · ' + scheduleNote}`,
                 sync_status: 'LOCAL',
             });
             return report;

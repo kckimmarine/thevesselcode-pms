@@ -111,7 +111,7 @@ const TVC_StoreMenu = (function () {
                             </table>
                         </div>
                         <div class="impa-detail-cart">
-                            <label class="impa-detail-qty-label" for="impaDetailQty">청구 수량 (Requisition Qty)</label>
+                            <label class="impa-detail-qty-label" for="impaDetailQty">Requisition Qty</label>
                             <div class="impa-detail-cart-row">
                                 <input type="number" id="impaDetailQty" class="impa-detail-qty" min="1" step="1" value="1" inputmode="numeric">
                                 <button type="button" class="btn impa-detail-cart-btn" id="impaDetailCartBtn">
@@ -123,7 +123,7 @@ const TVC_StoreMenu = (function () {
                         <div class="impa-detail-public-cta hidden" id="impaDetailPublicCta" aria-hidden="true"></div>
                     </section>
                     <footer class="impa-detail-footer">
-                        <button type="button" class="impa-detail-close-btn impa-detail-close-bottom">Close / 닫기</button>
+                        <button type="button" class="impa-detail-close-btn impa-detail-close-bottom">Close</button>
                     </footer>
                     </div>
                 </div>
@@ -358,7 +358,7 @@ const TVC_StoreMenu = (function () {
         return `
             <div class="impa-plate-loading" role="status" aria-live="polite">
                 <div class="impa-plate-loading-spinner" aria-hidden="true"></div>
-                <p class="impa-plate-loading-text">도판 로딩 중… <span class="impa-plate-loading-id">${id}</span></p>
+                <p class="impa-plate-loading-text">Loading drawing plate… <span class="impa-plate-loading-id">${id}</span></p>
             </div>`;
     }
 
@@ -367,10 +367,10 @@ const TVC_StoreMenu = (function () {
         const id = esc(plateId || '—');
         const name = esc(item.name || 'IMPA Item');
         const offline = reason === 'offline' || (typeof navigator !== 'undefined' && !navigator.onLine);
-        const title = offline ? '도판 다운로드 대기' : '도판을 불러올 수 없음';
+        const title = offline ? 'Drawing plate download pending' : 'Cannot load drawing plate';
         const subtitle = offline
-            ? '오프라인 상태입니다. 네트워크 연결 후 다시 열어 주세요.'
-            : '도판 파일이 아직 캐시되지 않았습니다.';
+            ? 'You are offline. Reconnect and try again.'
+            : 'Drawing plate is not cached yet.';
         return `
             <svg class="impa-plate-placeholder-svg" viewBox="0 0 480 360" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="${title}">
                 <rect width="480" height="360" fill="#f0f4f8"/>

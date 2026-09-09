@@ -681,7 +681,7 @@ const TVC_PmsMasterExcel = (function () {
             `Vessel: ${vesselId}  ·  PMS Master — ${department} — Group Headers`,
             'Format shared: Engine · Master · HQ (this DEPARTMENT). Deck uses a separate DECK file.',
             'Live DB snapshot — PMS GROUP Tree (maintenance_groups + maintenance_jobs) for this department only.',
-            'CRITICAL EQUIPMENT = Yes / No. Group에 Yes면 해당 그룹 job이 Critical로 집계됩니다.',
+            'CRITICAL EQUIPMENT = Yes / No. If Group is Yes, jobs in that group count as Critical.',
         ]);
         ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'Jobs (ref)', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
             wsG.getRow(HDR_ROW).getCell(i + 1).value = h;
@@ -704,9 +704,9 @@ const TVC_PmsMasterExcel = (function () {
 
         const wsE = wb.addWorksheet('Equipment Headers', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsE, [
-            `Vessel: ${vesselId}  ·  Equipment blocks (GG-EE-III 중 EE)`,
-            'EQ NO = EE (01–99, 필수). Jobs 시트 EQ NO · Equipment와 같아야 해당 Equipment로 분류됩니다.',
-            'CRITICAL EQUIPMENT = Yes / No (Equipment별).',
+            `Vessel: ${vesselId}  ·  Equipment blocks (EE in GG-EE-III)`,
+            'EQ NO = EE (01–99, required). Jobs sheet EQ NO must match Equipment for classification.',
+            'CRITICAL EQUIPMENT = Yes / No (per Equipment).',
         ]);
         ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'Maker', 'Model/Type', 'Capacity', 'Serial No.', 'CRITICAL EQUIPMENT'].forEach((h, i) => {
             wsE.getRow(HDR_ROW).getCell(i + 1).value = h;
@@ -735,9 +735,9 @@ const TVC_PmsMasterExcel = (function () {
         const wsJ = wb.addWorksheet('Jobs', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsJ, [
             `Vessel: ${vesselId}  ·  ${department} — ${exportJobs.length} jobs`,
-            'JOB CODE = GG-EE-III (예: 01-00-001). EE 미지정 = 00. Match by DEPARTMENT + JOB CODE. 시트에서 뺀 행은 삭제(Work Report 연결은 임시 CODE).',
-            'EQ NO / Equipment: Equipment Headers와 동일하게 입력. 노란색 셀 = Import 필수.',
-            'CRITICAL EQUIPMENT = Yes / No (Job별). 비우면 Group / Equipment 설정을 따릅니다.',
+            'JOB CODE = GG-EE-III (e.g. 01-00-001). EE unset = 00. Match by DEPARTMENT + JOB CODE. Rows removed from sheet are deleted (Work Report links use temp CODE).',
+            'EQ NO / Equipment: same as Equipment Headers. Yellow cells = required for Import.',
+            'CRITICAL EQUIPMENT = Yes / No (per Job). Blank inherits Group / Equipment.',
         ]);
         const jHeaders = ['DEPARTMENT', 'GROUP NO', 'GROUP NAME', 'EQ NO', 'Equipment', 'JOB CODE', 'SORT-1', 'SORT-2', 'JOB DETAIL', 'PERIOD', 'UNIT', 'P.I.C', 'LAST DONE', 'CRITICAL EQUIPMENT'];
         jHeaders.forEach((h, i) => { wsJ.getRow(HDR_ROW).getCell(i + 1).value = h; });
@@ -1522,7 +1522,7 @@ const TVC_PmsMasterExcel = (function () {
             if (!localIds.has(row.job_id)) continue;
             if (seenJobIds.has(row.job_id)) {
                 warnings.push(
-                    `Jobs row ${row._excelRow || '?'} (${row.job_code}): JOB_ID가 다른 행과 중복 — JOB CODE로 매칭합니다.`
+                    `Jobs row ${row._excelRow || '?'} (${row.job_code}): duplicate JOB_ID on another row — matching by JOB CODE.`
                 );
                 row.job_id = null;
             } else {
@@ -2321,7 +2321,7 @@ const TVC_PmsMasterExcel = (function () {
         for (const e of equipRows) await upsertGroupDef(e, e.item_sort1, vesselId);
 
         const orphanNote = orphanStats.removed || orphanStats.detached
-            ? ` · 제외 ${orphanStats.removed} · Work Report 격리 ${orphanStats.detached}`
+            ? ` · excluded ${orphanStats.removed} · Work Report isolated ${orphanStats.detached}`
             : '';
         await TVC_DB.put('audit_logs', {
             timestamp: new Date().toLocaleString(),
