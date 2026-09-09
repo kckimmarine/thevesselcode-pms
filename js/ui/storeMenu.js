@@ -451,7 +451,8 @@ const TVC_StoreMenu = (function () {
             return;
         }
 
-        const result = await TVC_PlateImageCache.fetchPlate(plateId);
+        const impaCode = item.impa_code || item.code || '';
+        const result = await TVC_PlateImageCache.fetchPlate(plateId, impaCode);
         if (loadToken !== _plateLoadToken) return;
 
         viewport?.classList.remove('is-loading');

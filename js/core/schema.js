@@ -1413,6 +1413,14 @@ const TVC_ImpaSchema = (function () {
     }
 
     function resolvePlateAssetUrl(plateId) {
+        const raw = String(plateId || '').trim();
+        if (/^berth-\d{6}$/i.test(raw)) {
+            return `${PLATE_ASSET_BASE}/${raw.toLowerCase()}.webp`;
+        }
+        const legacy = raw.replace(/\.(jpg|jpeg|png|webp)$/i, '');
+        if (/^\d{2}-\d{3}-\d{2}$/i.test(legacy)) {
+            return `${PLATE_ASSET_BASE}/${legacy}.webp`;
+        }
         const id = normalizePlateId(plateId, plateId);
         if (!id || !PLATE_ID_PATTERN.test(id)) return '';
         return `${PLATE_ASSET_BASE}/${id}.webp`;

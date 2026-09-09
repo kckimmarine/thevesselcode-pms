@@ -3,6 +3,10 @@ const TVC_PlateImageCache = (function () {
     const CACHE_NAME = 'tvc-impa-plates-lru';
     const LRU_KEY = 'tvc_plate_lru_order_v1';
     const MAX_ENTRIES = 50;
+    const BERTH_INDEX_URL = '/data/berth-impa-index.json';
+
+    let _berthIndex = null;
+    let _berthIndexPromise = null;
 
     function readLru() {
         try {
@@ -33,6 +37,29 @@ const TVC_PlateImageCache = (function () {
         return TVC_ImpaSchema.resolvePlateAssetUrl(plateId);
     }
 
+    async function loadBerthIndex() {
+        if (_berthIndex) return _berthIndex;
+        if (_berthIndexPromise) return _berthIndexPromise;
+        _berthIndexPromise = fetch(BERTH_INDEX_URL, { cache: 'no-store' })
+            .then(res => (res.ok ? res.json() : { codes: {} }))
+            .then(data => {
+                _berthIndex = data?.codes && typeof data.codes === 'object' ? data.codes : {};
+                return _berthIndex;
+            })
+            .catch(() => {
+                _berthIndex = {};
+                return _berthIndex;
+            });
+        return _berthIndexPromise;
+    }
+
+    async function resolveBerthPlateId(impaCode) {
+        const code = String(impaCode || '').replace(/\D/g, '').padStart(6, '0');
+        if (!code || code === '000000') return '';
+        const index = await loadBerthIndex();
+        return index[code] || index[String(impaCode || '').trim()] || '';
+    }
+
     async function evictOldest(cache, order) {
         while (order.length > MAX_ENTRIES) {
             const url = order.shift();
@@ -48,12 +75,7 @@ const TVC_PlateImageCache = (function () {
         writeLru(order);
     }
 
-    /**
-     * Fetch plate webp on demand. Returns blob object URL or failure reason.
-     * @returns {Promise<{ok:boolean, objectUrl?:string, fromCache?:boolean, reason?:string}>}
-     */
-    async function fetchPlate(plateId) {
-        const url = assetUrl(plateId);
+    async function fetchUrl(url) {
         if (!url) return { ok: false, reason: 'no-id' };
 
         const cache = await openCache();
@@ -84,8 +106,25 @@ const TVC_PlateImageCache = (function () {
         }
     }
 
+    /**
+     * Fetch plate webp on demand. Returns blob object URL or failure reason.
+     * @returns {Promise<{ok:boolean, objectUrl?:string, fromCache?:boolean, reason?:string}>}
+     */
+    async function fetchPlate(plateId, impaCode) {
+        const berthId = impaCode ? await resolveBerthPlateId(impaCode) : '';
+        if (berthId) {
+            const berthUrl = assetUrl(berthId);
+            const berthResult = await fetchUrl(berthUrl);
+            if (berthResult.ok) return berthResult;
+        }
+        const url = assetUrl(plateId);
+        return fetchUrl(url);
+    }
+
     async function clearAll() {
         writeLru([]);
+        _berthIndex = null;
+        _berthIndexPromise = null;
         if ('caches' in window) await caches.delete(CACHE_NAME).catch(() => {});
     }
 
@@ -93,5 +132,15 @@ const TVC_PlateImageCache = (function () {
         return { maxEntries: MAX_ENTRIES, cachedUrls: readLru().length };
     }
 
-    return { fetchPlate, assetUrl, clearAll, getStats, MAX_ENTRIES, CACHE_NAME };
+    return {
+        fetchPlate,
+        fetchUrl,
+        assetUrl,
+        resolveBerthPlateId,
+        loadBerthIndex,
+        clearAll,
+        getStats,
+        MAX_ENTRIES,
+        CACHE_NAME,
+    };
 })();
