@@ -110,4 +110,18 @@ body.mkt-toolkit-page #marketing-footer .home-footer {
         align-items: flex-start;
         gap: 8px;
     }
+
+    /* Toolkit: reserve space for shared marketing footer below catalog workspace */
+    body.mkt-toolkit-page .mkt-site-wrap {
+        height: 100dvh;
+        max-height: 100dvh;
+        overflow: hidden;
+    }
+
+    body.mkt-toolkit-page .store-public-shell {
+        flex: 1;
+        min-height: 0;
+        height: auto;
+        max-height: none;
+    }
 }
