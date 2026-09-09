@@ -55,7 +55,7 @@ const toolkit = readFileSync(join(ROOT, 'toolkit.html'), 'utf8');
 check('toolkit shared header', toolkit.includes('marketing-topbar'));
 check('toolkit no legacy header', !toolkit.includes('store-public-header'));
 
-check('nav contact us removed from topbar', !shell.includes("label: 'Contact Us'"));
+check('nav contact us in topbar', shell.includes("label: 'Contact Us'"));
 check('header contact CTA removed', !shell.includes('home-topbar-cta'));
 
 const marketingCss = [
