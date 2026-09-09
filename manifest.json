@@ -2,7 +2,7 @@
   "name": "THE VESSEL CODE — TVC-PMS",
   "short_name": "TVC-PMS",
   "description": "THE VESSEL CODE — Offline-first Planned Maintenance System for vessels",
-  "start_url": "/index.html",
+  "start_url": "/app.html",
   "scope": "/",
   "display": "standalone",
   "orientation": "any",
