@@ -64,7 +64,8 @@ console.log('OK public/sitemap.xml', `(${chunkFiles.length} child sitemaps, ${co
 const robots = `User-agent: *
 Allow: /store/
 Allow: /toolkit
-Allow: /about-contact/
+Allow: /services
+Allow: /contact-us
 
 Sitemap: ${origin}/sitemap.xml
 `;

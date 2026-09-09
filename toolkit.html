@@ -8,24 +8,19 @@
     <meta name="description" content="Maritime Toolkit — IMPA catalog, bunker calculations, lube &amp; paint cross-references, and flange engineering tables by THE VESSEL CODE.">
     <title>Maritime Toolkit | THE VESSEL CODE</title>
     <link rel="icon" type="image/png" href="icons/company-logo.png?v=20260804-logo-no-ring">
+    <link rel="stylesheet" href="css/home.css?v=20260909-mkt-shell">
+    <link rel="stylesheet" href="css/marketing-shell.css?v=20260909-mkt-shell">
     <link rel="stylesheet" href="css/store.css?v=20260908-mobile-modal">
     <link rel="stylesheet" href="css/store-public.css?v=20260908-shipserv-modal">
 </head>
-<body class="store-public-body store-tool-catalog">
-    <div class="store-public-shell">
-        <header class="store-public-header" aria-label="Maritime Toolkit">
-            <div class="store-public-brand">
-                <img src="icons/company-logo.png?v=20260804-logo-no-ring" alt="" width="44" height="44" draggable="false">
-                <div class="store-public-brand-text">
-                    <h1 class="store-public-title">⚓ MARITIME TOOLKIT</h1>
-                    <p class="store-public-subtitle">Instant Engineering Tools &amp; Global Marine Catalog</p>
-                </div>
-            </div>
-            <div class="store-public-header-actions">
-                <a href="/contact" class="btn-header-contact">About &amp; Contact</a>
-                <a class="store-public-site-link" href="/">thevesselcode.com</a>
-            </div>
-        </header>
+<body class="store-public-body store-tool-catalog mkt-page mkt-toolkit-page" data-mkt-active="toolkit">
+    <div class="mkt-site-wrap">
+        <div id="marketing-topbar"></div>
+        <div class="store-public-shell">
+        <div class="store-public-toolkit-intro" aria-hidden="false">
+            <h1 class="store-public-title store-public-title-inline">⚓ Maritime Toolkit</h1>
+            <p class="store-public-subtitle store-public-subtitle-inline">Instant Engineering Tools &amp; Global Marine Catalog</p>
+        </div>
 
         <nav class="store-public-toolkit" id="storePublicToolkit" role="tablist" aria-label="Maritime utility tabs">
             <button type="button" class="store-tool-chip active" data-tool-tab="catalog" role="tab" aria-selected="true">📦 IMPA Catalog</button>
@@ -51,8 +46,10 @@
             <span>© 2026 THE VESSEL CODE</span>
             <span class="store-public-footer-tag">Maritime Toolkit · Open utilities for ship engineers worldwide</span>
         </footer>
+        </div>
     </div>
 
+    <script src="js/marketing-shell.js?v=20260909-mkt-shell"></script>
     <script src="js/core/schema.js?v=20260906-plate-pipeline"></script>
     <script src="js/core/db.js?v=20260906-plate-pipeline"></script>
     <script src="js/ui/virtualList.js?v=20260723-readability"></script>

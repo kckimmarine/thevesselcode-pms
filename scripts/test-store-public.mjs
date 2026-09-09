@@ -101,7 +101,7 @@ async function main() {
     const contactHref = await page.locator('.btn-header-contact').getAttribute('href');
     results.push({
       check: 'About & Contact links to contact section',
-      ok: contactHref === '/contact' || contactHref === 'https://thevesselcode.com/contact/',
+      ok: contactHref === '/contact-us' || contactHref === '/contact' || contactHref === 'https://thevesselcode.com/contact-us',
       detail: contactHref,
     });
 

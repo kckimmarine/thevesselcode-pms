@@ -12,7 +12,7 @@ async function main() {
 
   try {
     const page = await browser.newPage();
-    await page.goto(`${BASE}/about-contact/`, { waitUntil: 'networkidle' });
+    await page.goto(`${BASE}/contact-us`, { waitUntil: 'networkidle' });
 
     results.push({
       check: 'hero headline present',
