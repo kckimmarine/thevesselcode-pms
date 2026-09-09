@@ -72,11 +72,21 @@ function buildInquiryText(body) {
     ].join('\n');
 }
 
+function sandboxSafeRecipients(fromAddress, recipients) {
+    const from = String(fromAddress || '').toLowerCase();
+    if (!from.includes('@resend.dev')) return recipients;
+
+    const signupInbox = String(process.env.RESEND_ACCOUNT_EMAIL || 'ktechship@gmail.com').trim().toLowerCase();
+    const allowed = recipients.filter((addr) => String(addr).trim().toLowerCase() === signupInbox);
+    return allowed.length ? allowed : [signupInbox];
+}
+
 async function sendViaResend(body) {
     const apiKey = String(process.env.RESEND_API_KEY || '').trim();
     if (!apiKey) return null;
 
-    const to = contactRecipients();
+    const from = contactFromAddress();
+    const to = sandboxSafeRecipients(from, contactRecipients());
     const subject = `[TVC Contact] ${body.inquiryType}`;
     const text = buildInquiryText(body);
 
@@ -87,7 +97,7 @@ async function sendViaResend(body) {
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-            from: contactFromAddress(),
+            from,
             to,
             reply_to: body.email,
             subject,
