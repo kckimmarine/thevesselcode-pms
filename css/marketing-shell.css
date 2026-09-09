@@ -71,11 +71,7 @@ body.mkt-toolkit-page .store-public-subtitle-inline {
 }
 
 /* Contact page under marketing shell */
-body.mkt-contact-page.ac-page {
-    background:
-        radial-gradient(ellipse 90% 55% at 15% -5%, rgba(14, 165, 233, 0.1), transparent 55%),
-        linear-gradient(180deg, #050d18 0%, #0c1a2e 100%);
-}
+/* Contact page background — see marketing-photography.css */
 
 body.mkt-contact-page #marketing-topbar .home-topbar {
     width: min(100%, 1180px);
