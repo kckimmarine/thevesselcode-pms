@@ -1,15 +1,15 @@
 /* THE VESSEL CODE — About & Contact */
 :root {
-    --ac-bg-top: #0b1320;
-    --ac-bg-bottom: #111e33;
-    --ac-card: rgba(17, 30, 51, 0.82);
-    --ac-border: rgba(255, 255, 255, 0.08);
-    --ac-text: #e8eef7;
+    --ac-bg-top: #0a101e;
+    --ac-bg-bottom: #0f172a;
+    --ac-card: rgba(15, 23, 42, 0.75);
+    --ac-border: rgba(56, 189, 248, 0.18);
+    --ac-text: #f8fafc;
     --ac-muted: #94a3b8;
-    --ac-accent: #5eead4;
-    --ac-teal: #004d4d;
-    --ac-teal-hover: #006666;
-    --ac-link: #7dd3fc;
+    --ac-accent: #38bdf8;
+    --ac-teal: #0e7490;
+    --ac-teal-hover: #0369a1;
+    --ac-link: #38bdf8;
     --ac-radius: 14px;
     --ac-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
 }
@@ -27,10 +27,8 @@ html {
 body.ac-page {
     margin: 0;
     min-height: 100%;
-    color: var(--ac-text);
+    color: var(--ac-muted);
     font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    background: linear-gradient(180deg, var(--ac-bg-top) 0%, var(--ac-bg-bottom) 100%);
-    background-attachment: fixed;
     line-height: 1.5;
 }
 

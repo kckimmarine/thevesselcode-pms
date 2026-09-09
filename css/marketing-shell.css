@@ -70,8 +70,7 @@ body.mkt-toolkit-page .store-public-subtitle-inline {
     color: #94a3b8;
 }
 
-/* Contact page under marketing shell */
-/* Contact page background — see marketing-photography.css */
+/* Contact page canvas — see marketing-theme.css */
 
 body.mkt-contact-page #marketing-topbar .home-topbar {
     width: min(100%, 1180px);

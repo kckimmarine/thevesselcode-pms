@@ -1,0 +1,172 @@
+{
+  "source": "berthmarine.com",
+  "category_slug": "11-welfare-items",
+  "category_name": "11. Welfare Items",
+  "scraped_at": "2026-09-09T15:43:42.484Z",
+  "item_count": 10,
+  "unique_plates": 10,
+  "items": [
+    {
+      "impa_code": "110101",
+      "item_name": "STATIONARY BICYCLE INDOOR USE - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110101.jpg",
+      "plate_key": "110101",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110101/"
+    },
+    {
+      "impa_code": "110102",
+      "item_name": "STATIONARY BICYCLE WITH ERGOMETER - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110102.jpg",
+      "plate_key": "110102",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110102/"
+    },
+    {
+      "impa_code": "110103",
+      "item_name": "TREADMILL (RUNNING MACHINE), FOLDABLE, AC 110V - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110103.jpg",
+      "plate_key": "110103",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110103/"
+    },
+    {
+      "impa_code": "110104",
+      "item_name": "TREADMILL (RUNNING MACHINE), FOLDABLE, AC 220V - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110104.jpg",
+      "plate_key": "110104",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110104/"
+    },
+    {
+      "impa_code": "110105",
+      "item_name": "MONOCYCLE - PC",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110105.jpg",
+      "plate_key": "110105",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110105/"
+    },
+    {
+      "impa_code": "110106",
+      "item_name": "TREADMILL (RUNNING MACHINE), NON-FOLDABLE, AC 110V - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110106.jpg",
+      "plate_key": "110106",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110106/"
+    },
+    {
+      "impa_code": "110107",
+      "item_name": "TREADMILL (RUNNING MACHINE), NON-FOLDABLE, AC 220V - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110107.jpg",
+      "plate_key": "110107",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110107/"
+    },
+    {
+      "impa_code": "110108",
+      "item_name": "CROSS TRAINER - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110108.jpg",
+      "plate_key": "110108",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110108/"
+    },
+    {
+      "impa_code": "110109",
+      "item_name": "ELLIPTICAL TRAINER - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110109.jpg",
+      "plate_key": "110109",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110109/"
+    },
+    {
+      "impa_code": "110110",
+      "item_name": "EXERCISER ROWING INDOOR USE - SET",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110110.jpg",
+      "plate_key": "110110",
+      "category": "11. Welfare Items",
+      "product_url": "https://www.berthmarine.com/product/impa-code-110110/"
+    }
+  ],
+  "plates": [
+    {
+      "plate_key": "110101",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110101.jpg",
+      "impa_codes": [
+        "110101"
+      ],
+      "local_webp": "public/data/plates/berth-110101.webp"
+    },
+    {
+      "plate_key": "110102",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110102.jpg",
+      "impa_codes": [
+        "110102"
+      ],
+      "local_webp": "public/data/plates/berth-110102.webp"
+    },
+    {
+      "plate_key": "110103",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110103.jpg",
+      "impa_codes": [
+        "110103"
+      ],
+      "local_webp": "public/data/plates/berth-110103.webp"
+    },
+    {
+      "plate_key": "110104",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110104.jpg",
+      "impa_codes": [
+        "110104"
+      ],
+      "local_webp": "public/data/plates/berth-110104.webp"
+    },
+    {
+      "plate_key": "110105",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110105.jpg",
+      "impa_codes": [
+        "110105"
+      ],
+      "local_webp": "public/data/plates/berth-110105.webp"
+    },
+    {
+      "plate_key": "110106",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110106.jpg",
+      "impa_codes": [
+        "110106"
+      ],
+      "local_webp": "public/data/plates/berth-110106.webp"
+    },
+    {
+      "plate_key": "110107",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110107.jpg",
+      "impa_codes": [
+        "110107"
+      ],
+      "local_webp": "public/data/plates/berth-110107.webp"
+    },
+    {
+      "plate_key": "110108",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110108.jpg",
+      "impa_codes": [
+        "110108"
+      ],
+      "local_webp": "public/data/plates/berth-110108.webp"
+    },
+    {
+      "plate_key": "110109",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110109.jpg",
+      "impa_codes": [
+        "110109"
+      ],
+      "local_webp": "public/data/plates/berth-110109.webp"
+    },
+    {
+      "plate_key": "110110",
+      "image_url": "https://www.berthmarine.com/wp-content/uploads/2022/05/110110.jpg",
+      "impa_codes": [
+        "110110"
+      ],
+      "local_webp": "public/data/plates/berth-110110.webp"
+    }
+  ]
+}
