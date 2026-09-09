@@ -143,7 +143,7 @@ const TVC_StorePublicPullRefresh = (function () {
 
     function onTouchStart(e) {
         if (!isMobile() || _refreshing || modalOpen() || e.touches.length !== 1) return;
-        if (e.target.closest('#storePublicToolkit, .store-public-header, .store-public-footer, .modal')) return;
+        if (e.target.closest('#storePublicToolkit, .store-public-header, #marketing-footer, .home-footer, .modal')) return;
 
         _scrollEl = resolveScrollContainer(e.target);
         if (!_scrollEl || !atScrollTop(_scrollEl)) return;
