@@ -1,12 +1,12 @@
 /* THE VESSEL CODE — Service Worker (Offline-first) */
-const CACHE_VERSION = 'tvc-pms-20260906-toolkit-url';
+const CACHE_VERSION = 'tvc-pms-20260909-app-shell';
 const SHELL_CACHE = `${CACHE_VERSION}-shell`;
 const RUNTIME_CACHE = `${CACHE_VERSION}-runtime`;
 
 /** App shell — precached on install for offline boot */
 const PRECACHE_ASSETS = [
     '/',
-    '/index.html',
+    '/app.html',
     '/toolkit.html',
     '/store-public.html',
     '/manifest.json',
@@ -111,7 +111,7 @@ function networkFirstAsset(request) {
 function networkFirstNavigation(request) {
     return fetch(request).catch(async () => {
         const cache = await caches.open(SHELL_CACHE);
-        return cache.match('/index.html', { ignoreSearch: true })
+        return cache.match('/app.html', { ignoreSearch: true })
             || cache.match('/', { ignoreSearch: true })
             || Response.error();
     });

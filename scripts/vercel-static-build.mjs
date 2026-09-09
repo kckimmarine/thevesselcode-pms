@@ -11,7 +11,6 @@ const root = process.cwd();
 const out = join(root, 'dist');
 
 const STATIC_PATHS = [
-  'index.html',
   'home',
   'services',
   'contact-us',
@@ -77,20 +76,23 @@ if (existsSync(publicDir)) {
   }
 }
 
-// Marketing site at / (dist/index.html) — PMS SPA at /app.html for app.thevesselcode.com
+// PMS SPA at /app.html — no dist/index.html so Vercel host rewrites apply at /
 cpSync(join(root, 'index.html'), join(out, 'app.html'));
-cpSync(join(root, 'home', 'index.html'), join(out, 'index.html'));
-const marketingRoot = readFileSync(join(out, 'index.html'), 'utf8');
-if (!marketingRoot.includes('marketing-shell.js')) {
-  console.error('FAIL dist/index.html is not marketing home');
-  process.exit(1);
-}
 const pmsShell = readFileSync(join(out, 'app.html'), 'utf8');
 if (!pmsShell.includes('TVC-PMS') && !pmsShell.includes('TVC_App')) {
   console.error('FAIL dist/app.html is not PMS shell');
   process.exit(1);
 }
-console.log('OK dist/index.html ← marketing home');
+const marketingHome = readFileSync(join(out, 'home', 'index.html'), 'utf8');
+if (!marketingHome.includes('marketing-shell.js')) {
+  console.error('FAIL dist/home/index.html is not marketing home');
+  process.exit(1);
+}
+if (existsSync(join(out, 'index.html'))) {
+  console.error('FAIL dist/index.html must not exist (blocks Vercel host rewrites)');
+  process.exit(1);
+}
 console.log('OK dist/app.html ← PMS shell');
+console.log('OK dist/home/index.html ← marketing home (served via rewrite)');
 
 console.log('\nVercel static build complete → dist/');

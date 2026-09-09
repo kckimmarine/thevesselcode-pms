@@ -29,6 +29,7 @@ check('home redirect to root', redirects.some((r) => r.source === '/home/' && r.
 check('about-contact redirect', redirects.some((r) => r.source === '/about-contact/' && r.destination === '/contact-us'));
 check('no / -> /home/ redirect', !redirects.some((r) => r.destination === '/home/'));
 check('app host root rewrite', rewrites.some((r) => r.source === '/' && r.destination === '/app.html'));
+check('marketing host root rewrite', rewrites.some((r) => r.source === '/' && r.destination === '/home/index.html'));
 check('services rewrite', rewrites.some((r) => r.destination === '/services/index.html'));
 check('contact-us rewrite', rewrites.some((r) => r.destination === '/contact-us/index.html'));
 
@@ -56,15 +57,16 @@ check('toolkit no legacy header', !toolkit.includes('store-public-header'));
 const shell = readFileSync(join(ROOT, 'js/marketing-shell.js'), 'utf8');
 check('nav contact us label', shell.includes("label: 'Contact Us'"));
 
-check('build outputs marketing index', existsSync(join(ROOT, 'dist/index.html')));
+check('build skips dist/index.html', !existsSync(join(ROOT, 'dist/index.html')));
 check('build outputs pms app shell', existsSync(join(ROOT, 'dist/app.html')));
-if (existsSync(join(ROOT, 'dist/index.html'))) {
-    const distIndex = readFileSync(join(ROOT, 'dist/index.html'), 'utf8');
-    check('dist/index.html is marketing', distIndex.includes('marketing-shell.js'));
-}
+check('build outputs marketing home', existsSync(join(ROOT, 'dist/home/index.html')));
 if (existsSync(join(ROOT, 'dist/app.html'))) {
     const distApp = readFileSync(join(ROOT, 'dist/app.html'), 'utf8');
     check('dist/app.html is PMS', distApp.includes('TVC_App') || distApp.includes('TVC-PMS'));
+}
+if (existsSync(join(ROOT, 'dist/home/index.html'))) {
+    const distHome = readFileSync(join(ROOT, 'dist/home/index.html'), 'utf8');
+    check('dist/home/index.html is marketing', distHome.includes('marketing-shell.js'));
 }
 
 const failed = results.filter((r) => !r.ok);
