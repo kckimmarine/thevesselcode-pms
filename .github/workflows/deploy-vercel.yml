@@ -47,7 +47,9 @@ jobs:
 
       - name: Assert dist artifacts
         run: |
-          test -f dist/index.html
+          test ! -f dist/index.html
+          test -f dist/app.html
+          test -f dist/home/index.html
           test -f dist/toolkit.html
           test -f dist/js/config.js
           test -f dist/data/pms-unified.json
