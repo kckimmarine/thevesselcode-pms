@@ -25,19 +25,18 @@
   "rewrites": [
     {
       "source": "/",
-      "has": [{ "type": "host", "value": "thevesselcode.com" }],
-      "destination": "/home/index.html"
-    },
-    {
-      "source": "/",
-      "has": [{ "type": "host", "value": "www.thevesselcode.com" }],
-      "destination": "/home/index.html"
+      "has": [{ "type": "host", "value": "app.thevesselcode.com" }],
+      "destination": "/app.html"
     },
     { "source": "/services", "destination": "/services/index.html" },
     { "source": "/contact-us", "destination": "/contact-us/index.html" },
     { "source": "/toolkit", "destination": "/toolkit.html" },
     { "source": "/store/:code", "destination": "/api/store/:code" },
-    { "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|toolkit.html|store-public.html|about-contact|home|services|contact-us|store|sitemap|robots\\.txt).+)", "destination": "/index.html" }
+    {
+      "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|app.html|toolkit.html|store-public.html|about-contact|home|services|contact-us|store|sitemap|robots\\.txt).+)",
+      "has": [{ "type": "host", "value": "app.thevesselcode.com" }],
+      "destination": "/app.html"
+    }
   ],
   "functions": {
     "api/store/[code].js": {
@@ -60,6 +59,10 @@
     },
     {
       "source": "/index.html",
+      "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
+    },
+    {
+      "source": "/app.html",
       "headers": [{ "key": "Cache-Control", "value": "no-cache" }]
     },
     {
