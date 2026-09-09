@@ -107,8 +107,8 @@ async function main() {
     });
 
     results.push({
-      check: 'nav Contact Us link removed',
-      ok: await page.locator('.home-topnav a[data-nav="contact"]').count() === 0,
+      check: 'nav Contact Us link present',
+      ok: await page.locator('.home-topnav a[data-nav="contact"]').isVisible(),
     });
 
     results.push({
