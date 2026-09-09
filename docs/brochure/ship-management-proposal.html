@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HK Shipping Inc — 선박관리 서비스 프로포절</title>
+  <style>
+    :root {
+      --navy: #0a2540;
+      --blue: #1a5f9e;
+      --accent: #00a3e0;
+      --gold: #c9a227;
+      --gray: #5a6a7a;
+      --light: #f4f7fa;
+      --white: #ffffff;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Segoe UI', 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif;
+      color: #1a1a2e;
+      line-height: 1.65;
+      background: #e8ecf0;
+    }
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 20px auto;
+      background: var(--white);
+      box-shadow: 0 4px 24px rgba(0,0,0,.12);
+      overflow: hidden;
+      page-break-after: always;
+    }
+    @media print {
+      body { background: white; }
+      .page { margin: 0; box-shadow: none; }
+      .no-print { display: none; }
+    }
+
+    /* Cover */
+    .cover {
+      background: linear-gradient(145deg, var(--navy) 0%, #0d3a6b 50%, var(--blue) 100%);
+      color: white;
+      min-height: 297mm;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 60px 50px;
+      position: relative;
+    }
+    .cover::after {
+      content: '';
+      position: absolute;
+      bottom: 0; right: 0;
+      width: 60%; height: 40%;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 200'%3E%3Cpath d='M0 200 Q100 80 200 120 T400 60 L400 200Z' fill='rgba(255,255,255,.04)'/%3E%3C/svg%3E") no-repeat bottom right;
+      background-size: cover;
+    }
+    .cover-logo { font-size: 14px; letter-spacing: 4px; text-transform: uppercase; opacity: .7; margin-bottom: 40px; }
+    .cover h1 { font-size: 42px; font-weight: 700; line-height: 1.2; margin-bottom: 16px; }
+    .cover .subtitle { font-size: 22px; font-weight: 300; opacity: .9; margin-bottom: 48px; }
+    .cover .tagline {
+      font-size: 16px;
+      border-left: 4px solid var(--accent);
+      padding-left: 20px;
+      max-width: 480px;
+      opacity: .85;
+    }
+    .cover-footer {
+      position: absolute;
+      bottom: 50px;
+      left: 50px;
+      font-size: 13px;
+      opacity: .6;
+    }
+    .cover-pillars {
+      display: flex;
+      gap: 24px;
+      margin-top: 60px;
+      flex-wrap: wrap;
+    }
+    .pillar {
+      background: rgba(255,255,255,.1);
+      border: 1px solid rgba(255,255,255,.2);
+      border-radius: 8px;
+      padding: 20px 24px;
+      flex: 1;
+      min-width: 160px;
+    }
+    .pillar strong { display: block; font-size: 15px; margin-bottom: 6px; color: var(--accent); }
+    .pillar span { font-size: 13px; opacity: .8; }
+
+    /* Content pages */
+    .content { padding: 48px 50px; }
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid var(--navy);
+      padding-bottom: 12px;
+      margin-bottom: 32px;
+    }
+    .page-header h2 { font-size: 22px; color: var(--navy); }
+    .page-num { font-size: 12px; color: var(--gray); }
+    h3 { font-size: 17px; color: var(--blue); margin: 28px 0 12px; }
+    h3:first-of-type { margin-top: 0; }
+    p { margin-bottom: 12px; color: #333; font-size: 14px; }
+    ul { margin: 8px 0 16px 20px; font-size: 14px; }
+    li { margin-bottom: 6px; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      margin: 16px 0;
+    }
+    th {
+      background: var(--navy);
+      color: white;
+      padding: 10px 12px;
+      text-align: left;
+      font-weight: 600;
+    }
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #e0e6ed;
+    }
+    tr:nth-child(even) td { background: var(--light); }
+    .highlight-row td { background: #e8f4fc !important; font-weight: 600; }
+
+    .compare-table th:first-child { width: 22%; }
+    .compare-table .us { background: #d4edda; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin: 24px 0;
+    }
+    .stat-box {
+      background: var(--light);
+      border-radius: 8px;
+      padding: 20px;
+      text-align: center;
+      border-top: 3px solid var(--accent);
+    }
+    .stat-box .num { font-size: 28px; font-weight: 700; color: var(--navy); }
+    .stat-box .label { font-size: 12px; color: var(--gray); margin-top: 4px; }
+
+    .tvc-flow {
+      background: var(--light);
+      border-radius: 8px;
+      padding: 20px 24px;
+      font-family: monospace;
+      font-size: 13px;
+      line-height: 2;
+      margin: 16px 0;
+      border-left: 4px solid var(--accent);
+    }
+
+    .org-chart {
+      background: var(--light);
+      border-radius: 8px;
+      padding: 24px;
+      font-size: 12px;
+      line-height: 1.5;
+      overflow-x: auto;
+      white-space: pre;
+      font-family: 'Consolas', 'Malgun Gothic', monospace;
+    }
+
+    .value-cards {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      margin: 20px 0;
+    }
+    .value-card {
+      border: 1px solid #dde3ea;
+      border-radius: 8px;
+      padding: 20px;
+    }
+    .value-card h4 { color: var(--navy); font-size: 15px; margin-bottom: 8px; }
+    .value-card p { font-size: 13px; margin: 0; color: var(--gray); }
+
+    .contact-box {
+      background: var(--navy);
+      color: white;
+      border-radius: 8px;
+      padding: 28px 32px;
+      margin-top: 24px;
+    }
+    .contact-box h3 { color: var(--accent); margin-top: 0; }
+    .contact-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 24px; font-size: 14px; }
+    .contact-grid dt { opacity: .6; font-size: 12px; }
+    .contact-grid dd { margin: 0 0 12px; }
+
+    .badge {
+      display: inline-block;
+      background: var(--accent);
+      color: white;
+      font-size: 11px;
+      padding: 3px 10px;
+      border-radius: 12px;
+      margin-left: 8px;
+      vertical-align: middle;
+    }
+
+    .footnote { font-size: 11px; color: var(--gray); margin-top: 24px; border-top: 1px solid #dde3ea; padding-top: 12px; }
+    .print-btn {
+      position: fixed; top: 20px; right: 20px;
+      background: var(--navy); color: white;
+      border: none; padding: 12px 24px;
+      border-radius: 6px; cursor: pointer;
+      font-size: 14px; z-index: 100;
+    }
+    .print-btn:hover { background: var(--blue); }
+  </style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">🖨 PDF 저장 / 인쇄</button>
+
+<!-- PAGE 1: COVER -->
+<div class="page">
+  <div class="cover">
+    <div class="cover-logo">HK Shipping Inc</div>
+    <h1>선박관리 서비스<br>프로포절</h1>
+    <p class="subtitle">Ship Management Proposal for Shipowners</p>
+    <p class="tagline">
+      BSM급 종합 관리 역량 · 부산 기반 집중 운영 · The Vessel Code 디지털 플랫폼<br>
+      전 세계 지사 없이, 선주에게 비용 효율적이고 투명한 선박관리를 제공합니다.
+    </p>
+    <div class="cover-pillars">
+      <div class="pillar">
+        <strong>① The Vessel Code</strong>
+        <span>오프라인 PMS·SPARE·Sync 디지털 관리</span>
+      </div>
+      <div class="pillar">
+        <strong>② 종합 Ship Management</strong>
+        <span>기술·선원·운항·조달·QHSE</span>
+      </div>
+      <div class="pillar">
+        <strong>③ 부산 허브</strong>
+        <span>글로벌 지사 없는 효율적 운영</span>
+      </div>
+    </div>
+    <div class="cover-footer">Draft v1.0 · 2026 · Confidential</div>
+  </div>
+</div>
+
+<!-- PAGE 2: POSITIONING -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <h2>01 · 회사 소개 & 포지셔닝</h2>
+      <span class="page-num">02</span>
+    </div>
+
+    <p>HK Shipping Inc는 선주의 자산 보호, 해양환경 보호, 선원의 생명·안전을 최우선으로 하는 <strong>통합 선박관리</strong> 회사입니다. BSM(Bernhard Schulte Shipmanagement)과 같은 종합 관리 범위를 제공하되, 대명상선(DM Maritime)과 같이 <strong>부산 단일 허브</strong>에서 운영하여 관리 비용을 최적화합니다.</p>
+
+    <div class="stat-grid">
+      <div class="stat-box"><div class="num">29+</div><div class="label">관리 선박</div></div>
+      <div class="stat-box"><div class="num">30년+</div><div class="label">관리 경험</div></div>
+      <div class="stat-box"><div class="num">99%+</div><div class="label">가용성 목표</div></div>
+      <div class="stat-box"><div class="num">TVC</div><div class="label">디지털 플랫폼</div></div>
+    </div>
+
+    <h3>경쟁 포지셔닝</h3>
+    <table class="compare-table">
+      <thead>
+        <tr><th>항목</th><th>BSM</th><th>대명상선</th><th class="us">HK Shipping Inc</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>관리 범위</td><td>Ship/Crew/Performance/Digital</td><td>선박·선원·기술·ISM</td><td class="us">동급 종합 관리</td></tr>
+        <tr><td>글로벌 지사</td><td>10개 SMC</td><td>없음 (부산)</td><td class="us">없음 (부산 집중)</td></tr>
+        <tr><td>디지털</td><td>LiveFleet (클라우드)</td><td>—</td><td class="us">TVC (오프라인 우선)</td></tr>
+        <tr><td>선종</td><td>전 선종 700+척</td><td>Chemical Tanker</td><td class="us">Chemical + General Cargo</td></tr>
+        <tr><td>강점</td><td>규모·역사 (140년+)</td><td>케미컬·한국선원</td><td class="us">비용·유연성·TVC 투명성</td></tr>
+      </tbody>
+    </table>
+
+    <h3>그룹 구성</h3>
+    <table>
+      <thead><tr><th>법인</th><th>역할</th><th>위치</th></tr></thead>
+      <tbody>
+        <tr><td><strong>HK Shipping Group AS</strong></td><td>통합 해운 그룹</td><td>Norway</td></tr>
+        <tr><td><strong>Kopervik Ship Management</strong></td><td>General Cargo 선박관리 (21척+)</td><td>Norway / Poland</td></tr>
+        <tr><td><strong>대명상선 (DM Maritime)</strong></td><td>Chemical Tanker 선박·선원관리</td><td>부산, Korea</td></tr>
+        <tr><td><strong>Scandinavian Ship Services</strong></td><td>선원 채용·배승</td><td>Latvia</td></tr>
+        <tr><td><strong>VessTech Group</strong></td><td>기술 수리·선용품</td><td>—</td></tr>
+        <tr class="highlight-row"><td><strong>The Vessel Code</strong></td><td>PMS·SPARE·Sync 디지털 플랫폼</td><td>선박 + HQ</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE 3: TVC -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <h2>02 · The Vessel Code — 디지털 관리</h2>
+      <span class="page-num">03</span>
+    </div>
+
+    <p><strong>The Vessel Code (TVC-PMS)</strong>는 HK Shipping Inc 선박관리의 디지털 운영 기반입니다. BSM의 LiveFleet이 클라우드 실시간 대시보드를 제공하는 반면, TVC는 <strong>선박의 오프라인 환경</strong>에 최적화되어 항해 중·저속 위성망에서도 PMS·재고·결함 업무를 수행하고, 본사와 <strong>ZIP Export/Import</strong>로 안전하게 동기화합니다.</p>
+
+    <h3>TVC 모듈</h3>
+    <table>
+      <thead><tr><th>모듈</th><th>기능</th><th>선주 가치</th></tr></thead>
+      <tbody>
+        <tr><td><strong>PMS</strong></td><td>Deck/Engine 정비계획, Work Report, Overdue</td><td>정비 이력·PSC 대비</td></tr>
+        <tr><td><strong>SPARE</strong></td><td>부품 재고, 소모, 자동 차감</td><td>이중 차감 방지, 비용 통제</td></tr>
+        <tr><td><strong>Defect Report</strong></td><td>결함 등록 → 확인 → HQ 승인</td><td>결함 이력 단일화</td></tr>
+        <tr><td><strong>Work Permit</strong></td><td>작업허가 워크플로</td><td>안전관리 문서화</td></tr>
+        <tr><td><strong>Sync (ZIP)</strong></td><td>선박↔HQ 부서별 Export/Import</td><td>오프라인 선박 환경 대응</td></tr>
+      </tbody>
+    </table>
+
+    <h3>업무 워크플로</h3>
+    <div class="tvc-flow">
+작성자 (갑판/기관)  →  Save (Reported)
+        ↓
+확인자 (기관장/선장)  →  Confirm  (+ 스케줄·재고 규칙)
+        ↓
+HQ 승인자  →  Approve (잠금)
+        ↓
+선박 ↔ HQ  →  ZIP Export/Import
+    </div>
+
+    <h3>TVC vs 클라우드 플랫폼</h3>
+    <table>
+      <thead><tr><th></th><th>클라우드 (LiveFleet 등)</th><th class="us">TVC (오프라인 우선)</th></tr></thead>
+      <tbody>
+        <tr><td>연결</td><td>상시 인터넷 필요</td><td class="us">선박 PC 로컬 동작</td></tr>
+        <tr><td>데이터</td><td>서버 중심</td><td class="us">IndexedDB + ZIP 동기화</td></tr>
+        <tr><td>선박 환경</td><td>위성·항만망 의존</td><td class="us">항해 중 업무 가능</td></tr>
+        <tr><td>비용</td><td>구독·통신 비용</td><td class="us">로컬 설치, ZIP 전송</td></tr>
+      </tbody>
+    </table>
+    <p class="footnote">시범 운영: INCHEON CHEMI (Chemical Tanker) · TVC-PMS v2</p>
+  </div>
+</div>
+
+<!-- PAGE 4: BUSINESS SCOPE -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <h2>03 · 업무 영역</h2>
+      <span class="page-num">04</span>
+    </div>
+
+    <div class="value-cards">
+      <div class="value-card">
+        <h4>Technical Management</h4>
+        <p>ISM/ISPS/MLC · PMS(TVC) · 도크·수리 · 증서·Class/P&I · PSC/Vetting · 신조감리</p>
+      </div>
+      <div class="value-card">
+        <h4>Crew Management</h4>
+        <p>한국·동남아·유럽 선원 · STCW 검증 · Assessment · MLC 복지 · Chemical 전문 승무</p>
+      </div>
+      <div class="value-card">
+        <h4>Commercial & Operations</h4>
+        <p>항해계획 · 연료·성능 · 항만·에이전트 · 용선 지원 · Insurance·Claims</p>
+      </div>
+      <div class="value-card">
+        <h4>Procurement & Supplies</h4>
+        <p>Spare/Stores/Lub oil · 선용품 · 긴급 수리 · TVC SPARE 재고 동기화</p>
+      </div>
+      <div class="value-card">
+        <h4>QHSE & Environment</h4>
+        <p>Zero Harm · EU ETS/CII/BWMS · ISO 14001 · 결함·사고 TVC 기록</p>
+      </div>
+      <div class="value-card">
+        <h4>Digital & Reporting</h4>
+        <p>TVC 일상 운영 · 월간 Management Report · KPI Dashboard</p>
+      </div>
+    </div>
+
+    <h3>선주에게 제공하는 가치</h3>
+    <table>
+      <thead><tr><th>가치</th><th>내용</th></tr></thead>
+      <tbody>
+        <tr><td><strong>비용 효율</strong></td><td>글로벌 지사 없음 → 간접비 절감 · 폴란드·라트비아·부산 최적 인력 배치</td></tr>
+        <tr><td><strong>투명성</strong></td><td>TVC ZIP Sync → 선박·본사 데이터 일치 · Work Report/Defect/SPARE 단일 이력</td></tr>
+        <tr><td><strong>안전·규정</strong></td><td>ISM·ISPS·STCW·MLC · Oil & Chemical 전문 승무·정비 · PSC·SIRE·CDI 대비</td></tr>
+        <tr><td><strong>유연성</strong></td><td>3rd Party Management · 신조·인수·매각 · 선종·국적 맞춤형</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE 5: ORG CHART -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <h2>04 · 조직도</h2>
+      <span class="page-num">05</span>
+    </div>
+
+    <div class="org-chart">                    ┌─────────────────────────┐
+                    │   Managing Director     │
+                    │        (대표이사)         │
+                    └───────────┬─────────────┘
+                                │
+        ┌───────────┬───────────┼───────────┬───────────┐
+        │           │           │           │           │
+   ┌────▼────┐ ┌────▼────┐ ┌────▼────┐ ┌────▼────┐ ┌────▼────┐
+   │Technical│ │  Crew   │ │Commercial│ │Procure- │ │  QHSE   │
+   │Management│ │Management│ │& Ops   │ │ ment    │ │& Env    │
+   └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘ └────┬────┘
+        │           │           │           │           │
+   Superintendents  Crewing     Ops Desk    Stores     Audit
+   (감독관 ×N)      & Training              & Spare
+        │                         │
+        └─────────────┬───────────┘
+                      │
+   ┌──────────────────▼──────────────────────────────────┐
+   │         Digital Systems — The Vessel Code            │
+   │    PMS · SPARE · Defect · Work Permit · Sync        │
+   └──────────────────┬──────────────────────────────────┘
+                      │
+            ┌─────────▼─────────┐
+            │  Busan HQ (부산)   │
+            └─────────┬─────────┘
+                      │
+        ┌─────────────┼─────────────┐
+        │             │             │
+   Norway         Poland        Latvia
+  (Kopervik)     (Gdansk)      (Crewing)</div>
+
+    <h3>핵심 인력 구성 (예시)</h3>
+    <table>
+      <thead><tr><th>역할</th><th>담당</th></tr></thead>
+      <tbody>
+        <tr><td>Managing Director</td><td>그룹 전략·선주 관계</td></tr>
+        <tr><td>Technical Director</td><td>ISM·PMS·도크 계획</td></tr>
+        <tr><td>Crew Manager</td><td>선원 채용·교육·복지</td></tr>
+        <tr><td>Superintendent (×N)</td><td>선박별 기술 감독·PSC 대응</td></tr>
+        <tr><td>TVC System Admin</td><td>디지털 플랫폼·Sync 관리</td></tr>
+        <tr><td>QHSE Manager</td><td>안전·환경·내부심사</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE 6: TRACK RECORD -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <h2>05 · 선박관리 이력</h2>
+      <span class="page-num">06</span>
+    </div>
+
+    <h3>연혁</h3>
+    <table>
+      <thead><tr><th>연도</th><th>사건</th></tr></thead>
+      <tbody>
+        <tr><td>1994</td><td>Kopervik Ship Management 설립 (Norway)</td></tr>
+        <tr><td>1999</td><td>HK Shipping Group 협력 시작</td></tr>
+        <tr><td>2013</td><td>Technical·ISM 폴란드(Gdańsk) 이전 — 비용·인력 최적화</td></tr>
+        <tr><td>2017</td><td>HK Shipping Group AS 통합</td></tr>
+        <tr><td>2020</td><td>대명상선(DM Maritime) 설립 — 부산 케미컬 전문</td></tr>
+        <tr><td>2024–</td><td>The Vessel Code 시범 운영 (INCHEON CHEMI)</td></tr>
+        <tr><td>2026</td><td>FRI WAVE 인수 등 선대 확대</td></tr>
+      </tbody>
+    </table>
+
+    <h3>Chemical / Product Tanker (대명상선)</h3>
+    <table>
+      <thead><tr><th>선박명</th><th>G/T</th><th>선종</th><th>국적</th></tr></thead>
+      <tbody>
+        <tr class="highlight-row"><td>INCHEON CHEMI</td><td>5,510</td><td>Chemical</td><td>🇰🇷</td></tr>
+        <tr><td>GOLD STAR SHINE</td><td>5,376</td><td>Chemical</td><td>🇰🇷</td></tr>
+        <tr><td>VALIANT</td><td>8,270</td><td>Chemical</td><td>🇵🇦</td></tr>
+        <tr><td>STIO LOBELIA / AZALEA</td><td>5,720 / 5,546</td><td>Chemical</td><td>🇰🇷</td></tr>
+        <tr><td>QUARTERBACK J</td><td>6,976</td><td>Chemical</td><td>🇰🇷</td></tr>
+        <tr><td>KS SUNGLORY / SUNRISE</td><td>1,571 / 1,572</td><td>General</td><td>🇰🇷</td></tr>
+      </tbody>
+    </table>
+
+    <h3>General Cargo (Kopervik — 21척+)</h3>
+    <p>Brufjell, Astrid Erika, Fri Wave, Fri Bergen, Fri Gdansk, Haafjell, Lafjell 등 — 합계 약 87,000 DWT · 423+ 항만 운항</p>
+
+    <h3>운영 KPI 목표</h3>
+    <table>
+      <thead><tr><th>지표</th><th>목표</th></tr></thead>
+      <tbody>
+        <tr><td>Fleet Availability</td><td>99%+</td></tr>
+        <tr><td>PSC Zero Detention</td><td>연간 목표</td></tr>
+        <tr><td>PMS Overdue Rate</td><td>&lt; 5% (TVC 자동 추적)</td></tr>
+        <tr><td>Off-hire Days</td><td>최소화</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- PAGE 7: CONTACT -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <h2>06 · 서비스 프로세스 & 연락처</h2>
+      <span class="page-num">07</span>
+    </div>
+
+    <h3>선주 온보딩 프로세스</h3>
+    <div class="tvc-flow">
+1. Initial Meeting     →  선주 요구·선박 현황 파악
+2. Proposal & KPI      →  관리 범위·요율·KPI 합의
+3. Takeover Plan       →  ISM 인수·선원·증서·TVC 설치
+4. Go-Live             →  관리 개시 + TVC Sync 가동
+5. Monthly Review      →  KPI·비용·PSC 리뷰
+6. Continuous Improve  →  PMS·선원·디지털 개선
+    </div>
+
+    <div class="contact-box">
+      <h3>문의</h3>
+      <dl class="contact-grid">
+        <dt>회사명</dt><dd>HK Shipping Inc</dd>
+        <dt>주소</dt><dd>부산광역시 중구 중앙대로 [번호]</dd>
+        <dt>Tel</dt><dd>+82-51-XXX-XXXX</dd>
+        <dt>Email</dt><dd>[이메일 입력]</dd>
+        <dt>Web</dt><dd>hk-shipping.group / dmmaritime.co.kr</dd>
+        <dt>Digital</dt><dd>The Vessel Code — PMS · SPARE · Offline Sync</dd>
+      </dl>
+    </div>
+
+    <p class="footnote">
+      참고: BSM (bs-shipmanagement.com) · 대명상선 (dmmaritime.co.kr) · HK Shipping Group (hk-shipping.group)<br>
+      본 문서는 선주사 프로포절용 초안입니다. 법인명·연락처·KPI·인력 명단은 최종 발행 전 확인이 필요합니다.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>
