@@ -17,6 +17,7 @@ function check(name, ok, detail = '') {
 
 check('home/index.html exists', existsSync(join(ROOT, 'home/index.html')));
 check('services/index.html exists', existsSync(join(ROOT, 'services/index.html')));
+check('pms/index.html exists', existsSync(join(ROOT, 'pms/index.html')));
 check('contact-us/index.html exists', existsSync(join(ROOT, 'contact-us/index.html')));
 check('js/marketing-shell.js exists', existsSync(join(ROOT, 'js/marketing-shell.js')));
 check('css/marketing-shell.css exists', existsSync(join(ROOT, 'css/marketing-shell.css')));
@@ -31,6 +32,8 @@ check('no / -> /home/ redirect', !redirects.some((r) => r.destination === '/home
 check('app host root rewrite', rewrites.some((r) => r.source === '/' && r.destination === '/app.html'));
 check('marketing host root rewrite', rewrites.some((r) => r.source === '/' && r.destination === '/home/index.html'));
 check('services rewrite', rewrites.some((r) => r.destination === '/services/index.html'));
+check('pms rewrite', rewrites.some((r) => r.destination === '/pms/index.html'));
+check('pms not redirected to app', !redirects.some((r) => r.source === '/pms' && String(r.destination).includes('app.thevesselcode.com')));
 check('contact-us rewrite', rewrites.some((r) => r.destination === '/contact-us/index.html'));
 
 const shell = readFileSync(join(ROOT, 'js/marketing-shell.js'), 'utf8');
@@ -38,7 +41,9 @@ const home = readFileSync(join(ROOT, 'home/index.html'), 'utf8');
 check('marketing topbar mount', home.includes('id="marketing-topbar"'));
 check('marketing shell script', home.includes('marketing-shell.js'));
 check('hero slogan', home.includes('Decoding the Engineering, Operations, and Economics'));
+check('home hero eyebrow removed', !home.includes('Former C/E'));
 check('services link in marketing shell', shell.includes("href: '/services'"));
+check('pms nav internal route', shell.includes("href: '/pms'") && !shell.includes("href: 'https://app.thevesselcode.com', label: 'TVC-PMS'"));
 check('contact us link in marketing footer', shell.includes("href: '/contact-us'"));
 check('no inline services section on home', !home.includes('id="service-superintendent"'));
 check('canonical root', home.includes('https://thevesselcode.com/'));
@@ -46,6 +51,12 @@ check('canonical root', home.includes('https://thevesselcode.com/'));
 const services = readFileSync(join(ROOT, 'services/index.html'), 'utf8');
 check('services page pillars', services.includes('Owner') && services.includes('Strategic Supply'));
 check('services active nav', services.includes('data-mkt-active="services"'));
+
+const pms = readFileSync(join(ROOT, 'pms/index.html'), 'utf8');
+check('pms page hero title', pms.includes('Fleet Planned Maintenance'));
+check('pms active nav', pms.includes('data-mkt-active="pms"'));
+check('pms go to app CTA', pms.includes('href="https://app.thevesselcode.com"'));
+check('home explore pms internal', home.includes('href="/pms"'));
 
 const contact = readFileSync(join(ROOT, 'contact-us/index.html'), 'utf8');
 check('contact us title', contact.includes('Contact Us | THE VESSEL CODE'));
@@ -62,6 +73,7 @@ const marketingCss = [
     join(ROOT, 'css/marketing-theme.css'),
     join(ROOT, 'home/index.html'),
     join(ROOT, 'services/index.html'),
+    join(ROOT, 'pms/index.html'),
     join(ROOT, 'contact-us/index.html'),
 ].map((p) => readFileSync(p, 'utf8')).join('\n');
 check('no unsplash on marketing pages', !/unsplash\.com/i.test(marketingCss));

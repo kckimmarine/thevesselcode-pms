@@ -76,6 +76,33 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
     margin-bottom: 0;
 }
 
+.home-pms-hero .home-section-head {
+    max-width: 760px;
+}
+
+.home-pms-hero-actions {
+    margin-top: 20px;
+}
+
+.home-pms-cta-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+@media (max-width: 767px) {
+    .home-pms-cta-actions {
+        width: 100%;
+        justify-content: stretch;
+    }
+
+    .home-pms-cta-actions .home-btn {
+        flex: 1 1 100%;
+        text-align: center;
+    }
+}
+
 /* ── Enterprise glass cards ── */
 .mkt-glass-card,
 .home-card,
