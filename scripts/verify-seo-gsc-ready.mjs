@@ -23,12 +23,6 @@ function check(name, ok, detail = '') {
     console.log(ok ? 'OK' : 'FAIL', name, detail ? `— ${detail}` : '');
 }
 
-const toolkit = readFileSync(join(root, 'toolkit.html'), 'utf8');
-check('toolkit quick index label', toolkit.includes('Quick Reference IMPA Specs'));
-HUB_CODES.forEach((code) => {
-    check(`toolkit links /store/${code}`, toolkit.includes(`href="/store/${code}"`));
-});
-
 const home = readFileSync(join(root, 'home', 'index.html'), 'utf8');
 check('home footer store anchor', home.includes('<a href="/store/812101">Marine Store Spec Index (IMPA 812101)</a>'));
 

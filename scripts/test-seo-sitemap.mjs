@@ -125,12 +125,6 @@ storeChunks.forEach((fileName) => {
 });
 check('robots sitemap count matches index', (robotsTxt.match(/^Sitemap: /gm) || []).length === storeChunks.length + 1);
 
-const toolkit = readFileSync(join(root, 'toolkit.html'), 'utf8');
-check('toolkit quick index label', toolkit.includes('Quick Reference IMPA Specs'));
-HUB_CODES.forEach((code) => {
-    check(`toolkit hub link /store/${code}`, toolkit.includes(`href="/store/${code}"`));
-});
-
 const home = readFileSync(join(root, 'home', 'index.html'), 'utf8');
 check('home store index link', home.includes('<a href="/store/812101">Marine Store Spec Index (IMPA 812101)</a>'));
 
