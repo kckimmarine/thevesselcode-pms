@@ -13,6 +13,9 @@ Thumbs.db
 *.tmp
 gitstatus.tmp
 
+# Mirrored from public/assets for local npm start
+assets/
+
 # Electron / Pilot license secrets & build output
 electron/keys/private.pem
 dist/
