@@ -121,7 +121,12 @@ function specRows(item) {
 
 function buildPageTitle(item) {
     const name = item.name || 'Marine Store Item';
-    return `IMPA ${item.impa_code} - ${name} Specs & Catalog | The Vessel Code`;
+    return `IMPA ${item.impa_code} (${name}) Specs, Dimensions & Marine Stores Guide | The Vessel Code`;
+}
+
+function buildPrimaryHeading(item) {
+    const name = item.name || 'Marine Store Item';
+    return `IMPA CODE ${item.impa_code}: ${name}`;
 }
 
 function buildMetaDescription(item) {
@@ -133,7 +138,7 @@ function buildDescription(item) {
     return buildMetaDescription(item);
 }
 
-function buildJsonLd(item, pageUrl, imageUrl) {
+function buildProductJsonLd(item, pageUrl, imageUrl) {
     return {
         '@context': 'https://schema.org',
         '@type': 'Product',
@@ -154,11 +159,40 @@ function buildJsonLd(item, pageUrl, imageUrl) {
     };
 }
 
+function buildTechArticleJsonLd(item, pageUrl) {
+    return {
+        '@context': 'https://schema.org',
+        '@type': 'TechArticle',
+        headline: `IMPA CODE ${item.impa_code} Technical Specifications`,
+        name: buildPrimaryHeading(item),
+        description: buildDescription(item),
+        url: pageUrl,
+        author: {
+            '@type': 'Organization',
+            name: 'THE VESSEL CODE',
+            url: storeSeoOrigin(),
+        },
+        about: {
+            '@type': 'Product',
+            sku: item.impa_code,
+            name: item.name || `IMPA ${item.impa_code}`,
+        },
+    };
+}
+
+function buildJsonLd(item, pageUrl, imageUrl) {
+    return [
+        buildProductJsonLd(item, pageUrl, imageUrl),
+        buildTechArticleJsonLd(item, pageUrl),
+    ];
+}
+
 function buildStoreItemHtml(item, { origin } = {}) {
     const base = (origin || storeSeoOrigin()).replace(/\/$/, '');
     const pageUrl = `${base}/store/${item.impa_code}`;
     const toolkitUrl = `${base}/toolkit?impa=${encodeURIComponent(item.impa_code)}`;
     const title = buildPageTitle(item);
+    const heading = buildPrimaryHeading(item);
     const description = buildMetaDescription(item);
     const plateUrl = derivePlateAssetUrl(item);
     const imageUrl = plateUrl ? `${base}${plateUrl}` : '';
@@ -216,7 +250,7 @@ function buildStoreItemHtml(item, { origin } = {}) {
   <main class="wrap">
     <article class="card" itemscope itemtype="https://schema.org/Product">
       <span class="badge">IMPA ${escapeHtml(item.impa_code)}</span>
-      <h1 itemprop="name">${escapeHtml(item.name || `IMPA ${item.impa_code}`)}</h1>
+      <h1 itemprop="name">${escapeHtml(heading)}</h1>
       <p class="lead">${escapeHtml(description)}</p>
       <div class="grid">
         <section class="plate" aria-label="Catalog plate">
@@ -276,8 +310,12 @@ module.exports = {
     loadIndex,
     getItemByCode,
     buildPageTitle,
+    buildPrimaryHeading,
     buildMetaDescription,
     buildDescription,
+    buildProductJsonLd,
+    buildTechArticleJsonLd,
+    buildJsonLd,
     buildStoreItemHtml,
     buildNotFoundHtml,
 };

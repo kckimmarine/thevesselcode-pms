@@ -41,6 +41,14 @@ if (seoIndex.status !== 0) process.exit(seoIndex.status ?? 1);
 const sitemap = spawnSync('node', ['scripts/generate-sitemap.mjs'], { cwd: root, stdio: 'inherit' });
 if (sitemap.status !== 0) process.exit(sitemap.status ?? 1);
 
+const shouldPingSitemaps = process.env.PING_SITEMAPS === '1' || process.env.VERCEL === '1';
+if (shouldPingSitemaps) {
+  const ping = spawnSync('node', ['scripts/ping-sitemaps.mjs'], { cwd: root, stdio: 'inherit' });
+  if (ping.status !== 0) {
+    console.warn('WARN sitemap ping failed (non-fatal)');
+  }
+}
+
 rmSync(out, { recursive: true, force: true });
 mkdirSync(out, { recursive: true });
 

@@ -35,6 +35,9 @@ deploy/.env.deploy.local
 .env
 deploy/.env.local
 
+# Local indexing API push state (service account stays in env)
+.data/
+
 # Playwright HTML/trace dumps (keep e2e/artifacts screenshots + TEST_REPORT.md)
 /test-results/
 /playwright-report/

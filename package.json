@@ -10,6 +10,9 @@
     "export-spare-master-sample": "node scripts/export-spare-master-sample.mjs",
     "build": "node scripts/vercel-static-build.mjs",
     "generate:impa-seo": "node scripts/generate-impa-seo-index.mjs && node scripts/generate-sitemap.mjs",
+    "push:indexing": "node scripts/push-indexing.mjs",
+    "ping:sitemaps": "node scripts/ping-sitemaps.mjs",
+    "test:push-indexing": "node scripts/test-push-indexing.mjs",
     "test:store-seo": "node scripts/test-store-seo.mjs",
     "test:seo-sitemap": "node scripts/test-seo-sitemap.mjs",
     "verify:seo-gsc": "node scripts/verify-seo-gsc-ready.mjs",
@@ -79,6 +82,7 @@
     "@playwright/test": "^1.55.0",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "googleapis": "^144.0.0",
     "png-to-ico": "^3.0.2",
     "sharp": "^0.35.3"
   },

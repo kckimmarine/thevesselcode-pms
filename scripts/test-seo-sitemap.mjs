@@ -44,7 +44,10 @@ check(`${TEST_CODE} exists in seo index`, !!item?.name, item?.name || 'missing')
 
 const html = impaSeo.buildStoreItemHtml(item);
 check('default seo origin is www', impaSeo.storeSeoOrigin() === CANONICAL_ORIGIN);
-check('html title format', html.includes(`<title>IMPA ${TEST_CODE} - ${item.name} Specs &amp; Catalog | The Vessel Code</title>`));
+check('html title format', html.includes(`<title>IMPA ${TEST_CODE} (${item.name}) Specs, Dimensions &amp; Marine Stores Guide | The Vessel Code</title>`));
+check('html h1 format', html.includes(`<h1 itemprop="name">IMPA CODE ${TEST_CODE}: ${item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h1>`));
+check('html json-ld product', html.includes('"@type":"Product"') || html.includes('"@type": "Product"'));
+check('html json-ld techarticle', html.includes('"@type":"TechArticle"') || html.includes('"@type": "TechArticle"'));
 check('html canonical uses www', html.includes(`<link rel="canonical" href="${CANONICAL_ORIGIN}/store/${TEST_CODE}">`));
 check('html og:url uses www', html.includes(`<meta property="og:url" content="${CANONICAL_ORIGIN}/store/${TEST_CODE}">`));
 check('html meta description', html.includes('Technical specifications, dimensions, and marine store catalog details'));
