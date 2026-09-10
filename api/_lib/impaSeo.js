@@ -22,7 +22,7 @@ let _indexCache = null;
 function storeSeoOrigin() {
     const fromEnv = String(process.env.STORE_SEO_ORIGIN || '').trim();
     if (fromEnv) return fromEnv.replace(/\/$/, '');
-    return 'https://thevesselcode.com';
+    return 'https://www.thevesselcode.com';
 }
 
 function escapeHtml(value) {
@@ -107,7 +107,7 @@ function specRows(item) {
         }
     });
 
-    if (item.unit) rows.push(['Standard Unit', item.unit]);
+    if (item.unit && !used.has('Standard Unit')) rows.push(['Standard Unit', item.unit]);
     if (item.category) rows.push(['Catalog Section', item.category]);
     if (item.plate_id) rows.push(['Plate Reference', item.plate_id]);
 

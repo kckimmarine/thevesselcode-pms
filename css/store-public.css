@@ -104,6 +104,50 @@ html:has(.store-public-body) {
     text-decoration: underline;
 }
 
+.seo-quick-index {
+    margin: 0 16px 12px;
+    padding: 14px 16px;
+    border: 1px solid #bfd0ea;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.82);
+}
+
+.seo-quick-index-label {
+    margin: 0 0 10px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #0b3d91;
+}
+
+.seo-quick-index-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.seo-quick-chip {
+    display: inline-flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-radius: 999px;
+    border: 1px solid #cbd5e1;
+    background: #f8fafc;
+    color: #0b3d91;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.seo-quick-chip:hover,
+.seo-quick-chip:focus-visible {
+    background: #e8f1ff;
+    border-color: #93b4e4;
+}
+
 .store-public-toolkit {
     display: flex;
     flex-wrap: nowrap;

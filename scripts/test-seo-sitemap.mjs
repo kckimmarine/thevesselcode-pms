@@ -11,6 +11,12 @@ import { createRequire } from 'node:module';
 const root = process.cwd();
 const require = createRequire(import.meta.url);
 const TEST_CODE = '812101';
+const CANONICAL_ORIGIN = 'https://www.thevesselcode.com';
+const HUB_CODES = [
+    '812101', '812105', '812204', '812312', '812851',
+    '590101', '590203', '590705', '591211', '591720',
+    '791201', '791301',
+];
 
 function run(label, cmd, args) {
     const result = spawnSync(cmd, args, { cwd: root, stdio: 'inherit' });
@@ -36,8 +42,11 @@ const impaSeo = require('../api/_lib/impaSeo.js');
 const item = impaSeo.getItemByCode(TEST_CODE);
 check(`${TEST_CODE} exists in seo index`, !!item?.name, item?.name || 'missing');
 
-const html = impaSeo.buildStoreItemHtml(item, { origin: 'https://thevesselcode.com' });
+const html = impaSeo.buildStoreItemHtml(item);
+check('default seo origin is www', impaSeo.storeSeoOrigin() === CANONICAL_ORIGIN);
 check('html title format', html.includes(`<title>IMPA ${TEST_CODE} - ${item.name} Specs &amp; Catalog | The Vessel Code</title>`));
+check('html canonical uses www', html.includes(`<link rel="canonical" href="${CANONICAL_ORIGIN}/store/${TEST_CODE}">`));
+check('html og:url uses www', html.includes(`<meta property="og:url" content="${CANONICAL_ORIGIN}/store/${TEST_CODE}">`));
 check('html meta description', html.includes('Technical specifications, dimensions, and marine store catalog details'));
 check('html spec table', html.includes('<table class="spec-table">'));
 check('html rating row', html.includes('<th scope="row">Rating</th>'));
@@ -104,6 +113,20 @@ const storeChunk = readFileSync(join(root, 'public', 'sitemap-store-1.xml'), 'ut
 assertValidXml('sitemap-store-1.xml', storeChunk);
 check('store chunk includes test code', storeChunk.includes(`/store/${TEST_CODE}`));
 check('store chunk priority 0.8', storeChunk.includes('<priority>0.8</priority>'));
+
+const toolkit = readFileSync(join(root, 'toolkit.html'), 'utf8');
+check('toolkit quick index label', toolkit.includes('Quick Reference IMPA Specs'));
+HUB_CODES.forEach((code) => {
+    check(`toolkit hub link /store/${code}`, toolkit.includes(`href="/store/${code}"`));
+});
+
+const home = readFileSync(join(root, 'home', 'index.html'), 'utf8');
+check('home store index link', home.includes('<a href="/store/812101">Marine Store Spec Index (IMPA 812101)</a>'));
+
+HUB_CODES.forEach((code) => {
+    const hubItem = impaSeo.getItemByCode(code);
+    check(`hub code in seo index ${code}`, !!hubItem?.name, hubItem?.name || 'missing');
+});
 
 const failed = results.filter((r) => !r.ok);
 if (failed.length) {

@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-09-10T05:10:50.986Z",
+  "generated_at": "2026-09-10T05:23:01.275Z",
   "chapters": [
     "59",
     "61",
     "79",
     "81"
   ],
-  "count": 515,
+  "count": 521,
   "items": [
     {
       "c": "150821",
@@ -2478,6 +2478,40 @@
       }
     },
     {
+      "impa_code": "791201",
+      "code": "791201",
+      "name": "Antifouling Paint Self-Polishing Red 20L",
+      "unit": "LTR",
+      "category": "Paints & Coatings",
+      "rob": 40,
+      "plate_id": "PL-79-01",
+      "plate_no": "PL-79-01",
+      "specs": {
+        "Rating": "IMO PSPC",
+        "Material": "Copper-free SPC",
+        "Standard Unit": "LTR",
+        "Dimensions": "20 L pail",
+        "Standard": "ISO 12944"
+      }
+    },
+    {
+      "impa_code": "791301",
+      "code": "791301",
+      "name": "Epoxy Tank Coating Grey 20L",
+      "unit": "LTR",
+      "category": "Paints & Coatings",
+      "rob": 32,
+      "plate_id": "PL-79-02",
+      "plate_no": "PL-79-02",
+      "specs": {
+        "Rating": "IMO PSPC",
+        "Material": "Epoxy marine coating",
+        "Standard Unit": "LTR",
+        "Dimensions": "20 L pail",
+        "Standard": "ISO 12944"
+      }
+    },
+    {
       "c": "810001",
       "n": "Bicycle Tube",
       "u": "PCS",
@@ -3956,6 +3990,74 @@
         "Dimensions": "DN50 flanged gate valve",
         "Body Material": "Bronze",
         "Standard": "ISO 7005 / PN16"
+      }
+    },
+    {
+      "impa_code": "812105",
+      "code": "812105",
+      "name": "Globe Valve Bronze Straight DN40",
+      "unit": "PCS",
+      "category": "Valves & Cocks",
+      "rob": 6,
+      "plate_id": "PL-81-21",
+      "plate_no": "PL-81-21",
+      "specs": {
+        "Rating": "PN16",
+        "Material": "Bronze",
+        "Standard Unit": "PCS",
+        "Dimensions": "DN40 straight globe valve",
+        "Standard": "ISO 7005 / PN16"
+      }
+    },
+    {
+      "impa_code": "812204",
+      "code": "812204",
+      "name": "Butterfly Valve Lug Type DN80",
+      "unit": "PCS",
+      "category": "Valves & Cocks",
+      "rob": 4,
+      "plate_id": "PL-81-21",
+      "plate_no": "PL-81-21",
+      "specs": {
+        "Rating": "PN16",
+        "Material": "Ductile iron",
+        "Standard Unit": "PCS",
+        "Dimensions": "DN80 lug type",
+        "Standard": "ISO 7005 / PN16"
+      }
+    },
+    {
+      "impa_code": "812312",
+      "code": "812312",
+      "name": "Check Valve Swing Type Bronze DN65",
+      "unit": "PCS",
+      "category": "Valves & Cocks",
+      "rob": 5,
+      "plate_id": "PL-81-21",
+      "plate_no": "PL-81-21",
+      "specs": {
+        "Rating": "PN16",
+        "Material": "Bronze",
+        "Standard Unit": "PCS",
+        "Dimensions": "DN65 swing check valve",
+        "Standard": "ISO 7005 / PN16"
+      }
+    },
+    {
+      "impa_code": "812851",
+      "code": "812851",
+      "name": "Ball Valve Full Bore Stainless DN25",
+      "unit": "PCS",
+      "category": "Valves & Cocks",
+      "rob": 8,
+      "plate_id": "PL-81-21",
+      "plate_no": "PL-81-21",
+      "specs": {
+        "Rating": "PN40",
+        "Material": "SS316",
+        "Standard Unit": "PCS",
+        "Dimensions": "DN25 full bore",
+        "Standard": "ISO 7005 / PN40"
       }
     }
   ]
