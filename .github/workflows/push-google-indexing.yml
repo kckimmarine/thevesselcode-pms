@@ -1,0 +1,62 @@
+name: Google Indexing Push (IMPA store)
+
+# Mobile: GitHub app → Actions → this workflow → Run workflow
+on:
+  workflow_dispatch:
+    inputs:
+      limit:
+        description: Max URLs to push this run
+        required: true
+        default: '200'
+        type: string
+      dry_run:
+        description: Preview only (no Google API calls)
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+jobs:
+  push-indexing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Generate IMPA SEO index
+        run: node scripts/generate-impa-seo-index.mjs
+
+      - name: Dry-run preview
+        if: inputs.dry_run == true
+        env:
+          GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON }}
+        run: npm run push:indexing -- --dry-run --limit ${{ inputs.limit }}
+
+      - name: Push URLs to Google Indexing API
+        if: inputs.dry_run != true
+        env:
+          GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::Secret GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON is not set."
+            echo "Repo → Settings → Secrets → Actions → New repository secret"
+            echo "Name: GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON"
+            echo "Value: paste the full JSON key file contents"
+            exit 1
+          fi
+          npm run push:indexing -- --limit ${{ inputs.limit }}
+
+      - name: Ping Bing sitemaps
+        if: inputs.dry_run != true
+        run: npm run ping:sitemaps
