@@ -56,27 +56,129 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
     background-repeat: no-repeat;
 }
 
-/* Home — smart vessel network illustration with navy scrim blend */
+/* Home — smart vessel network illustration with navy scrim blend (variant picker) */
 .mkt-hero-smart-vessel,
 #hero.mkt-hero-smart-vessel {
+    --hero-h0: 0.95;
+    --hero-h45: 0.85;
+    --hero-h75: 0.55;
+    --hero-h100: 0.85;
+    --hero-v0: 0.7;
+    --hero-v100: 0.98;
+    --hero-image-boost: 1;
     background-color: #0a101e;
     background-image:
         linear-gradient(
             90deg,
-            rgba(10, 16, 30, 0.95) 0%,
-            rgba(10, 16, 30, 0.85) 45%,
-            rgba(10, 16, 30, 0.55) 75%,
-            rgba(10, 16, 30, 0.85) 100%
+            rgba(10, 16, 30, var(--hero-h0)) 0%,
+            rgba(10, 16, 30, var(--hero-h45)) 45%,
+            rgba(10, 16, 30, var(--hero-h75)) 75%,
+            rgba(10, 16, 30, var(--hero-h100)) 100%
         ),
         linear-gradient(
             180deg,
-            rgba(10, 16, 30, 0.7) 0%,
-            rgba(10, 16, 30, 0.98) 100%
-        ),
-        url('/assets/images/hero-smart-vessel.jpg');
+            rgba(10, 16, 30, var(--hero-v0)) 0%,
+            rgba(10, 16, 30, var(--hero-v100)) 100%
+        );
     background-size: cover;
     background-position: center right;
     background-repeat: no-repeat;
+}
+
+.mkt-hero-smart-vessel::before,
+#hero.mkt-hero-smart-vessel::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background-image: url('/assets/images/hero-smart-vessel.jpg');
+    background-size: cover;
+    background-position: center right;
+    background-repeat: no-repeat;
+    filter: saturate(var(--hero-image-boost)) contrast(calc(0.98 + (var(--hero-image-boost) - 1) * 0.35));
+    pointer-events: none;
+}
+
+#hero.mkt-hero-smart-vessel[data-hero-variant="soft"] {
+    --hero-h0: 0.97;
+    --hero-h45: 0.9;
+    --hero-h75: 0.72;
+    --hero-h100: 0.92;
+    --hero-v0: 0.82;
+    --hero-v100: 0.99;
+    --hero-image-boost: 0.92;
+}
+
+#hero.mkt-hero-smart-vessel[data-hero-variant="balanced"] {
+    --hero-h0: 0.95;
+    --hero-h45: 0.85;
+    --hero-h75: 0.55;
+    --hero-h100: 0.85;
+    --hero-v0: 0.7;
+    --hero-v100: 0.98;
+    --hero-image-boost: 1;
+}
+
+#hero.mkt-hero-smart-vessel[data-hero-variant="vivid"],
+#hero.mkt-hero-smart-vessel:not([data-hero-variant]) {
+    --hero-h0: 0.9;
+    --hero-h45: 0.76;
+    --hero-h75: 0.38;
+    --hero-h100: 0.72;
+    --hero-v0: 0.58;
+    --hero-v100: 0.94;
+    --hero-image-boost: 1.08;
+}
+
+#hero.mkt-hero-smart-vessel[data-hero-variant="crisp"] {
+    --hero-h0: 0.84;
+    --hero-h45: 0.66;
+    --hero-h75: 0.28;
+    --hero-h100: 0.62;
+    --hero-v0: 0.48;
+    --hero-v100: 0.88;
+    --hero-image-boost: 1.14;
+}
+
+.home-hero-variant-picker {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+.home-hero-variant-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #64748b;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+}
+
+.home-hero-variant-btn {
+    border: 1px solid rgba(56, 189, 248, 0.22);
+    background: rgba(15, 23, 42, 0.55);
+    color: #94a3b8;
+    border-radius: 999px;
+    padding: 5px 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+
+.home-hero-variant-btn:hover,
+.home-hero-variant-btn:focus-visible {
+    color: #e2e8f0;
+    border-color: rgba(56, 189, 248, 0.45);
+    outline: none;
+}
+
+.home-hero-variant-btn.active {
+    background: rgba(14, 116, 144, 0.35);
+    border-color: rgba(56, 189, 248, 0.55);
+    color: #f8fafc;
 }
 
 @media (max-width: 768px) {
@@ -85,12 +187,91 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
         background-image:
             linear-gradient(
                 180deg,
-                rgba(10, 16, 30, 0.94) 0%,
-                rgba(10, 16, 30, 0.9) 42%,
-                rgba(10, 16, 30, 0.78) 100%
-            ),
-            url('/assets/images/hero-smart-vessel.jpg');
+                rgba(10, 16, 30, calc(var(--hero-h0) + 0.02)) 0%,
+                rgba(10, 16, 30, calc(var(--hero-h45) + 0.06)) 42%,
+                rgba(10, 16, 30, calc(var(--hero-h75) + 0.2)) 100%
+            );
+    }
+
+    .mkt-hero-smart-vessel::before,
+    #hero.mkt-hero-smart-vessel::before {
         background-position: center bottom;
+    }
+}
+
+/* Services — photographic card backgrounds with navy scrim */
+.home-service-card.home-service-card--photo {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    background: rgba(15, 23, 42, 0.72);
+}
+
+.home-service-card--photo::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-repeat: no-repeat;
+    opacity: 0.42;
+    z-index: 0;
+    transform: scale(1.02);
+}
+
+.home-service-card--photo::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+        120deg,
+        rgba(10, 16, 30, 0.94) 0%,
+        rgba(10, 16, 30, 0.84) 42%,
+        rgba(10, 16, 30, 0.62) 100%
+    );
+    z-index: 0;
+}
+
+.home-service-card--photo > * {
+    position: relative;
+    z-index: 1;
+}
+
+.home-service-card--superintendent::before {
+    background-image: url('/assets/images/services/service-superintendent.jpg');
+    background-position: center right;
+}
+
+.home-service-card--retrofit::before {
+    background-image: url('/assets/images/services/service-retrofit.jpg');
+    background-position: center center;
+}
+
+.home-service-card--psc::before {
+    background-image: url('/assets/images/services/service-psc.jpg');
+    background-position: center top;
+}
+
+.home-service-card--repair::before {
+    background-image: url('/assets/images/services/service-repair.jpg');
+    background-position: center center;
+}
+
+.home-service-card--supply::before {
+    background-image: url('/assets/images/services/service-supply.webp');
+    background-position: center right;
+}
+
+@media (max-width: 768px) {
+    .home-service-card--photo::before {
+        opacity: 0.3;
+    }
+
+    .home-service-card--photo::after {
+        background: linear-gradient(
+            180deg,
+            rgba(10, 16, 30, 0.95) 0%,
+            rgba(10, 16, 30, 0.88) 100%
+        );
     }
 }
 

@@ -16,13 +16,13 @@
     <link rel="icon" type="image/png" href="/icons/company-logo.png?v=20260804-logo-no-ring">
     <link rel="stylesheet" href="/css/home.css?v=20260909-mkt-dark">
     <link rel="stylesheet" href="/css/marketing-shell.css?v=20260909-mkt-footer">
-    <link rel="stylesheet" href="/css/marketing-theme.css?v=20260910-hero-vessel">
+    <link rel="stylesheet" href="/css/marketing-theme.css?v=20260910-hero-services-bg">
 </head>
 <body class="home-page mkt-page" data-mkt-active="home">
     <div class="mkt-site-wrap">
         <div id="marketing-topbar"></div>
         <div class="home-shell">
-        <section id="hero" class="home-hero mkt-hero mkt-hero-smart-vessel" aria-labelledby="homeHeroTitle">
+        <section id="hero" class="home-hero mkt-hero mkt-hero-smart-vessel" data-hero-variant="vivid" aria-labelledby="homeHeroTitle">
             <div class="home-hero-copy">
                 <h1 id="homeHeroTitle">THE VESSEL CODE</h1>
                 <p class="home-hero-tagline">Decoding the Engineering, Operations, and Economics of Global Shipping.</p>
@@ -36,6 +36,13 @@
                 <div class="home-hero-actions">
                     <a class="home-btn home-btn-primary" href="/pms">Explore TVC-PMS</a>
                     <a class="home-btn home-btn-secondary" href="/toolkit">Free Maritime Toolkit / IMPA Catalog</a>
+                </div>
+                <div id="homeHeroVariantPicker" class="home-hero-variant-picker" role="group" aria-label="Hero background intensity">
+                    <span class="home-hero-variant-label">Background:</span>
+                    <button type="button" class="home-hero-variant-btn" data-variant="soft" aria-pressed="false">Soft</button>
+                    <button type="button" class="home-hero-variant-btn" data-variant="balanced" aria-pressed="false">Balanced</button>
+                    <button type="button" class="home-hero-variant-btn active" data-variant="vivid" aria-pressed="true">Vivid</button>
+                    <button type="button" class="home-hero-variant-btn" data-variant="crisp" aria-pressed="false">Crisp</button>
                 </div>
             </div>
             <aside id="core-topics" class="home-hero-card mkt-glass-card" aria-label="Core topics">
@@ -106,5 +113,6 @@
         </div>
     </div>
     <script src="/js/marketing-shell.js?v=20260910-pms-page"></script>
+    <script src="/js/home-hero-variant.js?v=20260910-hero-services-bg"></script>
 </body>
 </html>
