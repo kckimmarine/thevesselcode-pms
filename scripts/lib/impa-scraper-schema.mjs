@@ -28,16 +28,16 @@ export function isValidImpaCode(code) {
 
 /** Compact scraper row → storeManager / fromCatalogJson compatible object */
 export function expandCompactItem(item, chapterMeta = CHAPTER_META) {
-  const c = String(item?.c || '').trim();
+  const c = String(item?.c || item?.impa_code || item?.code || '').trim();
   const g = String(item?.g || c.slice(0, 2) || '').trim();
   const meta = chapterMeta[g] || { title: `Chapter ${g}`, category: 'General' };
-  const p = String(item?.p || '').trim() || derivePlateId(c);
+  const p = String(item?.p || item?.plate_id || item?.plate_no || '').trim() || derivePlateId(c);
   return {
     impa_code: c,
     code: c,
-    name: String(item?.n || '').trim(),
-    unit: normalizeUnit(item?.u),
-    category: meta.category,
+    name: String(item?.n || item?.name || '').trim(),
+    unit: normalizeUnit(item?.u || item?.unit),
+    category: String(item?.category || meta.category || 'General').trim(),
     chapter: g,
     plate_id: p,
     plate_no: p,
@@ -47,9 +47,10 @@ export function expandCompactItem(item, chapterMeta = CHAPTER_META) {
 
 export function validateCompactItem(item) {
   const errors = [];
-  if (!isValidImpaCode(item?.c)) errors.push(`invalid code: ${item?.c}`);
-  if (!String(item?.n || '').trim()) errors.push('missing name (n)');
-  if (!String(item?.u || '').trim()) errors.push('missing unit (u)');
-  if (!String(item?.g || '').trim()) errors.push('missing chapter (g)');
+  const code = String(item?.c || item?.impa_code || item?.code || '').trim();
+  if (!isValidImpaCode(code)) errors.push(`invalid code: ${code}`);
+  if (!String(item?.n || item?.name || '').trim()) errors.push('missing name (n)');
+  if (!String(item?.u || item?.unit || '').trim()) errors.push('missing unit (u)');
+  if (!String(item?.g || code.slice(0, 2) || '').trim()) errors.push('missing chapter (g)');
   return errors;
 }

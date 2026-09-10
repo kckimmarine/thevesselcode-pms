@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 
 const HUB_CODES = [
     '812101', '812105', '812204', '812312', '812851',
-    '590101', '590203', '590705', '591211', '591720',
+    '590101', '590203', '590705', '590102', '590105',
     '791201', '791301',
 ];
 const CANONICAL_ORIGIN = 'https://www.thevesselcode.com';

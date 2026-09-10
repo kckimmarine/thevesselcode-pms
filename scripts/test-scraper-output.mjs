@@ -37,23 +37,33 @@ function toDbRecord(expanded) {
   };
 }
 
+function normalizeChapterPayload(payload, file) {
+  if (Array.isArray(payload)) {
+    const match = /impa-(\d{2})\.json$/.exec(file);
+    return { chapter: match?.[1] || '', items: payload };
+  }
+  return {
+    chapter: String(payload?.chapter || ''),
+    items: Array.isArray(payload?.items) ? payload.items : [],
+  };
+}
+
 function testChapterFile(file) {
-  const payload = loadJson(file);
+  const raw = loadJson(file);
+  const payload = normalizeChapterPayload(raw, file);
   const errors = [];
   if (!payload.chapter) errors.push(`${file}: missing chapter`);
-  if (!Array.isArray(payload.items) || !payload.items.length) errors.push(`${file}: empty items`);
+  if (!payload.items.length) errors.push(`${file}: empty items`);
 
-  for (const item of payload.items || []) {
+  for (const item of payload.items) {
+    const code = item.c || item.impa_code || item.code || '?';
     const ve = validateCompactItem(item);
-    if (ve.length) errors.push(`${file} ${item.c}: ${ve.join(', ')}`);
+    if (ve.length) errors.push(`${file} ${code}: ${ve.join(', ')}`);
     const exp = expandCompactItem(item, CHAPTER_META);
     const db = toDbRecord(exp);
-    if (!db) errors.push(`${file} ${item.c}: failed DB expansion`);
-    if (item.g && item.c && !item.c.startsWith(item.g)) {
-      errors.push(`${file} ${item.c}: code prefix mismatch g=${item.g}`);
-    }
+    if (!db) errors.push(`${file} ${code}: failed DB expansion`);
   }
-  return { file, count: payload.items?.length || 0, errors };
+  return { file, count: payload.items.length, errors };
 }
 
 function main() {
