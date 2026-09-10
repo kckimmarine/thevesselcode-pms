@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-09-08T14:03:37.079Z",
+  "generated_at": "2026-09-10T05:10:50.986Z",
   "chapters": [
     "59",
     "61",
     "79",
     "81"
   ],
-  "count": 514,
+  "count": 515,
   "items": [
     {
       "c": "150821",
@@ -3939,6 +3939,24 @@
       "u": "BOX",
       "g": "81",
       "p": "81-110-01.jpg"
+    },
+    {
+      "impa_code": "812101",
+      "code": "812101",
+      "name": "Gate Valve Bronze Flanged DN50 PN16",
+      "unit": "PCS",
+      "category": "Valves & Cocks",
+      "rob": 6,
+      "plate_id": "PL-81-21",
+      "plate_no": "PL-81-21",
+      "specs": {
+        "Rating": "PN16",
+        "Material": "Bronze",
+        "Standard Unit": "PCS",
+        "Dimensions": "DN50 flanged gate valve",
+        "Body Material": "Bronze",
+        "Standard": "ISO 7005 / PN16"
+      }
     }
   ]
 }

@@ -9,6 +9,13 @@ import { join } from 'node:path';
 const root = process.cwd();
 const URLS_PER_SITEMAP = 10_000;
 const origin = String(process.env.STORE_SEO_ORIGIN || 'https://thevesselcode.com').replace(/\/$/, '');
+const lastmod = new Date().toISOString().slice(0, 10);
+
+const CORE_PAGES = [
+  { path: '/', changefreq: 'weekly', priority: '1.0' },
+  { path: '/toolkit', changefreq: 'weekly', priority: '0.9' },
+  { path: '/about-contact', changefreq: 'monthly', priority: '0.7' },
+];
 
 const indexPath = join(root, 'api', '_data', 'impa-seo-index.json');
 const fallbackPath = join(root, 'public', 'data', 'impa-seo-index.json');
@@ -23,7 +30,21 @@ const codes = Object.keys(payload.items || {}).sort();
 const publicDir = join(root, 'public');
 mkdirSync(publicDir, { recursive: true });
 
-const lastmod = new Date().toISOString().slice(0, 10);
+const coreUrls = CORE_PAGES.map(({ path, changefreq, priority }) => `  <url>
+    <loc>${origin}${path}</loc>
+    <lastmod>${lastmod}</lastmod>
+    <changefreq>${changefreq}</changefreq>
+    <priority>${priority}</priority>
+  </url>`).join('\n');
+const coreXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${coreUrls}
+</urlset>
+`;
+writeFileSync(join(publicDir, 'sitemap-core.xml'), coreXml);
+console.log('OK public/sitemap-core.xml', `(${CORE_PAGES.length} URLs)`);
+
+const lastmodStore = lastmod;
 const chunks = [];
 for (let i = 0; i < codes.length; i += URLS_PER_SITEMAP) {
     chunks.push(codes.slice(i, i + URLS_PER_SITEMAP));
@@ -35,9 +56,9 @@ chunks.forEach((chunk, idx) => {
     chunkFiles.push(fileName);
     const urls = chunk.map((code) => `  <url>
     <loc>${origin}/store/${code}</loc>
-    <lastmod>${lastmod}</lastmod>
+    <lastmod>${lastmodStore}</lastmod>
     <changefreq>monthly</changefreq>
-    <priority>0.6</priority>
+    <priority>0.8</priority>
   </url>`).join('\n');
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
@@ -48,10 +69,16 @@ ${urls}
     console.log('OK', `public/${fileName}`, `(${chunk.length} URLs)`);
 });
 
-const indexEntries = chunkFiles.map((fileName) => `  <sitemap>
-    <loc>${origin}/${fileName}</loc>
+const indexEntries = [
+  `  <sitemap>
+    <loc>${origin}/sitemap-core.xml</loc>
     <lastmod>${lastmod}</lastmod>
-  </sitemap>`).join('\n');
+  </sitemap>`,
+  ...chunkFiles.map((fileName) => `  <sitemap>
+    <loc>${origin}/${fileName}</loc>
+    <lastmod>${lastmodStore}</lastmod>
+  </sitemap>`),
+].join('\n');
 
 const sitemapIndex = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">

@@ -89,29 +89,48 @@ function derivePlateAssetUrl(item) {
     return '';
 }
 
+const PRIORITY_SPEC_KEYS = ['Rating', 'Material', 'Standard Unit', 'Standard'];
+
 function specRows(item) {
+    const specs = item.specs && typeof item.specs === 'object' ? item.specs : {};
+    const used = new Set();
     const rows = [
         ['IMPA Code', item.impa_code],
         ['Product Name', item.name],
-        ['Unit of Measure', item.unit],
-        ['Catalog Section', item.category],
     ];
+
+    PRIORITY_SPEC_KEYS.forEach((key) => {
+        const value = specs[key];
+        if (value != null && String(value).trim()) {
+            rows.push([key, String(value)]);
+            used.add(key);
+        }
+    });
+
+    if (item.unit) rows.push(['Standard Unit', item.unit]);
+    if (item.category) rows.push(['Catalog Section', item.category]);
     if (item.plate_id) rows.push(['Plate Reference', item.plate_id]);
-    Object.entries(item.specs || {}).forEach(([key, value]) => {
+
+    Object.entries(specs).forEach(([key, value]) => {
+        if (used.has(key)) return;
         if (value != null && String(value).trim()) rows.push([key, String(value)]);
     });
+
     return rows.filter(([, value]) => String(value || '').trim());
 }
 
+function buildPageTitle(item) {
+    const name = item.name || 'Marine Store Item';
+    return `IMPA ${item.impa_code} - ${name} Specs & Catalog | The Vessel Code`;
+}
+
+function buildMetaDescription(item) {
+    const name = item.name || 'Marine Store Item';
+    return `Technical specifications, dimensions, and marine store catalog details for IMPA ${item.impa_code} (${name}).`;
+}
+
 function buildDescription(item) {
-    const bits = [
-        `Technical specifications and marine stores data for IMPA ${item.impa_code}`,
-        item.name ? `(${item.name})` : '',
-        item.unit ? `Unit: ${item.unit}.` : '',
-        item.category ? `Section: ${item.category}.` : '',
-    ].filter(Boolean);
-    const text = bits.join(' ').replace(/\s+/g, ' ').trim();
-    return text.length > 300 ? `${text.slice(0, 297)}...` : text;
+    return buildMetaDescription(item);
 }
 
 function buildJsonLd(item, pageUrl, imageUrl) {
@@ -139,8 +158,8 @@ function buildStoreItemHtml(item, { origin } = {}) {
     const base = (origin || storeSeoOrigin()).replace(/\/$/, '');
     const pageUrl = `${base}/store/${item.impa_code}`;
     const toolkitUrl = `${base}/toolkit?impa=${encodeURIComponent(item.impa_code)}`;
-    const title = `IMPA ${item.impa_code} - ${item.name || 'Marine Store Item'} | The Vessel Code`;
-    const description = buildDescription(item);
+    const title = buildPageTitle(item);
+    const description = buildMetaDescription(item);
     const plateUrl = derivePlateAssetUrl(item);
     const imageUrl = plateUrl ? `${base}${plateUrl}` : '';
     const rows = specRows(item);
@@ -189,6 +208,8 @@ function buildStoreItemHtml(item, { origin } = {}) {
     .btn-primary { background: #0b3d91; color: #fff; }
     .btn-secondary { background: #fff; color: #0b3d91; border: 1px solid #bfd0ea; }
     .footer { margin-top: 18px; color: #64748b; font-size: 13px; }
+    .conversion-hook { margin-top: 20px; padding: 14px 16px; border-radius: 12px; background: #eef6ff; border: 1px solid #bfd0ea; color: #0b3d91; font-size: 14px; line-height: 1.5; }
+    .conversion-hook a { color: #0b3d91; font-weight: 700; }
   </style>
 </head>
 <body>
@@ -213,6 +234,7 @@ function buildStoreItemHtml(item, { origin } = {}) {
         <a class="btn btn-primary" href="${escapeHtml(toolkitUrl)}">Open Interactive Maritime Toolkit</a>
         <a class="btn btn-secondary" href="${escapeHtml(`${base}/toolkit`)}">Browse Full IMPA Catalog</a>
       </div>
+      <p class="conversion-hook">&#9875; Vessel ROB Tracking &amp; 1-Click Requisition available on <a href="${escapeHtml(`${base}/pms`)}">TVC-PMS</a>.</p>
       <p class="footer">THE VESSEL CODE — offline-first PMS + SPICS and maritime toolkit for shipboard operations.</p>
     </article>
   </main>
@@ -222,6 +244,10 @@ function buildStoreItemHtml(item, { origin } = {}) {
 
 function buildNotFoundHtml(code, { origin } = {}) {
     const base = (origin || storeSeoOrigin()).replace(/\/$/, '');
+    const normalized = normalizeCode(code);
+    const searchUrl = normalized && normalized !== '000000'
+        ? `${base}/toolkit?impa=${encodeURIComponent(normalized)}`
+        : `${base}/toolkit`;
     const title = `IMPA ${escapeHtml(code || 'Item')} Not Found | The Vessel Code`;
     return `<!DOCTYPE html>
 <html lang="en">
@@ -235,6 +261,7 @@ function buildNotFoundHtml(code, { origin } = {}) {
 <body style="font-family:system-ui,sans-serif;padding:32px;">
   <h1>IMPA item not found</h1>
   <p>No catalog entry matched code <strong>${escapeHtml(code || '')}</strong>.</p>
+  <p><a href="${escapeHtml(searchUrl)}">Search catalog for IMPA ${escapeHtml(normalized || code || '')}</a></p>
   <p><a href="${escapeHtml(`${base}/toolkit`)}">Open Maritime Toolkit</a></p>
 </body>
 </html>`;
@@ -248,6 +275,8 @@ module.exports = {
     expandCompactRow,
     loadIndex,
     getItemByCode,
+    buildPageTitle,
+    buildMetaDescription,
     buildDescription,
     buildStoreItemHtml,
     buildNotFoundHtml,
