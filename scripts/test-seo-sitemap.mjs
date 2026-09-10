@@ -114,6 +114,7 @@ assertValidXml('sitemap-store-1.xml', storeChunk);
 check('store chunk includes test code', storeChunk.includes(`/store/${TEST_CODE}`));
 check('store chunk uses www origin', storeChunk.includes('<loc>https://www.thevesselcode.com/store/'));
 check('robots references www sitemap', readFileSync(join(root, 'public', 'robots.txt'), 'utf8').includes('Sitemap: https://www.thevesselcode.com/sitemap.xml'));
+check('robots references store sitemap', readFileSync(join(root, 'public', 'robots.txt'), 'utf8').includes('Sitemap: https://www.thevesselcode.com/sitemap-store-1.xml'));
 
 const toolkit = readFileSync(join(root, 'toolkit.html'), 'utf8');
 check('toolkit quick index label', toolkit.includes('Quick Reference IMPA Specs'));

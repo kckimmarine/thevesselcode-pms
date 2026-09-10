@@ -89,6 +89,9 @@ writeFileSync(join(publicDir, 'sitemap.xml'), sitemapIndex);
 console.log('OK public/sitemap.xml', `(${chunkFiles.length} child sitemaps, ${codes.length} URLs)`);
 
 const robots = `User-agent: *
+Allow: /sitemap.xml
+Allow: /sitemap-core.xml
+Allow: /sitemap-store-1.xml
 Allow: /store/
 Allow: /toolkit
 Allow: /services
@@ -96,6 +99,7 @@ Allow: /pms
 Allow: /contact-us
 
 Sitemap: ${origin}/sitemap.xml
+Sitemap: ${origin}/sitemap-store-1.xml
 `;
 writeFileSync(join(publicDir, 'robots.txt'), robots);
 console.log('OK public/robots.txt');
