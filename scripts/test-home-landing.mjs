@@ -43,6 +43,7 @@ check('marketing shell script', home.includes('marketing-shell.js'));
 check('hero slogan', home.includes('Decoding the Engineering, Operations, and Economics'));
 check('home hero smart vessel class', home.includes('mkt-hero-smart-vessel'));
 check('hero vessel image asset exists', existsSync(join(ROOT, 'public/assets/images/hero-smart-vessel.jpg')));
+check('sync-public-assets script exists', existsSync(join(ROOT, 'scripts/sync-public-assets.mjs')));
 check('home hero variant picker', home.includes('home-hero-variant-picker') && home.includes('home-hero-variant.js'));
 check('home hero variant script exists', existsSync(join(ROOT, 'js/home-hero-variant.js')));
 check('home hero eyebrow removed', !home.includes('Former C/E'));

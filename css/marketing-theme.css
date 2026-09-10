@@ -56,23 +56,23 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
     background-repeat: no-repeat;
 }
 
-/* Home — smart vessel network illustration with navy scrim blend (variant picker) */
+/* Home — smart vessel photo first, light navy fade for text (variant picker) */
 .mkt-hero-smart-vessel,
 #hero.mkt-hero-smart-vessel {
-    --hero-h0: 0.95;
-    --hero-h45: 0.85;
-    --hero-h75: 0.55;
-    --hero-h100: 0.85;
-    --hero-v0: 0.7;
-    --hero-v100: 0.98;
+    --hero-h0: 0.72;
+    --hero-h45: 0.38;
+    --hero-h75: 0.12;
+    --hero-h100: 0.04;
+    --hero-v0: 0.22;
+    --hero-v100: 0.42;
     --hero-image-boost: 1;
     background-color: #0a101e;
     background-image:
         linear-gradient(
             90deg,
             rgba(10, 16, 30, var(--hero-h0)) 0%,
-            rgba(10, 16, 30, var(--hero-h45)) 45%,
-            rgba(10, 16, 30, var(--hero-h75)) 75%,
+            rgba(10, 16, 30, var(--hero-h45)) 42%,
+            rgba(10, 16, 30, var(--hero-h75)) 68%,
             rgba(10, 16, 30, var(--hero-h100)) 100%
         ),
         linear-gradient(
@@ -100,44 +100,44 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
 }
 
 #hero.mkt-hero-smart-vessel[data-hero-variant="soft"] {
-    --hero-h0: 0.97;
-    --hero-h45: 0.9;
-    --hero-h75: 0.72;
-    --hero-h100: 0.92;
-    --hero-v0: 0.82;
-    --hero-v100: 0.99;
-    --hero-image-boost: 0.92;
+    --hero-h0: 0.82;
+    --hero-h45: 0.58;
+    --hero-h75: 0.28;
+    --hero-h100: 0.14;
+    --hero-v0: 0.38;
+    --hero-v100: 0.58;
+    --hero-image-boost: 0.96;
 }
 
 #hero.mkt-hero-smart-vessel[data-hero-variant="balanced"] {
-    --hero-h0: 0.95;
-    --hero-h45: 0.85;
-    --hero-h75: 0.55;
-    --hero-h100: 0.85;
-    --hero-v0: 0.7;
-    --hero-v100: 0.98;
-    --hero-image-boost: 1;
+    --hero-h0: 0.76;
+    --hero-h45: 0.48;
+    --hero-h75: 0.18;
+    --hero-h100: 0.08;
+    --hero-v0: 0.28;
+    --hero-v100: 0.48;
+    --hero-image-boost: 1.02;
 }
 
 #hero.mkt-hero-smart-vessel[data-hero-variant="vivid"],
 #hero.mkt-hero-smart-vessel:not([data-hero-variant]) {
-    --hero-h0: 0.9;
-    --hero-h45: 0.76;
-    --hero-h75: 0.38;
-    --hero-h100: 0.72;
-    --hero-v0: 0.58;
-    --hero-v100: 0.94;
+    --hero-h0: 0.72;
+    --hero-h45: 0.38;
+    --hero-h75: 0.12;
+    --hero-h100: 0.04;
+    --hero-v0: 0.22;
+    --hero-v100: 0.42;
     --hero-image-boost: 1.08;
 }
 
 #hero.mkt-hero-smart-vessel[data-hero-variant="crisp"] {
-    --hero-h0: 0.84;
-    --hero-h45: 0.66;
-    --hero-h75: 0.28;
-    --hero-h100: 0.62;
-    --hero-v0: 0.48;
-    --hero-v100: 0.88;
-    --hero-image-boost: 1.14;
+    --hero-h0: 0.64;
+    --hero-h45: 0.28;
+    --hero-h75: 0.06;
+    --hero-h100: 0;
+    --hero-v0: 0.14;
+    --hero-v100: 0.3;
+    --hero-image-boost: 1.12;
 }
 
 .home-hero-variant-picker {
@@ -187,9 +187,9 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
         background-image:
             linear-gradient(
                 180deg,
-                rgba(10, 16, 30, calc(var(--hero-h0) + 0.02)) 0%,
-                rgba(10, 16, 30, calc(var(--hero-h45) + 0.06)) 42%,
-                rgba(10, 16, 30, calc(var(--hero-h75) + 0.2)) 100%
+                rgba(10, 16, 30, calc(var(--hero-h0) + 0.04)) 0%,
+                rgba(10, 16, 30, calc(var(--hero-h45) + 0.02)) 38%,
+                rgba(10, 16, 30, calc(var(--hero-h75) + 0.06)) 100%
             );
     }
 
@@ -199,12 +199,12 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
     }
 }
 
-/* Services — photographic card backgrounds with navy scrim */
+/* Services — photo-first cards with a light navy fade for text */
 .home-service-card.home-service-card--photo {
     position: relative;
     overflow: hidden;
     isolation: isolate;
-    background: rgba(15, 23, 42, 0.72);
+    background: transparent;
 }
 
 .home-service-card--photo::before {
@@ -213,9 +213,9 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
     inset: 0;
     background-size: cover;
     background-repeat: no-repeat;
-    opacity: 0.42;
+    opacity: 1;
     z-index: 0;
-    transform: scale(1.02);
+    transform: scale(1.03);
 }
 
 .home-service-card--photo::after {
@@ -223,12 +223,13 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
     position: absolute;
     inset: 0;
     background: linear-gradient(
-        120deg,
-        rgba(10, 16, 30, 0.94) 0%,
-        rgba(10, 16, 30, 0.84) 42%,
-        rgba(10, 16, 30, 0.62) 100%
+        105deg,
+        rgba(10, 16, 30, 0.78) 0%,
+        rgba(10, 16, 30, 0.52) 34%,
+        rgba(10, 16, 30, 0.28) 62%,
+        rgba(10, 16, 30, 0.14) 100%
     );
-    z-index: 0;
+    z-index: 1;
 }
 
 .home-service-card--photo > * {
@@ -262,15 +263,12 @@ body.mkt-toolkit-page #marketing-topbar .home-topbar {
 }
 
 @media (max-width: 768px) {
-    .home-service-card--photo::before {
-        opacity: 0.3;
-    }
-
     .home-service-card--photo::after {
         background: linear-gradient(
             180deg,
-            rgba(10, 16, 30, 0.95) 0%,
-            rgba(10, 16, 30, 0.88) 100%
+            rgba(10, 16, 30, 0.82) 0%,
+            rgba(10, 16, 30, 0.58) 48%,
+            rgba(10, 16, 30, 0.34) 100%
         );
     }
 }
@@ -355,6 +353,13 @@ body.mkt-contact-page .ac-form-card {
     -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--mkt-card-border);
     box-shadow: var(--mkt-card-shadow);
+}
+
+.home-service-card.home-service-card--photo.mkt-glass-card,
+#services .home-service-card.home-service-card--photo {
+    background: transparent;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
 }
 
 .home-edge-card,
