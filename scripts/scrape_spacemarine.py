@@ -130,12 +130,25 @@ class SpaceMarineScraper:
         if self.delay:
             time.sleep(self.delay)
 
-    def _get(self, url: str, params: dict[str, Any]) -> str:
-        self._sleep()
-        resp = self.session.get(url, params=params, timeout=30)
-        resp.raise_for_status()
-        resp.encoding = resp.apparent_encoding or "euc-kr"
-        return resp.text
+    def _get(self, url: str, params: dict[str, Any], retries: int = 3) -> str:
+        last_err: Exception | None = None
+        for attempt in range(retries + 1):
+            self._sleep()
+            try:
+                resp = self.session.get(url, params=params, timeout=30)
+                if resp.status_code in (429, 502, 503, 504) and attempt < retries:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                resp.raise_for_status()
+                resp.encoding = resp.apparent_encoding or "euc-kr"
+                return resp.text
+            except requests.RequestException as exc:
+                last_err = exc
+                if attempt < retries:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                raise
+        raise last_err or RuntimeError(f"GET failed for {url}")
 
     def fetch_list_page(self, start_no: int) -> list[str]:
         html = self._get(
@@ -217,11 +230,19 @@ def scrape_category(
         raise RuntimeError(f"No items found for category {category}")
 
     items: list[dict[str, str]] = []
+    skipped = 0
     for idx, code in enumerate(codes, start=1):
-        row = scraper.fetch_item(code)
+        try:
+            row = scraper.fetch_item(code)
+        except requests.RequestException as exc:
+            skipped += 1
+            print(f"  [{idx}/{len(codes)}] {code} -> ERROR {exc}", file=sys.stderr)
+            continue
         if row:
             items.append(row)
         print(f"  [{idx}/{len(codes)}] {code} -> {row['n'][:60] if row else 'SKIP'}")
+    if skipped:
+        print(f"WARNING: skipped {skipped} item(s) due to fetch errors", file=sys.stderr)
     return items
 
 

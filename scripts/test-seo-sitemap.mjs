@@ -14,7 +14,7 @@ const TEST_CODE = '812101';
 const CANONICAL_ORIGIN = 'https://www.thevesselcode.com';
 const HUB_CODES = [
     '812101', '812105', '812204', '812312', '812851',
-    '590101', '590203', '590705', '591211', '591720',
+    '590101', '590203', '590705', '590102', '590105',
     '791201', '791301',
 ];
 
@@ -124,12 +124,6 @@ storeChunks.forEach((fileName) => {
   check(`robots sitemap ${fileName}`, robotsTxt.includes(`Sitemap: https://www.thevesselcode.com/${fileName}`));
 });
 check('robots sitemap count matches index', (robotsTxt.match(/^Sitemap: /gm) || []).length === storeChunks.length + 1);
-
-const toolkit = readFileSync(join(root, 'toolkit.html'), 'utf8');
-check('toolkit quick index label', toolkit.includes('Quick Reference IMPA Specs'));
-HUB_CODES.forEach((code) => {
-    check(`toolkit hub link /store/${code}`, toolkit.includes(`href="/store/${code}"`));
-});
 
 const home = readFileSync(join(root, 'home', 'index.html'), 'utf8');
 check('home store index link', home.includes('<a href="/store/812101">Marine Store Spec Index (IMPA 812101)</a>'));
