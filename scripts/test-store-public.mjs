@@ -97,8 +97,22 @@ async function main() {
     });
 
     results.push({
-      check: 'header title present',
-      ok: /MARITIME TOOLKIT/i.test(await page.locator('.store-public-title').textContent() || ''),
+      check: 'hero title present',
+      ok: /MARITIME TOOLKIT/i.test(await page.locator('#toolkitHeroTitle').textContent() || ''),
+    });
+
+    results.push({
+      check: 'hero title has no anchor icon',
+      ok: !/⚓/.test(await page.locator('#toolkitHeroTitle').textContent() || ''),
+    });
+
+    const heroTitleSize = await page.locator('#toolkitHeroTitle').evaluate((el) => (
+      parseFloat(getComputedStyle(el).fontSize)
+    ));
+    results.push({
+      check: 'hero title uses large standardized font',
+      ok: heroTitleSize >= 32,
+      detail: heroTitleSize,
     });
 
     results.push({
