@@ -65,6 +65,7 @@ const robots = `User-agent: *
 Allow: /store/
 Allow: /toolkit
 Allow: /services
+Allow: /pms
 Allow: /contact-us
 
 Sitemap: ${origin}/sitemap.xml

@@ -1,7 +1,7 @@
 /**
  * THE VESSEL CODE — shared marketing topbar + footer (Home, Services, Toolkit, Contact Us).
  * Mount: <div id="marketing-topbar"></div> + <div id="marketing-footer"></div>
- *        + body[data-mkt-active="home|services|toolkit|contact"]
+ *        + body[data-mkt-active="home|services|toolkit|pms|contact"]
  */
 (function () {
     'use strict';
@@ -10,7 +10,7 @@
         { id: 'home', href: '/', label: 'Home' },
         { id: 'services', href: '/services', label: 'Services' },
         { id: 'toolkit', href: '/toolkit', label: 'Maritime Toolkit' },
-        { id: 'pms', href: 'https://app.thevesselcode.com', label: 'TVC-PMS', external: true },
+        { id: 'pms', href: '/pms', label: 'TVC-PMS' },
         { id: 'contact', href: '/contact-us', label: 'Contact Us' },
     ];
 
@@ -18,7 +18,7 @@
         { href: '/', label: 'Home' },
         { href: '/services', label: 'Services' },
         { href: '/toolkit', label: 'Toolkit' },
-        { href: 'https://app.thevesselcode.com', label: 'PMS', external: true },
+        { href: '/pms', label: 'PMS' },
         { href: '/contact-us', label: 'Contact' },
     ];
 
