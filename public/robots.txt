@@ -5,4 +5,4 @@ Allow: /services
 Allow: /pms
 Allow: /contact-us
 
-Sitemap: https://thevesselcode.com/sitemap.xml
+Sitemap: https://www.thevesselcode.com/sitemap.xml
