@@ -14,14 +14,8 @@ on:
   schedule:
     # Weekly Monday 06:00 UTC
     - cron: '0 6 * * 1'
-  push:
-    branches: [master]
-    paths:
-      - '.github/workflows/scrape-impa-chapters.yml'
-      - 'scripts/scrape-impa-chapters.mjs'
-      - 'scripts/test-scraper-output.mjs'
-      - 'scripts/lib/impa-scraper-schema.mjs'
-      - 'scripts/fixtures/impa-catalog/**'
+  # Do NOT run on push to master — fixture scrapes previously overwrote the
+  # Space-Marine catalog after merges. Use workflow_dispatch or schedule only.
 
 permissions:
   contents: write
@@ -42,11 +36,17 @@ jobs:
         with:
           node-version: '20'
 
+      - name: Set up Python (Space-Marine scraper)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
       - name: Scrape all IMPA chapters
         env:
           IMPA_SCRAPER_BASE_URL: ${{ secrets.IMPA_SCRAPER_BASE_URL }}
           IMPA_SCRAPER_DELAY_MS: '400'
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.live }}" = "true" ]; then
             if [ -z "$IMPA_SCRAPER_BASE_URL" ]; then
               echo "::error::Set repository secret IMPA_SCRAPER_BASE_URL for --live scrape"
@@ -56,17 +56,32 @@ jobs:
           elif [ -n "$IMPA_SCRAPER_BASE_URL" ] && [ "${{ github.event_name }}" = "schedule" ]; then
             npm run scrape:impa -- --all --live
           else
-            npm run scrape:impa -- --all
+            pip install requests beautifulsoup4
+            for cat in 59 79 81 61; do
+              python3 scripts/scrape_spacemarine.py --category "$cat" --delay 0.2
+            done
+            node scripts/merge-impa-chapters.mjs
+            node scripts/generate-impa-seo-index.mjs
+            node scripts/generate-sitemap.mjs
           fi
 
       - name: Validate scraper output
         run: npm run test:scraper
 
+      - name: Guard against catalog shrink
+        run: |
+          COUNT=$(node -e "const d=require('./public/data/impa-full.json'); process.stdout.write(String(d.count||d.items?.length||0))")
+          echo "impa-full.json count: $COUNT"
+          if [ "$COUNT" -lt 400 ]; then
+            echo "::error::Refusing to commit — impa-full.json too small ($COUNT items)"
+            exit 1
+          fi
+
       - name: Commit and push refreshed data
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/data
+          git add public/data api/_data/impa-seo-index.json
           if git diff --staged --quiet; then
             echo "No catalog changes to commit."
             exit 0
