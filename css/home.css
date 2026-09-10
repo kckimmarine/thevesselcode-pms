@@ -434,6 +434,23 @@ body.home-page {
     font-size: 0.94rem;
 }
 
+.home-seo-index-link {
+    margin-top: 28px;
+    font-size: 0.78rem;
+    color: var(--home-muted);
+}
+
+.home-seo-index-link a {
+    color: var(--home-muted);
+    text-decoration: none;
+}
+
+.home-seo-index-link a:hover,
+.home-seo-index-link a:focus-visible {
+    color: var(--home-accent-2);
+    text-decoration: underline;
+}
+
 .home-footer {
     margin-top: 48px;
     padding-top: 24px;
