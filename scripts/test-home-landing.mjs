@@ -41,11 +41,8 @@ const home = readFileSync(join(ROOT, 'home/index.html'), 'utf8');
 check('marketing topbar mount', home.includes('id="marketing-topbar"'));
 check('marketing shell script', home.includes('marketing-shell.js'));
 check('hero slogan', home.includes('Decoding the Engineering, Operations, and Economics'));
-check('home hero smart vessel class', home.includes('mkt-hero-smart-vessel'));
-check('hero vessel image asset exists', existsSync(join(ROOT, 'public/assets/images/hero-smart-vessel.jpg')));
+check('home hero no photo background', !home.includes('mkt-hero-smart-vessel') && !home.includes('home-hero-variant-picker'));
 check('sync-public-assets script exists', existsSync(join(ROOT, 'scripts/sync-public-assets.mjs')));
-check('home hero variant picker', home.includes('home-hero-variant-picker') && home.includes('home-hero-variant.js'));
-check('home hero variant script exists', existsSync(join(ROOT, 'js/home-hero-variant.js')));
 check('home hero eyebrow removed', !home.includes('Former C/E'));
 check('services link in marketing shell', shell.includes("href: '/services'"));
 check('pms nav internal route', shell.includes("href: '/pms'") && !shell.includes("href: 'https://app.thevesselcode.com', label: 'TVC-PMS'"));
@@ -56,18 +53,7 @@ check('canonical root', home.includes('https://thevesselcode.com/'));
 const services = readFileSync(join(ROOT, 'services/index.html'), 'utf8');
 check('services page pillars', services.includes('Owner') && services.includes('Strategic Supply'));
 check('services active nav', services.includes('data-mkt-active="services"'));
-check('services photo card classes', services.includes('home-service-card--photo') && services.includes('home-service-card--superintendent'));
-const serviceImages = [
-    'service-superintendent.jpg',
-    'service-retrofit.jpg',
-    'service-psc.jpg',
-    'service-repair.jpg',
-    'service-supply.webp',
-];
-serviceImages.forEach((name) => {
-    check(`service image asset ${name}`, existsSync(join(ROOT, 'public/assets/images/services', name)));
-});
-check('service photo css', readFileSync(join(ROOT, 'css/marketing-theme.css'), 'utf8').includes('home-service-card--photo'));
+check('services no photo card classes', !services.includes('home-service-card--photo'));
 
 const pms = readFileSync(join(ROOT, 'pms/index.html'), 'utf8');
 check('pms page hero title', pms.includes('Fleet Planned Maintenance'));
@@ -95,16 +81,13 @@ const marketingCss = [
 ].map((p) => readFileSync(p, 'utf8')).join('\n');
 check('no unsplash on marketing pages', !/unsplash\.com/i.test(marketingCss));
 check('marketing theme css exists', existsSync(join(ROOT, 'css/marketing-theme.css')));
-check('hero vessel background css', readFileSync(join(ROOT, 'css/marketing-theme.css'), 'utf8').includes('/assets/images/hero-smart-vessel.jpg'));
+const themeCss = readFileSync(join(ROOT, 'css/marketing-theme.css'), 'utf8');
+check('no hero photo background css', !themeCss.includes('hero-smart-vessel') && !themeCss.includes('home-service-card--photo'));
 check('no marketing-photography css', !existsSync(join(ROOT, 'css/marketing-photography.css')));
 
 check('build skips dist/index.html', !existsSync(join(ROOT, 'dist/index.html')));
 check('build outputs pms app shell', existsSync(join(ROOT, 'dist/app.html')));
 check('build outputs marketing home', existsSync(join(ROOT, 'dist/home/index.html')));
-check('build outputs hero vessel image', existsSync(join(ROOT, 'dist/assets/images/hero-smart-vessel.jpg')));
-serviceImages.forEach((name) => {
-    check(`build outputs service image ${name}`, existsSync(join(ROOT, 'dist/assets/images/services', name)));
-});
 if (existsSync(join(ROOT, 'dist/app.html'))) {
     const distApp = readFileSync(join(ROOT, 'dist/app.html'), 'utf8');
     check('dist/app.html is PMS', distApp.includes('TVC_App') || distApp.includes('TVC-PMS'));
