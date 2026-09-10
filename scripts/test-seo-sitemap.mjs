@@ -105,14 +105,15 @@ check('sitemap index references store chunk', sitemapIndex.includes('sitemap-sto
 
 const coreSitemap = readFileSync(join(root, 'public', 'sitemap-core.xml'), 'utf8');
 assertValidXml('sitemap-core.xml', coreSitemap);
-check('core sitemap has home', coreSitemap.includes('<loc>https://thevesselcode.com/</loc>'));
-check('core sitemap has toolkit', coreSitemap.includes('<loc>https://thevesselcode.com/toolkit</loc>'));
-check('core sitemap has about-contact', coreSitemap.includes('<loc>https://thevesselcode.com/about-contact</loc>'));
+check('core sitemap has home', coreSitemap.includes('<loc>https://www.thevesselcode.com/</loc>'));
+check('core sitemap has toolkit', coreSitemap.includes('<loc>https://www.thevesselcode.com/toolkit</loc>'));
+check('core sitemap has about-contact', coreSitemap.includes('<loc>https://www.thevesselcode.com/about-contact</loc>'));
 
 const storeChunk = readFileSync(join(root, 'public', 'sitemap-store-1.xml'), 'utf8');
 assertValidXml('sitemap-store-1.xml', storeChunk);
 check('store chunk includes test code', storeChunk.includes(`/store/${TEST_CODE}`));
-check('store chunk priority 0.8', storeChunk.includes('<priority>0.8</priority>'));
+check('store chunk uses www origin', storeChunk.includes('<loc>https://www.thevesselcode.com/store/'));
+check('robots references www sitemap', readFileSync(join(root, 'public', 'robots.txt'), 'utf8').includes('Sitemap: https://www.thevesselcode.com/sitemap.xml'));
 
 const toolkit = readFileSync(join(root, 'toolkit.html'), 'utf8');
 check('toolkit quick index label', toolkit.includes('Quick Reference IMPA Specs'));

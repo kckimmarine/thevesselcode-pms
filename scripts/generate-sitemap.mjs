@@ -8,7 +8,7 @@ import { join } from 'node:path';
 
 const root = process.cwd();
 const URLS_PER_SITEMAP = 10_000;
-const origin = String(process.env.STORE_SEO_ORIGIN || 'https://thevesselcode.com').replace(/\/$/, '');
+const origin = String(process.env.STORE_SEO_ORIGIN || 'https://www.thevesselcode.com').replace(/\/$/, '');
 const lastmod = new Date().toISOString().slice(0, 10);
 
 const CORE_PAGES = [
