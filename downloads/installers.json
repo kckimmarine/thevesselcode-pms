@@ -1,21 +1,21 @@
 {
   "version": "1.0.6",
-  "generated_at": "2026-09-10T01:57:10.6725942Z",
+  "generated_at": "2026-09-10T05:15:48.0955621Z",
   "setups": [
     {
       "sku": "VESSEL_DECK",
       "filename": "TVC-PMS-VESSEL_DECK-1.0.6-Setup.exe",
-      "bytes": 87640654
+      "bytes": 87640777
     },
     {
       "sku": "VESSEL_ENGINE",
       "filename": "TVC-PMS-VESSEL_ENGINE-1.0.6-Setup.exe",
-      "bytes": 87640704
+      "bytes": 87640823
     },
     {
       "sku": "VESSEL_MASTER",
       "filename": "TVC-PMS-VESSEL_MASTER-1.0.6-Setup.exe",
-      "bytes": 87640680
+      "bytes": 87640794
     }
   ]
 }
