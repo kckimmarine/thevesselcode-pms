@@ -3,7 +3,7 @@
  * Generate chunked sitemaps for IMPA store SEO URLs.
  * Output: public/sitemap.xml (index) + public/sitemap-store-N.xml
  */
-import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
@@ -86,20 +86,35 @@ ${indexEntries}
 </sitemapindex>
 `;
 writeFileSync(join(publicDir, 'sitemap.xml'), sitemapIndex);
-console.log('OK public/sitemap.xml', `(${chunkFiles.length} child sitemaps, ${codes.length} URLs)`);
+console.log('OK public/sitemap.xml', `(${chunkFiles.length + 1} child sitemaps, ${codes.length} store URLs)`);
+
+for (const file of readdirSync(publicDir)) {
+  const stale = /^sitemap-store-(\d+)\.xml$/.exec(file);
+  if (stale && !chunkFiles.includes(file)) {
+    unlinkSync(join(publicDir, file));
+    console.log('OK removed stale', `public/${file}`);
+  }
+}
+
+const sitemapAllowLines = [
+  'Allow: /sitemap.xml',
+  'Allow: /sitemap-core.xml',
+  ...chunkFiles.map((fileName) => `Allow: /${fileName}`),
+];
+const sitemapDirectiveLines = [
+  `Sitemap: ${origin}/sitemap.xml`,
+  ...chunkFiles.map((fileName) => `Sitemap: ${origin}/${fileName}`),
+];
 
 const robots = `User-agent: *
-Allow: /sitemap.xml
-Allow: /sitemap-core.xml
-Allow: /sitemap-store-1.xml
+${sitemapAllowLines.join('\n')}
 Allow: /store/
 Allow: /toolkit
 Allow: /services
 Allow: /pms
 Allow: /contact-us
 
-Sitemap: ${origin}/sitemap.xml
-Sitemap: ${origin}/sitemap-store-1.xml
+${sitemapDirectiveLines.join('\n')}
 `;
 writeFileSync(join(publicDir, 'robots.txt'), robots);
-console.log('OK public/robots.txt');
+console.log('OK public/robots.txt', `(${chunkFiles.length} store sitemap directives)`);
