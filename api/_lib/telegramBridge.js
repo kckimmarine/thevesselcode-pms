@@ -193,6 +193,34 @@ async function createCursorIssue(plan, originalMessage) {
     return issue;
 }
 
+function commandName(text) {
+    const t = String(text || '').trim();
+    if (!t.startsWith('/')) return '';
+    return t.split(/\s+/)[0].split('@')[0].toLowerCase();
+}
+
+function isHealthCheckText(text) {
+    const t = String(text || '').trim();
+    const cmd = commandName(t);
+    if (cmd === '/test' || cmd === '/ping') return true;
+    const lower = t.toLowerCase();
+    return lower === 'test' || lower === 'ping' || t === '테스트';
+}
+
+function healthCheckText() {
+    const c = config();
+    return [
+        '✅ TVC Command Bridge 테스트 성공',
+        '',
+        isReady() ? '설정: OK' : '설정: 환경변수 부족',
+        `Repo: ${c.githubOwner}/${c.githubRepo}`,
+        `Label: ${c.cursorLabel}`,
+        '',
+        '실제 작업을 보내면 GitHub Issue → Cursor PR 로 진행됩니다.',
+        '명령: /help /status /test',
+    ].join('\n');
+}
+
 function helpText() {
     return [
         'TVC Command Bridge',
@@ -203,7 +231,8 @@ function helpText() {
         '',
         '흐름: Gemini 정리 → GitHub Issue → Cursor Cloud → PR',
         '',
-        '명령: /help /status',
+        '명령: /help /status /test',
+        '핑: 테스트 · test · ping  (Issue 없이 연결만 확인)',
     ].join('\n');
 }
 
@@ -221,11 +250,12 @@ async function handleTelegramUpdate(update) {
     }
 
     const text = msg.text.trim();
-    if (text === '/start' || text === '/help') {
+    const cmd = commandName(text);
+    if (text === '/start' || text === '/help' || cmd === '/start' || cmd === '/help') {
         await sendTelegram(chatId, helpText());
         return { ok: true, action: 'help' };
     }
-    if (text === '/status') {
+    if (text === '/status' || cmd === '/status') {
         await sendTelegram(chatId, [
             'Bridge status:',
             isReady() ? '✅ configured' : '❌ missing Vercel env vars',
@@ -233,6 +263,10 @@ async function handleTelegramUpdate(update) {
             `Label: ${c.cursorLabel}`,
         ].join('\n'));
         return { ok: true, action: 'status' };
+    }
+    if (isHealthCheckText(text)) {
+        await sendTelegram(chatId, healthCheckText());
+        return { ok: true, action: 'healthcheck' };
     }
 
     await sendTelegram(chatId, '⏳ Gemini가 작업을 정리하고 GitHub Issue를 만듭니다…');
@@ -269,4 +303,8 @@ module.exports = {
     readJsonBody,
     handleTelegramUpdate,
     helpText,
+    healthCheckText,
+    isHealthCheckText,
+    fallbackPlan,
+    commandName,
 };
