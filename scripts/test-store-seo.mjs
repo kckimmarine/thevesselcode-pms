@@ -39,13 +39,17 @@ const item = impaSeo.getItemByCode(sampleCode);
 check('lookup sample item', !!item?.name, sampleCode);
 
 const html = impaSeo.buildStoreItemHtml(item, { origin: 'https://app.thevesselcode.com' });
-check('html has title', html.includes(`IMPA ${sampleCode}`));
+check('html has title', html.includes(`Specs &amp; Catalog`));
 check('html has canonical', html.includes(`/store/${sampleCode}`));
+check('html has description meta', html.includes('Technical specifications, dimensions, and marine store catalog details'));
+check('html has spec table', html.includes('spec-table'));
 check('html has toolkit link', html.includes('toolkit?impa='));
 check('html has json-ld', html.includes('application/ld+json'));
+check('html has saas hook', html.includes('Vessel ROB Tracking'));
 
 const sitemap = readFileSync(join(root, 'public', 'sitemap.xml'), 'utf8');
 check('sitemap index exists', sitemap.includes('<sitemapindex'));
+check('sitemap references core pages', sitemap.includes('sitemap-core.xml'));
 check('sitemap references store chunk', sitemap.includes('sitemap-store-1.xml'));
 
 const chunk = readFileSync(join(root, 'public', 'sitemap-store-1.xml'), 'utf8');

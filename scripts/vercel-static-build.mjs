@@ -67,7 +67,7 @@ if (existsSync(publicAssets)) {
 }
 
 const publicDir = join(root, 'public');
-for (const file of ['robots.txt', 'sitemap.xml']) {
+for (const file of ['robots.txt', 'sitemap.xml', 'sitemap-core.xml']) {
   const src = join(publicDir, file);
   if (existsSync(src)) {
     cpSync(src, join(out, file));

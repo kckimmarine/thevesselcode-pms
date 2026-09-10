@@ -11,6 +11,7 @@
     "build": "node scripts/vercel-static-build.mjs",
     "generate:impa-seo": "node scripts/generate-impa-seo-index.mjs && node scripts/generate-sitemap.mjs",
     "test:store-seo": "node scripts/test-store-seo.mjs",
+    "test:seo-sitemap": "node scripts/test-seo-sitemap.mjs",
     "test:home-landing": "node scripts/test-home-landing.mjs",
     "setup:vercel-domains": "node scripts/setup-vercel-domains.mjs",
     "setup:vercel-store-seo": "node scripts/setup-vercel-store-seo-env.mjs",

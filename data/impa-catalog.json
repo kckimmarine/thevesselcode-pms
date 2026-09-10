@@ -443,6 +443,24 @@
     }
   },
   {
+    "impa_code": "812101",
+    "code": "812101",
+    "name": "Gate Valve Bronze Flanged DN50 PN16",
+    "unit": "PCS",
+    "category": "Valves & Cocks",
+    "rob": 6,
+    "plate_id": "PL-81-21",
+    "plate_no": "PL-81-21",
+    "specs": {
+      "Rating": "PN16",
+      "Material": "Bronze",
+      "Standard Unit": "PCS",
+      "Dimensions": "DN50 flanged gate valve",
+      "Body Material": "Bronze",
+      "Standard": "ISO 7005 / PN16"
+    }
+  },
+  {
     "impa_code": "331502",
     "code": "331502",
     "name": "Rag Cotton Industrial",
