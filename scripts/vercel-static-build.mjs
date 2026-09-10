@@ -60,6 +60,12 @@ if (existsSync(publicData)) {
   console.log('OK public/data → data/');
 }
 
+const publicAssets = join(root, 'public', 'assets');
+if (existsSync(publicAssets)) {
+  cpSync(publicAssets, join(out, 'assets'), { recursive: true });
+  console.log('OK public/assets → assets/');
+}
+
 const publicDir = join(root, 'public');
 for (const file of ['robots.txt', 'sitemap.xml']) {
   const src = join(publicDir, file);
