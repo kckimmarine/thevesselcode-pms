@@ -88,9 +88,11 @@ const TVC_RBAC = (function () {
     // 계정 명칭 정의 — Username → Header 표시 타이틀
     const ACCOUNT_TITLES = {
         'officer': 'Officer',
+        'chief officer': 'Chief officer',
         'co': 'Chief officer',
         'captain': 'Captain',
         'engineer': 'Engineer',
+        'chief engineer': 'Chief engineer',
         'ce': 'Chief engineer',
         'hq': 'Superintendent',
         'tvc': 'Ship Owner (Pilot)',
@@ -365,7 +367,7 @@ const TVC_RBAC = (function () {
     function canModifyDefectShipPhase3(user) {
         if (!user || !isShipAccount(user)) return false;
         const uname = String(user.username || '').toLowerCase();
-        if (uname === 'co' || uname === 'ce' || uname === 'captain') return true;
+        if (uname === 'chief officer' || uname === 'chief engineer' || uname === 'co' || uname === 'ce' || uname === 'captain') return true;
         return isApprover(user);
     }
 
@@ -443,7 +445,7 @@ const TVC_RBAC = (function () {
     function getRankLabel(user) {
         if (!user) return '';
         const uname = String(user.username || '').toLowerCase();
-        if (uname === 'co') return 'C/O';
+        if (uname === 'chief officer' || uname === 'co') return 'C/O';
         switch (user.role) {
             case 'SHIP_CAPTAIN': return 'Captain';
             case 'SHIP_CHIEF': return 'C/E';
@@ -459,11 +461,13 @@ const TVC_RBAC = (function () {
 
     /** 데모 계정 username → role (IndexedDB role 누락/불일치 시 fallback) */
     const DEMO_ROLE_BY_USERNAME = {
+        officer: Role.SHIP_OFFICER,
+        'chief officer': Role.SHIP_CAPTAIN,
+        engineer: Role.SHIP_OFFICER,
+        'chief engineer': Role.SHIP_CHIEF,
         co: Role.SHIP_CAPTAIN,
         ce: Role.SHIP_CHIEF,
         captain: Role.SHIP_CAPTAIN,
-        officer: Role.SHIP_OFFICER,
-        engineer: Role.SHIP_OFFICER,
         hq: Role.HQ_SUPERVISOR,
         tvc: Role.HQ_SUPERVISOR,
         admin: Role.TVC_ADMIN,
@@ -477,7 +481,7 @@ const TVC_RBAC = (function () {
     }
 
     /** Work Plan Modify / Append / Delete — ce · co · captain · hq 만 */
-    const MAINT_PLAN_EDITOR_USERNAMES = new Set(['ce', 'co', 'captain', 'hq']);
+    const MAINT_PLAN_EDITOR_USERNAMES = new Set(['chief engineer', 'chief officer', 'ce', 'co', 'captain', 'hq']);
 
     function isMaintPlanEditor(user) {
         if (!user) return false;
@@ -501,7 +505,7 @@ const TVC_RBAC = (function () {
         if (can(u, Action.MODIFY_INVENTORY)) return true;
         if (isApprover(u)) return true;
         const name = String(user.username || '').toLowerCase();
-        return name === 'ce' || name === 'co' || name === 'captain';
+        return name === 'chief engineer' || name === 'chief officer' || name === 'ce' || name === 'co' || name === 'captain';
     }
 
     function assertModifyOriginalPlan(user) {
@@ -610,14 +614,15 @@ const TVC_RBAC = (function () {
         const uname = String(user?.username || '').toLowerCase();
         if (uname === 'captain') return 'Captain';
         if (d === 'ENGINE') return 'Chief engineer';
-        if (d === 'DECK') return uname === 'co' ? 'Chief officer' : 'Captain';
+        if (d === 'DECK') return (uname === 'chief officer' || uname === 'co') ? 'Chief officer' : 'Captain';
         return '';
     }
 
     /** 데모 user id → username (legacy confirmed_by/approved_by 저장값) */
     const DEMO_USER_ID_TO_USERNAME = {
-        'user-chief': 'ce',
-        'user-co': 'co',
+        'user-ce': 'chief engineer',
+        'user-chief': 'chief engineer',
+        'user-co': 'chief officer',
         'user-captain': 'captain',
         'user-engineer': 'engineer',
         'user-officer': 'officer',
@@ -636,7 +641,7 @@ const TVC_RBAC = (function () {
 
         const mappedUname = DEMO_USER_ID_TO_USERNAME[raw];
         if (mappedUname) {
-            const d = dept || (mappedUname === 'ce' ? 'ENGINE' : mappedUname === 'hq' ? '' : 'DECK');
+            const d = dept || (mappedUname === 'chief engineer' || mappedUname === 'ce' ? 'ENGINE' : mappedUname === 'hq' ? '' : 'DECK');
             return getDepartmentConfirmLabel(d, { username: mappedUname })
                 || getAccountTitle(mappedUname) || '';
         }

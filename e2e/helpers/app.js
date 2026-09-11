@@ -1,9 +1,9 @@
 const { addFinding, addStep, addConsoleError, addPageError, screenshotPath, relScreenshot } = require('./findings');
 
 const ACCOUNTS = {
-  deck: { username: 'officer', password: '0000', dept: 'DECK', label: 'Deck / officer' },
-  engine: { username: 'engineer', password: '0000', dept: 'ENGINE', label: 'Engine / engineer' },
-  ce: { username: 'ce', password: '0000', dept: 'ENGINE', label: 'Engine / ce' },
+  deck: { username: 'Officer', password: '0000', dept: 'DECK', label: 'Deck / Officer' },
+  engine: { username: 'Engineer', password: '0000', dept: 'ENGINE', label: 'Engine / Engineer' },
+  ce: { username: 'Chief engineer', password: '0000', dept: 'ENGINE', label: 'Engine / Chief engineer' },
 };
 
 const HUNG_MS = 20_000;

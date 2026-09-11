@@ -64,15 +64,15 @@ const TVC_Space = (function () {
     };
 
     const LOGIN_MODE_USERS = {
-        [LoginMode.MASTER]: new Set(['captain']),
-        [LoginMode.DECK]: new Set(['officer', 'co']),
-        [LoginMode.ENGINE]: new Set(['engineer', 'ce']),
+        [LoginMode.MASTER]: new Set(['chief officer', 'captain']),
+        [LoginMode.DECK]: new Set(['officer', 'chief officer', 'co']),
+        [LoginMode.ENGINE]: new Set(['engineer', 'chief engineer', 'ce']),
     };
 
     const LOGIN_MODE_DENIED = {
-        [LoginMode.MASTER]: 'Vessel Mode - Master allows Captain (captain) accounts only.',
-        [LoginMode.DECK]: 'Vessel Mode - Deck allows Officer (officer) or Chief officer (co) accounts only.',
-        [LoginMode.ENGINE]: 'Vessel Mode - Engine allows Engineer (engineer) or Chief engineer (ce) accounts only.',
+        [LoginMode.MASTER]: 'Vessel Mode - Master allows Chief officer accounts only.',
+        [LoginMode.DECK]: 'Vessel Mode - Deck allows Officer or Chief officer accounts only.',
+        [LoginMode.ENGINE]: 'Vessel Mode - Engine allows Engineer or Chief engineer accounts only.',
     };
 
     function stationFromLoginMode(mode) {

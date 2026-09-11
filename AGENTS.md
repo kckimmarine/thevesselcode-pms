@@ -41,13 +41,13 @@ npm run verify-all           # RBAC + sync checks
 
 | User | Dept | Role | Typical use |
 |------|------|------|-------------|
-| `officer` | Deck | Officer | PMS report input |
-| `engineer` | Engine | Engineer | PMS + SPARE consumption |
-| `ce` | Engine | Chief Engineer | Confirm + SPARE admin |
-| `captain` | Deck | Captain | Confirm + export |
+| `Officer` | Deck | Officer | PMS report input |
+| `Chief officer` | Deck | Chief Officer | Deck confirm + Master hub |
+| `Engineer` | Engine | Engineer | PMS + SPARE consumption |
+| `Chief engineer` | Engine | Chief Engineer | Confirm + SPARE admin |
 | `hq` | — | HQ | Approve imported reports |
 
-Demo vessel: **INCHEON CHEMI**
+Demo vessel: **TVC No1**
 
 ---
 
