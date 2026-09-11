@@ -41,10 +41,10 @@ npm run verify-all           # RBAC + sync checks
 
 | User | Dept | Role | Typical use |
 |------|------|------|-------------|
-| `Officer` | Deck | Officer | PMS report input |
-| `Chief officer` | Deck | Chief Officer | Deck confirm + Master hub |
-| `Engineer` | Engine | Engineer | PMS + SPARE consumption |
-| `Chief engineer` | Engine | Chief Engineer | Confirm + SPARE admin |
+| `officer` | Deck | SHIP_OFFICER | PMS report input |
+| `co` | Deck | SHIP_CO | Deck confirm + Master hub |
+| `engineer` | Engine | SHIP_ENGINEER | PMS + SPARE consumption |
+| `ce` | Engine | SHIP_CE | Confirm + SPARE admin |
 | `hq` | — | HQ | Approve imported reports |
 
 Demo vessel: **TVC No1**

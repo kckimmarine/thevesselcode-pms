@@ -5,15 +5,30 @@ const TVC_RBAC = (function () {
     const Department = { DECK: 'DECK', ENGINE: 'ENGINE' };
 
     const Role = {
-        SHIP_OFFICER: 'SHIP_OFFICER',   // Deck/Engine inputter (부서에 따라)
-        SHIP_CAPTAIN: 'SHIP_CAPTAIN',   // Deck approver
-        SHIP_CHIEF: 'SHIP_CHIEF',       // Engine approver
+        SHIP_OFFICER: 'SHIP_OFFICER',   // Deck inputter
+        SHIP_ENGINEER: 'SHIP_ENGINEER', // Engine inputter
+        SHIP_CO: 'SHIP_CO',             // Deck approver (Chief officer)
+        SHIP_CE: 'SHIP_CE',             // Engine approver (Chief engineer)
+        SHIP_CAPTAIN: 'SHIP_CAPTAIN',   // legacy deck approver / Master hub
+        SHIP_CHIEF: 'SHIP_CHIEF',       // legacy engine approver
         HQ_SUPERVISOR: 'HQ_SUPERVISOR',
         TVC_ADMIN: 'TVC_ADMIN',
     };
 
     // 승인 권한을 가진 선박 역할 (부서 책임자)
-    const APPROVER_ROLES = new Set(['SHIP_CAPTAIN', 'SHIP_CHIEF']);
+    const APPROVER_ROLES = new Set(['SHIP_CAPTAIN', 'SHIP_CHIEF', 'SHIP_CO', 'SHIP_CE']);
+
+    function isDeckApproverRole(role) {
+        return role === Role.SHIP_CAPTAIN || role === Role.SHIP_CO;
+    }
+
+    function isEngineApproverRole(role) {
+        return role === Role.SHIP_CHIEF || role === Role.SHIP_CE;
+    }
+
+    function isShipAuthorRole(role) {
+        return role === Role.SHIP_OFFICER || role === Role.SHIP_ENGINEER;
+    }
 
     const ReportStatus = {
         REPORTED: 'REPORTED',
@@ -77,6 +92,9 @@ const TVC_RBAC = (function () {
 
     const ROLE_LABELS = {
         SHIP_OFFICER: 'Officer',
+        SHIP_ENGINEER: 'Engineer',
+        SHIP_CO: 'Chief Officer',
+        SHIP_CE: 'Chief Engineer',
         SHIP_CAPTAIN: 'Captain',
         SHIP_CHIEF: 'Chief Engineer',
         HQ_SUPERVISOR: 'HQ Superintendent',
@@ -107,6 +125,37 @@ const TVC_RBAC = (function () {
             Action.SUBMIT_DEFECT_REPORT,
             Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
             Action.IMPORT_DEFECT_URGENT,
+        ]),
+        SHIP_ENGINEER: new Set([
+            Action.CREATE_DAILY_REPORT, Action.EDIT_OWN_PENDING_REPORT,
+            Action.VIEW_INVENTORY, Action.VIEW_PMS_SCHEDULE,
+            Action.CREATE_REQUISITION,
+            Action.DEDUCT_INVENTORY, Action.SUPPLY_PARTS,
+            Action.SUBMIT_DEFECT_REPORT,
+            Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
+            Action.IMPORT_DEFECT_URGENT,
+        ]),
+        SHIP_CE: new Set([
+            Action.CREATE_DAILY_REPORT, Action.APPROVE_DAILY_REPORT,
+            Action.POSTPONE_DAILY_REPORT, Action.VIEW_INVENTORY,
+            Action.DEDUCT_INVENTORY, Action.MODIFY_INVENTORY,
+            Action.EXECUTE_MAINTENANCE, Action.SUPPLY_PARTS,
+            Action.VIEW_PMS_SCHEDULE, Action.UPDATE_RUN_HOURS,
+            Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
+            Action.CREATE_REQUISITION, Action.VIEW_AUDIT_LOG,
+            Action.MODIFY_MAINTENANCE_ITEM,
+            Action.SUBMIT_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
+        ]),
+        SHIP_CO: new Set([
+            Action.CREATE_DAILY_REPORT, Action.APPROVE_DAILY_REPORT,
+            Action.POSTPONE_DAILY_REPORT, Action.VIEW_INVENTORY,
+            Action.DEDUCT_INVENTORY, Action.MODIFY_INVENTORY,
+            Action.EXECUTE_MAINTENANCE, Action.SUPPLY_PARTS,
+            Action.VIEW_PMS_SCHEDULE, Action.UPDATE_RUN_HOURS,
+            Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
+            Action.CREATE_REQUISITION, Action.VIEW_AUDIT_LOG,
+            Action.MODIFY_MAINTENANCE_ITEM,
+            Action.SUBMIT_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
         ]),
         SHIP_CHIEF: new Set([
             Action.CREATE_DAILY_REPORT, Action.APPROVE_DAILY_REPORT,
@@ -289,17 +338,17 @@ const TVC_RBAC = (function () {
             base.showDefectUrgentExport = true;
             base.showDefectImportUrgent = true;
         }
-        if (user.role === Role.SHIP_OFFICER) {
+        if (isShipAuthorRole(user.role)) {
             base.showMaintenanceExecute = false;
             base.showApprovalQueue = false;
             base.showUpdateWorkPlan = false;
             base.canEditRunningHours = false;
             base.showDefectUrgentExport = false;
         }
-        if (user.role === Role.SHIP_CAPTAIN) {
+        if (isDeckApproverRole(user.role)) {
             base.canEditRunningHours = false;
         }
-        if (user.role === Role.SHIP_CHIEF) {
+        if (isEngineApproverRole(user.role)) {
             base.canEditRunningHours = true;
         }
         if (isHqAccount(user)) {
@@ -317,8 +366,11 @@ const TVC_RBAC = (function () {
             : normalizeReportStatus(toStatus);
         const transitions = {
             SHIP_OFFICER: { REPORTED: [] },
+            SHIP_ENGINEER: { REPORTED: [] },
             SHIP_CAPTAIN: { REPORTED: ['CONFIRMED'] },
+            SHIP_CO: { REPORTED: ['CONFIRMED'] },
             SHIP_CHIEF: { REPORTED: ['CONFIRMED'] },
+            SHIP_CE: { REPORTED: ['CONFIRMED'] },
             // HQ may Approve own drafts directly from Reported (skip Confirmed/Submitted)
             HQ_SUPERVISOR: { REPORTED: ['CONFIRMED', 'APPROVED'], CONFIRMED: ['APPROVED'] },
         };
@@ -367,7 +419,7 @@ const TVC_RBAC = (function () {
     function canModifyDefectShipPhase3(user) {
         if (!user || !isShipAccount(user)) return false;
         const uname = String(user.username || '').toLowerCase();
-        if (uname === 'chief officer' || uname === 'chief engineer' || uname === 'co' || uname === 'ce' || uname === 'captain') return true;
+        if (uname === 'co' || uname === 'ce' || uname === 'captain') return true;
         return isApprover(user);
     }
 
@@ -447,10 +499,13 @@ const TVC_RBAC = (function () {
         const uname = String(user.username || '').toLowerCase();
         if (uname === 'chief officer' || uname === 'co') return 'C/O';
         switch (user.role) {
-            case 'SHIP_CAPTAIN': return 'Captain';
-            case 'SHIP_CHIEF': return 'C/E';
-            case 'HQ_SUPERVISOR': return 'Superintendent';
-            case 'SHIP_OFFICER': return user.department === 'ENGINE' ? 'Engineer' : 'Officer';
+            case Role.SHIP_CAPTAIN: return 'Captain';
+            case Role.SHIP_CO: return 'C/O';
+            case Role.SHIP_CHIEF:
+            case Role.SHIP_CE: return 'C/E';
+            case Role.HQ_SUPERVISOR: return 'Superintendent';
+            case Role.SHIP_ENGINEER: return 'Engineer';
+            case Role.SHIP_OFFICER: return 'Officer';
             default: return user.department === 'ENGINE' ? 'Engineer' : 'Officer';
         }
     }
@@ -462,11 +517,11 @@ const TVC_RBAC = (function () {
     /** 데모 계정 username → role (IndexedDB role 누락/불일치 시 fallback) */
     const DEMO_ROLE_BY_USERNAME = {
         officer: Role.SHIP_OFFICER,
-        'chief officer': Role.SHIP_CAPTAIN,
-        engineer: Role.SHIP_OFFICER,
-        'chief engineer': Role.SHIP_CHIEF,
-        co: Role.SHIP_CAPTAIN,
-        ce: Role.SHIP_CHIEF,
+        co: Role.SHIP_CO,
+        engineer: Role.SHIP_ENGINEER,
+        ce: Role.SHIP_CE,
+        'chief officer': Role.SHIP_CO,
+        'chief engineer': Role.SHIP_CE,
         captain: Role.SHIP_CAPTAIN,
         hq: Role.HQ_SUPERVISOR,
         tvc: Role.HQ_SUPERVISOR,
@@ -481,7 +536,7 @@ const TVC_RBAC = (function () {
     }
 
     /** Work Plan Modify / Append / Delete — ce · co · captain · hq 만 */
-    const MAINT_PLAN_EDITOR_USERNAMES = new Set(['chief engineer', 'chief officer', 'ce', 'co', 'captain', 'hq']);
+    const MAINT_PLAN_EDITOR_USERNAMES = new Set(['ce', 'co', 'captain', 'hq']);
 
     function isMaintPlanEditor(user) {
         if (!user) return false;
@@ -505,7 +560,7 @@ const TVC_RBAC = (function () {
         if (can(u, Action.MODIFY_INVENTORY)) return true;
         if (isApprover(u)) return true;
         const name = String(user.username || '').toLowerCase();
-        return name === 'chief engineer' || name === 'chief officer' || name === 'ce' || name === 'co' || name === 'captain';
+        return name === 'ce' || name === 'co' || name === 'captain';
     }
 
     function assertModifyOriginalPlan(user) {
@@ -531,11 +586,11 @@ const TVC_RBAC = (function () {
         if (title && title !== 'User') return title;
         const role = resolveUserRole(user);
         if (role === Role.SHIP_CAPTAIN) return 'Captain';
-        if (role === Role.SHIP_CHIEF) return 'Chief engineer';
+        if (role === Role.SHIP_CO) return 'Chief officer';
+        if (role === Role.SHIP_CHIEF || role === Role.SHIP_CE) return 'Chief engineer';
         if (role === Role.HQ_SUPERVISOR) return 'Superintendent';
-        if (role === Role.SHIP_OFFICER) {
-            return user.department === 'ENGINE' ? 'Engineer' : 'Officer';
-        }
+        if (role === Role.SHIP_ENGINEER) return 'Engineer';
+        if (role === Role.SHIP_OFFICER) return 'Officer';
         return user.display_name || '';
     }
 
@@ -620,9 +675,9 @@ const TVC_RBAC = (function () {
 
     /** 데모 user id → username (legacy confirmed_by/approved_by 저장값) */
     const DEMO_USER_ID_TO_USERNAME = {
-        'user-ce': 'chief engineer',
-        'user-chief': 'chief engineer',
-        'user-co': 'chief officer',
+        'user-ce': 'ce',
+        'user-chief': 'ce',
+        'user-co': 'co',
         'user-captain': 'captain',
         'user-engineer': 'engineer',
         'user-officer': 'officer',
@@ -641,7 +696,7 @@ const TVC_RBAC = (function () {
 
         const mappedUname = DEMO_USER_ID_TO_USERNAME[raw];
         if (mappedUname) {
-            const d = dept || (mappedUname === 'chief engineer' || mappedUname === 'ce' ? 'ENGINE' : mappedUname === 'hq' ? '' : 'DECK');
+            const d = dept || (mappedUname === 'ce' ? 'ENGINE' : mappedUname === 'hq' ? '' : 'DECK');
             return getDepartmentConfirmLabel(d, { username: mappedUname })
                 || getAccountTitle(mappedUname) || '';
         }
@@ -688,6 +743,7 @@ const TVC_RBAC = (function () {
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForWorkReport, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
         isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isTvcPilotAccount, isPms21Account, isFleetMonitorAccount, canMasterExcelAccount, isCompanyHqAccount, isHqSku, isApprover,
+        isDeckApproverRole, isEngineApproverRole, isShipAuthorRole,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
         normalizeReportStatus, isDraftStatus, isReportedStatus, isConfirmedStatus, isApprovedStatus,

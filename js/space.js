@@ -64,15 +64,15 @@ const TVC_Space = (function () {
     };
 
     const LOGIN_MODE_USERS = {
-        [LoginMode.MASTER]: new Set(['chief officer', 'captain']),
-        [LoginMode.DECK]: new Set(['officer', 'chief officer', 'co']),
-        [LoginMode.ENGINE]: new Set(['engineer', 'chief engineer', 'ce']),
+        [LoginMode.MASTER]: new Set(['co', 'captain']),
+        [LoginMode.DECK]: new Set(['officer', 'co']),
+        [LoginMode.ENGINE]: new Set(['engineer', 'ce']),
     };
 
     const LOGIN_MODE_DENIED = {
-        [LoginMode.MASTER]: 'Vessel Mode - Master allows Chief officer accounts only.',
-        [LoginMode.DECK]: 'Vessel Mode - Deck allows Officer or Chief officer accounts only.',
-        [LoginMode.ENGINE]: 'Vessel Mode - Engine allows Engineer or Chief engineer accounts only.',
+        [LoginMode.MASTER]: 'Vessel Mode - Master allows Chief officer (co) accounts only.',
+        [LoginMode.DECK]: 'Vessel Mode - Deck allows Officer (officer) or Chief officer (co) accounts only.',
+        [LoginMode.ENGINE]: 'Vessel Mode - Engine allows Engineer (engineer) or Chief engineer (ce) accounts only.',
     };
 
     function stationFromLoginMode(mode) {
@@ -165,7 +165,7 @@ const TVC_Space = (function () {
         const map = {
             [TVC_RBAC.Action.CREATE_DAILY_REPORT]: user.department === 'DECK' ? Endpoint.DECK_WORK : Endpoint.ENGINE_WORK,
             [TVC_RBAC.Action.EDIT_OWN_PENDING_REPORT]: Endpoint.PENDING_REPORT,
-            [TVC_RBAC.Action.APPROVE_DAILY_REPORT]: user.role === 'SHIP_CAPTAIN' ? Endpoint.APPROVE_DECK : Endpoint.APPROVE_ENGINE,
+            [TVC_RBAC.Action.APPROVE_DAILY_REPORT]: TVC_RBAC.isDeckApproverRole(user.role) ? Endpoint.APPROVE_DECK : Endpoint.APPROVE_ENGINE,
             [TVC_RBAC.Action.EXPORT_SHIP_SYNC]: Endpoint.STATION_EXPORT,
             [TVC_RBAC.Action.IMPORT_SHIP_SYNC]: Endpoint.HQ_FEEDBACK_IMPORT,
         };
@@ -197,14 +197,14 @@ const TVC_Space = (function () {
         dept = String(dept || '').trim().toUpperCase();
         if (!dept) return false;
         if (isCaptainHub(user)) {
-            return user.role === 'SHIP_CAPTAIN';
+            return TVC_RBAC.isDeckApproverRole(user.role);
         }
         const station = getStation(user);
         if (station === Station.ECR) {
-            return user.role === 'SHIP_CHIEF' && dept === 'ENGINE';
+            return TVC_RBAC.isEngineApproverRole(user.role) && dept === 'ENGINE';
         }
         if (station === Station.CCR) {
-            return user.role === 'SHIP_CAPTAIN' && dept === 'DECK';
+            return TVC_RBAC.isDeckApproverRole(user.role) && dept === 'DECK';
         }
         if (!station) {
             return TVC_RBAC.isApprover(user) && String(user.department || '').trim().toUpperCase() === dept;
@@ -231,13 +231,13 @@ const TVC_Space = (function () {
     /** Deck CCR 확인자 — Chief officer (co) */
     function isDeckChief(user) {
         if (!user || getStation(user) !== Station.CCR) return false;
-        return user.role === 'SHIP_CAPTAIN';
+        return TVC_RBAC.isDeckApproverRole(user.role);
     }
 
     /** Engine ECR 확인자 — Chief engineer (ce) */
     function isEngineChief(user) {
         if (!user || getStation(user) !== Station.ECR) return false;
-        return user.role === 'SHIP_CHIEF';
+        return TVC_RBAC.isEngineApproverRole(user.role);
     }
 
     /** Station PC Data Export/Import — Deck: co only · Engine: ce only · Master/HQ: hub rules */
@@ -247,7 +247,7 @@ const TVC_Space = (function () {
         const station = getStation(user);
         if (station === Station.CCR) return isDeckChief(user);
         if (station === Station.ECR) return isEngineChief(user);
-        if (isCaptainHub(user)) return user.role === 'SHIP_CAPTAIN';
+        if (isCaptainHub(user)) return TVC_RBAC.isDeckApproverRole(user.role);
         return false;
     }
 
@@ -307,8 +307,8 @@ const TVC_Space = (function () {
         if (isCaptainHub(user)) {
             base.showCaptainDashboard = false;
             base.showHubImport = true;
-            base.showCompanyExport = user.role === 'SHIP_CAPTAIN';
-            base.showCompanyImport = user.role === 'SHIP_CAPTAIN';
+            base.showCompanyExport = TVC_RBAC.isDeckApproverRole(user.role);
+            base.showCompanyImport = TVC_RBAC.isDeckApproverRole(user.role);
             base.showHubStationExport = TVC_RBAC.isApprover(user);
             base.showStationExport = false;
             base.showExportShip = false;

@@ -5,15 +5,15 @@ const TVC_Auth = (function () {
     const AUTH_SESSION_KEY = 'tvc_auth_session';
     const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 15;
+    const USERS_SEED_VERSION = 16;
 
     const DEFAULT_USERS = [
         // Deck part
-        { id: 'user-officer', username: 'Officer', display_name: 'Officer', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'TVC No1' },
-        { id: 'user-co', username: 'Chief officer', display_name: 'Chief officer', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'TVC No1' },
+        { id: 'user-officer', username: 'officer', display_name: 'Officer', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'TVC No1' },
+        { id: 'user-co', username: 'co', display_name: 'Chief officer', account_type: 'SHIP', role: 'SHIP_CO', department: 'DECK', vessel_id: 'TVC No1' },
         // Engine part
-        { id: 'user-engineer', username: 'Engineer', display_name: 'Engineer', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'ENGINE', vessel_id: 'TVC No1' },
-        { id: 'user-ce', username: 'Chief engineer', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'TVC No1' },
+        { id: 'user-engineer', username: 'engineer', display_name: 'Engineer', account_type: 'SHIP', role: 'SHIP_ENGINEER', department: 'ENGINE', vessel_id: 'TVC No1' },
+        { id: 'user-ce', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CE', department: 'ENGINE', vessel_id: 'TVC No1' },
         // Head office
         { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
         // Web HQ pilot (thevesselcode.com)
@@ -28,7 +28,8 @@ const TVC_Auth = (function () {
 
     const DEPRECATED_USERNAMES = [
         'admin@thevesselcode.com',
-        'co', 'ce', 'captain', // legacy short usernames → Officer / Chief officer / Engineer / Chief engineer
+        'captain',
+        'Officer', 'Chief officer', 'Engineer', 'Chief engineer',
     ];
 
     const PBKDF2_SALT = 'tvc-pms-salt-v2';

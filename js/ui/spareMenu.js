@@ -4980,7 +4980,7 @@ const TVC_SpareMenu = (function () {
         const user = spareInventoryUser(st);
         if (!user || !window.TVC_RBAC) return false;
         const role = TVC_RBAC.resolveUserRole(user);
-        return role === TVC_RBAC.Role.SHIP_CHIEF || role === TVC_RBAC.Role.HQ_SUPERVISOR;
+        return TVC_RBAC.isEngineApproverRole(role) || role === TVC_RBAC.Role.HQ_SUPERVISOR;
     }
 
     function getFocusedSpareId(st) {
@@ -13538,7 +13538,7 @@ const TVC_SpareMenu = (function () {
     function isSpareAuthorAccount(user) {
         if (!user || !window.TVC_RBAC) return false;
         const role = TVC_RBAC.resolveUserRole?.(user) || user.role;
-        return role === TVC_RBAC.Role.SHIP_OFFICER;
+        return TVC_RBAC.isShipAuthorRole(role);
     }
 
     function renderSpareNecessaryCol({ canModify, user }) {
@@ -14919,11 +14919,11 @@ const TVC_SpareMenu = (function () {
         if (window.TVC_RBAC?.getReportedByLabel) return TVC_RBAC.getReportedByLabel(user);
         const role = user.role || TVC_RBAC?.resolveUserRole?.(user);
         if (role === 'SHIP_CAPTAIN') return 'Captain';
-        if (role === 'SHIP_CHIEF') return 'Chief engineer';
+        if (role === 'SHIP_CO') return 'Chief officer';
+        if (role === 'SHIP_CHIEF' || role === 'SHIP_CE') return 'Chief engineer';
         if (role === 'HQ_SUPERVISOR') return 'Superintendent';
-        if (role === 'SHIP_OFFICER') {
-            return String(user.department || '').toUpperCase() === 'ENGINE' ? 'Engineer' : 'Officer';
-        }
+        if (role === 'SHIP_ENGINEER') return 'Engineer';
+        if (role === 'SHIP_OFFICER') return 'Officer';
         return user.display_name || '';
     }
 

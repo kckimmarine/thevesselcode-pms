@@ -3398,7 +3398,7 @@ const TVC_App = (function () {
         const role = state.user
             ? (TVC_RBAC.resolveUserRole?.(state.user) || state.user.role)
             : null;
-        const isAuthor = role === TVC_RBAC.Role.SHIP_OFFICER;
+        const isAuthor = TVC_RBAC.isShipAuthorRole(role);
         return [
                     { label: 'Database Backup & Restore', tag: 'C', action: "TVC_App.menuAction('backup')" },
             { label: 'Data Export & Import', tag: 'C', action: 'TVC_App.openMenuXferMenu()', feature: 'showDataXfer' },
@@ -12956,7 +12956,7 @@ const TVC_App = (function () {
             ? (TVC_RBAC.resolveUserRole?.(state.user) || state.user.role)
             : null;
         // 작성자(engineer/officer)·HQ: Confirm 숨김 (확인자 ce/captain만 표시)
-        const showReportConfirm = !isHq && role !== TVC_RBAC.Role.SHIP_OFFICER;
+        const showReportConfirm = !isHq && !TVC_RBAC.isShipAuthorRole(role);
         setVis('histBtnApprove', showReportConfirm);
         setDis('histBtnApprove', !canConfirm);
         const approveBtn = document.getElementById('histBtnApprove');

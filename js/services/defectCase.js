@@ -163,7 +163,7 @@ const TVC_DefectCaseService = (function () {
         row.submitted_at = now();
         row.visible_in_list = true;
         row.chief_engineer = row.chief_engineer || (user?.department === 'ENGINE' ? TVC_RBAC.getRankLabel(user) : row.chief_engineer);
-        row.master = row.master || (user?.department === 'DECK' || user?.role === 'SHIP_CAPTAIN' ? TVC_RBAC.getRankLabel(user) : row.master);
+        row.master = row.master || (user?.department === 'DECK' || TVC_RBAC.isDeckApproverRole(user?.role) ? TVC_RBAC.getRankLabel(user) : row.master);
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
