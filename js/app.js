@@ -2613,6 +2613,13 @@ const TVC_App = (function () {
         return !!(state.user && typeof TVC_Space !== 'undefined' && TVC_Space.getUiFeatures(state.user).showSpareTab);
     }
 
+    /** HQ / Admin — Report History requires an explicit vessel (no Fleet View aggregate). */
+    function reportHistoryRequiresVesselSelection(user = state.user) {
+        return !!(user && TVC_RBAC.isHqAccount(user) && !state.selectedVesselId);
+    }
+
+    const REPORT_HISTORY_SELECT_VESSEL_MSG = 'Please select a vessel first.';
+
     function syncHistoryScopeUi() {
         const scope = state.historyScope === 'spare' && canShowSpareHistory() ? 'spare' : 'pms';
         state.historyScope = scope;
@@ -13495,9 +13502,20 @@ const TVC_App = (function () {
         if (!body) return;
         bindWorkHistoryTableEvents();
         pruneHistChecked();
+        const colSpan = 15;
+        if (reportHistoryRequiresVesselSelection()) {
+            setText('histCount', '0 / 0 entries');
+            const searchEl = document.getElementById('histSearch');
+            if (searchEl && document.activeElement !== searchEl) searchEl.value = state.search || '';
+            updateSearchClearBtn('histSearch');
+            syncReportPeriodInputs();
+            body.innerHTML = `<tr><td colspan="${colSpan}" class="muted" style="text-align:center">${esc(REPORT_HISTORY_SELECT_VESSEL_MSG)}</td></tr>`;
+            updateHistToolbarState();
+            TVC_RunHours.syncRhToolbarUi();
+            return;
+        }
         const all = workHistoryEntriesRaw();
         const entries = workHistoryEntries();
-        const colSpan = 15;
         setText('histCount', `${entries.length} / ${all.length} entries`);
         const searchEl = document.getElementById('histSearch');
         if (searchEl && document.activeElement !== searchEl) searchEl.value = state.search || '';
@@ -18853,7 +18871,7 @@ const TVC_App = (function () {
         setBatchActiveJob, setWrBatchViewJob, openBatchJobPicker, closeBatchJobPicker, closeBatchReport,
         openWorkReportFromHistory, openDefectFromHistory, openConsumeFromHistory, openWorkHistoryEntry, navWorkHistoryEntry, syncHistRowSelection,
         histNavButtonsHtml, workHistoryNavBounds,
-        modifyWorkReport, cancelWorkReportEdit, selectHistRow, renderWorkHistory, histDefectRowKey,
+        modifyWorkReport, cancelWorkReportEdit, selectHistRow, renderWorkHistory, reportHistoryRequiresVesselSelection, REPORT_HISTORY_SELECT_VESSEL_MSG, histDefectRowKey,
         buildDefectHistRowHtml, matchDefectHistSearch, initHistCellTips,
         formatHistGroupEquipmentName, isPlaceholderJobCode, defectEffectiveJobCode,
         histDetailWorkReport, histModifyReport, histReportApproval, histHqReportApproval, histDeleteReport,

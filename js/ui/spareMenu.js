@@ -8086,8 +8086,13 @@ const TVC_SpareMenu = (function () {
         head.style.paddingRight = sb > 0 ? `${sb}px` : '';
     }
 
-    function buildReqListRowsHtml(reqs, mode = 'modal') {
+    function buildReqListRowsHtml(reqs, mode = 'modal', opts = {}) {
         if (!reqs.length) {
+            if (opts.emptyTitle) {
+                return `<tr><td colspan="12" class="spare-req-list-empty">
+                <p class="spare-req-list-empty-title muted">${esc(opts.emptyTitle)}</p>
+            </td></tr>`;
+            }
             return `<tr><td colspan="12" class="spare-req-list-empty">
                 <span class="spare-req-list-empty-icon" aria-hidden="true">🧾</span>
                 <p class="spare-req-list-empty-title">No requisitions yet</p>
@@ -14080,13 +14085,17 @@ const TVC_SpareMenu = (function () {
     }
 
     async function historyReqListContext() {
-        const { st, vesselId } = await vesselScope();
+        const { st, vesselId, isHq } = await vesselScope();
         const m = modState(st);
+        const needsVessel = isHq && !vesselId;
+        if (needsVessel) {
+            return { st, m, allReqs: [], reqs: [], needsVesselSelection: true };
+        }
         const allReqs = typeof TVC_Inventory !== 'undefined'
             ? await TVC_Inventory.listRequisitions(vesselId)
             : [];
         const reqs = filterReqList(allReqs, st);
-        return { st, m, allReqs, reqs };
+        return { st, m, allReqs, reqs, needsVesselSelection: false };
     }
 
     function historyReqListCountLabel(reqs, allReqs) {
@@ -14118,24 +14127,35 @@ const TVC_SpareMenu = (function () {
         </div>`;
     }
 
+    function historyReqListRowOpts(needsVesselSelection) {
+        if (!needsVesselSelection) return {};
+        return {
+            emptyTitle: window.TVC_App?.REPORT_HISTORY_SELECT_VESSEL_MSG || 'Please select a vessel first.',
+        };
+    }
+
     async function syncHistoryReqListToolbar() {
         const host = document.getElementById('spareHistReqListHost');
         if (!host) return;
-        const { st, m, allReqs, reqs } = await historyReqListContext();
+        const { st, m, allReqs, reqs, needsVesselSelection } = await historyReqListContext();
         const bar = host.querySelector('.hist-toolbar-actions');
         if (bar) bar.outerHTML = historyReqListToolbarHtml(st, m, allReqs);
         const countEl = document.getElementById('spareHistReqCount');
-        if (countEl) countEl.textContent = historyReqListCountLabel(reqs, allReqs);
+        if (countEl) {
+            countEl.textContent = needsVesselSelection ? '0 / 0 entries' : historyReqListCountLabel(reqs, allReqs);
+        }
     }
 
     async function patchHistoryReqList() {
         const host = document.getElementById('spareHistReqListHost');
         if (!host) return;
-        const { st, reqs, allReqs } = await historyReqListContext();
+        const { st, reqs, allReqs, needsVesselSelection } = await historyReqListContext();
         const countEl = document.getElementById('spareHistReqCount');
-        if (countEl) countEl.textContent = historyReqListCountLabel(reqs, allReqs);
+        if (countEl) {
+            countEl.textContent = needsVesselSelection ? '0 / 0 entries' : historyReqListCountLabel(reqs, allReqs);
+        }
         const tbody = host.querySelector('#spareHistReqListScroll .spare-req-list-body-table tbody');
-        if (tbody) tbody.innerHTML = buildReqListRowsHtml(reqs, 'modal');
+        if (tbody) tbody.innerHTML = buildReqListRowsHtml(reqs, 'modal', historyReqListRowOpts(needsVesselSelection));
         const phaseHost = host.querySelector('.req-list-phase-tabs');
         if (phaseHost) {
             const phaseCounts = reqListPhaseCounts(allReqs, st);
@@ -14151,9 +14171,10 @@ const TVC_SpareMenu = (function () {
     async function renderHistoryReqList() {
         const host = document.getElementById('spareHistReqListHost');
         if (!host) return;
-        const { st, m, reqs, allReqs } = await historyReqListContext();
-        const countLabel = historyReqListCountLabel(reqs, allReqs);
+        const { st, m, reqs, allReqs, needsVesselSelection } = await historyReqListContext();
+        const countLabel = needsVesselSelection ? '0 / 0 entries' : historyReqListCountLabel(reqs, allReqs);
         const phaseCounts = reqListPhaseCounts(allReqs, st);
+        const rowOpts = historyReqListRowOpts(needsVesselSelection);
         host.innerHTML = `
         <div class="spare-req-list-wrap spare-req-list-main-wrap spare-hist-req-wrap">
           <div class="hist-toolbar-stack">
@@ -14164,7 +14185,7 @@ const TVC_SpareMenu = (function () {
           <div class="spare-req-list-panel-wrap">
             <div class="panel spare-req-list-panel">
               <div class="table-scroll-container spare-req-list-scroll" id="spareHistReqListScroll">
-                <table class="spare-data-table spare-req-list-table spare-req-list-body-table report-history-table">${REQ_LIST_COLGROUP}${reqListTableHeadHtml('spareHistReqHeadChkAll')}<tbody>${buildReqListRowsHtml(reqs, 'modal')}</tbody></table>
+                <table class="spare-data-table spare-req-list-table spare-req-list-body-table report-history-table">${REQ_LIST_COLGROUP}${reqListTableHeadHtml('spareHistReqHeadChkAll')}<tbody>${buildReqListRowsHtml(reqs, 'modal', rowOpts)}</tbody></table>
               </div>
             </div>
           </div>
