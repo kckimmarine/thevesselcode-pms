@@ -295,9 +295,10 @@ const TVC_RBAC = (function () {
         if (!user || user.account_type !== AccountType.ADMIN) return false;
         return ADMIN_TOOL_USERNAMES.has(String(user.username || '').trim().toLowerCase());
     }
-    /** Pilot ship-owner HQ (tvc) — company-scoped superintendent, not TVC admin. */
+    /** Company HQ superintendent — contract ship owner (company_id scoped), not TVC admin. */
     function isTvcPilotAccount(user) {
-        return String(user?.username || '').trim().toLowerCase() === 'tvc';
+        if (!isCompanyHqAccount(user)) return false;
+        return !!String(user.company_id || '').trim();
     }
     /** Repair partner (pms-21) — fleet-wide monitoring with admin, not registry/license. */
     function isPms21Account(user) {

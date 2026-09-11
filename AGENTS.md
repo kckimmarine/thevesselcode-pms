@@ -45,9 +45,10 @@ npm run verify-all           # RBAC + sync checks
 | `co` | Deck | SHIP_CO | Deck confirm + Master hub |
 | `engineer` | Engine | SHIP_ENGINEER | PMS + SPARE consumption |
 | `ce` | Engine | SHIP_CE | Confirm + SPARE admin |
-| `hq` | — | HQ | Approve imported reports |
+| `tvc shipping` | — | HQ (`TVC_SHIPPING`) | Contract company superintendent |
+| `admin` | — | ADMIN | Admin Mode (registry / license) |
 
-Demo vessel: **TVC No1**
+Contract demo vessel: **TVC No1** · company: **TVC_SHIPPING**
 
 ---
 

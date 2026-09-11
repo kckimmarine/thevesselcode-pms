@@ -5,31 +5,23 @@ const TVC_Auth = (function () {
     const AUTH_SESSION_KEY = 'tvc_auth_session';
     const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 16;
+    const USERS_SEED_VERSION = 17;
 
     const DEFAULT_USERS = [
-        // Deck part
+        // Contract vessel — TVC No1 (ship accounts)
         { id: 'user-officer', username: 'officer', display_name: 'Officer', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'TVC No1' },
         { id: 'user-co', username: 'co', display_name: 'Chief officer', account_type: 'SHIP', role: 'SHIP_CO', department: 'DECK', vessel_id: 'TVC No1' },
-        // Engine part
         { id: 'user-engineer', username: 'engineer', display_name: 'Engineer', account_type: 'SHIP', role: 'SHIP_ENGINEER', department: 'ENGINE', vessel_id: 'TVC No1' },
         { id: 'user-ce', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CE', department: 'ENGINE', vessel_id: 'TVC No1' },
-        // Head office
-        { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
-        // Web HQ pilot (thevesselcode.com)
-        { id: 'user-dm-hq', username: 'dm_user@thevesselcode.com', display_name: 'TVC HQ (Pilot)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
-        // THE VESSEL CODE — Admin Mode (app updates only)
-        // Pilot ship owner — company-scoped HQ superintendent (TVC No1)
-        { id: 'user-tvc', username: 'tvc', display_name: 'TVC Pilot (Ship Owner)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
-        { id: 'user-tvc-admin', username: 'admin', display_name: 'TVC Super Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null, seed_password: 'kimkc9363#@' },
-        // Repair partner — fleet-wide monitoring with TVC admin
-        { id: 'user-pms-21', username: 'pms-21', display_name: 'PMS-21 (Repair Partner)', account_type: 'ADMIN', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, seed_password: 'pms-21' },
+        // Contract company HQ — superintendent (company-scoped fleet)
+        { id: 'user-tvc-shipping', username: 'tvc shipping', display_name: 'TVC Shipping', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC_SHIPPING', seed_password: '0000' },
+        // TVC internal — Admin Mode (registry / license / app update)
+        { id: 'user-tvc-admin', username: 'admin', display_name: 'Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null, seed_password: 'admin' },
     ];
 
     const DEPRECATED_USERNAMES = [
         'admin@thevesselcode.com',
-        'captain',
-        'Officer', 'Chief officer', 'Engineer', 'Chief engineer',
+        'hq', 'tvc', 'dm_user@thevesselcode.com', 'pms-21', 'captain',
     ];
 
     const PBKDF2_SALT = 'tvc-pms-salt-v2';
