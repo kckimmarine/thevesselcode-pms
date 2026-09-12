@@ -182,6 +182,23 @@ const TVC_SupplierWorkspace = (function () {
                 </div>`;
             return;
         }
+        if (view === 'account' && currentUser) {
+            const u = currentUser;
+            const scopes = Array.isArray(u.business_scope) ? u.business_scope.join(', ') : '—';
+            main.innerHTML = `
+            <div class="supplier-panel">
+                <h2 class="supplier-panel-title">⚙️ Account</h2>
+                <dl class="supplier-account-dl">
+                    <dt>Company</dt><dd>${escapeHtml(companyLabel(u))}</dd>
+                    <dt>User ID</dt><dd>${escapeHtml(u.username || '—')}</dd>
+                    <dt>Business Scope</dt><dd>${escapeHtml(scopes)}</dd>
+                    <dt>Contact</dt><dd>${escapeHtml(u.contact_person || '—')}</dd>
+                    <dt>Email</dt><dd>${escapeHtml(u.contact_email || '—')}</dd>
+                    <dt>Service Ports</dt><dd>${escapeHtml(u.service_ports || '—')}</dd>
+                </dl>
+            </div>`;
+            return;
+        }
         main.innerHTML = `
             <div class="supplier-panel supplier-placeholder">
                 <h2 class="supplier-panel-title">${escapeHtml(titles[view] || 'Section')}</h2>
@@ -217,7 +234,12 @@ const TVC_SupplierWorkspace = (function () {
         if (title) title.textContent = 'SUPPLIER PORTAL';
         if (sub) sub.textContent = companyLabel(user);
         const badge = el('supplierUserBadge');
-        if (badge) badge.textContent = user?.display_name || user?.username || '—';
+        if (badge) badge.textContent = companyLabel(user);
+        const userIdLine = el('supplierUserIdLine');
+        if (userIdLine) {
+            const uid = String(user?.username || '').trim();
+            userIdLine.textContent = uid ? `User ID: ${uid}` : '—';
+        }
         await ensureDemoRfqs(user);
         await renderView('rfq');
         try { location.hash = 'tvc-supplier-workspace'; } catch (_) {}

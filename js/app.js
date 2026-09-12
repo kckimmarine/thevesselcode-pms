@@ -414,6 +414,7 @@ const TVC_App = (function () {
             } catch (e) { console.warn('[TVC] provisioned accounts sync', e); }
 
             try { TVC_Auth.applySavedIdToLoginForm(); } catch (e) { console.warn('[TVC] saved login id', e); }
+            try { TVC_SupplierRegister?.init(); } catch (e) { console.warn('[TVC] supplier register', e); }
 
             ['loginUser', 'loginPass', 'loginDept'].forEach(id => {
                 document.getElementById(id)?.addEventListener('keydown', e => {
@@ -18144,6 +18145,24 @@ const TVC_App = (function () {
 
     function aiHelpEl(id) { return document.getElementById(id); }
 
+    const LOGIN_TOAST_ID = 'loginToast';
+
+    function showLoginToast(message) {
+        let toast = document.getElementById(LOGIN_TOAST_ID);
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = LOGIN_TOAST_ID;
+            toast.className = 'tvc-feedback-toast login-toast hidden';
+            toast.setAttribute('role', 'status');
+            toast.setAttribute('aria-live', 'polite');
+            document.body.appendChild(toast);
+        }
+        toast.textContent = message;
+        toast.classList.remove('hidden');
+        clearTimeout(showLoginToast._timer);
+        showLoginToast._timer = setTimeout(() => toast.classList.add('hidden'), 4200);
+    }
+
     function showAiHelpToast(message) {
         let toast = aiHelpEl(AI_HELP_TOAST_ID);
         if (!toast) {
@@ -18916,7 +18935,7 @@ const TVC_App = (function () {
         triggerSpareMasterImport, importSpareMasterExcel,
         confirmPlanUpdate, closePlanUpdateModal, printTabList, printCurrentTab,
         doSubmit, doExecute, doApprove, doConfirm,
-        handleLogin, handleLogout, handleExport, handleImport, handleHubImport, handleDefectImport, handlePostponeImport, handleWorkPermitImport,
+        handleLogin, handleLogout, showLoginToast, handleExport, handleImport, handleHubImport, handleDefectImport, handlePostponeImport, handleWorkPermitImport,
         urgentExportDefect, exportDefectCompletion, loadSeedFile,
         openMenuXferMenu, closeMenuXferMenu, menuXferPickChannel, menuXferPickMode, menuXferBack, menuXferTriggerImport,
         menuXferSelectImportType, menuXferPickExportType,

@@ -90,6 +90,11 @@
                 <button type="submit" class="login-submit">Sign In</button>
                 <div id="loginErr" class="login-err" role="alert"></div>
             </form>
+            <p class="login-supplier-register-wrap">
+                <button type="button" id="supplierRegisterOpenBtn" class="login-supplier-register-btn">
+                    🤝 Register as Supplier / Partner
+                </button>
+            </p>
             <div id="loginDownloadSection" class="login-download hidden">
                 <button type="button" id="loginDownloadBtn" class="login-download-btn">
                     Download Vessel Mode (PC installer)
@@ -104,7 +109,7 @@
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / co</li>
                     <li><b>SM (HQ)</b> · tvc shipping (company vessels · no Department)</li>
-                    <li><b>Supplier</b> · supplier (Supplier Portal · no Department)</li>
+                    <li><b>Supplier</b> · use <b>Register as Supplier / Partner</b> below</li>
                     <li><b>Admin</b> · admin (Admin Mode · no Department)</li>
                 </ul>
             </div>
@@ -435,6 +440,7 @@
             <div>
                 <div id="supplierPortalTitle" class="supplier-portal-title">SUPPLIER PORTAL</div>
                 <div id="supplierCompanyName" class="supplier-company-name">—</div>
+                <div id="supplierUserIdLine" class="supplier-user-id-line">—</div>
             </div>
         </div>
         <div class="supplier-header-meta">
@@ -815,6 +821,54 @@
 
 <div id="listFilterPopFloat" class="list-filter-pop list-filter-pop-float hidden" role="dialog" aria-label="List filters"></div>
 
+<div id="supplier-register-modal" class="modal hidden supplier-register-modal" role="dialog" aria-labelledby="supplierRegisterTitle" aria-modal="true">
+    <div class="modal-box supplier-register-box" onclick="event.stopPropagation()">
+        <button type="button" id="supplierRegisterCloseBtn" class="modal-x" aria-label="Close">×</button>
+        <h3 id="supplierRegisterTitle">Register as Supplier / Partner</h3>
+        <p class="supplier-register-sub muted">Create your Supplier Portal account. All fields are stored locally on this device.</p>
+        <form id="supplierRegisterForm" class="supplier-register-form" novalidate>
+            <div class="login-field">
+                <label for="supplierRegUserId">User ID</label>
+                <input id="supplierRegUserId" type="text" autocomplete="username" required maxlength="64">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegPassword">Password</label>
+                <input id="supplierRegPassword" type="password" autocomplete="new-password" required minlength="4">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegCompany">Supplier / Company Name</label>
+                <input id="supplierRegCompany" type="text" autocomplete="organization" required maxlength="120"
+                    placeholder="e.g. ABC Marine Service">
+            </div>
+            <fieldset id="supplierRegScope" class="supplier-scope-fieldset">
+                <legend>Business Scope</legend>
+                <label class="login-check"><input type="checkbox" value="spares"> <span>Spares Supply</span></label>
+                <label class="login-check"><input type="checkbox" value="engine"> <span>Engine Repair</span></label>
+                <label class="login-check"><input type="checkbox" value="stores"> <span>Stores</span></label>
+                <label class="login-check"><input type="checkbox" value="electrical"> <span>Electrical</span></label>
+            </fieldset>
+            <div class="login-field">
+                <label for="supplierRegContact">Contact Person</label>
+                <input id="supplierRegContact" type="text" autocomplete="name" required maxlength="80">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegEmail">Contact Email</label>
+                <input id="supplierRegEmail" type="email" autocomplete="email" required maxlength="120">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegPorts">Service Base Ports</label>
+                <input id="supplierRegPorts" type="text" required maxlength="200"
+                    placeholder="e.g. Busan, Yeosu, Singapore">
+            </div>
+            <div id="supplierRegErr" class="login-err" role="alert"></div>
+            <div class="modal-actions supplier-register-actions">
+                <button type="button" id="supplierRegisterCancelBtn" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-green">Create Supplier Account</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div id="fileProtocolModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('fileProtocolModal')">
     <div class="modal-box">
         <button class="modal-x" onclick="TVC_App.closeModal('fileProtocolModal')">×</button>
@@ -905,6 +959,7 @@
 <script src="js/ui/workPermit.js?v=20260902-hq-attach"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
+<script src="js/ui/supplierRegister.js?v=20260912-supplier-register"></script>
 <script src="js/ui/supplierWorkspace.js?v=20260912-supplier-portal"></script>
 <script src="js/app.js?v=20260903-web-cloud"></script>
 <script src="js/pwa.js?v=20260902-date-picker"></script>

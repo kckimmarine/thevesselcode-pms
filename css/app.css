@@ -11995,4 +11995,34 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 .supplier-table th { background: #f7fafc; font-weight: 600; }
 .supplier-table td.num { text-align: right; }
 .supplier-empty { text-align: center; color: #718096; padding: 1.5rem !important; }
+.supplier-user-id-line { font-size: 0.82rem; opacity: 0.85; margin-top: 0.15rem; }
+.supplier-account-dl { margin: 0.5rem 0 0; display: grid; grid-template-columns: 9rem 1fr; gap: 0.35rem 1rem; font-size: 0.9rem; }
+.supplier-account-dl dt { font-weight: 600; color: #4a5568; }
+.supplier-account-dl dd { margin: 0; }
+
+.login-supplier-register-wrap { margin: 0.85rem 0 0; text-align: center; }
+.login-supplier-register-btn {
+    background: none;
+    border: none;
+    color: #2b6cb0;
+    font-size: 0.92rem;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0.35rem 0.5rem;
+}
+.login-supplier-register-btn:hover { color: #1a365d; }
+.tvc-feedback-toast.login-toast { bottom: 2.5rem; z-index: 12000; }
+
+.supplier-register-modal .supplier-register-box { max-width: 28rem; width: 96vw; max-height: 90vh; overflow-y: auto; }
+.supplier-register-sub { margin: 0 0 1rem; font-size: 0.88rem; }
+.supplier-register-form .login-field { margin-bottom: 0.65rem; }
+.supplier-scope-fieldset {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem 0.65rem;
+    margin: 0 0 0.65rem;
+}
+.supplier-scope-fieldset legend { font-size: 0.85rem; font-weight: 600; padding: 0 0.25rem; }
+.supplier-scope-fieldset .login-check { display: block; margin: 0.25rem 0; }
+.supplier-register-actions { justify-content: flex-end; gap: 0.5rem; }
 

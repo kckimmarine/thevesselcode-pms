@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 16, // v16: supplier_rfqs · supplier_quotes · supplier_orders
+    DB_VERSION: 17, // v17: supplier_profiles (self-registration)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -35,6 +35,7 @@ const TVC_SCHEMA = {
         supplier_rfqs: { keyPath: 'rfq_id' },
         supplier_quotes: { keyPath: 'id' },
         supplier_orders: { keyPath: 'id' },
+        supplier_profiles: { keyPath: 'supplier_id' },
     },
     INDEXES: {
         users: [{ name: 'username', keyPath: 'username', unique: true }],
@@ -127,6 +128,9 @@ const TVC_SCHEMA = {
             { name: 'by_rfq', keyPath: 'rfq_id' },
             { name: 'by_supplier', keyPath: 'supplier_id' },
             { name: 'by_status', keyPath: 'status' },
+        ],
+        supplier_profiles: [
+            { name: 'by_username', keyPath: 'username', unique: true },
         ],
         impa_master: [
             { name: 'by_category', keyPath: 'category' },
