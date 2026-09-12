@@ -11,6 +11,8 @@ This document is the **handoff layer** between Google Gemini (design, domain, re
 | **Gemini** | Domain rules, Korean UX copy, workflow validation, comparing requirements to manuals, reviewing screenshots, drafting acceptance criteria |
 | **Cursor** | Code changes, IndexedDB/transaction logic, Playwright E2E, git/PR, running `npm start` / `test:e2e` |
 
+**Operational channel (TVC policy):** Shipowner (CEO) → Superintendent (**Gemini**, review & handoff) → Shipyard (**Cursor Agent**, implement & PR). **No Telegram or other side channels** for command/control.
+
 **Shared truth:** [`AGENTS.md`](../AGENTS.md), [`UI-MAP.md`](UI-MAP.md), [`workflow-manual-v1.md`](workflow-manual-v1.md)
 
 ---
