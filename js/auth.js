@@ -5,7 +5,7 @@ const TVC_Auth = (function () {
     const AUTH_SESSION_KEY = 'tvc_auth_session';
     const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 19;
+    const USERS_SEED_VERSION = 20;
 
     const DEFAULT_USERS = [
         // Contract vessel — TVC No1 (ship accounts)
@@ -13,8 +13,9 @@ const TVC_Auth = (function () {
         { id: 'user-co', username: 'co', display_name: 'Chief officer', account_type: 'SHIP', role: 'SHIP_CO', department: 'DECK', vessel_id: 'TVC No1' },
         { id: 'user-engineer', username: 'engineer', display_name: 'Engineer', account_type: 'SHIP', role: 'SHIP_ENGINEER', department: 'ENGINE', vessel_id: 'TVC No1' },
         { id: 'user-ce', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CE', department: 'ENGINE', vessel_id: 'TVC No1' },
-        // Contract company HQ — superintendent (company-scoped fleet)
-        { id: 'user-tvc-shipping', username: 'tvc shipping', display_name: 'TVC Shipping', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC_SHIPPING', seed_password: '0000' },
+        { id: 'user-captain', username: 'captain', display_name: 'Captain', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'CAPTAIN', vessel_id: 'TVC No1' },
+        // Contract company SM — superintendent (company-scoped fleet)
+        { id: 'user-tvc-shipping', username: 'tvc shipping', display_name: 'TVC Shipping', account_type: 'SM', role: 'SM_SUPERINTENDENT', department: null, vessel_id: null, company_id: 'TVC_SHIPPING', seed_password: '0000' },
         // TVC internal — Admin Mode (registry / license / app update)
         { id: 'user-tvc-admin', username: 'admin', display_name: 'Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null, seed_password: 'admin' },
     ];
@@ -23,7 +24,7 @@ const TVC_Auth = (function () {
 
     const DEPRECATED_USERNAMES = [
         'admin@thevesselcode.com',
-        'hq', 'tvc', 'dm_user@thevesselcode.com', 'pms-21', 'captain',
+        'hq', 'tvc', 'dm_user@thevesselcode.com', 'pms-21',
     ];
 
     const PBKDF2_SALT = 'tvc-pms-salt-v2';
@@ -144,7 +145,8 @@ const TVC_Auth = (function () {
             ...session,
             role,
             account_type: user.account_type,
-            department: (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER')
+            department: (user.account_type === 'HQ' || user.account_type === 'SM'
+                || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER')
                 ? null : user.department,
             display_name: user.display_name,
             vessel_id: user.vessel_id,
@@ -289,7 +291,8 @@ const TVC_Auth = (function () {
             if (!licCheck.ok) return licCheck;
         }
 
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
+        if (user.account_type === 'HQ' || user.account_type === 'SM'
+            || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
             if (loginMode) {
                 return {
                     ok: false,
@@ -322,7 +325,7 @@ const TVC_Auth = (function () {
             if (!spaceCheck.ok) return spaceCheck;
             station = spaceCheck.station;
         } else if (!loginMode) {
-            return { ok: false, error: 'Select Department (Master / Deck / Engine).' };
+            return { ok: false, error: 'Select Department (Captain / Deck / Engine).' };
         }
 
         const session = {
@@ -425,7 +428,8 @@ const TVC_Auth = (function () {
             }
         }
 
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
+        if (user.account_type === 'HQ' || user.account_type === 'SM'
+            || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,
                 account_type: user.account_type, role: sessionRole,

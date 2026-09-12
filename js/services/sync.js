@@ -101,7 +101,7 @@ const TVC_Sync = (function () {
                 ? 'Deck export is not applied in Engine Mode.'
                 : 'Engine/Deck export is not applied in the other department Mode.';
         return (
-            `Import station export ZIP in Master Mode or HQ Mode${deptHint}.\n\n`
+            `Import station export ZIP in Captain Mode or HQ Mode${deptHint}.\n\n`
             + `${crossDept}\n\n`
             + 'On Engine/Deck station PCs, use Export to send data to Master — do not import station export ZIP here.'
         );
@@ -124,7 +124,7 @@ const TVC_Sync = (function () {
                 throw new Error(stationExportImportDeniedMessage(fileDept));
             }
             if (!isMaster && !isHq) {
-                throw new Error('Station export ZIP can be imported in Master Mode or HQ Mode.');
+                throw new Error('Station export ZIP can be imported in Captain Mode or HQ Mode.');
             }
             if ((isMaster || isHq) && !activeDept) {
                 throw new Error(`Select the ${fileDept ? TVC_RBAC.getDeptLabel(fileDept) : 'Deck or Engine'} department toggle before Import.`);
@@ -164,10 +164,10 @@ const TVC_Sync = (function () {
                 throw new Error('Import HQ reply ZIP on the vessel (Master / Engine / Deck Mode).');
             }
             if (fileDept === 'ENGINE' && isDeckStation) {
-                throw new Error('Engine HQ reply is not applied in Deck Mode. Import in Engine Mode or Master Mode (Engine toggle).');
+                throw new Error('Engine HQ reply is not applied in Deck Mode. Import in Engine Mode or Captain Mode (Engine toggle).');
             }
             if (fileDept === 'DECK' && isEngineStation) {
-                throw new Error('Deck HQ reply is not applied in Engine Mode. Import in Deck Mode or Master Mode (Deck toggle).');
+                throw new Error('Deck HQ reply is not applied in Engine Mode. Import in Deck Mode or Captain Mode (Deck toggle).');
             }
             if (parsed) {
                 if (parsed.isHqReply && parsed.department) {
@@ -585,9 +585,9 @@ const TVC_Sync = (function () {
             package_type: opts.caseReview ? 'CASE' : (opts.monthlyExport ? 'MONTHLY' : undefined),
             channel: opts.channel || undefined,
             peer: opts.monthlyExport || opts.caseReview
-                ? (built.hubRelayHqReply ? 'Station' : 'Master/HQ')
+                ? (built.hubRelayHqReply ? 'Station' : 'Captain/HQ')
                 : (direction === 'STATION_TO_HUB'
-                    ? 'Master'
+                    ? 'Captain'
                     : (direction === 'SHIP_TO_HQ' || direction === 'HQ_TO_SHIP' ? 'Company' : null)),
         });
     }
@@ -707,7 +707,7 @@ const TVC_Sync = (function () {
             }
         } else if (fileDirection === 'STATION_TO_HUB') {
             if (!isHq) {
-                throw new Error('Import Station export ZIP in Master Mode or HQ Mode.');
+                throw new Error('Import Station export ZIP in Captain Mode or HQ Mode.');
             }
         }
 

@@ -197,7 +197,7 @@ const TVC_App = (function () {
         const field = sel?.closest('.login-field');
         if (!sel) return;
         const allModes = [
-            { value: 'MASTER', label: 'Master' },
+            { value: 'MASTER', label: 'Captain' },
             { value: 'ENGINE', label: 'Engine' },
             { value: 'DECK', label: 'Deck' },
         ];
@@ -790,9 +790,11 @@ const TVC_App = (function () {
         return rowDept === want;
     }
 
-    function isMasterHubMode() {
+    function isCaptainHubMode() {
         return !!(state.user && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(state.user));
     }
+    /** @deprecated use isCaptainHubMode */
+    function isMasterHubMode() { return isCaptainHubMode(); }
 
     /** Captain Hub / HQ may report the viewed department, not only user.department. */
     function canReportJobDepartment(user, dept) {
@@ -1412,6 +1414,7 @@ const TVC_App = (function () {
         if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'SM Mode';
         if (TVC_RBAC.isSuperHqAccount?.(user)) return 'Admin Mode';
         if (TVC_RBAC.isHqAccount(user)) return 'SM Mode';
+        if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)) return 'Captain Mode';
         if (user?.department === 'DECK') return 'Vessel Mode - Deck';
         if (user?.department === 'ENGINE') return 'Vessel Mode - Engine';
         return 'Vessel Mode';
@@ -1594,7 +1597,7 @@ const TVC_App = (function () {
         });
     }
 
-    /** HQ · Master Hub: Import/Export 시 DECK/ENGINE을 명시적으로 고른다. Station(C/E·C/O)은 자기 부서로 자동 확정. */
+    /** HQ · Captain Hub: Import/Export 시 DECK/ENGINE을 명시적으로 고른다. Station(C/E·C/O)은 자기 부서로 자동 확정. */
     function accountNeedsDeptPick(user) {
         if (!user) return false;
         if (TVC_RBAC.isHqAccount(user)) return true;
@@ -1642,7 +1645,7 @@ const TVC_App = (function () {
         }
         const dept = await pickDepartmentThen(title);
         if (!dept) return null;
-        if (isMasterHubMode() && dept !== state.department) {
+        if (isCaptainHubMode() && dept !== state.department) {
             await setDepartment(dept);
         }
         return dept;
@@ -3385,7 +3388,7 @@ const TVC_App = (function () {
         ];
     }
 
-    /** Master Hub — station ZIP merge + HQ export only (no Update Work Plan on hub PC) */
+    /** Captain Hub — station ZIP merge + HQ export only (no Update Work Plan on hub PC) */
     function hubMonthlyReportItems() {
         return [
             {
@@ -3500,13 +3503,13 @@ const TVC_App = (function () {
     function menuXferDefaultChannelHint(user) {
         const ctx = menuXferStationContext(user);
         if (ctx === 'station') {
-            return 'Export Monthly Report ZIP → Master (or HQ direct, same dept). Import HQ reply here — Engine/Deck only, no cross-dept.';
+            return 'Export Monthly Report ZIP → Captain (or HQ direct, same dept). Import HQ reply here — Engine/Deck only, no cross-dept.';
         }
         if (ctx === 'master') {
             return 'Import station ZIP → Export to HQ. After HQ reply Import, Export again → Engine/Deck station (CE/C/O). Match the Deck/Engine toggle. Online: Push to HQ / Pull HQ reply (V-SAT). FBB: use ZIP.';
         }
         if (ctx === 'hq') {
-            return 'Import vessel ZIP (station export or Master report). Engine/Deck toggle must match file. HQ reply → Master or station direct. Online: Pull from vessel / Push reply (V-SAT). FBB: use ZIP.';
+            return 'Import vessel ZIP (station export or Captain report). Engine/Deck toggle must match file. HQ reply → Captain or station direct. Online: Pull from vessel / Push reply (V-SAT). FBB: use ZIP.';
         }
         return 'Default transfer: offline ZIP.';
     }
@@ -3566,7 +3569,7 @@ const TVC_App = (function () {
         const ok = await TVC_Dialog.confirm(
             `Publish cloud restore for ${vesselId}?\n\n`
             + 'This uploads a full HQ_TO_SHIP package from cloud DB.\n'
-            + 'On vessel Master Hub: Pull HQ reply (online) or Import the downloaded ZIP.',
+            + 'On vessel Captain Hub: Pull HQ reply (online) or Import the downloaded ZIP.',
         );
         if (!ok) return;
         try {
@@ -3594,7 +3597,7 @@ const TVC_App = (function () {
         try {
             await TVC_Dialog.alert('Downloading cloud restore ZIP…');
             const result = await TVC_CloudRestore.downloadRestoreZip(user, { vesselId, department: 'ALL' });
-            await TVC_Dialog.alert(`Saved ${result.filename}\nImport on vessel Master Hub (Import ZIP).`);
+            await TVC_Dialog.alert(`Saved ${result.filename}\nImport on vessel Captain Hub (Import ZIP).`);
         } catch (e) {
             await TVC_Dialog.alert(`Cloud restore download failed: ${e.message || e}`);
         }
@@ -3750,7 +3753,7 @@ const TVC_App = (function () {
             return `Company (HQ) — ${TVC_RBAC.getDeptLabel(target)}`;
         }
         if (target && typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user)) {
-            return `Master Hub (${TVC_RBAC.getDeptLabel(target)})`;
+            return `Captain Hub (${TVC_RBAC.getDeptLabel(target)})`;
         }
         return target ? TVC_RBAC.getDeptLabel(target) : '—';
     }
@@ -3814,7 +3817,7 @@ const TVC_App = (function () {
             return shipSubmitted;
         }
         const st = TVC_DefectCase.listWorkflowStatus(row);
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (TVC_DefectCase.isPhase4CloseForwardPending(row)) return true;
             if (TVC_DefectCase.isPhase3CompletionHubPending(row)) return true;
             if (isDefectStationCompletionPending(row)) return true;
@@ -3839,7 +3842,7 @@ const TVC_App = (function () {
             return 'Not exportable';
         }
         const st = TVC_DefectCase.listWorkflowStatus(row);
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (TVC_DefectCase.isPhase4CloseForwardPending(row)) return '';
             if (TVC_DefectCase.isPhase3CompletionHubPending(row)) return '';
             if (isDefectStationCompletionPending(row)) return '';
@@ -3894,7 +3897,7 @@ const TVC_App = (function () {
 
     function menuXferMonthlyRowSelectable(row) {
         TVC_WorkReport.fromLegacy(row);
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (workReportListWorkflowStatus(row) !== 'Submitted') return false;
             return TVC_HubRelay.canHubLegExport(row);
         }
@@ -3903,7 +3906,7 @@ const TVC_App = (function () {
     }
 
     function menuXferMonthlySelectDisabledTitle(row) {
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (TVC_HubRelay.isHubSynced(row)) return TVC_HubRelay.hubExportBlockedTitle();
             const st = workReportListWorkflowStatus(row);
             if (st !== 'Submitted') return 'Awaiting station export first';
@@ -4073,13 +4076,13 @@ const TVC_App = (function () {
     }
 
     function menuXferVesselMonthlyBlocked() {
-        if (TVC_RBAC.isHqAccount(state.user) || isMasterHubMode()) return false;
+        if (TVC_RBAC.isHqAccount(state.user) || isCaptainHubMode()) return false;
         return menuXferVesselOpenReports().total > 0;
     }
 
     function menuXferMonthlyPlanHtml() {
         const isHq = TVC_RBAC.isHqAccount(state.user);
-        const isMaster = isMasterHubMode();
+        const isMaster = isCaptainHubMode();
         const dept = getPlanLockDept();
         const matrix = menuXferPmsOutstandingMatrix();
         const open = (!isHq && !isMaster) ? menuXferVesselOpenReports() : null;
@@ -4384,8 +4387,8 @@ const TVC_App = (function () {
         }).join('');
         }
         return `
-            <p class="spare-sync-hint">Check the defect reports to export → <strong>${esc(dest)}</strong>${isMasterHubMode() ? ' (Submitted → Company · Approved HQ replies → Station)' : ' (Confirmed only)'}</p>
-            <p class="spare-sync-note muted">${rows.length} in list · ${selectable.length} selectable${isMasterHubMode() ? ' (Submitted to Company, or Approved HQ reply to Station)' : ' (Confirmed, not yet Submitted)'}. Same scope as Work History / Defect tab.</p>
+            <p class="spare-sync-hint">Check the defect reports to export → <strong>${esc(dest)}</strong>${isCaptainHubMode() ? ' (Submitted → Company · Approved HQ replies → Station)' : ' (Confirmed only)'}</p>
+            <p class="spare-sync-note muted">${rows.length} in list · ${selectable.length} selectable${isCaptainHubMode() ? ' (Submitted to Company, or Approved HQ reply to Station)' : ' (Confirmed, not yet Submitted)'}. Same scope as Work History / Defect tab.</p>
             <div class="search-field-wrap menu-xfer-defect-search">
                 <input type="text" class="search-input" id="menuXferDefectSearch" placeholder="Search File No / Job Code / SORT…" value="${escAttr(_menuXfer.defectSearch || '')}">
             </div>
@@ -4483,7 +4486,7 @@ const TVC_App = (function () {
         if (TVC_RBAC.isHqAccount(state.user)) {
             return st === 'Approved' && row.sync_status !== 'SYNCED';
         }
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (st !== 'Submitted' && st !== 'Approved') return false;
             return typeof TVC_HubRelay?.canHubLegExport === 'function'
                 ? TVC_HubRelay.canHubLegExport(row)
@@ -4503,7 +4506,7 @@ const TVC_App = (function () {
             if (st === 'Reported') return 'Reported — confirm first';
             return 'Not exportable';
         }
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (TVC_HubRelay?.isHubSynced?.(row)) return TVC_HubRelay.hubExportBlockedTitle();
             if (st !== 'Submitted' && st !== 'Approved') return 'Awaiting station export first';
             return 'Not exportable';
@@ -4561,7 +4564,7 @@ const TVC_App = (function () {
     }
 
     function isMasterHqReplyForwardPending(kind, row) {
-        if (!isMasterHubMode() || !row) return false;
+        if (!isCaptainHubMode() || !row) return false;
         if (kind === 'defect') {
             return typeof TVC_DefectCase.isHqReplyStationForwardPending === 'function'
                 && TVC_DefectCase.isHqReplyStationForwardPending(row);
@@ -4628,7 +4631,7 @@ const TVC_App = (function () {
         if (entry.kind === 'defect') return menuXferDefectRowSelectable(entry.row);
         if (menuXferCaseIsVesselReview()) {
             const st = menuXferCaseEntryListStatus(entry);
-            if (isMasterHubMode()) {
+            if (isCaptainHubMode()) {
                 if (st === 'Confirmed' || st === 'Submitted') return true;
                 return isMasterHqReplyForwardPending(entry.kind, entry.row);
             }
@@ -4643,9 +4646,9 @@ const TVC_App = (function () {
         if (entry.kind === 'defect') return menuXferDefectSelectDisabledTitle(entry.row);
         if (menuXferCaseIsVesselReview()) {
             const st = menuXferCaseEntryListStatus(entry);
-            if (st === 'Submitted') return isMasterHubMode() ? '' : 'Already exported';
+            if (st === 'Submitted') return isCaptainHubMode() ? '' : 'Already exported';
             if (st === 'Approved') {
-                if (isMasterHubMode()) {
+                if (isCaptainHubMode()) {
                     if (entry.row?.hq_reply_forwarded_at) return 'Already forwarded to Station';
                     if (isMasterHqReplyForwardPending(entry.kind, entry.row)) return '';
                     return 'Already forwarded to Station';
@@ -4747,7 +4750,7 @@ const TVC_App = (function () {
     }
 
     function menuXferCaseReadyHtml() {
-        const dest = isMasterHubMode()
+        const dest = isCaptainHubMode()
             ? `Company (HQ) / ${menuXferHqReplyStationDestLabel()}`
             : menuXferExportTargetLabel(menuXferResolveExportTarget(state.user, 'workPermit'));
         if (menuXferCaseIsVesselReview()) {
@@ -4764,7 +4767,7 @@ const TVC_App = (function () {
                 emptyMsg: 'No confirmed Case Reports to export.',
                 exportLabel: count ? `Export (${count} confirmed)` : 'Export',
                 readyLine: `Ready to send: <strong>${count}</strong> Case Report(s) (W / M / D / P / C).`,
-                note: isMasterHubMode()
+                note: isCaptainHubMode()
                     ? `W ${k.w} · M ${k.m} · D ${k.d} · P ${k.p} · C ${k.c}. Submitted → Company (HQ). Approved HQ replies → ${menuXferHqReplyStationDestLabel()}. Export those two groups separately.`
                     : `W ${k.w} · M ${k.m} · D ${k.d} · P ${k.p} · C ${k.c}. Confirm first, then export any type so Company can review vessel work for a period. Use Select individually to set Period.`,
             });
@@ -4789,7 +4792,7 @@ const TVC_App = (function () {
 
     /** Station: delta while unlocked with pending Confirmed; otherwise full monthly snapshot so a file is always created. HQ/Master: always snapshot. */
     function monthlyExportUsesSnapshot(user, dept) {
-        if (TVC_RBAC.isHqAccount(user) || isMasterHubMode()) return true;
+        if (TVC_RBAC.isHqAccount(user) || isCaptainHubMode()) return true;
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user)) {
             const d = dept || getPlanLockDept();
             if (isOriginalPlanUpdateLocked(d)) return true;
@@ -4815,7 +4818,7 @@ const TVC_App = (function () {
                 <button type="button" id="menuXferMonthlyExportBtn" class="btn btn-green spare-sync-btn" onclick="TVC_App.menuXferConfirmMonthlyExport()">Export</button>
             </div>`;
         }
-        if (isStation && !locked && !TVC_RBAC.isHqAccount(state.user) && !isMasterHubMode()) {
+        if (isStation && !locked && !TVC_RBAC.isHqAccount(state.user) && !isCaptainHubMode()) {
             return menuXferConfirmedExportReadyHtml({
                 title: 'confirmed Work Reports (pending changes)',
                 count: pendingConfirmed,
@@ -4830,8 +4833,8 @@ const TVC_App = (function () {
         const month = lock?.month || '—';
         const stats = lock?.stats;
         let summary = `<p class="muted">Destination: <strong>${esc(dest)}</strong></p>`;
-        if (isMasterHubMode()) {
-            summary += `<p class="muted">Master Hub — import Engine/Deck station ZIP first (match ${esc(TVC_RBAC.getDeptLabel(dept) || dept || 'department')} toggle), then export. Update Work Plan is done on station PCs.</p>`;
+        if (isCaptainHubMode()) {
+            summary += `<p class="muted">Captain Hub — import Engine/Deck station ZIP first (match ${esc(TVC_RBAC.getDeptLabel(dept) || dept || 'department')} toggle), then export. Update Work Plan is done on station PCs.</p>`;
         } else if (lock) {
             summary += `<ul class="menu-xfer-summary">
                 <li>Department: ${esc(TVC_RBAC.getDeptLabel(dept) || dept || '—')}</li>
@@ -4925,7 +4928,7 @@ const TVC_App = (function () {
             return workReportListWorkflowStatus(row) === 'Approved' && row.sync_status !== 'SYNCED';
         }
         const st = workReportListWorkflowStatus(row);
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (st === 'Approved') return !row.hq_reply_forwarded_at;
             return st === 'Submitted' && TVC_HubRelay.canHubLegExport(row);
         }
@@ -4940,7 +4943,7 @@ const TVC_App = (function () {
             if (st === 'Reported') return 'Reported — confirm first';
             return 'Not exportable';
         }
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (st === 'Approved') return row.hq_reply_forwarded_at ? 'Already forwarded to Station' : '';
             if (TVC_HubRelay.isHubSynced(row)) return TVC_HubRelay.hubExportBlockedTitle();
             if (st !== 'Submitted') return 'Awaiting station export first';
@@ -5122,7 +5125,7 @@ const TVC_App = (function () {
             return TVC_WorkPermit.listWorkflowStatus(row) === 'Approved' && row.sync_status !== 'SYNCED';
         }
         const st = TVC_WorkPermit.listWorkflowStatus(row);
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (TVC_WorkPermit.isHqReplyStationForwardPending(row)) return true;
             return st === 'Submitted' && TVC_HubRelay.canHubLegExport(row);
         }
@@ -5137,7 +5140,7 @@ const TVC_App = (function () {
             if (st === 'Reported') return 'Reported — confirm first';
             return 'Not exportable';
         }
-        if (isMasterHubMode()) {
+        if (isCaptainHubMode()) {
             if (TVC_WorkPermit.isHqReplyStationForwardPending(row)) return '';
             if (row.hq_reply_forwarded_at) return 'Already forwarded to Station';
             if (TVC_HubRelay.isHubSynced(row)) return TVC_HubRelay.hubExportBlockedTitle();
@@ -5537,7 +5540,7 @@ const TVC_App = (function () {
         const typeCounts = menuXferCaseTypeCountsHtml(isHq);
         const hint = isHq
             ? 'Official reply export is W / D / P only. Review imported M / C in Report History.'
-            : isMasterHubMode()
+            : isCaptainHubMode()
                 ? `Submitted → <strong>Company (HQ)</strong>. Approved HQ replies → <strong>${esc(menuXferHqReplyStationDestLabel())}</strong>.`
                 : `Check Case Reports for the Period so Company can review vessel work → <strong>${esc(dest)}</strong>`;
         return `
@@ -5685,7 +5688,7 @@ const TVC_App = (function () {
                     <button type="button" class="btn btn-green spare-sync-btn menu-xfer-channel-btn" onclick="TVC_App.menuXferPickChannel('offline')">Offline</button>
                     <button type="button" class="btn spare-sync-btn menu-xfer-channel-btn" onclick="TVC_App.menuXferPickChannel('online')"${onlineAvail ? '' : ' disabled title="Online sync not available for this account"'}>Online</button>
                 </div>
-                <p class="spare-sync-note muted" style="margin-top:10px">Offline — Export/Import ZIP · Online — V-SAT pull/push (HQ / Master)</p>`;
+                <p class="spare-sync-note muted" style="margin-top:10px">Offline — Export/Import ZIP · Online — V-SAT pull/push (HQ / Captain)</p>`;
         } else if (step === 'offline-home') {
             const hint = menuXferDefaultChannelHint(state.user);
             content = `
@@ -5737,8 +5740,8 @@ const TVC_App = (function () {
                 : ctx === 'master'
                     ? 'Import Engine/Deck station ZIP or HQ feedback ZIP. Match Deck/Engine toggle — Engine data never merges into Deck view.'
                     : ctx === 'hq'
-                        ? 'Import vessel ZIP (Engine/Deck station export or Master→HQ report). Select vessel and matching Deck/Engine toggle first.'
-                        : 'Select a PMS sync ZIP from Master or Company.';
+                        ? 'Import vessel ZIP (Engine/Deck station export or Captain→HQ report). Select vessel and matching Deck/Engine toggle first.'
+                        : 'Select a PMS sync ZIP from Captain or Company.';
             const importType = _menuXfer.importType || '';
             const typeBtns = menuImportTypesForUser(state.user).map(t => `
                 <button type="button" class="btn spare-sync-btn spare-sync-check-btn${importType === t.key ? ' is-checked' : ''}"
@@ -6264,7 +6267,7 @@ const TVC_App = (function () {
             await TVC_Dialog.alert('You do not have permission to export Case Reports.');
             return;
         }
-        const dirKind = isMasterHubMode() ? classifySelectedCaseExportDirection() : '';
+        const dirKind = isCaptainHubMode() ? classifySelectedCaseExportDirection() : '';
         if (dirKind === 'mixed') {
             await TVC_Dialog.alert(
                 'Export Approved HQ replies to Station separately from Submitted reports going to Company.',
@@ -6324,7 +6327,7 @@ const TVC_App = (function () {
         }
         const target = menuXferResolveExportTarget(user, 'monthly');
         if (!target || !menuXferCanExportTarget(user, target)) {
-            await TVC_Dialog.alert(isMasterHubMode()
+            await TVC_Dialog.alert(isCaptainHubMode()
                 ? 'Select Deck or Engine first, then export Monthly Report to Company.'
                 : 'You do not have permission to export monthly report.');
             return;
@@ -6379,7 +6382,7 @@ const TVC_App = (function () {
         } else {
             let relayHqReply = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)
                 && monthlyHasHqReplyForDept(dept);
-            if (isMasterHubMode() && packOpts.caseReview) {
+            if (isCaptainHubMode() && packOpts.caseReview) {
                 const kind = packOpts.exportDirKind || classifySelectedCaseExportDirection();
                 if (kind === 'mixed') {
                     throw new Error('Export Approved HQ replies to Station separately from Submitted reports going to Company.');
@@ -6419,7 +6422,7 @@ const TVC_App = (function () {
 
         if (target === 'COMPANY') {
             if (typeof TVC_Space === 'undefined' || !TVC_Space.isCaptainHub(user)) {
-                throw new Error('Company export is available on Captain Hub (Master PC) only.');
+                throw new Error('Company export is available on Captain Hub only.');
             }
             await handleCompanyExport();
             return;
@@ -6452,7 +6455,7 @@ const TVC_App = (function () {
                 ? (dept === 'DECK' ? 'Deck station (C/O)' : 'Engine station (CE)')
                 : 'Company (HQ)')
             : (typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user)
-                ? 'Master Hub'
+                ? 'Captain Hub'
                 : 'vessel');
         await TVC_Dialog.alert(`${TVC_RBAC.getDeptLabel(dept)} ${kind} exported to ${dest}.`);
     }
@@ -6473,11 +6476,11 @@ const TVC_App = (function () {
             await TVC_DefectSync.exportHqReplyZip(user, caseRow.id);
             return;
         }
-        if (isMasterHubMode() && TVC_DefectCase.isHqReplyStationForwardPending(caseRow)) {
+        if (isCaptainHubMode() && TVC_DefectCase.isHqReplyStationForwardPending(caseRow)) {
             await TVC_DefectSync.exportHqReplyBatchZip(user, [caseRow.id], { hubForward: true });
             return;
         }
-        if (isMasterHubMode() && TVC_DefectCase.isPhase4CloseForwardPending(caseRow)) {
+        if (isCaptainHubMode() && TVC_DefectCase.isPhase4CloseForwardPending(caseRow)) {
             await TVC_DefectSync.exportCloseZip(user, caseRow.id);
             return;
         }
@@ -6498,7 +6501,7 @@ const TVC_App = (function () {
             return;
         }
         if (TVC_DefectCase.listWorkflowStatus(caseRow) !== 'Confirmed') {
-            if (!(isMasterHubMode() && TVC_HubRelay.canHubLegExport(caseRow)
+            if (!(isCaptainHubMode() && TVC_HubRelay.canHubLegExport(caseRow)
                 && TVC_DefectCase.listWorkflowStatus(caseRow) === 'Submitted')) {
                 throw new Error(`${caseRow.case_no}: only Confirmed cases can be exported.`);
             }
@@ -6549,9 +6552,9 @@ const TVC_App = (function () {
         const completionRows = [];
         const closeRows = [];
         for (const c of scoped) {
-            if (isMasterHubMode() && TVC_DefectCase.isPhase4CloseForwardPending(c)) {
+            if (isCaptainHubMode() && TVC_DefectCase.isPhase4CloseForwardPending(c)) {
                 closeRows.push(c);
-            } else if (isMasterHubMode() && TVC_DefectCase.isHqReplyStationForwardPending(c)) {
+            } else if (isCaptainHubMode() && TVC_DefectCase.isHqReplyStationForwardPending(c)) {
                 replyRows.push(c);
             } else if (isDefectCompletionReady(c)
                 || c.status === TVC_DefectCase.Status.CLOSED
@@ -6600,7 +6603,7 @@ const TVC_App = (function () {
             return;
         }
         const hub = typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
-        if (hub || isMasterHubMode()) {
+        if (hub || isCaptainHubMode()) {
             if (st === 'Approved') {
                 await TVC_PostponeSync.exportHqReplyZip(user, reportRow.id);
                 if (!reportRow.hq_reply_forwarded_at) {
@@ -6658,7 +6661,7 @@ const TVC_App = (function () {
             return;
         }
         if (TVC_WorkPermit.listWorkflowStatus(row) !== 'Confirmed') {
-            if (isMasterHubMode() && TVC_WorkPermit.isHqReplyStationForwardPending(row)) {
+            if (isCaptainHubMode() && TVC_WorkPermit.isHqReplyStationForwardPending(row)) {
                 await TVC_WorkPermitSync.exportHqReplyZip(user, row.id);
                 if (typeof TVC_WorkPermit.stampHqReplyStationForwarded === 'function') {
                     TVC_WorkPermit.stampHqReplyStationForwarded(row);
@@ -6772,7 +6775,7 @@ const TVC_App = (function () {
                                         ? TVC_Sync.resolveFileDepartment(payload, file.name)
                                         : null),
                             )
-                            : 'Import station export ZIP in Master Mode or HQ Mode (matching department toggle).'
+                            : 'Import station export ZIP in Captain Mode or HQ Mode (matching department toggle).'
                     );
                 }
                 if (TVC_RBAC.isHqAccount(user) && (dir === 'SHIP_TO_HQ' || payload.export_meta?.package_type === 'COMPANY_REPORT')) {
@@ -6904,10 +6907,10 @@ const TVC_App = (function () {
 
     function menuHistAccountHint(user) {
         const kind = menuHistViewerKind(user);
-        if (kind === 'hq') return 'HQ Mode — shows Export / Import history for the vessel (Master).';
+        if (kind === 'hq') return 'HQ Mode — shows Export / Import history for the vessel (Captain).';
         if (kind === 'hub') return 'Hub (Captain) — shows Export / Import history with Engine/Deck stations and Company (HQ).';
         if (kind === 'station') {
-            return 'Confirmer — primarily exports/imports with Master. Company (HQ) packages are also recorded if Master PC is unavailable.';
+            return 'Confirmer — primarily exports/imports with Captain. Company (HQ) packages are also recorded if Captain Hub PC is unavailable.';
         }
         return 'Data Export & Import History';
     }
@@ -6952,9 +6955,9 @@ const TVC_App = (function () {
             return 'Company';
         }
 
-        // Station confirmer (CE / CO): Master 기본, HQ 직송은 Company
+        // Station confirmer (CE / CO): Captain hub 기본, HQ 직송은 Company
         if (isCompanyDir() && !isStationDir()) return 'Company';
-        return 'Master';
+        return 'Captain';
     }
 
     function menuHistCategoryKey(row) {
@@ -10007,13 +10010,13 @@ const TVC_App = (function () {
 
     function getPlanLockDept() {
         if (state.user && TVC_RBAC.isHqAccount(state.user)) return state.department || null;
-        if (isMasterHubMode()) return state.department || null;
+        if (isCaptainHubMode()) return state.department || null;
         return state.user?.department || state.department || null;
     }
 
     function rhUpdateGateApplies() {
         if (!state.user) return true;
-        if (isMasterHubMode()) return false;
+        if (isCaptainHubMode()) return false;
         return !(typeof TVC_Space !== 'undefined' && TVC_Space.isDeckVesselMode(state.user));
     }
 
@@ -10027,7 +10030,7 @@ const TVC_App = (function () {
     }
 
     function isOriginalPlanUpdateLocked(dept) {
-        if (isMasterHubMode()) return false;
+        if (isCaptainHubMode()) return false;
         if (state.user && TVC_RBAC.isHqAccount(state.user)) return false;
         dept = dept || getPlanLockDept();
         if (!dept) return false;
@@ -10036,7 +10039,7 @@ const TVC_App = (function () {
 
     function canPerformOriginalPlanUpdate() {
         if (!state.user) return false;
-        if (isMasterHubMode()) return false;
+        if (isCaptainHubMode()) return false;
         if (TVC_RBAC.isHqAccount(state.user)) return true;
         const dept = getPlanLockDept();
         if (!dept) return false;
@@ -17788,8 +17791,8 @@ const TVC_App = (function () {
         if (!user || !file) return;
         if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
             await TVC_Dialog.alert(
-                'Station merge import requires Vessel Mode — Master (captain account). ' +
-                'Sign out and log in with Department = Master.'
+                'Station merge import requires Captain Mode (captain account). ' +
+                'Sign out and log in with Department = Captain.'
             );
             return;
         }

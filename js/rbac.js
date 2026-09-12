@@ -1,6 +1,6 @@
 /** THE VESSEL CODE — Browser RBAC (mirrors src/auth/rbac.js) */
 const TVC_RBAC = (function () {
-    const AccountType = { SHIP: 'SHIP', HQ: 'HQ', ADMIN: 'ADMIN', SUPPLIER: 'SUPPLIER' };
+    const AccountType = { SHIP: 'SHIP', HQ: 'HQ', SM: 'SM', ADMIN: 'ADMIN', SUPPLIER: 'SUPPLIER' };
 
     const Department = { DECK: 'DECK', ENGINE: 'ENGINE' };
 
@@ -308,12 +308,17 @@ const TVC_RBAC = (function () {
 
     function isShipAccount(user) { return user?.account_type === AccountType.SHIP; }
     /** Company HQ account (superintendent) — Ship List scoped to that company. */
-    function isCompanyHqAccount(user) { return user?.account_type === AccountType.HQ; }
+    function isCompanyHqAccount(user) {
+        const t = user?.account_type;
+        return t === AccountType.HQ || t === AccountType.SM;
+    }
     function isSupplierAccount(user) { return user?.account_type === AccountType.SUPPLIER; }
     /** HQ Mode session: company HQ superintendent or TVC super-admin / fleet-wide viewer. */
     function isHqAccount(user) {
         if (!user) return false;
-        return user.account_type === AccountType.HQ || user.account_type === AccountType.ADMIN;
+        return user.account_type === AccountType.HQ
+            || user.account_type === AccountType.SM
+            || user.account_type === AccountType.ADMIN;
     }
     const ADMIN_TOOL_USERNAMES = new Set(['admin']);
     /** TVC internal administrator — Registry, License, full fleet admin. */
@@ -558,6 +563,7 @@ const TVC_RBAC = (function () {
 
     function resolveUserRole(user) {
         if (!user) return null;
+        if (user.role === 'SM_SUPERINTENDENT') return Role.HQ_SUPERVISOR;
         if (user.role) return user.role;
         return DEMO_ROLE_BY_USERNAME[String(user.username || '').toLowerCase()] || null;
     }

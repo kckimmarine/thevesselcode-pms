@@ -77,7 +77,7 @@ const TVC_License = (function () {
             return { ok: true };
         }
         const type = String(accountType || '').toUpperCase();
-        const isHq = type === 'HQ';
+        const isHq = type === 'HQ' || type === 'SM';
         const isAdmin = type === 'ADMIN';
         const isSupplier = type === 'SUPPLIER';
         const adminOnly = !!st.allowAdmin && !st.allowHq && !(st.loginModes || []).length;

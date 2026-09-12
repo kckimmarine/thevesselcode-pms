@@ -201,7 +201,7 @@ const TVC_PostponeSync = (function () {
         const { row, job } = await loadReportContext(reportId);
         const hubRelay = typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
         if (!TVC_RBAC.isHqAccount(user) && !hubRelay) {
-            throw new Error('HQ reply export is available on HQ or Master Hub only.');
+            throw new Error('HQ reply export is available on HQ or Captain Hub only.');
         }
         if (!TVC_RBAC.isApprovedStatus(row.status, row.is_locked)) {
             throw new Error('HQ must approve the postpone report before reply export.');
@@ -258,7 +258,7 @@ const TVC_PostponeSync = (function () {
         const HQ_ONLY = new Set(['POSTPONE_REQUEST_TO_HQ']);
         const SHIP_ONLY = new Set(['POSTPONE_REPLY_HQ_TO_SHIP']);
         if (HQ_ONLY.has(direction) && !isHq && !isHub) {
-            throw new Error('This postpone package is for HQ or Master Hub import only.');
+            throw new Error('This postpone package is for HQ or Captain Hub import only.');
         }
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This postpone package is for ship import only.');

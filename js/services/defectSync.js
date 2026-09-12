@@ -598,7 +598,7 @@ const TVC_DefectSync = (function () {
         const HQ_ONLY = new Set(['DEFECT_URGENT_TO_HQ', 'DEFECT_COMPLETION_TO_HQ']);
         const SHIP_ONLY = new Set(['DEFECT_REPLY_HQ_TO_SHIP', 'DEFECT_CLOSE_HQ_TO_SHIP']);
         if (HQ_ONLY.has(direction) && !isHq && !isHub) {
-            throw new Error('This defect package is for HQ or Master Hub import only.');
+            throw new Error('This defect package is for HQ or Captain Hub import only.');
         }
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This defect package is for ship import only.');

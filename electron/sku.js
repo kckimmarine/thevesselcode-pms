@@ -11,7 +11,7 @@ const HQ_ALLOWED_VESSEL_IDS = [
 const SKUS = {
     VESSEL_MASTER: {
         sku: 'VESSEL_MASTER',
-        label: 'TVC-PMS — Master Hub',
+        label: 'TVC-PMS — Captain Hub',
         companyId: null,
         vesselId: null,
         universal: true,

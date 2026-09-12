@@ -1122,7 +1122,7 @@ const TVC_DefectCase = (function () {
         return /completion/i.test(String(row.last_export_filename || ''));
     }
 
-    /** Phase 3 DC ZIP — Master Hub still needs to export to HQ */
+    /** Phase 3 DC ZIP — Captain Hub still needs to export to HQ */
     function isPhase3CompletionHubPending(row) {
         if (!isPhase3DcComplete(row)) return false;
         if (looksLikeCompletionExport(row) && row.hub_sync_status === 'SYNCED') return false;
@@ -1135,7 +1135,7 @@ const TVC_DefectCase = (function () {
         return row.sync_status === 'SYNCED' && row.hub_sync_status !== 'SYNCED';
     }
 
-    /** Phase 4 close ZIP — Master Hub still needs to export to Station */
+    /** Phase 4 close ZIP — Captain Hub still needs to export to Station */
     function isPhase4CloseForwardPending(row) {
         return !!(row && row.status === Status.CLOSED && row.close_forward_pending && !row.close_forwarded_at);
     }

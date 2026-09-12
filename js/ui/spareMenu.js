@@ -12821,7 +12821,7 @@ const TVC_SpareMenu = (function () {
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub?.(user)) {
             return 'Hub (Captain) — shows SPARE Export / Import history with stations and Company (HQ).';
         }
-        return 'Confirmer — primarily exports/imports SPARE data with Master. Company (HQ) packages are also recorded if Master PC is unavailable.';
+        return 'Confirmer — primarily exports/imports SPARE data with Captain. Company (HQ) packages are also recorded if Captain Hub PC is unavailable.';
     }
 
     /** Vessel SPARE: Master 기본 · HQ 직송은 Company · HQ Mode: Vessel */
@@ -12840,7 +12840,7 @@ const TVC_SpareMenu = (function () {
         }
         const d = String(row?.direction || '');
         if (/TO_HQ|HQ_TO|COMPANY|ASSESSMENT/i.test(d) && !/STATION|MASTER/i.test(d)) return 'Company';
-        return 'Master';
+        return 'Captain';
     }
 
     function spareHistIsExport(row) {
@@ -13022,7 +13022,7 @@ const TVC_SpareMenu = (function () {
             }
             kind = _spareXfer.vesselImportType;
         }
-        // Master Hub Import: Requisition / Evaluation / Received / Inventory
+        // Captain Hub Import: Requisition / Evaluation / Received / Inventory
         if (isMaster && _spareXfer.step === 'import') {
             if (!_spareXfer.masterImportType) {
                 await TVC_Dialog.alert('Select an import type first.');

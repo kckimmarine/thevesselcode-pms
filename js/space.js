@@ -50,7 +50,7 @@ const TVC_Space = (function () {
     };
 
 
-    /** Login UI — Master / Deck / Engine (maps to internal station) */
+    /** Login UI — Captain (MASTER) / Deck / Engine (maps to internal station) */
     const LoginMode = {
         MASTER: 'MASTER',
         DECK: 'DECK',
@@ -58,19 +58,19 @@ const TVC_Space = (function () {
     };
 
     const LOGIN_MODE_LABELS = {
-        MASTER: 'Master',
+        MASTER: 'Captain',
         DECK: 'Deck',
         ENGINE: 'Engine',
     };
 
     const LOGIN_MODE_USERS = {
-        [LoginMode.MASTER]: new Set(['co', 'captain']),
+        [LoginMode.MASTER]: new Set(['captain']),
         [LoginMode.DECK]: new Set(['officer', 'co']),
         [LoginMode.ENGINE]: new Set(['engineer', 'ce']),
     };
 
     const LOGIN_MODE_DENIED = {
-        [LoginMode.MASTER]: 'Vessel Mode - Master allows Chief officer (co) accounts only.',
+        [LoginMode.MASTER]: 'Captain Mode login is for Captain (captain) accounts only.',
         [LoginMode.DECK]: 'Vessel Mode - Deck allows Officer (officer) or Chief officer (co) accounts only.',
         [LoginMode.ENGINE]: 'Vessel Mode - Engine allows Engineer (engineer) or Chief engineer (ce) accounts only.',
     };
@@ -88,7 +88,7 @@ const TVC_Space = (function () {
 
     function getStation(user) {
         if (!user) return null;
-        // login_mode is authoritative (avoids stale session.station blocking Master hub import)
+        // login_mode is authoritative (avoids stale session.station blocking Captain hub import)
         if (user.login_mode) return stationFromLoginMode(user.login_mode);
         if (user.station) return user.station;
         return null;
@@ -116,12 +116,13 @@ const TVC_Space = (function () {
     /** Login gate — loginMode: MASTER | DECK | ENGINE */
     function validateLogin(user, loginMode) {
         if (!user) return { ok: false, error: 'Unable to verify account.' };
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
-            return { ok: false, error: 'HQ accounts must sign in without selecting a Department.' };
+        if (user.account_type === 'HQ' || user.account_type === 'SM'
+            || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
+            return { ok: false, error: 'Company accounts must sign in without selecting a Department.' };
         }
 
         if (!loginMode || !LOGIN_MODE_LABELS[loginMode]) {
-            return { ok: false, error: 'Select Department (Master / Deck / Engine).' };
+            return { ok: false, error: 'Select Department (Captain / Deck / Engine).' };
         }
 
         const uname = String(user.username || '').toLowerCase();
@@ -191,7 +192,7 @@ const TVC_Space = (function () {
         return TVC_RBAC.canAccessDepartment(user, dept);
     }
 
-    /** Approval: Master(Captain) → all depts; ECR(C/E) → Engine; CCR(C/O) → Deck */
+    /** Approval: Captain hub → all depts; ECR(C/E) → Engine; CCR(C/O) → Deck */
     function canApproveReport(user, dept) {
         if (!user || !TVC_RBAC.isApprover(user)) return false;
         dept = String(dept || '').trim().toUpperCase();
@@ -240,7 +241,7 @@ const TVC_Space = (function () {
         return TVC_RBAC.isEngineApproverRole(user.role);
     }
 
-    /** Station PC Data Export/Import — Deck: co only · Engine: ce only · Master/HQ: hub rules */
+    /** Station PC Data Export/Import — Deck: co only · Engine: ce only · Captain hub / HQ: hub rules */
     function canStationDataXfer(user) {
         if (!user) return false;
         if (TVC_RBAC.isHqAccount(user)) return true;
@@ -321,7 +322,7 @@ const TVC_Space = (function () {
             base.showDefectInbox = true;
             base.showDefectImportUrgent = true;
             base.showDefectUrgentExport = TVC_RBAC.isApprover(user);
-            // Master Hub aggregates station data — no local RH / Original Plan update
+            // Captain Hub aggregates station data — no local RH / Original Plan update
             base.showUpdateWorkPlan = false;
             base.showModifyOriginalPlan = false;
             base.canEditRunningHours = false;
@@ -345,7 +346,7 @@ const TVC_Space = (function () {
         if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'SM Mode';
         if (TVC_RBAC.isSuperHqAccount?.(user)) return 'Admin Mode';
         if (TVC_RBAC.isHqAccount(user)) return 'SM Mode';
-        if (isCaptainHub(user)) return 'Vessel Mode - Master';
+        if (isCaptainHub(user)) return 'Captain Mode';
         const station = getStation(user);
         if (station === Station.CCR) return 'Vessel Mode - Deck';
         if (station === Station.ECR) return 'Vessel Mode - Engine';

@@ -108,7 +108,7 @@ const TVC_OnlineSync = (function () {
     async function pullHqFeedback(user, vesselId) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
         if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
-            throw new Error('Online pull from HQ is available from Master Hub (Captain) only.');
+            throw new Error('Online pull from HQ is available from Captain Hub only.');
         }
         if (!isAvailable()) throw new Error(statusMessage());
         const vid = String(vesselId || user.vessel_id || '').trim();
@@ -216,7 +216,7 @@ const TVC_OnlineSync = (function () {
 
         if (direction === 'SHIP_TO_HQ') {
             if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
-                throw new Error('Online push to HQ is available from Master Hub (Captain) only.');
+                throw new Error('Online push to HQ is available from Captain Hub only.');
             }
             if (typeof TVC_Sync.buildCompanyZipBlob !== 'function') {
                 throw new Error('Sync export module is not loaded.');
@@ -288,7 +288,7 @@ const TVC_OnlineSync = (function () {
 
         if (direction === 'SHIP_PULL') {
             if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
-                throw new Error('Online pull from HQ is available from Master Hub (Captain) only.');
+                throw new Error('Online pull from HQ is available from Captain Hub only.');
             }
             const vesselId = opts.vesselId || user.vessel_id;
             const meta = await pullHqFeedback(user, vesselId);

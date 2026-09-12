@@ -1,4 +1,4 @@
-/* Hub Relay — Station leg (sync_status) vs Master Hub leg (hub_sync_status) */
+/* Hub Relay — Station leg (sync_status) vs Captain Hub leg (hub_sync_status) */
 const TVC_HubRelay = (function () {
     const SYNCED = 'SYNCED';
 
@@ -27,7 +27,7 @@ const TVC_HubRelay = (function () {
         return !!row && !isStationSynced(row);
     }
 
-    /** Master Hub: sync_status = SYNCED && hub_sync_status ≠ SYNCED */
+    /** Captain Hub: sync_status = SYNCED && hub_sync_status ≠ SYNCED */
     function canHubLegExport(row) {
         return !!row && isStationSynced(row) && !isHubSynced(row);
     }

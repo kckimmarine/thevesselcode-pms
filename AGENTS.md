@@ -42,7 +42,8 @@ npm run verify-all           # RBAC + sync checks
 | User | Dept | Role | Typical use |
 |------|------|------|-------------|
 | `officer` | Deck | SHIP_OFFICER | PMS report input |
-| `co` | Deck | SHIP_CO | Deck confirm + Master hub |
+| `captain` | Captain | SHIP_CAPTAIN | Captain Mode (Deck+Engine hub) |
+| `co` | Deck | SHIP_CO | Deck confirm only (sign in with Deck) |
 | `engineer` | Engine | SHIP_ENGINEER | PMS + SPARE consumption |
 | `ce` | Engine | SHIP_CE | Confirm + SPARE admin |
 | `tvc shipping` | — | HQ (`TVC_SHIPPING`) | Contract company superintendent |

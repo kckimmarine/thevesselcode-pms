@@ -18,7 +18,7 @@ const TVC_SetupExport = (function () {
         const s = String(sku || '').toUpperCase();
         if (s === 'VESSEL_DECK') return 'Deck';
         if (s === 'VESSEL_ENGINE') return 'Engine';
-        if (s === 'VESSEL_MASTER') return 'Master';
+        if (s === 'VESSEL_MASTER') return 'Captain';
         return '';
     }
 

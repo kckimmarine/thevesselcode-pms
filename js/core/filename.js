@@ -40,7 +40,7 @@ const TVC_Filename = (function () {
         return `${scopeToken(dept, false)}_hq`;
     }
 
-    /** Master Hub SPARE master excel scope: engine_master | deck_master */
+    /** Captain Hub SPARE master excel scope: engine_master | deck_master */
     function masterHubScopeToken(dept) {
         return `${scopeToken(dept, false)}_master`;
     }

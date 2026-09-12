@@ -1,7 +1,7 @@
 /* THE VESSEL CODE — Sign-in Vessel Mode installer picker (web deploy) */
 const TVC_VesselDownload = (function () {
     const SKU_META = {
-        VESSEL_MASTER: { label: 'Master', desc: 'Bridge / captain station', icon: '🧭' },
+        VESSEL_MASTER: { label: 'Captain', desc: 'Bridge / captain station (Captain Mode)', icon: '🧭' },
         VESSEL_ENGINE: { label: 'Engine', desc: 'Engine control room', icon: '⚙️' },
         VESSEL_DECK: { label: 'Deck', desc: 'Deck department', icon: '⚓' },
     };

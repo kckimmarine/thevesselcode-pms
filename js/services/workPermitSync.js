@@ -324,7 +324,7 @@ const TVC_WorkPermitSync = (function () {
         const HQ_ONLY = new Set(['WORK_PERMIT_REQUEST_TO_HQ']);
         const SHIP_ONLY = new Set(['WORK_PERMIT_REPLY_HQ_TO_SHIP']);
         if (HQ_ONLY.has(direction) && !isHq && !isHub) {
-            throw new Error('This Work Permit package is for HQ or Master Hub import only.');
+            throw new Error('This Work Permit package is for HQ or Captain Hub import only.');
         }
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This Work Permit package is for ship import only.');
