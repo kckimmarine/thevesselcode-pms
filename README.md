@@ -1,6 +1,6 @@
-# THE VESSEL CODE (TVC-PMS) v2
+# THE VESSEL CODE — TVC-SM (The Vessel Code - Ship Management) v2
 
-Unified **PMS + SPICS** system rebuilt from `PMS-ENGINE.xlsx` + `PMS-DECK.xlsx`.  
+Unified **vessel-core PMS + SPARE (SPICS)** system rebuilt from `PMS-ENGINE.xlsx` + `PMS-DECK.xlsx`.  
 Offline-first — 선박·본사 간 데이터 교환은 **부서별 ZIP Export/Import** 로만 수행합니다.
 
 ## Quick Start

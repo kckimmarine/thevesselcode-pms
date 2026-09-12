@@ -12,7 +12,7 @@
 
     function inquiryLabel(value) {
         const map = {
-            demo: 'TVC-PMS Fleet Demo & PoC',
+            demo: 'TVC-SM Fleet Demo & PoC',
             partnership: 'Maritime Toolkit & Engineering Partnership',
             support: 'Technical Support & Bug Report',
             general: 'General Inquiries',

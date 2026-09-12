@@ -1,4 +1,4 @@
-# TVC-PMS UI Map
+# TVC-SM (The Vessel Code - Ship Management) UI Map
 
 Screen → DOM → JavaScript mapping for AI and human developers.  
 **Last aligned with codebase:** 2026-09-04.
@@ -13,7 +13,7 @@ Screen → DOM → JavaScript mapping for AI and human developers.
 ├── #tabBar                      # Main navigation
 └── #tabContent
     ├── #tab-menu                # Menu home
-    ├── #tab-actual              # PMS (Actual Plan)
+    ├── #tab-actual              # TVC-SM / PMS (Actual Plan)
     ├── #tab-spare               # SPARE inventory
     └── #tab-history             # Report History
 ```
@@ -21,7 +21,7 @@ Screen → DOM → JavaScript mapping for AI and human developers.
 | Tab id | Label | `TVC_App.switchTab` | Primary render |
 |--------|-------|---------------------|----------------|
 | `menu` | 📑 Menu | `switchTab('menu')` | `renderCmaxsMenu` / menu cards |
-| `actual` | 📝 PMS | `switchTab('actual')` | `renderActualPlan`, tree + job sheet |
+| `actual` | 📝 TVC-SM | `switchTab('actual')` | `renderActualPlan`, tree + job sheet |
 | `spare` | 🔩 SPARE | `switchTab('spare')` | `TVC_SpareMenu` inventory |
 | `history` | 📜 Report History | `switchTab('history')` | `renderWorkHistory` |
 

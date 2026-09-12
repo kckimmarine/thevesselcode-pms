@@ -1319,7 +1319,7 @@ const TVC_App = (function () {
     function rerenderCurrentTab() { (TAB_RENDERERS[state.currentTab] || renderMainMenu)(); }
 
     // ── Header / role UI ─────────────────────────────────────────────
-    const WINDOW_TITLE_BASE = 'THE VESSEL CODE — TVC-PMS';
+    const WINDOW_TITLE_BASE = 'TVC-SM — THE VESSEL CODE';
 
     function resolveWindowTitleSuffix(user) {
         if (!user) return '';
@@ -8513,7 +8513,7 @@ const TVC_App = (function () {
             <h3 class="spare-sync-title">${isCompanyScope ? 'Company App Update (allowedVesselIds)' : 'Universal App Update (pool)'}</h3>
             <p class="spare-sync-hint">${isCompanyScope
                 ? 'After vessel add / Registry change · manifest includes active vessels → <strong>reissue HQ seat license</strong> required'
-                : 'Existing pool vessels (already on TVC-PMS): deliver one <strong>shared App Update ZIP</strong>.'}</p>
+                : 'Existing pool vessels (already on TVC-SM): deliver one <strong>shared App Update ZIP</strong>.'}</p>
             <p class="spare-sync-note muted">Customer PC: <strong>Data Export &amp; Import → App Update → Import → Install update</strong> · Master / History / IndexedDB preserved</p>
             ${isCompanyScope ? `
             <label class="spare-sync-note" style="display:block;margin:8px 0">Company
@@ -18066,9 +18066,9 @@ const TVC_App = (function () {
         {
             id: 'report-workflow',
             keys: ['report', 'routine', 'incident', 'trouble', 'history', 'pms report', 'work report', 'defect', 'approve', 'make report', 'submit', 'confirm'],
-            title: '📘 TVC-PMS reports — create & review',
+            title: '📘 TVC-SM reports — create & review',
             steps: [
-                'Routine maintenance: [PMS] tab → select equipment → green [Make Report] → [Save].',
+                'Routine maintenance: [TVC-SM] tab → select equipment → green [Make Report] → [Save].',
                 'Trouble / defect: in [Make Report], check [☑ Trouble / Defect] (cause and delay fields expand).',
                 'Review history: [Report History] tab → open prior reports and Approve when ready.',
             ],
@@ -18181,7 +18181,7 @@ const TVC_App = (function () {
     function formatGuideReply(guide) {
         const lines = [guide.title, ''];
         guide.steps.forEach((step, i) => lines.push(`${i + 1}. ${step}`));
-        lines.push('', 'Other topics: [PMS] reports · [SPARE] parts · [Period] filter · [Menu] Export/Import');
+        lines.push('', 'Other topics: [TVC-SM] reports · [SPARE] parts · [Period] filter · [Menu] Export/Import');
         return lines.join('\n');
     }
 
@@ -18195,7 +18195,7 @@ const TVC_App = (function () {
         } else {
             appendAiHelpBubble('bot', [
                 'No matching guide. Try one of these topics:',
-                '• [PMS] → [Make Report] → [Save] → [Report History]',
+                '• [TVC-SM] → [Make Report] → [Save] → [Report History]',
                 '• [SPARE] → [New Requisition] · parts list at bottom of [Make Report]',
                 '• [Period] dates (YYYY-MM-DD) or 📅 icon',
                 '',

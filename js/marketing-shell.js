@@ -10,7 +10,7 @@
         { id: 'home', href: '/', label: 'Home' },
         { id: 'services', href: '/services', label: 'Services' },
         { id: 'toolkit', href: '/toolkit', label: 'Maritime Toolkit' },
-        { id: 'pms', href: '/pms', label: 'TVC-PMS' },
+        { id: 'pms', href: '/pms', label: 'TVC-SM' },
         { id: 'contact', href: '/contact-us', label: 'Contact Us' },
     ];
 
@@ -18,7 +18,7 @@
         { href: '/', label: 'Home' },
         { href: '/services', label: 'Services' },
         { href: '/toolkit', label: 'Toolkit' },
-        { href: '/pms', label: 'PMS' },
+        { href: '/pms', label: 'TVC-SM' },
         { href: '/contact-us', label: 'Contact' },
     ];
 
