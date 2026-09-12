@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>HK Shipping Inc — Ship Management Proposal</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap');
+
+    :root {
+      --navy: #0b1f3a;
+      --navy-mid: #12325c;
+      --blue: #1e6fd9;
+      --blue-light: #3d9bff;
+      --cyan: #00b4d8;
+      --gold: #c9a227;
+      --text: #1e293b;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --surface: #f8fafc;
+      --white: #ffffff;
+      --success: #059669;
+      --gradient: linear-gradient(135deg, #0b1f3a 0%, #12325c 45%, #1e6fd9 100%);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Noto Sans KR', 'Inter', system-ui, sans-serif;
+      color: var(--text);
+      line-height: 1.65;
+      background: #dde4ec;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 16px auto;
+      background: var(--white);
+      box-shadow: 0 8px 40px rgba(11,31,58,.14);
+      overflow: hidden;
+      position: relative;
+      page-break-after: always;
+    }
+
+    @media print {
+      body { background: white; }
+      .page { margin: 0; box-shadow: none; }
+      .no-print { display: none !important; }
+      @page { size: A4; margin: 0; }
+    }
+
+    .print-btn {
+      position: fixed; top: 20px; right: 20px; z-index: 999;
+      background: var(--navy); color: white; border: none;
+      padding: 14px 28px; border-radius: 8px; cursor: pointer;
+      font-size: 14px; font-weight: 600; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+    }
+    .print-btn:hover { background: var(--blue); }
+
+    /* ── COVER ── */
+    .cover {
+      min-height: 297mm;
+      background: var(--gradient);
+      color: white;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 56px 52px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: '';
+      position: absolute; inset: 0;
+      background:
+        radial-gradient(ellipse 80% 60% at 90% 10%, rgba(0,180,216,.18) 0%, transparent 60%),
+        radial-gradient(ellipse 50% 40% at 5% 90%, rgba(255,255,255,.06) 0%, transparent 50%);
+    }
+    .cover-grid {
+      position: absolute; inset: 0; opacity: .04;
+      background-image:
+        linear-gradient(rgba(255,255,255,.5) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,255,255,.5) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    .cover-badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25);
+      border-radius: 100px; padding: 8px 18px; font-size: 11px;
+      letter-spacing: .12em; text-transform: uppercase; font-weight: 600;
+      margin-bottom: 36px; position: relative;
+    }
+    .cover-badge::before { content: '⚓'; font-size: 13px; }
+    .cover h1 {
+      font-size: 46px; font-weight: 800; line-height: 1.15;
+      letter-spacing: -.02em; position: relative; margin-bottom: 8px;
+    }
+    .cover .en-title {
+      font-family: 'Inter', sans-serif;
+      font-size: 28px; font-weight: 300; opacity: .85;
+      margin-bottom: 32px; position: relative;
+    }
+    .cover-lead {
+      font-size: 16px; line-height: 1.75; max-width: 520px;
+      opacity: .88; position: relative; margin-bottom: 48px;
+      border-left: 3px solid var(--cyan); padding-left: 20px;
+    }
+    .cover-stats {
+      display: grid; grid-template-columns: repeat(3, 1fr);
+      gap: 16px; position: relative;
+    }
+    .cover-stat {
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.18);
+      border-radius: 12px; padding: 22px 20px;
+      backdrop-filter: blur(4px);
+    }
+    .cover-stat .num {
+      font-family: 'Inter', sans-serif;
+      font-size: 26px; font-weight: 800; color: var(--cyan);
+      margin-bottom: 4px;
+    }
+    .cover-stat .lbl { font-size: 12px; opacity: .8; line-height: 1.4; }
+    .cover-footer {
+      position: absolute; bottom: 44px; left: 52px; right: 52px;
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 11px; opacity: .5; letter-spacing: .05em;
+    }
+
+    /* ── CONTENT PAGES ── */
+    .content { padding: 44px 48px 48px; }
+    .page-header {
+      display: flex; justify-content: space-between; align-items: flex-end;
+      border-bottom: 2px solid var(--navy); padding-bottom: 14px; margin-bottom: 28px;
+    }
+    .page-header .section-num {
+      font-family: 'Inter', sans-serif;
+      font-size: 11px; font-weight: 700; color: var(--blue);
+      letter-spacing: .15em; text-transform: uppercase; margin-bottom: 4px;
+    }
+    .page-header h2 { font-size: 22px; font-weight: 700; color: var(--navy); }
+    .page-header .en { font-family: 'Inter', sans-serif; font-size: 13px; color: var(--muted); font-weight: 400; }
+    .page-num {
+      font-family: 'Inter', sans-serif;
+      font-size: 32px; font-weight: 800; color: var(--border); line-height: 1;
+    }
+
+    h3 { font-size: 16px; font-weight: 700; color: var(--navy); margin: 24px 0 10px; }
+    h3:first-child { margin-top: 0; }
+    p { font-size: 13.5px; color: #334155; margin-bottom: 12px; }
+    .lead { font-size: 15px; color: var(--navy); font-weight: 500; line-height: 1.7; margin-bottom: 20px; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+    .three-col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .four-col { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+
+    /* Cards */
+    .card {
+      border: 1px solid var(--border); border-radius: 12px;
+      padding: 22px; background: var(--white);
+      transition: box-shadow .2s;
+    }
+    .card.dark { background: var(--navy); color: white; border-color: var(--navy); }
+    .card.dark p { color: rgba(255,255,255,.75); }
+    .card.dark h4 { color: white; }
+    .card-icon {
+      width: 44px; height: 44px; border-radius: 10px;
+      background: linear-gradient(135deg, #e8f4fd, #d0e8ff);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 20px; margin-bottom: 14px;
+    }
+    .card h4 { font-size: 14px; font-weight: 700; color: var(--navy); margin-bottom: 8px; }
+    .card p { font-size: 12.5px; margin: 0; line-height: 1.6; color: var(--muted); }
+
+    .card.accent { border-top: 3px solid var(--blue); }
+    .card.gold { border-top: 3px solid var(--gold); }
+
+    /* Checklist */
+    .checklist { list-style: none; margin: 12px 0; }
+    .checklist li {
+      font-size: 13px; padding: 6px 0 6px 24px; position: relative; color: #334155;
+    }
+    .checklist li::before {
+      content: '✓'; position: absolute; left: 0;
+      color: var(--blue); font-weight: 700;
+    }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; font-size: 12.5px; margin: 16px 0; }
+    th {
+      background: var(--navy); color: white; padding: 10px 14px;
+      text-align: left; font-weight: 600; font-size: 12px;
+    }
+    th.us { background: var(--blue); }
+    td { padding: 10px 14px; border-bottom: 1px solid var(--border); vertical-align: top; }
+    tr:nth-child(even) td { background: var(--surface); }
+    tr.highlight td { background: #e8f4fd !important; font-weight: 600; }
+    td.saving { color: var(--success); font-weight: 600; }
+    td.us { color: var(--blue); font-weight: 600; }
+
+    /* KPI */
+    .kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin: 20px 0; }
+    .kpi {
+      text-align: center; padding: 24px 16px;
+      border: 1px solid var(--border); border-radius: 12px;
+      border-top: 3px solid var(--blue);
+    }
+    .kpi .num {
+      font-family: 'Inter', sans-serif;
+      font-size: 36px; font-weight: 800; color: var(--navy); line-height: 1;
+    }
+    .kpi .unit { font-size: 18px; }
+    .kpi .label { font-size: 12px; font-weight: 700; color: var(--blue); margin: 8px 0 4px; }
+    .kpi .desc { font-size: 11px; color: var(--muted); line-height: 1.4; }
+
+    /* OPEX Chart */
+    .opex-chart { margin: 24px 0; }
+    .opex-row { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+    .opex-label { width: 200px; font-size: 12px; font-weight: 600; color: var(--navy); flex-shrink: 0; }
+    .opex-bar-wrap { flex: 1; background: #eef2f7; border-radius: 6px; height: 32px; position: relative; }
+    .opex-bar {
+      height: 100%; border-radius: 6px;
+      display: flex; align-items: center; padding-left: 12px;
+      font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; color: white;
+    }
+    .opex-bar.b100 { width: 100%; background: #94a3b8; }
+    .opex-bar.b88  { width: 88%;  background: #64748b; }
+    .opex-bar.b76  { width: 76%;  background: var(--blue); }
+    .opex-bar.b68  { width: 68%;  background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+
+    /* Timeline */
+    .timeline { position: relative; margin: 28px 0; padding-left: 28px; }
+    .timeline::before {
+      content: ''; position: absolute; left: 8px; top: 8px; bottom: 8px;
+      width: 2px; background: linear-gradient(180deg, var(--blue), var(--cyan));
+    }
+    .tl-item { position: relative; margin-bottom: 22px; padding-left: 20px; }
+    .tl-item::before {
+      content: ''; position: absolute; left: -24px; top: 6px;
+      width: 12px; height: 12px; border-radius: 50%;
+      background: var(--blue); border: 2px solid white; box-shadow: 0 0 0 2px var(--blue);
+    }
+    .tl-year { font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700; color: var(--blue); }
+    .tl-title { font-size: 14px; font-weight: 700; color: var(--navy); margin: 2px 0 4px; }
+    .tl-desc { font-size: 12.5px; color: var(--muted); }
+
+    /* Quote */
+    .quote-box {
+      background: linear-gradient(135deg, #f0f7ff, #e8f4fd);
+      border-left: 4px solid var(--blue);
+      border-radius: 0 12px 12px 0;
+      padding: 20px 24px; margin: 20px 0;
+    }
+    .quote-box p { font-size: 14px; font-weight: 500; color: var(--navy); margin: 0; line-height: 1.7; }
+
+    /* Flow */
+    .flow { display: flex; gap: 0; margin: 20px 0; flex-wrap: wrap; }
+    .flow-step {
+      flex: 1; min-width: 100px; text-align: center; position: relative; padding: 14px 8px;
+    }
+    .flow-step .num {
+      width: 32px; height: 32px; border-radius: 50%;
+      background: var(--navy); color: white;
+      display: flex; align-items: center; justify-content: center;
+      font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 700;
+      margin: 0 auto 8px;
+    }
+    .flow-step .title { font-size: 11px; font-weight: 700; color: var(--navy); }
+    .flow-step .sub { font-size: 10px; color: var(--muted); margin-top: 2px; }
+    .flow-step::after {
+      content: '→'; position: absolute; right: -6px; top: 22px;
+      color: var(--border); font-size: 16px;
+    }
+    .flow-step:last-child::after { display: none; }
+
+    /* CTA */
+    .cta-page {
+      min-height: 297mm;
+      background: var(--gradient);
+      color: white;
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      text-align: center; padding: 60px 48px;
+      position: relative;
+    }
+    .cta-page h2 { font-size: 36px; font-weight: 800; margin-bottom: 12px; }
+    .cta-page .sub { font-size: 15px; opacity: .8; max-width: 480px; margin-bottom: 48px; line-height: 1.7; }
+    .cta-cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; width: 100%; max-width: 560px; }
+    .cta-card {
+      background: rgba(255,255,255,.1); border: 1px solid rgba(255,255,255,.2);
+      border-radius: 12px; padding: 24px 16px;
+    }
+    .cta-card .icon { font-size: 24px; margin-bottom: 10px; }
+    .cta-card .lbl { font-size: 10px; letter-spacing: .1em; text-transform: uppercase; opacity: .6; margin-bottom: 6px; }
+    .cta-card .val { font-size: 14px; font-weight: 600; }
+
+    .footnote { font-size: 10.5px; color: var(--muted); margin-top: 20px; border-top: 1px solid var(--border); padding-top: 12px; }
+    .tag { display: inline-block; background: #e8f4fd; color: var(--blue); font-size: 10px; font-weight: 700; padding: 3px 10px; border-radius: 100px; margin-right: 6px; }
+
+    .split-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: center; }
+    .hero-visual {
+      background: linear-gradient(135deg, #e8f4fd 0%, #d0e8ff 50%, #b8d9f5 100%);
+      border-radius: 16px; height: 220px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 64px; position: relative; overflow: hidden;
+    }
+    .hero-visual::after {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(180deg, transparent 60%, rgba(11,31,58,.08));
+    }
+
+    .pain-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0; }
+    .pain-item {
+      display: flex; gap: 12px; padding: 14px;
+      background: var(--surface); border-radius: 10px; border: 1px solid var(--border);
+    }
+    .pain-item .icon { font-size: 20px; flex-shrink: 0; }
+    .pain-item .title { font-size: 12px; font-weight: 700; color: var(--navy); }
+    .pain-item .desc { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<button class="print-btn no-print" onclick="window.print()">PDF 저장 / 인쇄</button>
+
+<!-- ══════════ PAGE 1 · COVER ══════════ -->
+<div class="page">
+  <div class="cover">
+    <div class="cover-grid"></div>
+    <div class="cover-badge">Technical &amp; Operational Excellence</div>
+    <h1>HK SHIPPING INC.</h1>
+    <div class="en-title">Ship Management Proposal</div>
+    <p class="cover-lead">
+      글로벌 수준의 종합 선박관리 역량과 부산 허브의 비용 효율,<br>
+      자체 정비 워크숍, The Vessel Code 디지털 생태계를 하나로.<br>
+      <strong>선주의 자산을 지키고, OPEX를 줄이고, 투명하게 운영합니다.</strong>
+    </p>
+    <div class="cover-stats">
+      <div class="cover-stat">
+        <div class="num">20~32%</div>
+        <div class="lbl">OPEX 최적화<br><span style="opacity:.7">vs 기존 관리사</span></div>
+      </div>
+      <div class="cover-stat">
+        <div class="num">TVC</div>
+        <div class="lbl">The Vessel Code<br><span style="opacity:.7">오프라인 PMS·SPARE·Sync</span></div>
+      </div>
+      <div class="cover-stat">
+        <div class="num">350m²</div>
+        <div class="lbl">In-House PMS Workshop<br><span style="opacity:.7">영도 자체 정비 공장</span></div>
+      </div>
+    </div>
+    <div class="cover-footer">
+      <span>CONFIDENTIAL · 2026</span>
+      <span>Busan, Republic of Korea</span>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 2 · EXECUTIVE SUMMARY ══════════ -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <div class="section-num">Section 01</div>
+        <h2>Executive Summary</h2>
+        <div class="en">핵심 요약 — 선주를 위한 한 페이지</div>
+      </div>
+      <div class="page-num">02</div>
+    </div>
+
+    <div class="split-hero">
+      <div>
+        <p class="lead">해양의 엄격함과 민첩함의 결합<br><em>Maritime Rigor Meets Agility</em></p>
+        <p>HK Shipping Inc는 기관적 안전과 규율 있는 자본 지출을 추구하는 선주를 위해 <strong>전 영역 기술·운항 관리</strong>를 제공합니다.</p>
+        <p>글로벌 기술 방법론과 <strong>부산 단일 허브</strong>의 경량 운영을 결합하여, 해외 지사 간접비 없이 타협 없는 관리 품질을 실현합니다.</p>
+        <div class="quote-box">
+          <p>"선박관리는 비용이 아니라 <strong>자산 가치 보존</strong>의 문제입니다. HK Shipping은 관리비 이상의 가치를 증명합니다."</p>
+        </div>
+      </div>
+      <div class="hero-visual">🚢</div>
+    </div>
+
+    <h3>선주가 직면한 4가지 과제 → HK Shipping의 해답</h3>
+    <div class="pain-grid">
+      <div class="pain-item">
+        <div class="icon">📈</div>
+        <div>
+          <div class="title">OPEX 상승 · 지사 간접비</div>
+          <div class="desc">글로벌 관리사의 지역별 surcharge → 부산 허브 단일 운영으로 20~32% 절감</div>
+        </div>
+      </div>
+      <div class="pain-item">
+        <div class="icon">🔍</div>
+        <div>
+          <div class="title">PSC · SIRE 2.0 강화</div>
+          <div class="desc">TVC 기반 PMS·결함 이력 + 사전 감사 → Zero Detention 목표</div>
+        </div>
+      </div>
+      <div class="pain-item">
+        <div class="icon">📡</div>
+        <div>
+          <div class="title">해상 디지털 사각지대</div>
+          <div class="desc">클라우드 의존 → TVC 오프라인 PMS로 항해 중 업무 연속성 확보</div>
+        </div>
+      </div>
+      <div class="pain-item">
+        <div class="icon">🔧</div>
+        <div>
+          <div class="title">외주 정비 마크업</div>
+          <div class="desc">100% 하청 → 영도 자체 워크숍(PMS) 원가 정비로 투명한 비용 구조</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 3 · POSITIONING ══════════ -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <div class="section-num">Section 02</div>
+        <h2>Strategic Market Positioning</h2>
+        <div class="en">전략적 시장 포지셔닝</div>
+      </div>
+      <div class="page-num">03</div>
+    </div>
+
+    <div class="two-col" style="margin-bottom:24px">
+      <div class="card accent">
+        <div class="card-icon">🌐</div>
+        <h4>BSM-Class Management Breadth</h4>
+        <p style="margin-bottom:12px">BSM급 종합 선박관리 역량 — 기술·선원·도크·상업·Vetting 전 영역</p>
+        <ul class="checklist">
+          <li>ISM · ISPS · MLC · TMSA 인증 역량</li>
+          <li>SIRE 2.0 · CDI · PSC 대비 프로토콜</li>
+          <li>인수(Takeover)부터 매각(S&amp;P)까지 전 생애주기 자산 보호</li>
+          <li>신조감리 · 개조 · BWTS/CII 규제 대응</li>
+        </ul>
+      </div>
+      <div class="card gold">
+        <div class="card-icon">📍</div>
+        <h4>Busan Hub Lean Cost Structure</h4>
+        <p style="margin-bottom:12px">글로벌 지사 없는 부산 집중 운영 — 해운 공급망·조선소의 중심</p>
+        <ul class="checklist">
+          <li>Zero regional branch surcharge · 관료적 지연 없음</li>
+          <li>세계 수준 조선소·기자재 즉시 접근</li>
+          <li>24/7 시니어 관리진 직접 접근성</li>
+          <li>대명상선(DM Maritime) 케미컬 전문 노하우</li>
+        </ul>
+      </div>
+    </div>
+
+    <h3>경쟁 비교</h3>
+    <table>
+      <thead>
+        <tr><th>항목</th><th>BSM</th><th>대명상선</th><th class="us">HK Shipping Inc</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>관리 범위</td><td>700+척 · 10 SMC</td><td>케미컬 8척+</td><td class="us">종합 관리 · 29척+</td></tr>
+        <tr><td>글로벌 지사</td><td>10개 센터</td><td>없음</td><td class="us">없음 (부산 허브)</td></tr>
+        <tr><td>디지털</td><td>LiveFleet (클라우드)</td><td>—</td><td class="us">TVC (오프라인 우선)</td></tr>
+        <tr><td>자체 정비</td><td>—</td><td>—</td><td class="us">PMS Workshop 350m²</td></tr>
+        <tr><td>강점</td><td>규모·140년 역사</td><td>케미컬·한국선원</td><td class="us">비용·TVC·워크숍 시너지</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 4 · TVC ══════════ -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <div class="section-num">Section 03</div>
+        <h2>Digital Edge: The Vessel Code</h2>
+        <div class="en">디지털 경쟁력 — 오프라인 우선 PMS 플랫폼</div>
+      </div>
+      <div class="page-num">04</div>
+    </div>
+
+    <div class="split-hero">
+      <div>
+        <p class="lead">제한된 연결 환경에서도 운항을 지속하는<br>HK Shipping의 독자 디지털 기반</p>
+        <ul class="checklist">
+          <li><strong>Offline-First PMS</strong> — Deck/Engine 정비계획, 결함, Running Hours. 항해 중 무제한 업무</li>
+          <li><strong>Intelligent Spare Control</strong> — 실시간 소모 추적, 중복 발주 방지, 재고 감사 대비</li>
+          <li><strong>Secure Bidirectional Sync</strong> — ZIP 기반 선박↔부산 HQ 동기화, vessel_id·부서 검증</li>
+          <li><strong>Audit-Proof Traceability</strong> — PSC · Class · SIRE Vetting용 불변 정비 이력</li>
+        </ul>
+      </div>
+      <div class="hero-visual" style="font-size:48px">🖥️<br><span style="font-size:14px;color:var(--navy);font-weight:600;margin-top:8px;display:block">Marine Digital</span></div>
+    </div>
+
+    <h3>TVC 워크플로</h3>
+    <div class="flow">
+      <div class="flow-step"><div class="num">1</div><div class="title">Report</div><div class="sub">갑판/기관 작성</div></div>
+      <div class="flow-step"><div class="num">2</div><div class="title">Confirm</div><div class="sub">기관장/선장 확인</div></div>
+      <div class="flow-step"><div class="num">3</div><div class="title">Approve</div><div class="sub">HQ 승인·잠금</div></div>
+      <div class="flow-step"><div class="num">4</div><div class="title">Sync</div><div class="sub">ZIP Export/Import</div></div>
+    </div>
+
+    <table>
+      <thead><tr><th></th><th>클라우드 (LiveFleet 등)</th><th class="us">TVC (오프라인 우선)</th></tr></thead>
+      <tbody>
+        <tr><td>연결</td><td>상시 인터넷 필요</td><td class="us">선박 PC 로컬 동작</td></tr>
+        <tr><td>데이터 소유</td><td>서버 중심</td><td class="us">선박 IndexedDB + ZIP</td></tr>
+        <tr><td>항해 중 업무</td><td>위성망 의존</td><td class="us">오프라인 100% 가능</td></tr>
+        <tr><td>비용</td><td>구독·통신비</td><td class="us">로컬 설치, ZIP 전송</td></tr>
+      </tbody>
+    </table>
+    <p class="footnote">시범 운영: <strong>INCHEON CHEMI</strong> (Chemical Tanker) · TVC-PMS v2 · 834 jobs · 1,346 spare parts</p>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 5 · SCOPE ══════════ -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <div class="section-num">Section 04</div>
+        <h2>Comprehensive Management Scope</h2>
+        <div class="en">종합 관리 업무 영역</div>
+      </div>
+      <div class="page-num">05</div>
+    </div>
+
+    <div class="four-col">
+      <div class="card accent">
+        <div class="card-icon">⚙️</div>
+        <h4>Technical &amp; Class</h4>
+        <p>기관·기계 감독, 도크 엔지니어링, Class Annual Survey, BWTS/CII 규제 업그레이드</p>
+      </div>
+      <div class="card accent">
+        <div class="card-icon">👤</div>
+        <h4>Crew Manning</h4>
+        <p>STCW 검증, 승선 전 Assessment, MLC 복지, Chemical/Bulk 전문 승무 로테이션</p>
+      </div>
+      <div class="card accent">
+        <div class="card-icon">📦</div>
+        <h4>Procurement</h4>
+        <p>투명한 Spare 조달, Lub oil, Bulk provision, 비교 견적 기반 최저가 보장</p>
+      </div>
+      <div class="card accent">
+        <div class="card-icon">🛡️</div>
+        <h4>QHSE &amp; Vetting</h4>
+        <p>SIRE · CDI · PSC 사전 감사, Risk Assessment, Zero Detention 환경 안전</p>
+      </div>
+    </div>
+
+    <h3>그룹 생태계</h3>
+    <table>
+      <thead><tr><th>법인 / 파트너</th><th>역할</th><th>위치</th></tr></thead>
+      <tbody>
+        <tr><td><strong>HK Shipping Group AS</strong></td><td>통합 해운 그룹</td><td>Norway</td></tr>
+        <tr><td><strong>Kopervik Ship Management</strong></td><td>General Cargo 21척+</td><td>Norway / Poland</td></tr>
+        <tr><td><strong>대명상선 (DM Maritime)</strong></td><td>Chemical Tanker 선박·선원관리</td><td>부산</td></tr>
+        <tr><td><strong>PMS (Perfect Marine Solution)</strong></td><td>자체 정비 워크숍 350m²</td><td>부산 영도</td></tr>
+        <tr><td><strong>Scandinavian Ship Services</strong></td><td>선원 채용·배승</td><td>Latvia</td></tr>
+        <tr class="highlight"><td><strong>The Vessel Code</strong></td><td>PMS · SPARE · Defect · Sync</td><td>선박 + HQ</td></tr>
+        <tr><td>SPACE SHIPBROKERS</td><td>신조·S&amp;P Advisory</td><td>Partner</td></tr>
+        <tr><td>PRODA Marine / Press Marine</td><td>한·일·중 Spare Logistics</td><td>Partner</td></tr>
+        <tr><td>Mana Maritime / Alpha Maritime</td><td>SIRE Vetting 인증</td><td>Partner</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 6 · WORKSHOP ══════════ -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <div class="section-num">Section 05</div>
+        <h2>In-House Workshop: PMS Busan</h2>
+        <div class="en">자체 정비 공장 — 실질적 기술 자립</div>
+      </div>
+      <div class="page-num">06</div>
+    </div>
+
+    <div class="split-hero">
+      <div>
+        <p class="lead">Tangible Technical Self-Sufficiency</p>
+        <p>일반 관리사는 물리적 수리 작업의 100%를 외부 하청에 의존합니다. HK Shipping은 자체 정비 자회사 <strong>PMS (Perfect Marine Solution)</strong>를 운영합니다.</p>
+        <ul class="checklist">
+          <li><strong>Strategic Facility</strong> — 부산 영도 해양 산업단지 350m² 전용 오버홀 공장</li>
+          <li><strong>Heavy Machining</strong> — 주·부기관 재정비, Cargo Pump, Valve, 정밀 가공</li>
+          <li><strong>Pipe &amp; Electrical</strong> — 배관 가공, 유압 수리, 발전기·제어 자동화</li>
+          <li><strong>Cost Transparency</strong> — 실제 워크숍 원가 정비, 하청 마크업 제거</li>
+        </ul>
+        <div class="quote-box">
+          <p>외주 대비 <strong>정비비 15~25% 절감</strong> + TVC SPARE 재고와 연동된 부품 관리</p>
+        </div>
+      </div>
+      <div class="hero-visual" style="font-size:48px">🔧</div>
+    </div>
+
+    <h3>HK Shipping + PMS Workshop = Full In-House Synergy</h3>
+    <div class="three-col">
+      <div class="card"><h4>① 예방 정비</h4><p>TVC PMS Overdue → 워크숍 사전 정비 → Off-hire 최소화</p></div>
+      <div class="card"><h4>② 도크 지원</h4><p>도크 계획·감독 + 워크숍 사전 가공 → 도크 기간 단축</p></div>
+      <div class="card"><h4>③ 긴급 대응</h4><p>24/7 Superintendent + 영도 즉시 수리 → 항만 체류 최소화</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 7 · KPI ══════════ -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <div class="section-num">Section 06</div>
+        <h2>Fleet Availability &amp; Quality</h2>
+        <div class="en">운영 성과 KPI</div>
+      </div>
+      <div class="page-num">07</div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi">
+        <div class="num">99.4<span class="unit">%</span></div>
+        <div class="label">Fleet Availability</div>
+        <div class="desc">예방 정비로 계획 외 정지·Off-hire 방지</div>
+      </div>
+      <div class="kpi">
+        <div class="num">0</div>
+        <div class="label">PSC Detentions</div>
+        <div class="desc">입항 전 사전 감사 → 글로벌 클린 기록</div>
+      </div>
+      <div class="kpi">
+        <div class="num">&lt;3<span class="unit">%</span></div>
+        <div class="label">PMS Overdue Rate</div>
+        <div class="desc">TVC 자동 추적 → 엄격한 예방 정비</div>
+      </div>
+      <div class="kpi">
+        <div class="num">24/7</div>
+        <div class="label">Superintendent Hotline</div>
+        <div class="desc">자격을 갖춘 Chief Engineer 즉시 기술 지원</div>
+      </div>
+    </div>
+
+    <h3>관리 선박 (Fleet Heritage)</h3>
+    <table>
+      <thead><tr><th>선박명</th><th>선종</th><th>G/T or DWT</th><th>비고</th></tr></thead>
+      <tbody>
+        <tr class="highlight"><td>INCHEON CHEMI</td><td>Chemical</td><td>5,510 GT</td><td>TVC 시범 · 🇰🇷</td></tr>
+        <tr><td>GOLD STAR SHINE</td><td>Chemical</td><td>5,376 GT</td><td>🇰🇷</td></tr>
+        <tr><td>VALIANT</td><td>Chemical</td><td>8,270 GT</td><td>🇵🇦</td></tr>
+        <tr><td>STIO LOBELIA / AZALEA</td><td>Chemical</td><td>5,720 / 5,546</td><td>🇰🇷</td></tr>
+        <tr><td>QUARTERBACK J</td><td>Chemical</td><td>6,976 GT</td><td>🇰🇷</td></tr>
+        <tr><td>FRI WAVE / FRI BERGEN 등</td><td>General Cargo</td><td>21척+ · 87K DWT</td><td>Kopervik · 423+ ports</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 8 · COST BENCHMARK ══════════ -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <div class="section-num">Section 07</div>
+        <h2>Direct Cost Benchmark</h2>
+        <div class="en">비용 비교 — 선주가 실제로 절감하는 금액</div>
+      </div>
+      <div class="page-num">08</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>항목</th><th>Conventional Management</th><th class="us">HK Shipping Inc</th><th>Annual Value</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Safety Management Fee</strong></td>
+          <td>$60,000/yr ($5,000/mo)</td>
+          <td class="us">$48,000/yr ($4,000/mo)</td>
+          <td class="saving">$12,000 절감</td>
+        </tr>
+        <tr>
+          <td><strong>Class Survey Coordination</strong></td>
+          <td>$10,000 / case</td>
+          <td class="us">$8,000 / case</td>
+          <td class="saving">$2,000 / 회</td>
+        </tr>
+        <tr>
+          <td><strong>Superintendent Ship Visit</strong></td>
+          <td>$50~150/day + travel</td>
+          <td class="us">Included (surcharge 없음)</td>
+          <td class="saving">~$1,800/yr</td>
+        </tr>
+        <tr>
+          <td><strong>Spare &amp; Store Procurement</strong></td>
+          <td>단일 공급자 +15~20%</td>
+          <td class="us">Wholesale 비교 견적</td>
+          <td class="saving">최저 시장가</td>
+        </tr>
+        <tr>
+          <td><strong>Dedicated Workshop</strong></td>
+          <td>외부 하청 요율</td>
+          <td class="us">PMS 영도 350m² 원가 정비</td>
+          <td class="saving">15~25% 정비비 절감</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>Annual OPEX Efficiency Ratio</h3>
+    <div class="opex-chart">
+      <div class="opex-row">
+        <div class="opex-label">Traditional Global Manager</div>
+        <div class="opex-bar-wrap"><div class="opex-bar b100">100% Baseline OPEX</div></div>
+      </div>
+      <div class="opex-row">
+        <div class="opex-label">Regional Competitor (Korean)</div>
+        <div class="opex-bar-wrap"><div class="opex-bar b88">88% Standard Fee</div></div>
+      </div>
+      <div class="opex-row">
+        <div class="opex-label">HK Shipping Inc Standard</div>
+        <div class="opex-bar-wrap"><div class="opex-bar b76">76% Optimized OPEX</div></div>
+      </div>
+      <div class="opex-row">
+        <div class="opex-label">HK Shipping + PMS Workshop</div>
+        <div class="opex-bar-wrap"><div class="opex-bar b68">68% Full In-House Synergy</div></div>
+      </div>
+    </div>
+    <div class="quote-box">
+      <p>지사 surcharge 제거 + 자체 PMS 오버홀 공장 활용으로 선주는 <strong>최대 32% OPEX 절감</strong>을 실현할 수 있습니다.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 9 · MILESTONES & ORG ══════════ -->
+<div class="page">
+  <div class="content">
+    <div class="page-header">
+      <div>
+        <div class="section-num">Section 08</div>
+        <h2>Milestones &amp; Organization</h2>
+        <div class="en">연혁 · 조직 · 파트너</div>
+      </div>
+      <div class="page-num">09</div>
+    </div>
+
+    <div class="two-col">
+      <div>
+        <h3>Milestones &amp; Fleet Heritage</h3>
+        <div class="timeline">
+          <div class="tl-item">
+            <div class="tl-year">2021 · Inception</div>
+            <div class="tl-title">HK Shipping Inc 설립</div>
+            <div class="tl-desc">부산, 전문 안전 자문·검사 지원 서비스 시작</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">2022 · Fleet Expansion</div>
+            <div class="tl-title">선대 확대</div>
+            <div class="tl-desc">Peninsula X/XI, Incheon Chemi, 해외 General Cargo 기술 자문 수주</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">2023 · PMS Facility</div>
+            <div class="tl-title">영도 350m² 워크숍 가동</div>
+            <div class="tl-desc">엔지니어링 자립 달성 — 자체 오버홀 공장 완공</div>
+          </div>
+          <div class="tl-item">
+            <div class="tl-year">2024–2026 · TVC Era</div>
+            <div class="tl-title">The Vessel Code 전면 배포</div>
+            <div class="tl-desc">디지털 PMS Suite 가동, 글로벌 선대 통합 관리 확대</div>
+          </div>
+        </div>
+      </div>
+      <div>
+        <h3>Agile Executive Structure</h3>
+        <p style="font-size:12.5px;margin-bottom:12px">평탄한 조직으로 기술 의사결정을 신속하게 — 관료적 지연 없음</p>
+        <ul class="checklist">
+          <li><strong>COO &amp; CTO</strong> — Chief Engineer 출신, 일상 운영·안전 기준 직접 지휘</li>
+          <li><strong>Technical Superintendents</strong> — 선박별 단일 담당 (Single Point of Contact)</li>
+          <li><strong>In-House Repair Engineers</strong> — 영도 워크숍 상주 기술 인력</li>
+          <li><strong>TVC System Admin</strong> — 디지털 플랫폼·Sync 관리</li>
+        </ul>
+
+        <h3>Onboarding Process</h3>
+        <div class="flow" style="margin-top:12px">
+          <div class="flow-step"><div class="num">1</div><div class="title">Meeting</div><div class="sub">요구 파악</div></div>
+          <div class="flow-step"><div class="num">2</div><div class="title">KPI</div><div class="sub">범위·요율</div></div>
+          <div class="flow-step"><div class="num">3</div><div class="title">Takeover</div><div class="sub">ISM·TVC</div></div>
+          <div class="flow-step"><div class="num">4</div><div class="title">Go-Live</div><div class="sub">관리 개시</div></div>
+          <div class="flow-step"><div class="num">5</div><div class="title">Review</div><div class="sub">월간 KPI</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════ PAGE 10 · CTA ══════════ -->
+<div class="page">
+  <div class="cta-page">
+    <h2>Partner With HK Shipping</h2>
+    <p class="sub">
+      기관적 선박관리의 정밀함과 직접적인 비용 최적화,<br>
+      독자 디지털 인텔리전스를 하나로.<br>
+      선주의 자산 가치를 함께 지켜나가겠습니다.
+    </p>
+    <div class="cta-cards">
+      <div class="cta-card">
+        <div class="icon">📍</div>
+        <div class="lbl">Operational Hub</div>
+        <div class="val">Busan, Republic of Korea</div>
+      </div>
+      <div class="cta-card">
+        <div class="icon">✉️</div>
+        <div class="lbl">Direct Inquiries</div>
+        <div class="val">hkshipco@gmail.com</div>
+      </div>
+      <div class="cta-card">
+        <div class="icon">📞</div>
+        <div class="lbl">24/7 Operations Desk</div>
+        <div class="val">+82 10-2907-2150</div>
+      </div>
+    </div>
+    <p style="margin-top:48px;font-size:12px;opacity:.5">
+      HK Shipping Inc · The Vessel Code · PMS (Perfect Marine Solution)<br>
+      Confidential · 2026
+    </p>
+  </div>
+</div>
+
+</body>
+</html>
