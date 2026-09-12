@@ -121,6 +121,18 @@ const sitemapIndex = readFileSync(join(root, 'public', 'sitemap.xml'), 'utf8');
 assertValidXml('sitemap.xml', sitemapIndex);
 check('sitemap index references core pages', sitemapIndex.includes('sitemap-core.xml'));
 check('sitemap index references store chunk', sitemapIndex.includes('sitemap-store-1.xml'));
+const seoIndex = JSON.parse(readFileSync(join(root, 'api', '_data', 'impa-seo-index.json'), 'utf8'));
+const seoCount = Number(seoIndex.count) || Object.keys(seoIndex.items || {}).length;
+if (seoCount > 10_000) {
+    check('sitemap index references store chunk 2', sitemapIndex.includes('sitemap-store-2.xml'));
+    const storeChunk2Path = join(root, 'public', 'sitemap-store-2.xml');
+    check('sitemap-store-2.xml exists', existsSync(storeChunk2Path));
+    if (existsSync(storeChunk2Path)) {
+        const storeChunk2 = readFileSync(storeChunk2Path, 'utf8');
+        assertValidXml('sitemap-store-2.xml', storeChunk2);
+        check('store chunk 2 url count', (storeChunk2.match(/<loc>/g) || []).length === seoCount - 10_000);
+    }
+}
 
 const coreSitemap = readFileSync(join(root, 'public', 'sitemap-core.xml'), 'utf8');
 assertValidXml('sitemap-core.xml', coreSitemap);
@@ -130,7 +142,11 @@ check('core sitemap has contact-us', coreSitemap.includes('<loc>https://www.thev
 
 const storeChunk = readFileSync(join(root, 'public', 'sitemap-store-1.xml'), 'utf8');
 assertValidXml('sitemap-store-1.xml', storeChunk);
-check('store chunk includes test code', storeChunk.includes(`/store/${TEST_CODE}`));
+const storeChunk2Path = join(root, 'public', 'sitemap-store-2.xml');
+const storeChunk2 = existsSync(storeChunk2Path) ? readFileSync(storeChunk2Path, 'utf8') : '';
+const testCodeInSitemap = storeChunk.includes(`/store/${TEST_CODE}`)
+    || storeChunk2.includes(`/store/${TEST_CODE}`);
+check('store sitemap includes test code', testCodeInSitemap);
 check('store chunk uses www origin', storeChunk.includes('<loc>https://www.thevesselcode.com/store/'));
 check('robots references www sitemap', readFileSync(join(root, 'public', 'robots.txt'), 'utf8').includes('Sitemap: https://www.thevesselcode.com/sitemap.xml'));
 const robotsTxt = readFileSync(join(root, 'public', 'robots.txt'), 'utf8');

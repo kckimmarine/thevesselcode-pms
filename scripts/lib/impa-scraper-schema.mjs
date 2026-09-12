@@ -3,6 +3,8 @@
  */
 
 export const CHAPTER_META = {
+  '23': { title: 'Cordage & Ropes', category: 'Rigging' },
+  '33': { title: 'Deck & Mooring Stores', category: 'Deck' },
   '59': { title: 'Safety Equipment', category: 'Safety' },
   '61': { title: 'Hand Tools', category: 'Tools' },
   '79': { title: 'Paints & Coatings', category: 'Paint' },
