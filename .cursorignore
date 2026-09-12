@@ -1,0 +1,25 @@
+# Lean context — heavy / non-runtime (Cursor indexing)
+dist/
+node_modules/
+docs/exports/
+public/data/impa*.json
+release/
+e2e/
+*.txt
+
+# Build & vendor noise
+build/licenses/
+build/electron-builder/
+.playwright/
+test-results/
+playwright-report/
+blob-report/
+
+# Large generated / mirror trees (runtime copies live under data/ or dist/)
+data/impa-catalog-pages/
+data/impa-plates/
+data/plates/
+
+# Desktop packaging output
+*.exe
+*.blockmap

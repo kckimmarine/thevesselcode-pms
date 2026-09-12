@@ -24,7 +24,6 @@ const ENTRIES = [
   { path: 'sm/', category: '마케팅 웹', role: 'TVC-SM 소개 페이지 (/sm)', attention: '문구·CTA 수정' },
   { path: 'services/', category: '마케팅 웹', role: '서비스 소개 (/services)', attention: '가끔' },
   { path: 'contact-us/', category: '마케팅 웹', role: '문의 폼 (/contact-us)', attention: '가끔' },
-  { path: 'about-contact/', category: '마케팅 웹', role: '레거시 경로 — contact-us로 리다이렉트', attention: '거의 무시' },
   { path: 'toolkit.html', category: '마케팅 웹', role: 'Maritime Toolkit / IMPA (/toolkit)', attention: '가끔' },
   { path: 'js/marketing-shell.js', category: '마케팅 웹', role: '공통 상단 네비·푸터 (Home, Services, TVC-SM, Contact)', attention: '메뉴 링크' },
   { path: 'css/home.css', category: '마케팅 웹', role: '랜딩·SM 페이지 스타일', attention: '디자인' },

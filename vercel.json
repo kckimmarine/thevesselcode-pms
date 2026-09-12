@@ -42,7 +42,7 @@
     { "source": "/toolkit", "destination": "/toolkit.html" },
     { "source": "/store/:code", "destination": "/api/store/:code" },
     {
-      "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|app.html|toolkit.html|store-public.html|about-contact|home|services|sm|contact-us|store|sitemap|robots\\.txt).+)",
+      "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|app.html|toolkit.html|store-public.html|home|services|sm|contact-us|store|sitemap|robots\\.txt).+)",
       "has": [{ "type": "host", "value": "app.thevesselcode.com" }],
       "destination": "/app.html"
     }

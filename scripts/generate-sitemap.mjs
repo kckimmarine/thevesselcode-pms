@@ -14,7 +14,7 @@ const lastmod = new Date().toISOString().slice(0, 10);
 const CORE_PAGES = [
   { path: '/', changefreq: 'weekly', priority: '1.0' },
   { path: '/toolkit', changefreq: 'weekly', priority: '0.9' },
-  { path: '/about-contact', changefreq: 'monthly', priority: '0.7' },
+  { path: '/contact-us', changefreq: 'monthly', priority: '0.7' },
 ];
 
 const indexPath = join(root, 'api', '_data', 'impa-seo-index.json');

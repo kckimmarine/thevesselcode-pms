@@ -13,6 +13,8 @@ Thumbs.db
 *.tmp
 gitstatus.tmp
 gemini-full-context.txt
+docs/exports/tvc-core-frontend.txt
+context-*.txt
 
 # Mirrored from public/assets for local npm start
 assets/
