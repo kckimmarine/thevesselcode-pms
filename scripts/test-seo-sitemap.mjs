@@ -49,6 +49,9 @@ check('html title format', html.includes(`<title>IMPA CODE ${TEST_CODE} - ${escN
 check('html h1 format', html.includes(`<h1>IMPA CODE ${TEST_CODE} - ${escName}</h1>`));
 check('html no duplicate microdata product', !html.includes('itemtype="https://schema.org/Product"'));
 check('html json-ld seller', html.includes('"seller"'));
+check('html json-ld validFrom', html.includes('"validFrom"'));
+check('html json-ld merchant return policy', html.includes('MerchantReturnPolicy') || html.includes('hasMerchantReturnPolicy'));
+check('html json-ld shipping details', html.includes('OfferShippingDetails') || html.includes('shippingDetails'));
 check('html og:title format', html.includes(`<meta property="og:title" content="IMPA CODE ${TEST_CODE} - ${escName}">`));
 check('html og:description plate copy', html.includes('maritime catalog plate illustration'));
 check('html og:image plate url', html.includes('<meta property="og:image" content="https://www.thevesselcode.com/data/plates/'));

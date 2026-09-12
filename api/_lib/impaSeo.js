@@ -159,10 +159,55 @@ function resolveMpn(item) {
     return String(fromSpecs || item.impa_code).trim();
 }
 
+function todayIsoDate() {
+    return new Date().toISOString().slice(0, 10);
+}
+
 function offerPriceValidUntil() {
     const d = new Date();
     d.setFullYear(d.getFullYear() + 1);
     return d.toISOString().slice(0, 10);
+}
+
+function buildMerchantReturnPolicy(origin) {
+    const contactUrl = `${origin.replace(/\/$/, '')}/contact-us`;
+    return {
+        '@type': 'MerchantReturnPolicy',
+        applicableCountry: 'US',
+        returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted',
+        merchantReturnLink: contactUrl,
+        name: 'B2B marine stores — returns per quotation and purchase order terms. Contact for details.',
+    };
+}
+
+function buildShippingDetails() {
+    return {
+        '@type': 'OfferShippingDetails',
+        shippingRate: {
+            '@type': 'MonetaryAmount',
+            value: '0',
+            currency: 'USD',
+        },
+        shippingDestination: {
+            '@type': 'DefinedRegion',
+            addressCountry: ['US', 'KR', 'SG', 'GB', 'DE', 'NL', 'JP'],
+        },
+        deliveryTime: {
+            '@type': 'ShippingDeliveryTime',
+            handlingTime: {
+                '@type': 'QuantitativeValue',
+                minValue: 1,
+                maxValue: 14,
+                unitCode: 'DAY',
+            },
+            transitTime: {
+                '@type': 'QuantitativeValue',
+                minValue: 3,
+                maxValue: 60,
+                unitCode: 'DAY',
+            },
+        },
+    };
 }
 
 /** Default B2B catalog offer — quote on request (GSC Product / Merchant requires offers + seller). */
@@ -172,6 +217,7 @@ function buildB2bProductOffer(pageUrl) {
         '@type': 'Offer',
         price: '0.00',
         priceCurrency: 'USD',
+        validFrom: todayIsoDate(),
         priceValidUntil: offerPriceValidUntil(),
         priceSpecification: {
             '@type': 'UnitPriceSpecification',
@@ -187,6 +233,8 @@ function buildB2bProductOffer(pageUrl) {
             name: 'THE VESSEL CODE (K-TECH)',
             url: origin,
         },
+        hasMerchantReturnPolicy: buildMerchantReturnPolicy(origin),
+        shippingDetails: buildShippingDetails(),
     };
 }
 
