@@ -12039,15 +12039,92 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
 .sm-rfq-detail-actions { margin: 1rem 0; }
 .supplier-quote-drawer { position: fixed; inset: 0; z-index: 13000; background: rgba(15, 23, 42, 0.45); display: flex; justify-content: flex-end; }
 .supplier-quote-drawer.hidden { display: none !important; }
-.supplier-quote-drawer-panel { width: min(480px, 100vw); background: #fff; height: 100%; overflow: auto; padding: 1rem 1.25rem 2rem; box-shadow: -4px 0 24px rgba(0,0,0,0.12); }
+.supplier-panel-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+}
+.supplier-quote-drawer-panel { width: min(720px, 100vw); background: #fff; height: 100%; overflow: auto; padding: 1rem 1.25rem 2rem; box-shadow: -4px 0 24px rgba(0,0,0,0.12); }
+.supplier-quote-drawer-head h3 { margin: 0 0 0.35rem; font-size: 1.15rem; }
+.supplier-quote-adhoc-meta {
+    display: grid;
+    gap: 0.5rem;
+    margin: 0.75rem 0 1rem;
+    padding: 0.75rem;
+    background: #f7fafc;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    font-size: 0.88rem;
+}
+.supplier-quote-adhoc-meta label { display: flex; flex-direction: column; gap: 0.25rem; }
+.supplier-quote-adhoc-line-meta {
+    display: grid;
+    gap: 0.45rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.88rem;
+}
 .supplier-quote-line { border-bottom: 1px solid #e2e8f0; padding: 0.75rem 0; }
-.supplier-quote-line-fields { display: grid; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.88rem; }
+.supplier-quote-line-fields {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    font-size: 0.88rem;
+}
+.supplier-quote-field { display: flex; flex-direction: column; gap: 0.2rem; }
+.supplier-quote-field-wide { grid-column: 1 / -1; }
 .supplier-quote-line-fields input, .supplier-quote-line-fields select { width: 100%; max-width: 100%; }
-.supplier-quote-drawer-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+.supplier-quote-line-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+    font-size: 0.82rem;
+}
+.supplier-quote-summary {
+    margin: 1rem 0;
+    padding: 0.75rem 1rem;
+    background: #ebf8ff;
+    border: 1px solid #bee3f8;
+    border-radius: 8px;
+    font-size: 0.9rem;
+}
+.supplier-quote-summary-title { margin: 0 0 0.5rem; font-size: 0.95rem; }
+.supplier-quote-summary-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.5rem 1rem;
+    margin: 0.25rem 0;
+}
+.supplier-quote-summary-overall {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid #90cdf4;
+    font-weight: 600;
+}
+.supplier-quote-drawer-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-end;
+    margin-top: 1rem;
+}
+.supplier-quote-print-btn { border-color: #2b6cb0; color: #2c5282; }
+.supplier-quote-add-line { margin-top: 0.5rem; }
 .login-supplier-register-wrap { margin-top: 0.75rem; text-align: center; }
 .login-supplier-register-btn { background: none; border: none; color: #2b6cb0; cursor: pointer; text-decoration: underline; font-size: 0.9rem; }
 @media (max-width: 768px) {
     .sm-rfq-layout { grid-template-columns: 1fr; }
     .supplier-nav { flex-wrap: wrap; }
     .supplier-quote-drawer-panel { width: 100vw; }
+    .supplier-quote-line-fields { grid-template-columns: 1fr; }
+    .supplier-panel-toolbar { flex-direction: column; align-items: stretch; }
+    .supplier-quote-drawer-actions { flex-direction: column; }
+    .supplier-quote-drawer-actions .btn { width: 100%; }
 }

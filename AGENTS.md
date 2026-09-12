@@ -4,7 +4,9 @@ This file helps **Cursor Cloud Agents**, **Cursor IDE**, and **Gemini** work on 
 
 ## Product summary
 
-**THE VESSEL CODE (TVC-PMS)** is an offline-first PMS + SPICS web app for vessel stations and **SM (Ship Management)**. Data sync is **ZIP export/import only** — no live cloud API in normal ship operation.
+**TVC-SM** is a unified web-first platform encompassing **Public Traffic** (IMPA / Maritime Toolkit), **Supplier Mode** (quotation & margin engine), and **Vessel Core** (PMS + SPARE). Shipboard Vessel Core remains **offline-first** (IndexedDB + ZIP export/import); marketing and supplier tooling are web-first on the same codebase.
+
+**THE VESSEL CODE (TVC-PMS)** naming still applies to the Vessel Core app shell. Data sync for fleet operations is **ZIP export/import only** — no live cloud API in normal ship operation.
 
 | Layer | Path |
 |-------|------|
