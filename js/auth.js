@@ -5,29 +5,27 @@ const TVC_Auth = (function () {
     const AUTH_SESSION_KEY = 'tvc_auth_session';
     const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 14;
+    const USERS_SEED_VERSION = 21;
 
     const DEFAULT_USERS = [
-        // Deck part
-        { id: 'user-officer', username: 'officer', display_name: 'Kim 2/O (Deck Officer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'TVC No1' },
-        { id: 'user-co', username: 'co', display_name: 'Park C/O (Chief Officer)', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'TVC No1' },
-        { id: 'user-captain', username: 'captain', display_name: 'Choi Captain', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'TVC No1' },
-        // Engine part
-        { id: 'user-engineer', username: 'engineer', display_name: 'Kim 3/E (Engineer)', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'ENGINE', vessel_id: 'TVC No1' },
-        { id: 'user-chief', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'TVC No1' },
-        // Head office
-        { id: 'user-hq', username: 'hq', display_name: 'Lee Superintendent', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
-        // Web HQ pilot (thevesselcode.com)
-        { id: 'user-dm-hq', username: 'dm_user@thevesselcode.com', display_name: 'TVC HQ (Pilot)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
-        // THE VESSEL CODE — Admin Mode (app updates only)
-        // Pilot ship owner — company-scoped HQ superintendent (TVC No1)
-        { id: 'user-tvc', username: 'tvc', display_name: 'TVC Pilot (Ship Owner)', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC' },
-        { id: 'user-tvc-admin', username: 'admin', display_name: 'TVC Super Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null, seed_password: 'kimkc9363#@' },
-        // Repair partner — fleet-wide monitoring with TVC admin
-        { id: 'user-pms-21', username: 'pms-21', display_name: 'PMS-21 (Repair Partner)', account_type: 'ADMIN', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, seed_password: 'pms-21' },
+        // Contract vessel — TVC Voyager (demo ship accounts)
+        { id: 'user-officer', username: 'officer', display_name: 'Officer', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'DECK', vessel_id: 'TVC Voyager' },
+        { id: 'user-co', username: 'co', display_name: 'Chief officer', account_type: 'SHIP', role: 'SHIP_CO', department: 'DECK', vessel_id: 'TVC Voyager' },
+        { id: 'user-engineer', username: 'engineer', display_name: 'Engineer', account_type: 'SHIP', role: 'SHIP_ENGINEER', department: 'ENGINE', vessel_id: 'TVC Voyager' },
+        { id: 'user-ce', username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CE', department: 'ENGINE', vessel_id: 'TVC Voyager' },
+        { id: 'user-captain', username: 'captain', display_name: 'Captain', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'CAPTAIN', vessel_id: 'TVC Voyager' },
+        // Contract company SM — superintendent (company-scoped fleet)
+        { id: 'user-tvc-shipping', username: 'tvc shipping', display_name: 'TVC Shipping', account_type: 'SM', role: 'SM_SUPERINTENDENT', department: null, vessel_id: null, company_id: 'TVC_SHIPPING', seed_password: '0000' },
+        // TVC internal — Admin Mode (registry / license / app update)
+        { id: 'user-tvc-admin', username: 'admin', display_name: 'Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null, seed_password: 'admin' },
     ];
 
-    const DEPRECATED_USERNAMES = ['admin@thevesselcode.com'];
+    const REMOVED_SEED_USER_IDS = ['user-supplier-demo'];
+
+    const DEPRECATED_USERNAMES = [
+        'admin@thevesselcode.com',
+        'hq', 'tvc', 'dm_user@thevesselcode.com', 'pms-21',
+    ];
 
     const PBKDF2_SALT = 'tvc-pms-salt-v2';
     const PBKDF2_ITER = 100000;
@@ -92,7 +90,7 @@ const TVC_Auth = (function () {
         // 동일 username 중복 레코드 제거 (예: chief@dm01 → ce 마이그레이션 잔여)
         const fresh = await TVC_DB.getAll('users');
         for (const row of fresh) {
-            if (DEPRECATED_USERNAMES.includes(row.username)) {
+            if (DEPRECATED_USERNAMES.includes(row.username) || REMOVED_SEED_USER_IDS.includes(row.id)) {
                 await TVC_DB.del('users', row.id);
                 continue;
             }
@@ -125,6 +123,58 @@ const TVC_Auth = (function () {
         return hashPassword(password);
     }
 
+    function isCompanyPortalAccountType(accountType) {
+        const t = (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeAccountType)
+            ? TVC_RBAC.normalizeAccountType(accountType)
+            : String(accountType || '').toUpperCase();
+        return t === 'SM' || t === 'ADMIN' || t === 'SUPPLIER';
+    }
+
+    async function refreshSessionFromDb() {
+        const session = getCurrentUser();
+        if (!session) return null;
+        const users = await TVC_DB.getAll('users');
+        const user = users.find(u => u.id === session.id)
+            || users.find(u => u.username === session.username);
+        if (!user) return session;
+        let supplierProfile = null;
+        if (user.account_type === 'SUPPLIER' && user.supplier_id) {
+            supplierProfile = await TVC_DB.get('supplier_profiles', user.supplier_id).catch(() => null);
+        }
+        const role = user.role || TVC_RBAC.resolveUserRole(user);
+        let station = null;
+        if (session.login_mode && typeof TVC_Space !== 'undefined') {
+            station = TVC_Space.stationFromLoginMode(session.login_mode);
+        } else {
+            station = session.station || null;
+        }
+        const account_type = (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeAccountType)
+            ? TVC_RBAC.normalizeAccountType(user.account_type)
+            : user.account_type;
+        const updated = normalizeSessionUser({
+            ...session,
+            role: (typeof TVC_LegacySm !== 'undefined' && TVC_LegacySm.normalizeRole)
+                ? TVC_LegacySm.normalizeRole(role)
+                : role,
+            account_type,
+            department: isCompanyPortalAccountType(account_type)
+                ? null : user.department,
+            display_name: user.display_name,
+            vessel_id: user.vessel_id,
+            company_id: user.company_id || null,
+            supplier_id: user.supplier_id || session.supplier_id || null,
+            company_name: supplierProfile?.company_name || user.company_name || session.company_name || null,
+            contact_person: supplierProfile?.contact_person || user.contact_person || null,
+            contact_email: supplierProfile?.contact_email || user.contact_email || null,
+            business_scope: supplierProfile?.business_scope || user.business_scope || null,
+            service_ports: supplierProfile?.service_ports || user.service_ports || null,
+            station,
+            login_mode: session.login_mode || null,
+        });
+        persistSession(updated);
+        return updated;
+    }
+
     function normalizeSupplierUsername(raw) {
         return String(raw || '').trim();
     }
@@ -146,6 +196,10 @@ const TVC_Auth = (function () {
         return normalizeSupplierUsername(username).replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 48) || 'supplier';
     }
 
+    /**
+     * Self-service supplier onboarding — stores users + supplier_profiles (offline).
+     * @returns {Promise<{ ok: boolean, error?: string, username?: string }>}
+     */
     async function registerSupplier(payload) {
         const username = normalizeSupplierUsername(payload?.username);
         const password = String(payload?.password || '');
@@ -221,58 +275,34 @@ const TVC_Auth = (function () {
         return { ok: true, username };
     }
 
-    function portalSessionFields(user, supplierProfile) {
-        const base = {
-            supplier_id: user.supplier_id || null,
-            company_name: supplierProfile?.company_name || user.company_name || null,
-            contact_person: supplierProfile?.contact_person || user.contact_person || null,
-            contact_email: supplierProfile?.contact_email || user.contact_email || null,
-            business_scope: supplierProfile?.business_scope || user.business_scope || null,
-            service_ports: supplierProfile?.service_ports || user.service_ports || null,
-        };
-        return base;
+    function normalizeSessionUser(session) {
+        if (!session || typeof session !== 'object') return session;
+        let account_type = session.account_type;
+        let role = session.role;
+        if (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeAccountType) {
+            account_type = TVC_RBAC.normalizeAccountType(account_type);
+        } else if (String(account_type || '').toUpperCase() === 'HQ') {
+            account_type = 'SM';
+        }
+        if (typeof TVC_LegacySm !== 'undefined' && TVC_LegacySm.normalizeRole) {
+            role = TVC_LegacySm.normalizeRole(role);
+        }
+        if (account_type === session.account_type && role === session.role) return session;
+        return { ...session, account_type, role };
     }
 
-    async function refreshSessionFromDb() {
-        const session = getCurrentUser();
-        if (!session) return null;
-        const users = await TVC_DB.getAll('users');
-        const user = users.find(u => u.id === session.id)
-            || users.find(u => u.username === session.username);
-        if (!user) return session;
-        const role = user.role || TVC_RBAC.resolveUserRole(user);
-        let station = null;
-        if (session.login_mode && typeof TVC_Space !== 'undefined') {
-            station = TVC_Space.stationFromLoginMode(session.login_mode);
-        } else {
-            station = session.station || null;
-        }
-        let supplierProfile = null;
-        if (user.account_type === 'SUPPLIER' && user.supplier_id) {
-            supplierProfile = await TVC_DB.get('supplier_profiles', user.supplier_id).catch(() => null);
-        }
-        const portal = portalSessionFields(user, supplierProfile);
-        const updated = {
-            ...session,
-            role,
-            account_type: user.account_type,
-            department: (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER')
-                ? null : user.department,
-            display_name: user.display_name,
-            vessel_id: user.vessel_id,
-            company_id: user.company_id || null,
-            ...portal,
-            station,
-            login_mode: session.login_mode || null,
-        };
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(updated));
-        return updated;
+    function persistSession(session) {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
     }
 
     function getCurrentUser() {
         try {
             const raw = sessionStorage.getItem(SESSION_KEY);
-            return raw ? JSON.parse(raw) : null;
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const normalized = normalizeSessionUser(parsed);
+            if (normalized !== parsed) persistSession(normalized);
+            return normalized;
         } catch { return null; }
     }
 
@@ -296,41 +326,33 @@ const TVC_Auth = (function () {
             if (!licCheck.ok) return licCheck;
         }
 
-        if (user.account_type === 'SUPPLIER') {
-            if (loginMode) {
-                return { ok: false, error: 'Supplier accounts must sign in without selecting a Department.' };
-            }
-            let supplierProfile = null;
-            if (user.supplier_id) {
-                supplierProfile = await TVC_DB.get('supplier_profiles', user.supplier_id).catch(() => null);
-            }
-            const session = {
-                id: user.id, username: user.username, display_name: user.display_name,
-                account_type: user.account_type, role: sessionRole,
-                department: null, vessel_id: null, company_id: null,
-                station: null, login_mode: null,
-                ...portalSessionFields(user, supplierProfile),
-            };
-            sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-            return { ok: true, user: session };
-        }
-
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
+        const accountType = (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeAccountType)
+            ? TVC_RBAC.normalizeAccountType(user.account_type)
+            : user.account_type;
+        if (isCompanyPortalAccountType(accountType)) {
             if (loginMode) {
                 return {
                     ok: false,
-                    error: user.account_type === 'ADMIN'
+                    error: accountType === 'ADMIN'
                         ? 'Admin accounts must sign in without selecting a Department.'
-                        : 'Superintendent (hq) accounts must sign in without selecting a Department.',
+                        : (accountType === 'SUPPLIER'
+                            ? 'Supplier accounts must sign in without selecting a Department.'
+                            : 'Superintendent accounts must sign in without selecting a Department.'),
                 };
             }
-            const session = {
+            const session = normalizeSessionUser({
                 id: user.id, username: user.username, display_name: user.display_name,
-                account_type: user.account_type, role: sessionRole,
+                account_type: accountType, role: sessionRole,
                 department: null, vessel_id: user.vessel_id, company_id: user.company_id || null,
+                supplier_id: user.supplier_id || null,
+                company_name: user.company_name || user.display_name || null,
+                contact_person: user.contact_person || null,
+                contact_email: user.contact_email || null,
+                business_scope: user.business_scope || null,
+                service_ports: user.service_ports || null,
                 station: null, login_mode: null,
-            };
-            sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+            });
+            persistSession(session);
             return { ok: true, user: session };
         }
 
@@ -340,16 +362,16 @@ const TVC_Auth = (function () {
             if (!spaceCheck.ok) return spaceCheck;
             station = spaceCheck.station;
         } else if (!loginMode) {
-            return { ok: false, error: 'Select Department (Master / Deck / Engine).' };
+            return { ok: false, error: 'Select Department (Captain / Deck / Engine).' };
         }
 
-        const session = {
+        const session = normalizeSessionUser({
             id: user.id, username: user.username, display_name: user.display_name,
-            account_type: user.account_type, role: sessionRole,
+            account_type: accountType, role: sessionRole,
             department: user.department, vessel_id: user.vessel_id,
             station: station || null, login_mode: loginMode || null,
-        };
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        });
+        persistSession(session);
         return { ok: true, user: session };
     }
 
@@ -443,27 +465,14 @@ const TVC_Auth = (function () {
             }
         }
 
-        if (user.account_type === 'SUPPLIER') {
-            let supplierProfile = null;
-            if (user.supplier_id) {
-                supplierProfile = await TVC_DB.get('supplier_profiles', user.supplier_id).catch(() => null);
-            }
-            const session = {
-                id: user.id, username: user.username, display_name: user.display_name,
-                account_type: user.account_type, role: sessionRole,
-                department: null, vessel_id: null, company_id: null,
-                station: null, login_mode: null,
-                ...portalSessionFields(user, supplierProfile),
-            };
-            sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
-            return session;
-        }
-
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
+        if (user.account_type === 'SM' || user.account_type === 'HQ'
+            || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,
                 account_type: user.account_type, role: sessionRole,
                 department: null, vessel_id: user.vessel_id, company_id: user.company_id || null,
+                supplier_id: user.supplier_id || null,
+                company_name: user.company_name || user.display_name || null,
                 station: null, login_mode: null,
             };
             sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -490,6 +499,8 @@ const TVC_Auth = (function () {
             account_type: user.account_type, role: sessionRole,
             department: user.department, vessel_id: user.vessel_id,
             company_id: user.company_id || null,
+            supplier_id: user.supplier_id || null,
+            company_name: user.company_name || null,
             station: station || null, login_mode: loginMode || null,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -541,7 +552,7 @@ const TVC_Auth = (function () {
     }
 
     return {
-        initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, changePassword, registerSupplier,
+        initUsers, login, logout, getCurrentUser, refreshSessionFromDb, registerSupplier, requirePermission, changePassword,
         upsertProvisionedUser, hashPasswordForProvision, DEMO_PASSWORD, DEFAULT_USERS,
         getSavedId, setSavedId, clearSavedId, savePersistedAuthSession, clearPersistedAuthSession,
         hasPersistedAuthSession, applySavedIdToLoginForm, restorePersistedAuthSession,
