@@ -159,19 +159,34 @@ function resolveMpn(item) {
     return String(fromSpecs || item.impa_code).trim();
 }
 
-/** Default B2B catalog offer — quote on request (GSC Product snippet requires offers). */
+function offerPriceValidUntil() {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() + 1);
+    return d.toISOString().slice(0, 10);
+}
+
+/** Default B2B catalog offer — quote on request (GSC Product / Merchant requires offers + seller). */
 function buildB2bProductOffer(pageUrl) {
+    const origin = storeSeoOrigin();
     return {
         '@type': 'Offer',
         price: '0.00',
         priceCurrency: 'USD',
+        priceValidUntil: offerPriceValidUntil(),
         priceSpecification: {
             '@type': 'UnitPriceSpecification',
             priceType: 'https://schema.org/InvoicePrice',
+            price: '0.00',
+            priceCurrency: 'USD',
         },
         availability: 'https://schema.org/InStock',
         itemCondition: 'https://schema.org/NewCondition',
         url: pageUrl,
+        seller: {
+            '@type': 'Organization',
+            name: 'THE VESSEL CODE (K-TECH)',
+            url: origin,
+        },
     };
 }
 
@@ -212,10 +227,10 @@ function buildTechArticleJsonLd(item, pageUrl) {
             url: storeSeoOrigin(),
         },
         about: {
-            '@type': 'Product',
-            sku: item.impa_code,
-            name: item.name || `IMPA ${item.impa_code}`,
-            offers: buildB2bProductOffer(pageUrl),
+            '@type': 'DefinedTerm',
+            name: `IMPA ${item.impa_code}`,
+            termCode: item.impa_code,
+            description: item.name || `IMPA ${item.impa_code}`,
         },
     };
 }
@@ -291,14 +306,14 @@ function buildStoreItemHtml(item, { origin } = {}) {
 </head>
 <body>
   <main class="wrap">
-    <article class="card" itemscope itemtype="https://schema.org/Product">
+    <article class="card">
       <span class="badge">IMPA ${escapeHtml(item.impa_code)}</span>
-      <h1 itemprop="name">${escapeHtml(heading)}</h1>
+      <h1>${escapeHtml(heading)}</h1>
       <p class="lead">${escapeHtml(description)}</p>
       <div class="grid">
         <section class="plate" aria-label="Catalog plate">
           ${imageUrl
-        ? `<img src="${escapeHtml(plateUrl)}" alt="IMPA ${escapeHtml(item.impa_code)} catalog plate" loading="lazy" itemprop="image">`
+        ? `<img src="${escapeHtml(plateUrl)}" alt="IMPA ${escapeHtml(item.impa_code)} catalog plate" loading="lazy">`
         : `<div class="plate-fallback">Catalog plate reference: ${escapeHtml(item.plate_id || 'Not available')}</div>`}
         </section>
         <section aria-label="Specifications">
