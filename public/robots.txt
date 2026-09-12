@@ -2,6 +2,7 @@ User-agent: *
 Allow: /sitemap.xml
 Allow: /sitemap-core.xml
 Allow: /sitemap-store-1.xml
+Allow: /data/plates/
 Allow: /store/
 Allow: /toolkit
 Allow: /services
@@ -9,4 +10,5 @@ Allow: /sm
 Allow: /contact-us
 
 Sitemap: https://www.thevesselcode.com/sitemap.xml
+Sitemap: https://www.thevesselcode.com/sitemap-core.xml
 Sitemap: https://www.thevesselcode.com/sitemap-store-1.xml

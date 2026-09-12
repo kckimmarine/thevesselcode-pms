@@ -79,7 +79,14 @@ function getItemByCode(code) {
     return expandCompactRow(raw, normalized);
 }
 
+const SEO_PRODUCT_CATEGORY = 'Marine Stores / Ship Equipment';
+
 function derivePlateAssetUrl(item) {
+    const plateId = String(item?.plate_id || '').trim();
+    if (plateId) {
+        const safe = plateId.replace(/[^a-zA-Z0-9._-]/g, '');
+        if (safe) return `/data/plates/${safe}.webp`;
+    }
     const code = item?.impa_code || '';
     const chapter = code.slice(0, 2);
     const segment = code.slice(2, 4);
@@ -119,23 +126,37 @@ function specRows(item) {
     return rows.filter(([, value]) => String(value || '').trim());
 }
 
+function buildOgTitle(item) {
+    const name = item.name || 'Marine Store Item';
+    return `IMPA CODE ${item.impa_code} - ${name}`;
+}
+
 function buildPageTitle(item) {
     const name = item.name || 'Marine Store Item';
-    return `IMPA ${item.impa_code} (${name}) Specs, Dimensions & Marine Stores Guide | The Vessel Code`;
+    return `IMPA CODE ${item.impa_code} - ${name} | THE VESSEL CODE Maritime Catalog`;
 }
 
 function buildPrimaryHeading(item) {
-    const name = item.name || 'Marine Store Item';
-    return `IMPA CODE ${item.impa_code}: ${name}`;
+    return buildOgTitle(item);
+}
+
+function buildOgDescription(item) {
+    return `Technical specification, dimensions, unit, and maritime catalog plate illustration for IMPA ${item.impa_code}.`;
 }
 
 function buildMetaDescription(item) {
     const name = item.name || 'Marine Store Item';
-    return `Technical specifications, dimensions, and marine store catalog details for IMPA ${item.impa_code} (${name}).`;
+    return `${buildOgDescription(item)} ${name}.`;
 }
 
 function buildDescription(item) {
     return buildMetaDescription(item);
+}
+
+function resolveMpn(item) {
+    const specs = item.specs && typeof item.specs === 'object' ? item.specs : {};
+    const fromSpecs = specs['Maker Part No'] || specs['Part No'] || specs.MPN;
+    return String(fromSpecs || item.impa_code).trim();
 }
 
 function buildProductJsonLd(item, pageUrl, imageUrl) {
@@ -144,7 +165,8 @@ function buildProductJsonLd(item, pageUrl, imageUrl) {
         '@type': 'Product',
         name: item.name || `IMPA ${item.impa_code}`,
         sku: item.impa_code,
-        category: item.category,
+        mpn: resolveMpn(item),
+        category: SEO_PRODUCT_CATEGORY,
         description: buildDescription(item),
         url: pageUrl,
         brand: {
@@ -155,7 +177,7 @@ function buildProductJsonLd(item, pageUrl, imageUrl) {
             '@type': 'Organization',
             name: 'THE VESSEL CODE',
         },
-        ...(imageUrl ? { image: imageUrl } : {}),
+        ...(imageUrl ? { image: [imageUrl] } : {}),
     };
 }
 
@@ -192,8 +214,10 @@ function buildStoreItemHtml(item, { origin } = {}) {
     const pageUrl = `${base}/store/${item.impa_code}`;
     const toolkitUrl = `${base}/toolkit?impa=${encodeURIComponent(item.impa_code)}`;
     const title = buildPageTitle(item);
+    const ogTitle = buildOgTitle(item);
     const heading = buildPrimaryHeading(item);
     const description = buildMetaDescription(item);
+    const ogDescription = buildOgDescription(item);
     const plateUrl = derivePlateAssetUrl(item);
     const imageUrl = plateUrl ? `${base}${plateUrl}` : '';
     const rows = specRows(item);
@@ -213,13 +237,14 @@ function buildStoreItemHtml(item, { origin } = {}) {
   <meta name="robots" content="index,follow">
   <meta property="og:type" content="product">
   <meta property="og:site_name" content="THE VESSEL CODE">
-  <meta property="og:title" content="${escapeHtml(title)}">
-  <meta property="og:description" content="${escapeHtml(description)}">
+  <meta property="og:title" content="${escapeHtml(ogTitle)}">
+  <meta property="og:description" content="${escapeHtml(ogDescription)}">
   <meta property="og:url" content="${escapeHtml(pageUrl)}">
   ${imageUrl ? `<meta property="og:image" content="${escapeHtml(imageUrl)}">` : ''}
   <meta name="twitter:card" content="${imageUrl ? 'summary_large_image' : 'summary'}">
-  <meta name="twitter:title" content="${escapeHtml(title)}">
-  <meta name="twitter:description" content="${escapeHtml(description)}">
+  <meta name="twitter:title" content="${escapeHtml(ogTitle)}">
+  <meta name="twitter:description" content="${escapeHtml(ogDescription)}">
+  ${imageUrl ? `<meta name="twitter:image" content="${escapeHtml(imageUrl)}">` : ''}
   <script type="application/ld+json">${jsonLd}</script>
   <style>
     :root { color-scheme: light; font-family: "Segoe UI", system-ui, sans-serif; }
@@ -309,9 +334,13 @@ module.exports = {
     expandCompactRow,
     loadIndex,
     getItemByCode,
+    buildOgTitle,
     buildPageTitle,
     buildPrimaryHeading,
+    buildOgDescription,
     buildMetaDescription,
+    derivePlateAssetUrl,
+    SEO_PRODUCT_CATEGORY,
     buildDescription,
     buildProductJsonLd,
     buildTechArticleJsonLd,
