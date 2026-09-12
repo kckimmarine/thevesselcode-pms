@@ -2,7 +2,8 @@
 const TVC_DataPurge = (function () {
     const LEGACY_VESSEL_ID = 'DM_CHEMICAL_01';
     const LEGACY_PILOT_VESSEL_ID = 'INCHEON CHEMI';
-    const PILOT_VESSEL_ID = typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'TVC No1';
+    const PILOT_VESSEL_ID = typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.PILOT_VESSEL_ID : 'TVC Voyager';
+    const LEGACY_DEMO_VESSEL_ID = 'TVC No1';
     const MASTER_STORES = typeof TVC_MasterVesselScope !== 'undefined'
         ? TVC_MasterVesselScope.MASTER_STORES
         : ['maintenance_jobs', 'maintenance_groups', 'spare_groups', 'ship_components', 'spare_parts'];
@@ -315,7 +316,56 @@ const TVC_DataPurge = (function () {
         } catch (_) {}
 
         await TVC_DB.setMeta(KEY, VER);
-        console.info('[TVC_DataPurge] INCHEON CHEMI master → TVC No1', counts);
+        console.info('[TVC_DataPurge] INCHEON CHEMI master → pilot vessel', counts);
+        return counts;
+    }
+
+    /** TVC No1 → TVC Voyager — demo vessel rename (PMS/SPARE rows + meta). */
+    async function migratePilotVesselIdToVoyagerOnce() {
+        const KEY = 'pilot_vessel_id_migrate';
+        const VER = '20260912-voyager';
+        const done = await TVC_DB.getMeta(KEY).catch(() => null);
+        if (done === VER) return { skipped: true };
+
+        const counts = {};
+        for (const store of MASTER_STORES) {
+            let n = 0;
+            const rows = await TVC_DB.getAll(store).catch(() => []);
+            for (const row of rows) {
+                if (!row) continue;
+                const vid = String(row.vessel_id || '').trim();
+                if (vid === LEGACY_DEMO_VESSEL_ID) {
+                    row.vessel_id = PILOT_VESSEL_ID;
+                    await TVC_DB.put(store, row);
+                    n++;
+                }
+            }
+            counts[store] = n;
+        }
+        try {
+            const users = await TVC_DB.getAll('users').catch(() => []);
+            for (const u of users) {
+                if (String(u.vessel_id || '').trim() === LEGACY_DEMO_VESSEL_ID) {
+                    await TVC_DB.put('users', { ...u, vessel_id: PILOT_VESSEL_ID });
+                }
+            }
+        } catch (_) {}
+        try {
+            const vesselMeta = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID);
+            if (!vesselMeta || vesselMeta === LEGACY_DEMO_VESSEL_ID) {
+                await TVC_DB.setMeta(TVC_META_KEYS.VESSEL_ID, PILOT_VESSEL_ID);
+            }
+        } catch (_) {}
+        try {
+            if (localStorage.getItem('tvc_admin_selected_vessel') === LEGACY_DEMO_VESSEL_ID) {
+                localStorage.setItem('tvc_admin_selected_vessel', PILOT_VESSEL_ID);
+            }
+            if (localStorage.getItem('tvc_fleet_selected') === LEGACY_DEMO_VESSEL_ID) {
+                localStorage.setItem('tvc_fleet_selected', PILOT_VESSEL_ID);
+            }
+        } catch (_) {}
+        await TVC_DB.setMeta(KEY, VER);
+        console.info('[TVC_DataPurge] TVC No1 → TVC Voyager', counts);
         return counts;
     }
 
@@ -355,5 +405,10 @@ const TVC_DataPurge = (function () {
         return summary;
     }
 
-    return { run, migrateIncheonChemiMasterToTvcNo1Once, purgeAllRequisitionsOnce, purgeAllReportsForTestingOnce, purgeBuggyListDataOnce, repairReportJobRefs, repairReportJobRefsOnce, repairReportJobRefsInRows, PURGE_VERSION, LEGACY_VESSEL_ID };
+    return {
+        run, migrateIncheonChemiMasterToTvcNo1Once, migratePilotVesselIdToVoyagerOnce,
+        purgeAllRequisitionsOnce, purgeAllReportsForTestingOnce, purgeBuggyListDataOnce,
+        repairReportJobRefs, repairReportJobRefsOnce, repairReportJobRefsInRows,
+        PURGE_VERSION, LEGACY_VESSEL_ID,
+    };
 })();

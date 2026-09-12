@@ -253,7 +253,7 @@ const PERMISSION_UNIFICATION = [
         templateId: 'WF-04',
         useCase: 'HQ approve success',
         currentVariants: 'Approved by Company.',
-        proposedStandard: 'Approved by HQ.',
+        proposedStandard: 'Approved by Superintendent.',
         replaceCount: '~6',
         notes: 'Company is ambiguous — use HQ or Superintendent',
     },
@@ -280,7 +280,7 @@ const AWKWARD_ENGLISH = [
     ['Vendor registry is not loaded. Please refresh the page (Ctrl+F5).', 'Vendor registry is not loaded. Please refresh the page.', 'Platform', 'js/ui/spareMenu.js', 'Ctrl+F5 is Windows-specific'],
     ['Automatic Import is not available in file:// mode. …', 'Automatic import is not available when opened as a local file. Use npm run serve or the installed app.', 'Developer jargon', 'js/ui/spareMenu.js', 'Simplify file:// message'],
     ['consume Approved by Company. Approved by Superintendent.', 'Approved by HQ Superintendent.', 'Grammar/duplicate', 'js/ui/spareMenu.js', 'Fix lowercase consume prefix in message'],
-    ['O/S closed — approved by Company.', 'Outstanding quantity closed — approved by HQ.', 'Abbreviation', 'js/ui/spareMenu.js', 'Expand O/S'],
+    ['O/S closed — approved by Company.', 'Outstanding quantity closed — approved by Superintendent.', 'Abbreviation', 'js/ui/spareMenu.js', 'Expand O/S'],
 ];
 
 /** UI hints (not modal) with Korean — for completeness. */

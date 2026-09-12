@@ -115,7 +115,7 @@ const TVC_MasterBackup = (function () {
 
     async function resolveVesselId(user, opts = {}) {
         if (opts.vesselId) return opts.vesselId;
-        if (user && TVC_RBAC.isHqAccount(user) && opts.selectedVesselId) return opts.selectedVesselId;
+        if (user && TVC_RBAC.isSmAccount(user) && opts.selectedVesselId) return opts.selectedVesselId;
         return (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || user?.vessel_id || 'SHIP';
     }
 

@@ -21,7 +21,7 @@ const MERGED_GEN_ENGINE_KEY = '__SPARE_MERGE_03_05_GENERATOR__';
 const MERGED_GEN_ENGINE_LABEL = '03. GENERATOR ENGINE';
 
 const USERS = {
-    hq: { username: 'hq', display_name: 'Superintendent', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null },
+    hq: { username: 'hq', display_name: 'Superintendent', account_type: 'SM', role: 'HQ_SUPERVISOR', department: null, vessel_id: null },
     captain: { username: 'captain', display_name: 'Captain', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: PILOT_VESSEL_ID, station: 'CAPTAIN' },
     ce: { username: 'ce', display_name: 'Chief engineer', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: PILOT_VESSEL_ID, station: 'ECR' },
     co: { username: 'co', display_name: 'Chief officer', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: PILOT_VESSEL_ID, station: 'CCR' },
@@ -114,7 +114,7 @@ function assertLoginModeForSku(skuDef, loginMode, accountType) {
 
 function resolveWindowTitleSuffix(user, Space, RBAC) {
     if (!user) return '';
-    if (RBAC.isHqAccount(user)) return 'HQ';
+    if (RBAC.isHqAccount(user)) return 'SM';
     if (Space.isCaptainHub(user)) return 'MASTER';
     if (Space.isDeckVesselMode(user)) return 'DECK';
     if (Space.isEngineVesselMode(user)) return 'ENGINE';

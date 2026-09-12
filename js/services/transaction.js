@@ -82,10 +82,10 @@ const TVC_Transaction = (function () {
         return job;
     }
 
-    /** HQ에서 직접 작성한 Work Report — Work History 로드 조건(hq_synced + vessel_id)에 맞게 태깅 */
+    /** HQ에서 직접 작성한 Work Report — Work History 로드 조건(sm_synced + vessel_id)에 맞게 태깅 */
     async function stampHqLocalReport(report, user) {
-        if (!report || !TVC_RBAC.isHqAccount(user)) return report;
-        report.hq_synced = true;
+        if (!report || !TVC_RBAC.isSmAccount(user)) return report;
+        report.sm_synced = true;
         if (!report.vessel_id) {
             let vesselId = '';
             try {
@@ -370,7 +370,7 @@ const TVC_Transaction = (function () {
             if (!report) throw Object.assign(new Error('REPORT_NOT_FOUND'), { code: 'NOT_FOUND' });
             if (report.is_locked) throw Object.assign(new Error('LOCKED'), { code: 'LOCKED' });
             if (report.sync_status === 'SYNCED' && TVC_RBAC.isConfirmedStatus(report.status, report.is_locked)) {
-                if (!TVC_RBAC.isHqAccount(user)) {
+                if (!TVC_RBAC.isSmAccount(user)) {
                     throw Object.assign(new Error('Submitted reports cannot be modified.'), { code: 'LOCKED' });
                 }
             }
@@ -673,14 +673,14 @@ const TVC_Transaction = (function () {
         return confirmReport(user, report.id);
     }
 
-    /** HQ 공무감독: CONFIRMED → APPROVED + Lock (HQ 작성분은 REPORTED에서도 가능) */
+    /** SM 공무감독: CONFIRMED → APPROVED + Lock (HQ 작성분은 REPORTED에서도 가능) */
     async function approveReport(user, reportId, companyComment, opts = {}) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.CONFIRM_REPORT);
         return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {
             const report = await api.get('daily_work_reports', reportId);
             if (!report) throw Object.assign(new Error('INVALID_REPORT'), { code: 'INVALID' });
             TVC_WorkReport.fromLegacy(report);
-            const hqDirect = TVC_RBAC.canHqDirectApprove(user, report)
+            const hqDirect = TVC_RBAC.canSmDirectApprove(user, report)
                 && (TVC_RBAC.isReportedStatus(report.status, report.is_locked)
                     || TVC_RBAC.isConfirmedStatus(report.status, report.is_locked));
             if (!TVC_RBAC.isConfirmedStatus(report.status, report.is_locked) && !hqDirect) {
@@ -738,7 +738,7 @@ const TVC_Transaction = (function () {
     /** HQ: APPROVED → CONFIRMED (unlock) */
     async function unapproveReport(user, reportId) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.CONFIRM_REPORT);
-        if (!TVC_RBAC.isHqAccount(user) || !TVC_RBAC.canApproveHqReport(user)) {
+        if (!TVC_RBAC.isSmAccount(user) || !TVC_RBAC.canApproveSmReport(user)) {
             throw Object.assign(new Error('HQ unapprove only.'), { code: 'FORBIDDEN' });
         }
         return TVC_DB.runTransaction(['daily_work_reports', 'maintenance_jobs', 'audit_logs'], async (api) => {

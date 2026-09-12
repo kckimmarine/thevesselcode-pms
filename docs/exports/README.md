@@ -15,3 +15,12 @@ Outputs are written to the **repository root** (`context-*.txt`), gitignored —
 Upload order for audit: `context-1-frontend-shell` → `context-2-frontend-app` → … (split mode) or `context-1-frontend.txt` first (monolithic).
 
 Operational workflow: **Shipowner → Gemini → Cursor Agent** (see `docs/GEMINI-COLLAB.md`).
+
+## Legacy / frontend-only bundles
+
+```bash
+npm run export:gemini-context
+npm run export:core-frontend
+```
+
+`export:core-frontend` writes `docs/exports/tvc-core-frontend.txt` for web Files download when generated.

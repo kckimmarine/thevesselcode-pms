@@ -1,6 +1,6 @@
 /* PMS Master Excel — Export / Import (Group · Equipment · Jobs)
- * Department-scoped schema is identical across Engine · Master · HQ (ENGINE file)
- * and Deck · Master · HQ (DECK file). Do not add SKU-specific columns.
+ * Department-scoped schema is identical across Engine · Master · SM (ENGINE file)
+ * and Deck · Master · SM (DECK file). Do not add SKU-specific columns.
  */
 const TVC_PmsMasterExcel = (function () {
     const IMPORT_BUILD_ID = '20260821-crit-equip';
@@ -679,7 +679,7 @@ const TVC_PmsMasterExcel = (function () {
         const wsG = wb.addWorksheet('Group Headers', { views: [{ state: 'frozen', ySplit: DATA_START - 1 }] });
         addMetaRows(wsG, [
             `Vessel: ${vesselId}  ·  PMS Master — ${department} — Group Headers`,
-            'Format shared: Engine · Master · HQ (this DEPARTMENT). Deck uses a separate DECK file.',
+            'Format shared: Engine · Master · SM (this DEPARTMENT). Deck uses a separate DECK file.',
             'Live DB snapshot — PMS GROUP Tree (maintenance_groups + maintenance_jobs) for this department only.',
             'CRITICAL EQUIPMENT = Yes / No. If Group is Yes, jobs in that group count as Critical.',
         ]);

@@ -139,7 +139,7 @@ async function buildRestoreZipBuffer(scope, department) {
         `Direction: HQ_TO_SHIP`,
         `Records: ${recordCount}`,
         '',
-        'Import on vessel: Pull HQ reply (online) or Import ZIP in Master Hub.',
+        'Import on vessel: Pull HQ reply (online) or Import ZIP in Captain Hub.',
     ].join('\n'));
 
     const buffer = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
@@ -189,7 +189,7 @@ async function publishCloudRestore(req, { department, upload = true, exportedBy 
         record_count: built.record_count,
         file_size: built.buffer.length,
         package: uploadResult,
-        ship_pull_hint: 'On vessel Master Hub: Pull HQ reply (online) or Import this ZIP.',
+        ship_pull_hint: 'On vessel Captain Hub: Pull HQ reply (online) or Import this ZIP.',
     };
 }
 

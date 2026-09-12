@@ -3,7 +3,7 @@
 
 /** @deprecated Legacy pilot constants — seat license is source of truth for universal SKUs */
 const COMPANY_ID = 'TVC';
-const PILOT_VESSEL_ID = 'TVC No1';
+const PILOT_VESSEL_ID = 'TVC Voyager';
 const HQ_ALLOWED_VESSEL_IDS = [
     'TVC No1',
 ];
@@ -11,7 +11,7 @@ const HQ_ALLOWED_VESSEL_IDS = [
 const SKUS = {
     VESSEL_MASTER: {
         sku: 'VESSEL_MASTER',
-        label: 'TVC-PMS — Master Hub',
+        label: 'TVC-PMS — Captain Hub',
         companyId: null,
         vesselId: null,
         universal: true,

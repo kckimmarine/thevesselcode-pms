@@ -129,7 +129,7 @@ const TVC_AppUpdate = (function () {
         const notes = String(opts.notes || '').trim();
         const selectedSkus = Array.isArray(opts.skus) && opts.skus.length
             ? opts.skus
-            : ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+            : ['SM_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
         const sourceSetups = Array.isArray(opts.sourceSetups) ? opts.sourceSetups : [];
         const bySku = new Map(sourceSetups.map(s => [s.sku, s]));
 
@@ -171,17 +171,17 @@ const TVC_AppUpdate = (function () {
         if (manifest.delivery_mode === 'company' && manifest.allowed_vessel_ids?.length) {
             readmeLines.push(
                 '',
-                'HQ Ship List / allowedVesselIds (import HQ seat license after registry update):',
+                'HQ Ship List / allowedVesselIds (import SM seat license after registry update):',
                 ...manifest.allowed_vessel_ids.map(id => `  - ${id}`),
                 '',
-                '1. HQ PC: Import this App Update (optional — program version only)',
-                '2. HQ PC: Import new HQ seat license from TVC (required for Ship List scope)',
+                '1. SM PC: Import this App Update (optional — program version only)',
+                '2. SM PC: Import new SM seat license from TVC (required for Ship List scope)',
             );
         } else {
             readmeLines.push(
                 '',
                 'For vessels already using TVC-PMS (data on PC):',
-                '  HQ / Vessel → Data Export & Import → App Update → Import → Install update',
+                '  SM / Vessel → Data Export & Import → App Update → Import → Install update',
                 '',
                 'Does NOT replace Master Excel, Work History, or IndexedDB operational data.',
             );
@@ -194,7 +194,7 @@ const TVC_AppUpdate = (function () {
         return { blob, filename, manifest };
     }
 
-    /** Apply company-scope manifest vessels to HQ Fleet (Ship List). */
+    /** Apply company-scope manifest vessels to SM Fleet (Ship List). */
     function applyCompanyScopeToFleet(manifest) {
         if (!manifest || typeof TVC_Fleet === 'undefined') return;
         const ids = manifest.allowed_vessel_ids || [];

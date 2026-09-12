@@ -98,7 +98,7 @@ const TVC_OutstandingTasks = (function () {
     }
 
     async function requisitionRows(state) {
-        const isHq = state.user && TVC_RBAC.isHqAccount(state.user);
+        const isHq = state.user && TVC_RBAC.isSmAccount(state.user);
         const vesselId = isHq
             ? (state.selectedVesselId || (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || 'SHIP')
             : ((await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID)) || 'SHIP');
@@ -488,7 +488,7 @@ const TVC_OutstandingTasks = (function () {
             openScope = 'total';
         }
 
-        const isHq = TVC_RBAC.isHqAccount(state.user);
+        const isHq = TVC_RBAC.isSmAccount(state.user);
         if (isHq && !state.selectedVesselId) {
             host.innerHTML = renderPanel(bucketDefs(state, []), false, state);
             return;

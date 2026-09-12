@@ -79,7 +79,7 @@ const TVC_RunHours = (function () {
         if (ctx?.onRhToolbarChange) ctx.onRhToolbarChange();
     }
 
-    /** Running Hours는 Engine 전용. HQ All에서도 Engine만, Deck 부서에서는 비표시. */
+    /** Running Hours는 Engine 전용. SM All에서도 Engine만, Deck 부서에서는 비표시. */
     function runningHoursDepartment(state) {
         if (state?.department === 'DECK') return null;
         return 'ENGINE';

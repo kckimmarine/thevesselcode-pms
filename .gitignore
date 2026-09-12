@@ -12,6 +12,7 @@ Thumbs.db
 # Temp
 *.tmp
 gitstatus.tmp
+gemini-full-context.txt
 
 # Mirrored from public/assets for local npm start
 assets/

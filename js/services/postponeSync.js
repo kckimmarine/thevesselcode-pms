@@ -1,4 +1,4 @@
-/* Postpone — Request Export (POSTPONE_REQUEST_TO_HQ) + HQ Reply (POSTPONE_REPLY_HQ_TO_SHIP) */
+/* Postpone — Request Export (POSTPONE_REQUEST_TO_HQ) + SM Reply (POSTPONE_REPLY_SM_TO_SHIP) */
 const TVC_PostponeSync = (function () {
     const SCHEMA_VERSION = '1.0';
     const now = () => new Date().toISOString();
@@ -38,7 +38,7 @@ const TVC_PostponeSync = (function () {
   @media print { body { margin: 10mm; } }
 </style></head><body>
 <div class="meta">
-  <div><b>To:</b> Company (HQ)</div>
+  <div><b>To:</b> Company (SM)</div>
   <div><b>Report ID:</b> ${esc(row.id)}</div>
 </div>
 <h1>POSTPONE REQUEST</h1>
@@ -83,7 +83,7 @@ const TVC_PostponeSync = (function () {
 
     async function resolveVesselId(user, row) {
         return row.vessel_id
-            || await TVC_Sync.resolveExpectedVesselId(user, TVC_RBAC.isHqAccount(user))
+            || await TVC_Sync.resolveExpectedVesselId(user, TVC_RBAC.isSmAccount(user))
             || user?.vessel_id
             || 'UNKNOWN';
     }
@@ -115,7 +115,7 @@ const TVC_PostponeSync = (function () {
                 vessel_id: vesselId,
                 company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
-                direction: 'POSTPONE_REPLY_HQ_TO_SHIP',
+                direction: 'POSTPONE_REPLY_SM_TO_SHIP',
                 package_type: 'POSTPONE_REPORT_REPLY',
                 report_id: reportRow.id,
                 job_code: reportJobCode(reportRow),
@@ -191,7 +191,7 @@ const TVC_PostponeSync = (function () {
                 job_code: reportJobCode(row),
                 record_count: 1,
                 status: 'SUCCESS',
-                space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
+                space: TVC_RBAC.isSmAccount(user) ? 'SM' : 'SHIP',
             });
         }
         return { payload, filename };
@@ -200,8 +200,8 @@ const TVC_PostponeSync = (function () {
     async function exportHqReplyZip(user, reportId) {
         const { row, job } = await loadReportContext(reportId);
         const hubRelay = typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
-        if (!TVC_RBAC.isHqAccount(user) && !hubRelay) {
-            throw new Error('HQ reply export is available on HQ or Master Hub only.');
+        if (!TVC_RBAC.isSmAccount(user) && !hubRelay) {
+            throw new Error('SM reply export is available on SM or Captain Hub only.');
         }
         if (!TVC_RBAC.isApprovedStatus(row.status, row.is_locked)) {
             throw new Error('HQ must approve the postpone report before reply export.');
@@ -213,7 +213,7 @@ const TVC_PostponeSync = (function () {
         const zip = new JSZip();
         zip.file('postpone_report_reply.json', JSON.stringify(payload, null, 2));
         zip.file(`POSTPONE_REPLY_${jobCode}.html`, html);
-        zip.file('README.txt', `TVC-PMS Postpone HQ Reply\nJob: ${reportJobCode(row)}\nDirection: POSTPONE_REPLY_HQ_TO_SHIP`);
+        zip.file('README.txt', `TVC-PMS Postpone SM Reply\nJob: ${reportJobCode(row)}\nDirection: POSTPONE_REPLY_SM_TO_SHIP`);
 
         const filename = `${payload.export_meta.vessel_id}_POSTPONE_REPLY_${jobCode}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
@@ -221,7 +221,7 @@ const TVC_PostponeSync = (function () {
 
         row.sync_status = 'SYNCED';
         row.last_synced_at = now();
-        if (!TVC_RBAC.isHqAccount(user)
+        if (!TVC_RBAC.isSmAccount(user)
             && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)
             && !row.hq_reply_forwarded_at) {
             row.hq_reply_forwarded_at = now();
@@ -230,14 +230,14 @@ const TVC_PostponeSync = (function () {
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
                 type: 'EXPORT',
-                direction: 'POSTPONE_REPLY_HQ_TO_SHIP',
+                direction: 'POSTPONE_REPLY_SM_TO_SHIP',
                 department: row.department || job?.department || 'ALL',
                 vessel_id: payload.export_meta.vessel_id,
                 filename,
                 job_code: reportJobCode(row),
                 record_count: 1,
                 status: 'SUCCESS',
-                space: 'HQ',
+                space: 'SM',
             });
         }
         return { payload, filename };
@@ -252,13 +252,13 @@ const TVC_PostponeSync = (function () {
         const text = await zip.file(jsonName).async('string');
         const payload = JSON.parse(text);
         const direction = payload.export_meta?.direction;
-        const isHq = TVC_RBAC.isHqAccount(user);
+        const isHq = TVC_RBAC.isSmAccount(user);
         const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
 
-        const HQ_ONLY = new Set(['POSTPONE_REQUEST_TO_HQ']);
-        const SHIP_ONLY = new Set(['POSTPONE_REPLY_HQ_TO_SHIP']);
-        if (HQ_ONLY.has(direction) && !isHq && !isHub) {
-            throw new Error('This postpone package is for HQ or Master Hub import only.');
+        const SM_ONLY = new Set(['POSTPONE_REQUEST_TO_SM', 'POSTPONE_REQUEST_TO_HQ']);
+        const SHIP_ONLY = new Set(['POSTPONE_REPLY_SM_TO_SHIP']);
+        if (SM_ONLY.has(direction) && !isHq && !isHub) {
+            throw new Error('This postpone package is for SM or Captain Hub import only.');
         }
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This postpone package is for ship import only.');
@@ -285,7 +285,7 @@ const TVC_PostponeSync = (function () {
                 filename: file.name || '(postpone)',
                 record_count: payload.daily_work_reports?.length || 0,
                 status: 'SUCCESS',
-                space: isHq ? 'HQ' : 'SHIP',
+                space: isHq ? 'SM' : 'SHIP',
             });
         }
         return payload;

@@ -24,7 +24,7 @@ const GLOBAL = [
     ['Vessel Profile Export is available in HQ Mode only.', 'Vessel Profile Export is available in HQ Mode only.'], // already EN
     ['Confirm removed. Consumption returned to Reported.', 'Confirmation removed. Status returned to Reported.'],
     ['Confirm removed. Requisition returned to Reported.', 'Confirmation removed. Status returned to Reported.'],
-    ['Approved by Company.', 'Approved by HQ.'],
+    ['Approved by Company.', 'Approved by Superintendent.'],
     ['Check one or more', 'Select one or more'],
     ['Modify allows only one selected item', 'Modify supports only one selected item'],
     ['Login required.', 'Sign in required.'],
@@ -36,7 +36,7 @@ const GLOBAL = [
     ['ExcelJS library not loaded.', 'Excel export is not available. Please refresh the page (Ctrl+F5).'],
     ['Vendor registry is not loaded. Please refresh the page (Ctrl+F5).', 'Vendor registry is not loaded. Please refresh the page.'],
     ['Complete Evaluation (Eval column) first', 'Complete evaluation for all items first'],
-    ['O/S closed — approved by Company.', 'Outstanding quantity closed — approved by HQ.'],
+    ['O/S closed — approved by Company.', 'Outstanding quantity closed — approved by Superintendent.'],
     ['Each tab is a separate report. Unsaved input on this tab is not kept.\n\nSwitch report type?', 'Unsaved input on this tab will be lost.\n\nSwitch report type?'],
     ['Station access denied', 'Station access denied.'],
     ['Captain / Chief Engineer만 Work Procedure를 수정할 수 있습니다.', 'Only Captain or Chief Engineer can edit the Work Procedure.'],

@@ -56,7 +56,7 @@
             <div class="login-card-head">
                 <h2 class="login-card-title">Sign in to TVC-SM</h2>
                 <p class="login-card-sub">Ship Management — Vessel Core (PMS + SPARE) &amp; Shore Superintendent</p>
-                <p id="loginBetaBadge" class="login-beta-badge hidden" aria-label="Beta version">Beta · Cloud HQ Portal</p>
+                <p id="loginBetaBadge" class="login-beta-badge hidden" aria-label="Beta version">Beta · Cloud SM Portal</p>
                 <p id="loginLicenseBadge" class="login-license-badge muted hidden" aria-live="polite"></p>
             </div>
            <form class="login-form" novalidate onsubmit="event.preventDefault();TVC_App.handleLogin();">
@@ -82,7 +82,7 @@
                     <label for="loginDept">Department</label>
                     <select id="loginDept">
                         <option value="">— Select Department —</option>
-                        <option value="MASTER">Master</option>
+                        <option value="MASTER">Captain</option>
                         <option value="ENGINE">Engine</option>
                         <option value="DECK">Deck</option>
                     </select>
@@ -99,19 +99,18 @@
                 <button type="button" id="loginDownloadBtn" class="login-download-btn">
                     Download Vessel Mode (PC installer)
                 </button>
-                <p class="login-download-note">Install on ship PC · sync to HQ via web portal</p>
+                <p class="login-download-note">Install on ship PC · sync to SM via web portal</p>
             </div>
             <div class="login-hint">
                 <span class="login-hint-label">Demo access</span>
                 Password <strong>0000</strong>
                 <ul class="login-hint-list">
-                    <li><b>Master</b> · captain</li>
+                    <li><b>Captain</b> · captain (Captain Mode · no cross-login with co)</li>
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / co</li>
-                    <li><b>SM / HQ</b> · hq (company vessels · Department not required)</li>
-                    <li><b>SM / HQ</b> · tvc (all company vessels)</li>
+                    <li><b>SM</b> · tvc shipping (company vessels · no Department)</li>
                     <li><b>Supplier</b> · use <b>Register as Supplier / Partner</b> above</li>
-                    <li><b>Admin</b> · admin (Admin Mode · Department not required)</li>
+                    <li><b>Admin</b> · admin (Admin Mode · no Department)</li>
                 </ul>
             </div>
         </div>
@@ -190,7 +189,7 @@
         <section id="tab-menu" class="tab-pane">
             <div id="captainViewDashboard" class="captain-view-dashboard hidden"></div>
             <div class="cmaxs-body" id="cmaxsMenuBody">
-                <div class="hq-left-col hidden" id="hqLeftCol">
+                <div class="sm-left-col hidden" id="smLeftCol">
                     <div class="hq-administration-host" id="cmaxsCardsSidebar"></div>
                     <aside id="fleetListPanel" class="fleet-list-panel" data-admin-layout="1">
                         <div class="fleet-search-bar">
@@ -325,7 +324,7 @@
                 <div class="hist-toolbar hist-toolbar-actions filter-bar">
                     <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Report</button>
                     <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Confirm</button>
-                    <button type="button" id="histBtnHqApprove" class="btn btn-sm btn-green hidden" disabled onclick="TVC_App.histHqReportApproval()">Approve</button>
+                    <button type="button" id="histBtnSmApprove" class="btn btn-sm btn-green hidden" disabled onclick="TVC_App.histSmReportApproval()">Approve</button>
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" id="histBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_App.histModifyReport()">Modify</button>
                     <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
@@ -899,6 +898,54 @@
 
 <div id="listFilterPopFloat" class="list-filter-pop list-filter-pop-float hidden" role="dialog" aria-label="List filters"></div>
 
+<div id="supplier-register-modal" class="modal hidden supplier-register-modal" role="dialog" aria-labelledby="supplierRegisterTitle" aria-modal="true">
+    <div class="modal-box supplier-register-box" onclick="event.stopPropagation()">
+        <button type="button" id="supplierRegisterCloseBtn" class="modal-x" aria-label="Close">×</button>
+        <h3 id="supplierRegisterTitle">Register as Supplier / Partner</h3>
+        <p class="supplier-register-sub muted">Create your Supplier Portal account. All fields are stored locally on this device.</p>
+        <form id="supplierRegisterForm" class="supplier-register-form" novalidate>
+            <div class="login-field">
+                <label for="supplierRegUserId">User ID</label>
+                <input id="supplierRegUserId" type="text" autocomplete="username" required maxlength="64">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegPassword">Password</label>
+                <input id="supplierRegPassword" type="password" autocomplete="new-password" required minlength="4">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegCompany">Supplier / Company Name</label>
+                <input id="supplierRegCompany" type="text" autocomplete="organization" required maxlength="120"
+                    placeholder="e.g. ABC Marine Service">
+            </div>
+            <fieldset id="supplierRegScope" class="supplier-scope-fieldset">
+                <legend>Business Scope</legend>
+                <label class="login-check"><input type="checkbox" value="spares"> <span>Spares Supply</span></label>
+                <label class="login-check"><input type="checkbox" value="engine"> <span>Engine Repair</span></label>
+                <label class="login-check"><input type="checkbox" value="stores"> <span>Stores</span></label>
+                <label class="login-check"><input type="checkbox" value="electrical"> <span>Electrical</span></label>
+            </fieldset>
+            <div class="login-field">
+                <label for="supplierRegContact">Contact Person</label>
+                <input id="supplierRegContact" type="text" autocomplete="name" required maxlength="80">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegEmail">Contact Email</label>
+                <input id="supplierRegEmail" type="email" autocomplete="email" required maxlength="120">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegPorts">Service Base Ports</label>
+                <input id="supplierRegPorts" type="text" required maxlength="200"
+                    placeholder="e.g. Busan, Yeosu, Singapore">
+            </div>
+            <div id="supplierRegErr" class="login-err" role="alert"></div>
+            <div class="modal-actions supplier-register-actions">
+                <button type="button" id="supplierRegisterCancelBtn" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-green">Create Supplier Account</button>
+            </div>
+        </form>
+    </div>
+</div>
+
 <div id="fileProtocolModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('fileProtocolModal')">
     <div class="modal-box">
         <button class="modal-x" onclick="TVC_App.closeModal('fileProtocolModal')">×</button>
@@ -978,7 +1025,7 @@
 <script src="js/services/onlineSync.js?v=20260903-web-cloud"></script>
 <script src="js/services/cloudMirror.js?v=20260903-web-cloud"></script>
 <script src="js/services/webCloudState.js?v=20260903-web-cloud"></script>
-<script src="js/services/hqLiveSync.js?v=20260903-web-cloud"></script>
+<script src="js/services/smLiveSync.js?v=20260912-sm-rename"></script>
 <script src="js/services/fleet.js?v=20260831-tvc-ref"></script>
 <script src="js/services/adminRegistry.js?v=20260831-tvc-ref"></script>
 <script src="js/services/accountProvisioning.js?v=20260831-tvc-ref"></script>

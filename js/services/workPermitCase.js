@@ -99,8 +99,8 @@ const TVC_WorkPermitCaseService = (function () {
             'ship_attachments', 'company_attachments',
         ];
         fields.forEach(k => {
-            if (k === 'ship_attachments' && TVC_RBAC.isHqAccount(user)) return;
-            if ((k === 'company_comment' || k === 'company_attachments') && !TVC_RBAC.isHqAccount(user)) return;
+            if (k === 'ship_attachments' && TVC_RBAC.isSmAccount(user)) return;
+            if ((k === 'company_comment' || k === 'company_attachments') && !TVC_RBAC.isSmAccount(user)) return;
             if (payload[k] !== undefined) row[k] = payload[k];
         });
         row.checked_estimated_spare_parts = payload.checked_estimated_spare_parts === true
@@ -143,10 +143,10 @@ const TVC_WorkPermitCaseService = (function () {
             row.confirmed_at = '';
         }
         if (approve && !row.approved_at) {
-            if (!TVC_RBAC.isHqAccount(user)) {
+            if (!TVC_RBAC.isSmAccount(user)) {
                 throw Object.assign(new Error('HQ approval only.'), { code: 'FORBIDDEN' });
             }
-            const hqDirect = TVC_RBAC.canHqDirectApprove(user, row);
+            const hqDirect = TVC_RBAC.canSmDirectApprove(user, row);
             if (!row.confirmed_at && !hqDirect) {
                 throw Object.assign(new Error('Confirm required before Approve.'), { code: 'INVALID_STATUS' });
             }
@@ -158,16 +158,16 @@ const TVC_WorkPermitCaseService = (function () {
             row.approved_at = today;
         }
         if (unapprove && (row.approved_at || row.approved_by)) {
-            if (!TVC_RBAC.isHqAccount(user)) {
+            if (!TVC_RBAC.isSmAccount(user)) {
                 throw Object.assign(new Error('HQ unapprove only.'), { code: 'FORBIDDEN' });
             }
-            if (TVC_WorkPermit.isHqReplyExported(row)) {
+            if (TVC_WorkPermit.isSmReplyExported(row)) {
                 throw Object.assign(new Error('Exported permit cannot be unapproved.'), { code: 'LOCKED' });
             }
             row.approved_by = '';
             row.approved_at = '';
         }
-        if (company_comment !== undefined && TVC_RBAC.isHqAccount(user)) {
+        if (company_comment !== undefined && TVC_RBAC.isSmAccount(user)) {
             row.company_comment = String(company_comment ?? '');
         }
         markPending(row);
@@ -176,12 +176,12 @@ const TVC_WorkPermitCaseService = (function () {
     }
 
     async function saveCompanyComment(user, id, comment, extras = {}) {
-        if (!TVC_RBAC.isHqAccount(user)) {
+        if (!TVC_RBAC.isSmAccount(user)) {
             throw Object.assign(new Error('HQ only.'), { code: 'FORBIDDEN' });
         }
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Permit not found.'), { code: 'NOT_FOUND' });
-        if (TVC_WorkPermit.isHqReplyExported(row)) {
+        if (TVC_WorkPermit.isSmReplyExported(row)) {
             throw Object.assign(new Error('Reply already exported — Company Comments cannot be changed.'), { code: 'LOCKED' });
         }
         row.company_comment = String(comment ?? '');
@@ -196,7 +196,7 @@ const TVC_WorkPermitCaseService = (function () {
     async function deleteCase(user, id) {
         const row = await get(id);
         if (!row) return;
-        const hqImportedCleanup = user && TVC_RBAC.isHqAccount(user) && row.hq_synced
+        const hqImportedCleanup = user && TVC_RBAC.isSmAccount(user) && row.sm_synced
             && (row.approved_at || row.approved_by) && row.sync_status !== 'SYNCED';
         if (!hqImportedCleanup && !TVC_WorkPermit.canDeleteListWorkflow(row)) {
             throw Object.assign(new Error('Cannot delete this permit.'), { code: 'LOCKED' });

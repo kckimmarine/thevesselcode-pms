@@ -16,7 +16,7 @@ const TVC_SpareSync = (function () {
     }
 
     function isHqUser(user) {
-        return !!(typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isHqAccount?.(user));
+        return !!(typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSmAccount?.(user));
     }
 
     function resolveSpareExportScope(user, category, department, opts = {}) {

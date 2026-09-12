@@ -1,4 +1,4 @@
-/** THE VESSEL CODE — Phase E: Cloud snapshot → HQ_TO_SHIP restore package */
+/** THE VESSEL CODE — Phase E: Cloud snapshot → SM_TO_SHIP restore package */
 const TVC_CloudRestore = (function () {
     function restoreHeaders(user) {
         const headers = typeof TVC_OnlineSync !== 'undefined'
@@ -22,9 +22,9 @@ const TVC_CloudRestore = (function () {
         return { vesselId, companyId };
     }
 
-    /** Build HQ_TO_SHIP package on server and upload for vessel online pull. */
+    /** Build SM_TO_SHIP package on server and upload for vessel online pull. */
     async function publishRestoreToVessel(user, opts = {}) {
-        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!TVC_RBAC.isSmAccount(user)) throw new Error('HQ or Admin account required.');
         if (typeof TVC_OnlineSync === 'undefined' || !TVC_OnlineSync.isAvailable()) {
             throw new Error(TVC_OnlineSync?.statusMessage?.() || 'Online sync is not available.');
         }
@@ -51,13 +51,13 @@ const TVC_CloudRestore = (function () {
         }
         await TVC_Sync.recordSyncHistory({
             type: 'EXPORT',
-            direction: 'HQ_TO_SHIP',
+            direction: 'SM_TO_SHIP',
             department,
             vessel_id: vesselId,
             filename: payload.filename || 'cloud_restore.zip',
             record_count: payload.record_count || 0,
             status: 'SUCCESS',
-            space: 'HQ',
+            space: 'SM',
             channel: 'ONLINE',
             package_type: 'CLOUD_RESTORE',
         });
@@ -66,7 +66,7 @@ const TVC_CloudRestore = (function () {
 
     /** Download restore ZIP for offline FBB transfer to vessel. */
     async function downloadRestoreZip(user, opts = {}) {
-        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!TVC_RBAC.isSmAccount(user)) throw new Error('HQ or Admin account required.');
         if (typeof TVC_OnlineSync === 'undefined' || !TVC_OnlineSync.isAvailable()) {
             throw new Error(TVC_OnlineSync?.statusMessage?.() || 'Online sync is not available.');
         }

@@ -123,8 +123,8 @@ const Postpone = loadModule('js/services/postponeSync.js', 'TVC_PostponeSync');
 const CE = { username: 'ce', role: 'SHIP_CHIEF', department: 'ENGINE', station: 'ECR', account_type: 'SHIP', vessel_id: 'INCHEON CHEMI' };
 const CO = { username: 'co', role: 'SHIP_CAPTAIN', department: 'DECK', station: 'CCR', account_type: 'SHIP', vessel_id: 'INCHEON CHEMI' };
 const CAPTAIN = { username: 'captain', role: 'SHIP_CAPTAIN', department: null, station: 'CAPTAIN', account_type: 'SHIP', vessel_id: 'INCHEON CHEMI' };
-const HQ = { username: 'hq', role: 'HQ_SUPERVISOR', department: 'ENGINE', account_type: 'HQ', vessel_id: 'INCHEON CHEMI' };
-const HQ_DECK = { username: 'hq', role: 'HQ_SUPERVISOR', department: 'DECK', account_type: 'HQ', vessel_id: 'INCHEON CHEMI' };
+const HQ = { username: 'hq', role: 'HQ_SUPERVISOR', department: 'ENGINE', account_type: 'SM', vessel_id: 'INCHEON CHEMI' };
+const HQ_DECK = { username: 'hq', role: 'HQ_SUPERVISOR', department: 'DECK', account_type: 'SM', vessel_id: 'INCHEON CHEMI' };
 
 let pass = 0;
 let fail = 0;
