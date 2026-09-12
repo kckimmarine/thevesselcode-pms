@@ -21,6 +21,7 @@
     "test:seo-sitemap": "node scripts/test-seo-sitemap.mjs",
     "verify:seo-gsc": "node scripts/verify-seo-gsc-ready.mjs",
     "test:home-landing": "node scripts/test-home-landing.mjs",
+    "export:file-map": "node scripts/export-repo-file-map.mjs",
     "setup:vercel-domains": "node scripts/setup-vercel-domains.mjs",
     "setup:vercel-store-seo": "node scripts/setup-vercel-store-seo-env.mjs",
     "deploy:bluehost": "node scripts/deploy-bluehost.mjs",
