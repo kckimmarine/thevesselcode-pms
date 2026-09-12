@@ -33,7 +33,12 @@ const TVC_SupplierRegister = (function () {
 
     function openModal() {
         const modal = el(MODAL_ID);
-        if (!modal) return;
+        if (!modal) {
+            console.warn('[TVC] supplier register modal missing');
+            showToast('Registration form is not loaded. Hard refresh (Ctrl+Shift+R) and try again.');
+            return;
+        }
+        bind();
         modal.classList.remove('hidden');
         const err = el('supplierRegErr');
         if (err) err.textContent = '';
@@ -108,8 +113,15 @@ const TVC_SupplierRegister = (function () {
         return String(v || '').trim();
     }
 
+    let bound = false;
+
     function bind() {
-        el('supplierRegisterOpenBtn')?.addEventListener('click', () => openModal());
+        if (bound) return;
+        bound = true;
+        el('supplierRegisterOpenBtn')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            openModal();
+        });
         el('supplierRegisterCloseBtn')?.addEventListener('click', () => closeModal());
         el('supplierRegisterCancelBtn')?.addEventListener('click', () => closeModal());
         el(MODAL_ID)?.addEventListener('click', (e) => {
@@ -125,3 +137,7 @@ const TVC_SupplierRegister = (function () {
     return { init, openModal, closeModal, showToast };
 })();
 if (typeof window !== 'undefined') window.TVC_SupplierRegister = TVC_SupplierRegister;
+// End of body scripts: bind before TVC_App.boot() finishes IndexedDB (boot used to be the only init path).
+if (typeof window !== 'undefined' && window.TVC_SupplierRegister) {
+    try { window.TVC_SupplierRegister.init(); } catch (e) { console.warn('[TVC] supplier register early init', e); }
+}

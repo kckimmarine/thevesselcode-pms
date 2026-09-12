@@ -379,6 +379,7 @@ const TVC_App = (function () {
             try { await syncLoginAppVersion(); } catch (e) { console.warn('[TVC] version', e); }
             try { TVC_Config?.applyLoginChrome?.(); } catch (e) { console.warn('[TVC] login chrome', e); }
             try { TVC_Config?.applyEmbedChrome?.(); } catch (e) { console.warn('[TVC] embed chrome', e); }
+            try { TVC_SupplierRegister?.init(); } catch (e) { console.warn('[TVC] supplier register', e); }
             if (typeof TVC_License !== 'undefined') {
                 try {
                     const lic = await TVC_License.refresh();
@@ -415,7 +416,6 @@ const TVC_App = (function () {
             } catch (e) { console.warn('[TVC] provisioned accounts sync', e); }
 
             try { TVC_Auth.applySavedIdToLoginForm(); } catch (e) { console.warn('[TVC] saved login id', e); }
-            try { TVC_SupplierRegister?.init(); } catch (e) { console.warn('[TVC] supplier register', e); }
 
             ['loginUser', 'loginPass', 'loginDept'].forEach(id => {
                 document.getElementById(id)?.addEventListener('keydown', e => {
