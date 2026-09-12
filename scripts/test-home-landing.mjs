@@ -33,8 +33,7 @@ check('app host root rewrite', rewrites.some((r) => r.source === '/' && r.destin
 check('marketing host root rewrite', rewrites.some((r) => r.source === '/' && r.destination === '/home/index.html'));
 check('services rewrite', rewrites.some((r) => r.destination === '/services/index.html'));
 check('sm rewrite', rewrites.some((r) => r.destination === '/sm/index.html'));
-check('pms redirects to sm', redirects.some((r) => r.source === '/pms' && r.destination === '/sm'));
-check('pms slash redirects to sm', redirects.some((r) => r.source === '/pms/' && r.destination === '/sm'));
+check('no pms redirect to sm', !redirects.some((r) => r.source === '/pms' || r.source === '/pms/'));
 check('pms not rewritten to app', !rewrites.some((r) => r.destination === '/pms/index.html'));
 check('contact-us rewrite', rewrites.some((r) => r.destination === '/contact-us/index.html'));
 
@@ -65,8 +64,7 @@ check('sm fleet demo CTA', sm.includes('Request Fleet Demo') && sm.includes('hre
 check('sm sections', sm.includes('Vessel Core (PMS + SPARE)') && sm.includes('Shore Superintendent oversight') && sm.includes('Automated RFQ workflows'));
 check('home explore sm internal', home.includes('href="/sm"'));
 
-const pmsRedirect = readFileSync(join(ROOT, 'pms/index.html'), 'utf8');
-check('pms legacy redirect page', pmsRedirect.includes('/sm'));
+check('pms marketing page removed', !existsSync(join(ROOT, 'pms/index.html')));
 
 const contact = readFileSync(join(ROOT, 'contact-us/index.html'), 'utf8');
 check('contact us title', contact.includes('Contact Us | THE VESSEL CODE'));
@@ -107,6 +105,7 @@ if (existsSync(join(ROOT, 'dist/sm/index.html'))) {
     const distSm = readFileSync(join(ROOT, 'dist/sm/index.html'), 'utf8');
     check('dist/sm/index.html is TVC-SM intro', distSm.includes('Integrated Ship Management Platform'));
 }
+check('dist has no pms route', !existsSync(join(ROOT, 'dist/pms/index.html')));
 
 const failed = results.filter((r) => !r.ok);
 if (failed.length) {

@@ -14,7 +14,6 @@ const STATIC_PATHS = [
   'home',
   'services',
   'sm',
-  'pms',
   'contact-us',
   'toolkit.html',
   'about-contact',

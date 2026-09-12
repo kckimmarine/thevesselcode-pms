@@ -46,7 +46,7 @@ const TVC_Config = (function () {
         return WEB_HOSTS.has(host) || host.endsWith('.vercel.app');
     }
 
-    /** Opened inside thevesselcode.com/sm iframe (or ?embed=1). Legacy /pms redirects to /sm. */
+    /** Opened inside thevesselcode.com/sm iframe (or ?embed=1). Legacy /pms is not published (404). */
     function isEmbedded() {
         try {
             const q = new URLSearchParams(location.search);
