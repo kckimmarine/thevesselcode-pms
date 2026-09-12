@@ -464,16 +464,10 @@ const TVC_App = (function () {
             deptJobs,
             jobMatchesActualFilter,
             jobActualStatusKind,
-                    jobShowsCriticalEquipmentMark,
+            jobShowsCriticalEquipmentMark,
             menuNavigate,
-                    menuAction,
-                    rhUpdateGateApplies,
-                    isRhUpdateCommitted,
-                    isOriginalPlanUpdateLocked,
-                    getPlanLockDept,
-                    getMonthlyRhGatePendingEntries,
-                    monthlyRhGatePendingReason,
-                });
+            smWorkspaceNavigate,
+        });
             } catch (e) { console.error('[TVC] OutstandingTasks init', e); }
         window.addEventListener('tvc:spics-requisition-suggest', (e) => {
             state.spicsAlerts = e.detail?.alerts || [];
@@ -9899,6 +9893,16 @@ const TVC_App = (function () {
         if (view === 'outstandingRate') {
             renderOutstandingRateView();
         }
+    }
+
+    /** Menu outstanding tasks / SM shortcuts → RFQ workspace or tab + filters */
+    function smWorkspaceNavigate(target, opts = {}) {
+        const key = String(target || '').trim().toLowerCase();
+        if (key === 'rfq' || key === 'smrfq') {
+            void openSmRfqWorkspace();
+            return;
+        }
+        menuNavigate(target, opts);
     }
 
     /** 메뉴 카드 클릭 → 해당 탭 전환 + 필터 적용 (switchTab과 완전 결합) */

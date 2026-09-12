@@ -10,6 +10,29 @@ const TVC_OutstandingTasks = (function () {
 
     function init(context) { ctx = context; }
 
+    /** Canonical navigation: SM RFQ workspace or in-app tab (never throws). */
+    function invokeNavigate(tab, opts = {}) {
+        if (!ctx) return;
+        try {
+            if (typeof ctx.smWorkspaceNavigate === 'function') {
+                ctx.smWorkspaceNavigate(tab, opts);
+                return;
+            }
+            if (typeof ctx.menuNavigate === 'function') {
+                ctx.menuNavigate(tab, opts);
+                return;
+            }
+            const key = String(tab || '').trim().toLowerCase();
+            if (key === 'rfq' || key === 'smrfq') {
+                window.TVC_App?.openSmRfqWorkspace?.();
+                return;
+            }
+            window.TVC_App?.switchTab?.(tab);
+        } catch (err) {
+            console.warn('[TVC_OutstandingTasks] navigate failed', err);
+        }
+    }
+
     function esc(s) {
         return String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
     }
@@ -257,7 +280,7 @@ const TVC_OutstandingTasks = (function () {
                 count: overdue.length,
                 items: overdue,
                 renderItem: j => jobItemHtml(j, 'overdue'),
-                navigate: () => ctx.menuNavigate('actual', { actualFilter: 'overdue' }),
+                navigate: () => invokeNavigate('actual', { actualFilter: 'overdue' }),
             },
             due: {
                 key: 'due',
@@ -267,7 +290,7 @@ const TVC_OutstandingTasks = (function () {
                 count: due.length,
                 items: due,
                 renderItem: j => jobItemHtml(j, 'due30'),
-                navigate: () => ctx.menuNavigate('actual', { actualFilter: 'due30' }),
+                navigate: () => invokeNavigate('actual', { actualFilter: 'due30' }),
             },
             postponed: {
                 key: 'postponed',
@@ -277,7 +300,7 @@ const TVC_OutstandingTasks = (function () {
                 count: postponed.length,
                 items: postponed,
                 renderItem: j => jobItemHtml(j, 'postponed'),
-                navigate: () => ctx.menuNavigate('actual', { actualFilter: 'postponed' }),
+                navigate: () => invokeNavigate('actual', { actualFilter: 'postponed' }),
             },
             defect: {
                 key: 'defect',
@@ -287,7 +310,7 @@ const TVC_OutstandingTasks = (function () {
                 count: defect.length,
                 items: defect,
                 renderItem: dc => defectItemHtml(dc, state),
-                navigate: () => ctx.menuNavigate('history', { historyFilter: { type: 'd' } }),
+                navigate: () => invokeNavigate('history', { historyFilter: { type: 'd' } }),
             },
             lowStock: {
                 key: 'lowStock',
@@ -298,7 +321,7 @@ const TVC_OutstandingTasks = (function () {
                 items: lowStock,
                 renderItem: s => lowStockItemHtml(s, 'lowStock'),
                 navigate: () => {
-                    ctx.menuNavigate('spare');
+                    invokeNavigate('spare');
                     TVC_SpareMenu.showLowStockOnly?.();
                 },
             },
@@ -311,7 +334,7 @@ const TVC_OutstandingTasks = (function () {
                 items: legalLowStock,
                 renderItem: s => lowStockItemHtml(s, 'legalLowStock'),
                 navigate: () => {
-                    ctx.menuNavigate('spare');
+                    invokeNavigate('spare');
                     if (TVC_SpareMenu.showLegalLowStockOnly) TVC_SpareMenu.showLegalLowStockOnly();
                     else TVC_SpareMenu.setSpareFilter?.('legalLowStock');
                 },
@@ -325,7 +348,7 @@ const TVC_OutstandingTasks = (function () {
                 items: requisition,
                 renderItem: requisitionItemHtml,
                 navigate: () => {
-                    ctx.menuNavigate('spare');
+                    invokeNavigate('spare');
                     TVC_SpareMenu.viewRequisitionList?.();
                 },
             },
@@ -527,10 +550,15 @@ const TVC_OutstandingTasks = (function () {
     }
 
     function viewAll(key) {
-        const state = ctx.getState();
-        const buckets = bucketDefs(state, state._outstandingReqCache || []);
-        const b = buckets[key];
-        if (b?.navigate) b.navigate();
+        if (!ctx) return;
+        try {
+            const state = ctx.getState();
+            const buckets = bucketDefs(state, state._outstandingReqCache || []);
+            const b = buckets[key];
+            if (b?.navigate) b.navigate();
+        } catch (err) {
+            console.warn('[TVC_OutstandingTasks] viewAll failed', err);
+        }
     }
 
     function openItem(key) {
