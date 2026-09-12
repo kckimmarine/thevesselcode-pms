@@ -9,6 +9,8 @@
     "export-pms-master-sample": "node scripts/export-pms-master-sample.mjs",
     "export-spare-master-sample": "node scripts/export-spare-master-sample.mjs",
     "build": "node scripts/vercel-static-build.mjs",
+    "export:modular-context": "node scripts/export-modular-context.mjs",
+    "export:modular-context:split": "node scripts/export-modular-context.mjs --split",
     "generate:impa-seo": "node scripts/generate-impa-seo-index.mjs && node scripts/generate-sitemap.mjs",
     "push:indexing": "node scripts/push-indexing.mjs",
     "ping:sitemaps": "node scripts/ping-sitemaps.mjs",
