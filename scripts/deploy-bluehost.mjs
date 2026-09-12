@@ -61,13 +61,13 @@ async function uploadFile({ host, user, pass, localPath, remotePath }) {
     url,
   ];
   let lastErr;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 5; attempt++) {
     try {
       await execFileAsync('curl', args);
       return;
     } catch (err) {
       lastErr = err;
-      if (attempt < 3) await new Promise(r => setTimeout(r, attempt * 2000));
+      if (attempt < 5) await new Promise(r => setTimeout(r, attempt * 3000));
     }
   }
   throw lastErr;
