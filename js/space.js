@@ -9,8 +9,8 @@ const TVC_Space = (function () {
 
     const Direction = {
         STATION_TO_HUB: 'STATION_TO_HUB',
-        SHIP_TO_HQ: 'SHIP_TO_HQ',
-        HQ_TO_SHIP: 'HQ_TO_SHIP',
+        SHIP_TO_SM: 'SHIP_TO_SM',
+        SM_TO_SHIP: 'SM_TO_SHIP',
     };
 
     /** Logical API endpoints guarded per station */
@@ -24,7 +24,7 @@ const TVC_Space = (function () {
         HUB_IMPORT: 'HUB_IMPORT',
         COMPANY_EXPORT: 'COMPANY_EXPORT',
         MONITOR_ALL: 'MONITOR_ALL',
-        HQ_FEEDBACK_IMPORT: 'HQ_FEEDBACK_IMPORT',
+        SM_FEEDBACK_IMPORT: 'SM_FEEDBACK_IMPORT',
     };
 
     const STATION_LABELS = {
@@ -36,21 +36,21 @@ const TVC_Space = (function () {
     const STATION_ENDPOINTS = {
         [Station.CCR]: new Set([
             Endpoint.DECK_WORK, Endpoint.PENDING_REPORT, Endpoint.STATION_EXPORT,
-            Endpoint.APPROVE_DECK, Endpoint.HQ_FEEDBACK_IMPORT,
+            Endpoint.APPROVE_DECK, Endpoint.SM_FEEDBACK_IMPORT,
         ]),
         [Station.ECR]: new Set([
             Endpoint.ENGINE_WORK, Endpoint.PENDING_REPORT, Endpoint.STATION_EXPORT,
-            Endpoint.APPROVE_ENGINE, Endpoint.HQ_FEEDBACK_IMPORT,
+            Endpoint.APPROVE_ENGINE, Endpoint.SM_FEEDBACK_IMPORT,
         ]),
         [Station.CAPTAIN]: new Set([
             Endpoint.MONITOR_ALL, Endpoint.DECK_WORK, Endpoint.ENGINE_WORK,
             Endpoint.PENDING_REPORT, Endpoint.APPROVE_DECK, Endpoint.APPROVE_ENGINE,
-            Endpoint.HUB_IMPORT, Endpoint.COMPANY_EXPORT, Endpoint.HQ_FEEDBACK_IMPORT,
+            Endpoint.HUB_IMPORT, Endpoint.COMPANY_EXPORT, Endpoint.SM_FEEDBACK_IMPORT,
         ]),
     };
 
 
-    /** Login UI — Master / Deck / Engine (maps to internal station) */
+    /** Login UI — Captain (MASTER) / Deck / Engine (maps to internal station) */
     const LoginMode = {
         MASTER: 'MASTER',
         DECK: 'DECK',
@@ -58,7 +58,7 @@ const TVC_Space = (function () {
     };
 
     const LOGIN_MODE_LABELS = {
-        MASTER: 'Master',
+        MASTER: 'Captain',
         DECK: 'Deck',
         ENGINE: 'Engine',
     };
@@ -70,7 +70,7 @@ const TVC_Space = (function () {
     };
 
     const LOGIN_MODE_DENIED = {
-        [LoginMode.MASTER]: 'Vessel Mode - Master allows Captain (captain) accounts only.',
+        [LoginMode.MASTER]: 'Captain Mode login is for Captain (captain) accounts only.',
         [LoginMode.DECK]: 'Vessel Mode - Deck allows Officer (officer) or Chief officer (co) accounts only.',
         [LoginMode.ENGINE]: 'Vessel Mode - Engine allows Engineer (engineer) or Chief engineer (ce) accounts only.',
     };
@@ -88,7 +88,7 @@ const TVC_Space = (function () {
 
     function getStation(user) {
         if (!user) return null;
-        // login_mode is authoritative (avoids stale session.station blocking Master hub import)
+        // login_mode is authoritative (avoids stale session.station blocking Captain hub import)
         if (user.login_mode) return stationFromLoginMode(user.login_mode);
         if (user.station) return user.station;
         return null;
@@ -116,12 +116,13 @@ const TVC_Space = (function () {
     /** Login gate — loginMode: MASTER | DECK | ENGINE */
     function validateLogin(user, loginMode) {
         if (!user) return { ok: false, error: 'Unable to verify account.' };
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
-            return { ok: false, error: 'HQ accounts must sign in without selecting a Department.' };
+        const acct = TVC_RBAC.normalizeAccountType?.(user.account_type) || user.account_type;
+        if (acct === 'SM' || acct === 'ADMIN' || acct === 'SUPPLIER') {
+            return { ok: false, error: 'Company accounts must sign in without selecting a Department.' };
         }
 
         if (!loginMode || !LOGIN_MODE_LABELS[loginMode]) {
-            return { ok: false, error: 'Select Department (Master / Deck / Engine).' };
+            return { ok: false, error: 'Select Department (Captain / Deck / Engine).' };
         }
 
         const uname = String(user.username || '').toLowerCase();
@@ -137,7 +138,7 @@ const TVC_Space = (function () {
     /** Client-side endpoint middleware */
     function canEndpoint(user, endpoint) {
         if (!user) return false;
-        if (TVC_RBAC.isHqAccount(user)) return true;
+        if (TVC_RBAC.isSmAccount(user)) return true;
         const station = getStation(user);
         if (!station) return false;
         const allowed = STATION_ENDPOINTS[station];
@@ -158,16 +159,16 @@ const TVC_Space = (function () {
 
     /** Map RBAC actions → station endpoints */
     function assertAction(user, action) {
-        if (!user || TVC_RBAC.isHqAccount(user)) return;
+        if (!user || TVC_RBAC.isSmAccount(user)) return;
         const station = getStation(user);
         if (!station) return;
 
         const map = {
             [TVC_RBAC.Action.CREATE_DAILY_REPORT]: user.department === 'DECK' ? Endpoint.DECK_WORK : Endpoint.ENGINE_WORK,
             [TVC_RBAC.Action.EDIT_OWN_PENDING_REPORT]: Endpoint.PENDING_REPORT,
-            [TVC_RBAC.Action.APPROVE_DAILY_REPORT]: user.role === 'SHIP_CAPTAIN' ? Endpoint.APPROVE_DECK : Endpoint.APPROVE_ENGINE,
+            [TVC_RBAC.Action.APPROVE_DAILY_REPORT]: TVC_RBAC.isDeckApproverRole(user.role) ? Endpoint.APPROVE_DECK : Endpoint.APPROVE_ENGINE,
             [TVC_RBAC.Action.EXPORT_SHIP_SYNC]: Endpoint.STATION_EXPORT,
-            [TVC_RBAC.Action.IMPORT_SHIP_SYNC]: Endpoint.HQ_FEEDBACK_IMPORT,
+            [TVC_RBAC.Action.IMPORT_SHIP_SYNC]: Endpoint.SM_FEEDBACK_IMPORT,
         };
         const ep = map[action];
         if (ep) assertEndpoint(user, ep);
@@ -184,27 +185,25 @@ const TVC_Space = (function () {
 
     function canAccessDepartment(user, dept) {
         if (!user) return false;
-        if (TVC_RBAC.isHqAccount(user)) return TVC_RBAC.canAccessDepartment(user, dept);
+        if (TVC_RBAC.isSmAccount(user)) return TVC_RBAC.canAccessDepartment(user, dept);
         if (isCaptainHub(user)) return true;
         const fd = fixedDepartment(getStation(user));
         if (fd) return !dept || dept === fd;
         return TVC_RBAC.canAccessDepartment(user, dept);
     }
 
-    /** Approval: Master(Captain) → all depts; ECR(C/E) → Engine; CCR(C/O) → Deck */
+    /** Approval: ECR(ce) → Engine; CCR(co) → Deck · Captain hub does not approve */
     function canApproveReport(user, dept) {
         if (!user || !TVC_RBAC.isApprover(user)) return false;
+        if (isCaptainHub(user)) return false;
         dept = String(dept || '').trim().toUpperCase();
         if (!dept) return false;
-        if (isCaptainHub(user)) {
-            return user.role === 'SHIP_CAPTAIN';
-        }
         const station = getStation(user);
         if (station === Station.ECR) {
-            return user.role === 'SHIP_CHIEF' && dept === 'ENGINE';
+            return TVC_RBAC.isEngineApproverRole(user.role) && dept === 'ENGINE';
         }
         if (station === Station.CCR) {
-            return user.role === 'SHIP_CAPTAIN' && dept === 'DECK';
+            return TVC_RBAC.isDeckApproverRole(user.role) && dept === 'DECK';
         }
         if (!station) {
             return TVC_RBAC.isApprover(user) && String(user.department || '').trim().toUpperCase() === dept;
@@ -213,7 +212,7 @@ const TVC_Space = (function () {
     }
 
     function isDeckVesselMode(user) {
-        if (!user || TVC_RBAC.isHqAccount(user)) return false;
+        if (!user || TVC_RBAC.isSmAccount(user)) return false;
         if (isCaptainHub(user)) return false;
         const station = getStation(user);
         if (station === Station.CCR) return true;
@@ -221,7 +220,7 @@ const TVC_Space = (function () {
     }
 
     function isEngineVesselMode(user) {
-        if (!user || TVC_RBAC.isHqAccount(user)) return false;
+        if (!user || TVC_RBAC.isSmAccount(user)) return false;
         if (isCaptainHub(user) || isDeckVesselMode(user)) return false;
         const station = getStation(user);
         if (station === Station.ECR) return true;
@@ -231,30 +230,31 @@ const TVC_Space = (function () {
     /** Deck CCR 확인자 — Chief officer (co) */
     function isDeckChief(user) {
         if (!user || getStation(user) !== Station.CCR) return false;
-        return user.role === 'SHIP_CAPTAIN';
+        return TVC_RBAC.isDeckApproverRole(user.role);
     }
 
     /** Engine ECR 확인자 — Chief engineer (ce) */
     function isEngineChief(user) {
         if (!user || getStation(user) !== Station.ECR) return false;
-        return user.role === 'SHIP_CHIEF';
+        return TVC_RBAC.isEngineApproverRole(user.role);
     }
 
-    /** Station PC Data Export/Import — Deck: co only · Engine: ce only · Master/HQ: hub rules */
+    /** Station PC Data Export/Import — Deck: co only · Engine: ce only · Captain hub / HQ: hub rules */
     function canStationDataXfer(user) {
         if (!user) return false;
-        if (TVC_RBAC.isHqAccount(user)) return true;
+        if (TVC_RBAC.isSmAccount(user)) return true;
         const station = getStation(user);
         if (station === Station.CCR) return isDeckChief(user);
         if (station === Station.ECR) return isEngineChief(user);
-        if (isCaptainHub(user)) return user.role === 'SHIP_CAPTAIN';
+        if (isCaptainHub(user)) return true;
         return false;
     }
 
     function getUiFeatures(user) {
         const base = { ...TVC_RBAC.getUiFeatures(user) };
         if (!user) return base;
-        if (TVC_RBAC.isSuperHqAccount?.(user)) {
+        if (TVC_RBAC.isSupplierAccount?.(user)) return base;
+        if (TVC_RBAC.isSuperSmAccount?.(user)) {
             base.showRunningHours = true;
             base.canEditRunningHours = true;
             base.showSpareTab = true;
@@ -264,7 +264,7 @@ const TVC_Space = (function () {
             base.showAppUpdateImport = true;
             return base;
         }
-        if (TVC_RBAC.isHqAccount(user)) {
+        if (TVC_RBAC.isSmAccount(user)) {
             base.showRunningHours = true;
             base.canEditRunningHours = true;
             base.showSpareTab = true;
@@ -307,20 +307,20 @@ const TVC_Space = (function () {
         if (isCaptainHub(user)) {
             base.showCaptainDashboard = false;
             base.showHubImport = true;
-            base.showCompanyExport = user.role === 'SHIP_CAPTAIN';
-            base.showCompanyImport = user.role === 'SHIP_CAPTAIN';
-            base.showHubStationExport = TVC_RBAC.isApprover(user);
+            base.showCompanyExport = true;
+            base.showCompanyImport = true;
+            base.showHubStationExport = true;
             base.showStationExport = false;
             base.showExportShip = false;
             base.showImportShip = true;
             base.showDataXfer = true;
             base.showOnlineSync = true;
-            base.showApprovalQueue = TVC_RBAC.isApprover(user);
+            base.showApprovalQueue = false;
             base.showDefectReport = true;
             base.showDefectInbox = true;
-            base.showDefectImportUrgent = true;
-            base.showDefectUrgentExport = TVC_RBAC.isApprover(user);
-            // Master Hub aggregates station data — no local RH / Original Plan update
+            base.showDefectImportUrgent = false;
+            base.showDefectUrgentExport = true;
+            // Captain Hub aggregates station data — no local RH / Original Plan update
             base.showUpdateWorkPlan = false;
             base.showModifyOriginalPlan = false;
             base.canEditRunningHours = false;
@@ -331,7 +331,7 @@ const TVC_Space = (function () {
         } else {
             base.showSpareTab = !isDeckVesselMode(user);
         }
-        // HQ / Vessel may Import App Update packages (app binary only — not Master/History)
+        // SM / Vessel may Import App Update packages (app binary only — not Master/History)
         base.showAppUpdateImport = true;
         return base;
     }
@@ -340,10 +340,11 @@ const TVC_Space = (function () {
         if (!user) return '—';
         if (TVC_RBAC.isAdminAccount?.(user)) return 'Admin Mode';
         if (TVC_RBAC.isFleetMonitorAccount?.(user)) return 'Fleet Monitor';
-        if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'HQ Mode';
-        if (TVC_RBAC.isSuperHqAccount?.(user)) return 'Admin Mode';
-        if (TVC_RBAC.isHqAccount(user)) return 'HQ Mode';
-        if (isCaptainHub(user)) return 'Vessel Mode - Master';
+        if (TVC_RBAC.isSupplierAccount?.(user)) return 'Supplier Mode';
+        if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'SM Mode';
+        if (TVC_RBAC.isSuperSmAccount?.(user)) return 'Admin Mode';
+        if (TVC_RBAC.isSmAccount(user)) return 'SM Mode';
+        if (isCaptainHub(user)) return 'Captain Mode';
         const station = getStation(user);
         if (station === Station.CCR) return 'Vessel Mode - Deck';
         if (station === Station.ECR) return 'Vessel Mode - Engine';
@@ -353,7 +354,7 @@ const TVC_Space = (function () {
     }
 
     function canSwitchDepartmentView(user) {
-        return TVC_RBAC.isHqAccount(user) || isCaptainHub(user);
+        return TVC_RBAC.isSmAccount(user) || isCaptainHub(user);
     }
 
     return {

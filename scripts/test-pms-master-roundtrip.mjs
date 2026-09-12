@@ -199,7 +199,7 @@ function seedRunHourExpected(department, group, expectedNextMonth, scope = 'SHIP
 }
 
 const CE_USER = { username: 'ce', display_name: 'Chief engineer', role: 'SHIP_CHIEF', department: 'ENGINE' };
-const HQ_USER = { username: 'hq', display_name: 'Superintendent', role: 'HQ_SUPERVISOR', account_type: 'HQ' };
+const HQ_USER = { username: 'hq', display_name: 'Superintendent', role: 'HQ_SUPERVISOR', account_type: 'SM' };
 const CAPTAIN_USER = { username: 'captain', display_name: 'Captain', role: 'SHIP_CAPTAIN', department: 'DECK', station: 'CAPTAIN' };
 const CO_USER = { username: 'co', display_name: 'Chief officer', role: 'SHIP_CAPTAIN', department: 'DECK', station: 'CCR' };
 

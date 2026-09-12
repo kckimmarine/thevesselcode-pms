@@ -1,4 +1,4 @@
-/** THE VESSEL CODE — Web HQ shared cloud state (any PC sees the same records). */
+/** THE VESSEL CODE — Web SM shared cloud state (any PC sees the same records). */
 const TVC_WebCloudState = (function () {
     const CHUNK = 200;
     const PUSH_DEBOUNCE_MS = 1600;
@@ -11,7 +11,7 @@ const TVC_WebCloudState = (function () {
         try {
             if (typeof TVC_Config === 'undefined' || !TVC_Config.isWebDeploy?.()) return false;
         } catch (_) { return false; }
-        if (!user || typeof TVC_RBAC === 'undefined' || !TVC_RBAC.isHqAccount(user)) return false;
+        if (!user || typeof TVC_RBAC === 'undefined' || !TVC_RBAC.isSmAccount(user)) return false;
         if (typeof TVC_OnlineSync === 'undefined' || !TVC_OnlineSync.isAvailable()) return false;
         return true;
     }
@@ -55,7 +55,7 @@ const TVC_WebCloudState = (function () {
         const meta = {};
         if (typeof TVC_PMS !== 'undefined') {
             try {
-                const scope = TVC_PMS.scopeOf('HQ', vesselId);
+                const scope = TVC_PMS.scopeOf('SM', vesselId);
                 const store = TVC_PMS.readStore(scope);
                 if (store && typeof store === 'object' && Object.keys(store).length) {
                     meta.run_hours = store;

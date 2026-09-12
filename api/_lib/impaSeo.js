@@ -268,7 +268,7 @@ function buildStoreItemHtml(item, { origin } = {}) {
         <a class="btn btn-primary" href="${escapeHtml(toolkitUrl)}">Open Interactive Maritime Toolkit</a>
         <a class="btn btn-secondary" href="${escapeHtml(`${base}/toolkit`)}">Browse Full IMPA Catalog</a>
       </div>
-      <p class="conversion-hook">&#9875; Vessel ROB Tracking &amp; 1-Click Requisition available on <a href="${escapeHtml(`${base}/pms`)}">TVC-PMS</a>.</p>
+      <p class="conversion-hook">&#9875; Vessel ROB Tracking &amp; 1-Click Requisition available on <a href="${escapeHtml(`${base}/sm`)}">TVC-SM</a>.</p>
       <p class="footer">THE VESSEL CODE — offline-first PMS + SPICS and maritime toolkit for shipboard operations.</p>
     </article>
   </main>

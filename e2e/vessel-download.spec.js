@@ -12,7 +12,7 @@ test.describe('Vessel download picker', () => {
 
     const items = modal.locator('.vessel-download-item');
     await expect(items).toHaveCount(3);
-    await expect(items.nth(0)).toContainText('Master');
+    await expect(items.nth(0)).toContainText('Captain');
     await expect(items.nth(1)).toContainText('Engine');
     await expect(items.nth(2)).toContainText('Deck');
 

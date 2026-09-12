@@ -32,7 +32,7 @@
                 <tbody>
                     <tr><td><strong>① Universal Setup</strong></td><td>New company/vessel · verify Registry → Setup ZIP</td></tr>
                     <tr><td><strong>② Universal App Update</strong></td><td>Existing pool · program-only replace · no MR/License</td></tr>
-                    <tr><td><strong>③ Company App Update</strong></td><td>Vessel add, etc. · manifest <strong>allowedVesselIds</strong> → reissue HQ license</td></tr>
+                    <tr><td><strong>③ Company App Update</strong></td><td>Vessel add, etc. · manifest <strong>allowedVesselIds</strong> → reissue SM license</td></tr>
                 </tbody>
             </table>
 
@@ -50,23 +50,23 @@
             ${renderChecklist('A. New company + vessel', [
                 ['1', 'Company/vessel registry', '<strong>Company &amp; Vessel Registry</strong>'],
                 ['2', 'Setup ZIP', '<strong>Deliver → Universal Setup</strong> (after Registry check)'],
-                ['3', 'Deliver', 'HQ: HQ Setup · vessel: Master / Engine / Deck Setup'],
+                ['3', 'Deliver', 'HQ: SM Setup · vessel: Master / Engine / Deck Setup'],
                 ['4', 'License', 'machine request → <strong>Issue seat license</strong> (HQ=Company, Vessel=Company+Vessel)'],
                 ['5', 'Master', '<strong>PMS &amp; SPARE MASTER.xlsx</strong> prepare & deliver → customer Import'],
             ])}
-            <p class="spare-sync-note muted">Licenses per PC: HQ 1 + 3 per vessel PC (Master / Engine / Deck)</p>
+            <p class="spare-sync-note muted">Licenses per PC: SM 1 + 3 per vessel PC (Master / Engine / Deck)</p>
 
             ${renderChecklist('B. Existing pool — App Update (maintenance)', [
                 ['1', 'Shared ZIP', '<strong>Deliver → Universal App Update</strong>'],
-                ['2', 'Deliver', 'same ZIP to pool vessel HQ / Vessel PCs'],
+                ['2', 'Deliver', 'same ZIP to pool vessel SM / Vessel PCs'],
                 ['3', 'Apply', 'Import → Install update · keep Master / History'],
             ])}
 
             ${renderChecklist('C. Existing company — add vessel', [
                 ['1', 'Register new vessel', '<strong>Company &amp; Vessel Registry</strong>'],
                 ['2', 'Company App Update', '<strong>Deliver → Company App Update</strong> (allowedVesselIds)'],
-                ['3', 'Reissue HQ license', '<strong>Issue seat license</strong> (HQ · select Company)'],
-                ['4', 'New PC', '3 Vessel Setups + 3 licenses · HQ Import license'],
+                ['3', 'Reissue SM license', '<strong>Issue seat license</strong> (HQ · select Company)'],
+                ['4', 'New PC', '3 Vessel Setups + 3 licenses · SM Import license'],
                 ['5', 'Master', 'New vessel Master Excel → Import'],
             ])}
             <p class="spare-sync-note muted">No need to rebuild universal Setup ZIP (reuse same Setup)</p>
@@ -80,7 +80,7 @@
             <table class="admin-sop-table admin-sop-table-compact">
                 <thead><tr><th>SKU</th><th>Admin selection</th></tr></thead>
                 <tbody>
-                    <tr><td>HQ_OFFICE</td><td>Company → all active vessels → allowedVesselIds</td></tr>
+                    <tr><td>SM_OFFICE</td><td>Company → all active vessels → allowedVesselIds</td></tr>
                     <tr><td>VESSEL_MASTER / ENGINE / DECK</td><td>Company + Vessel</td></tr>
                 </tbody>
             </table>

@@ -4,7 +4,7 @@ This file helps **Cursor Cloud Agents**, **Cursor IDE**, and **Gemini** work on 
 
 ## Product summary
 
-**THE VESSEL CODE (TVC-PMS)** is an offline-first PMS + SPICS web app for vessel stations and HQ. Data sync is **ZIP export/import only** — no live cloud API in normal ship operation.
+**THE VESSEL CODE (TVC-PMS)** is an offline-first PMS + SPICS web app for vessel stations and **SM (Ship Management)**. Data sync is **ZIP export/import only** — no live cloud API in normal ship operation.
 
 | Layer | Path |
 |-------|------|
@@ -41,13 +41,15 @@ npm run verify-all           # RBAC + sync checks
 
 | User | Dept | Role | Typical use |
 |------|------|------|-------------|
-| `officer` | Deck | Officer | PMS report input |
-| `engineer` | Engine | Engineer | PMS + SPARE consumption |
-| `ce` | Engine | Chief Engineer | Confirm + SPARE admin |
-| `captain` | Deck | Captain | Confirm + export |
-| `hq` | — | HQ | Approve imported reports |
+| `officer` | Deck | SHIP_OFFICER | PMS report input |
+| `co` | Deck | SHIP_CO | Deck department head — confirm (sign in with **Deck**) |
+| `engineer` | Engine | SHIP_ENGINEER | PMS + SPARE consumption |
+| `ce` | Engine | SHIP_CE | Engine confirm + SPARE admin |
+| `captain` | Captain | SHIP_CAPTAIN | **Captain Hub** — SM ↔ Deck/Engine relay (no Deck/Engine confirm) |
+| `tvc shipping` | — | SM (`TVC_SHIPPING`) | Contract company superintendent |
+| `admin` | — | ADMIN | Admin Mode (registry / license) |
 
-Demo vessel: **INCHEON CHEMI**
+Demo vessel: **TVC Voyager** · contract company: **TVC_SHIPPING**
 
 ---
 
@@ -78,9 +80,9 @@ Demo vessel: **INCHEON CHEMI**
 
 ```
 Author (officer/engineer) → Save → REPORTED
-Chief (ce/captain)        → Confirm → CONFIRMED (+ schedule / stock rules apply)
-HQ (hq)                   → Approve → APPROVED (locked)
-Ship ↔ HQ                 → ZIP export/import (sync_status)
+Chief (ce/co) → Confirm → CONFIRMED (+ schedule / stock rules apply)
+SM (tvc shipping) → Approve → APPROVED (locked)
+Ship ↔ SM → ZIP export/import (sync_status)
 ```
 
 Stock paths (today):

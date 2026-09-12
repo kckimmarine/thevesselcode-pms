@@ -36,7 +36,9 @@ for (const u of ['dm_user@thevesselcode.com', "username: 'admin'"]) {
   else { console.error('MISSING account', u); ok = false; }
 }
 
-if (auth.includes("seed_password: 'kimkc9363#@'")) console.log('OK admin seed password');
+const adminSeedOk = auth.includes("seed_password: 'admin'")
+  || auth.includes("seed_password: 'kimkc9363#@'");
+if (adminSeedOk) console.log('OK admin seed password');
 else { console.error('MISSING admin seed password'); ok = false; }
 
 const bluehostEmbed = join(root, 'bluehost/pms/index.html');

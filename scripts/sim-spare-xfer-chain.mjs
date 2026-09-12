@@ -185,7 +185,7 @@ async function runDeptChain(dept) {
         username: 'hq',
         role: 'HQ_SUPERVISOR',
         department: dept,
-        account_type: 'HQ',
+        account_type: 'SM',
         vessel_id: VESSEL,
     };
 
@@ -319,7 +319,7 @@ async function runNegativeTests() {
     const reqZip = zipFromLastSave(engDb);
     try {
         await importReqZip(
-            { username: 'hq', department: 'ENGINE', account_type: 'HQ', vessel_id: VESSEL },
+            { username: 'hq', department: 'ENGINE', account_type: 'SM', vessel_id: VESSEL },
             reqZip,
             { expectedCategory: 'QUOTATION' },
         );
@@ -341,7 +341,7 @@ async function runNegativeTests() {
     installGlobals(hqEngDb);
     try {
         const imp = await importReqZip(
-            { username: 'hq', department: 'ENGINE', account_type: 'HQ', vessel_id: VESSEL },
+            { username: 'hq', department: 'ENGINE', account_type: 'SM', vessel_id: VESSEL },
             deckZip,
             { expectedCategory: 'REQUISITION' },
         );
@@ -359,7 +359,7 @@ async function runNegativeTests() {
     setupHqQuote(engineReq);
     const targets = [{ slot: 0, vendorName: 'X', currency: 'USD', lines: engineReq.lines }];
     await TVC_SpareSync.exportQuotationZip(
-        { username: 'hq', department: 'ENGINE', account_type: 'HQ', vessel_id: VESSEL },
+        { username: 'hq', department: 'ENGINE', account_type: 'SM', vessel_id: VESSEL },
         engineReq,
         targets,
         { isHq: true },
@@ -367,7 +367,7 @@ async function runNegativeTests() {
     const quoteZip = zipFromLastSave(orphanDb);
     try {
         await importReqZip(
-            { username: 'hq', department: 'ENGINE', account_type: 'HQ', vessel_id: VESSEL },
+            { username: 'hq', department: 'ENGINE', account_type: 'SM', vessel_id: VESSEL },
             quoteZip,
             { expectedCategory: 'QUOTATION', importMode: 'vendor-quote' },
         );

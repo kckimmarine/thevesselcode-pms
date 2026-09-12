@@ -122,7 +122,7 @@ const TVC_AdminPrint = (function () {
                 </tr>`;
             }).join('') || '<tr><td colspan="7">No vessels</td></tr>';
             return `
-                <h2>${esc(c.name)} (${esc(c.company_id)}) · HQ ${esc(hqVer)} · ${vessels.length} vessel(s)</h2>
+                <h2>${esc(c.name)} (${esc(c.company_id)}) · SM ${esc(hqVer)} · ${vessels.length} vessel(s)</h2>
                 <p class="meta">Status: ${esc(c.status)} · Setup: ${esc(c.deploy?.setup_version || '—')} · Sent: ${esc(c.deploy?.setup_sent_at || '—')}</p>
                 <table>
                     <thead><tr><th>No</th><th>Vessel ID</th><th>IMO</th><th>Delivery</th><th>Status</th><th>Setup ver</th><th>Version</th></tr></thead>

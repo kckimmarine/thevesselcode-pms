@@ -17,8 +17,8 @@
     { "source": "/maritime-toolkit/", "destination": "/toolkit", "permanent": true },
     { "source": "/impa", "destination": "/toolkit", "permanent": true },
     { "source": "/impa/", "destination": "/toolkit", "permanent": true },
-    { "source": "/maritime-pms", "destination": "/pms", "permanent": true },
-    { "source": "/maritime-pms/", "destination": "/pms", "permanent": true }
+    { "source": "/maritime-pms", "destination": "/sm", "permanent": true },
+    { "source": "/maritime-pms/", "destination": "/sm", "permanent": true }
   ],
   "rewrites": [
     {
@@ -37,12 +37,12 @@
       "destination": "/home/index.html"
     },
     { "source": "/services", "destination": "/services/index.html" },
-    { "source": "/pms", "destination": "/pms/index.html" },
+    { "source": "/sm", "destination": "/sm/index.html" },
     { "source": "/contact-us", "destination": "/contact-us/index.html" },
     { "source": "/toolkit", "destination": "/toolkit.html" },
     { "source": "/store/:code", "destination": "/api/store/:code" },
     {
-      "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|app.html|toolkit.html|store-public.html|about-contact|home|services|pms|contact-us|store|sitemap|robots\\.txt).+)",
+      "source": "/((?!vendor|js|css|icons|data|public|admin|downloads|bluehost|api|manifest.json|service-worker.js|package.json|app.html|toolkit.html|store-public.html|home|services|sm|contact-us|store|sitemap|robots\\.txt).+)",
       "has": [{ "type": "host", "value": "app.thevesselcode.com" }],
       "destination": "/app.html"
     }

@@ -59,7 +59,7 @@ const TVC_SeatLicense = (function () {
             ['SKU', req.skuLabel || req.sku || '—'],
             ['App version', req.appVersion || '—'],
             ['Company', req.companyId || '—'],
-            ['Vessel', req.vesselId || '(HQ)'],
+            ['Vessel', req.vesselId || '(SM)'],
             ['Machine ID', req.machineId || '—'],
             ['Host', req.hostname || '—'],
             ['User', req.username || '—'],

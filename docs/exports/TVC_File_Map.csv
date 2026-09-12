@@ -1,0 +1,57 @@
+﻿대분류,경로,존재,역할 설명,대표님 체크
+CI/CD,.github/workflows/,폴더,"GitHub Actions — Vercel 배포, IMPA 수집, Electron 빌드 등 자동화",보통 무시
+문서,AGENTS.md,파일,"Cursor/Gemini용 개발 가이드 (어디를 수정할지, 테스트 방법)",AI 협업 시 참고
+문서,README.md,파일,"로컬 실행(npm start), 프로젝트 개요",가끔 확인
+문서,docs/,폴더,"UI 맵, 워크플로, RBAC, 모바일 UX, Gemini 협업 메모",기능 설명·인수인계
+문서,docs/UI-MAP.md,파일,화면·모달·메뉴 구조 단일 진실 원천,UI 변경 시 업데이트
+문서,docs/workflow-manual-v1.md,파일,리포트·승인·ZIP 동기화 업무 흐름,운영·교육
+문서,docs/exports/,폴더,"Gemini/엑셀용 export 결과물 (CSV, txt)",생성물 보관
+마케팅 웹,home/,폴더,thevesselcode.com 홈 (/) — 회사 소개 랜딩,문구·CTA 수정
+마케팅 웹,sm/,폴더,TVC-SM 소개 페이지 (/sm),문구·CTA 수정
+마케팅 웹,services/,폴더,서비스 소개 (/services),가끔
+마케팅 웹,contact-us/,폴더,문의 폼 (/contact-us),가끔
+마케팅 웹,about-contact/,폴더,레거시 경로 — contact-us로 리다이렉트,거의 무시
+마케팅 웹,toolkit.html,파일,Maritime Toolkit / IMPA (/toolkit),가끔
+마케팅 웹,js/marketing-shell.js,파일,"공통 상단 네비·푸터 (Home, Services, TVC-SM, Contact)",메뉴 링크
+마케팅 웹,css/home.css,파일,랜딩·SM 페이지 스타일,디자인
+배포,vercel.json,파일,"Vercel 라우팅: /, /sm, app 호스트, 리다이렉트",URL 변경 시
+배포·SEO,public/,폴더,"sitemap, robots.txt, 대용량 IMPA JSON (빌드 시 dist로 복사)",SEO·스토어 URL
+배포,bluehost/,폴더,Bluehost 수동 업로드용 HTML 스냅샷 (iframe 등),Bluehost만
+TVC-SM 앱,index.html,파일,★ 로그인 후 PMS+SPARE 앱 껍데기 (app.thevesselcode.com / 로컬 :3000),핵심
+TVC-SM 앱,js/app.js,파일,"★ 메인 UI 오케스트레이션 (메뉴, 리포트, 모달)",핵심
+TVC-SM 앱,js/auth.js,파일,로그인·세션·데모 계정 시드,계정/비밀번호
+TVC-SM 앱,js/rbac.js,파일,권한·역할·부서 범위,핵심
+TVC-SM 앱,js/space.js,파일,Master/Deck/Engine/Captain 스테이션 모드,선박 UX
+TVC-SM 앱,js/config.js,파일,환경·embed·웹 HQ 설정,가끔
+TVC-SM 앱,js/pms.js,파일,PMS 스케줄·런아워 헬퍼 (리포트 UI 아님),주의: 폼은 app.js
+TVC-SM 앱,js/core/db.js,파일,IndexedDB 연결·업그레이드,데이터 구조
+TVC-SM 앱,js/core/schema.js,파일,IndexedDB 스키마·DB_VERSION,데이터 구조
+TVC-SM 앱,js/core/legacySm.js,파일,HQ→SM 레거시 필드 정규화,동기화
+TVC-SM 앱,js/ui/spareMenu.js,파일,SPARE 인벤토리·소비 UI,핵심
+TVC-SM 앱,js/ui/defectReport.js,파일,Defect Report UI,핵심
+TVC-SM 앱,js/ui/workPermit.js,파일,Work Permit UI,핵심
+TVC-SM 앱,js/ui/supplierWorkspace.js,파일,공급사 포털 워크스페이스,RFQ·견적
+TVC-SM 앱,js/ui/rfqWorkspace.js,파일,SM RFQ → 공급사 토스 UI,RFQ
+TVC-SM 앱,js/services/transaction.js,파일,리포트 확인·스톡 차감 규칙,핵심
+TVC-SM 앱,js/services/inventoryService.js,파일,원자적 스톡 소비,핵심
+TVC-SM 앱,js/services/sync.js,파일,ZIP보내기/가져오기 동기화,선박↔본사
+TVC-SM 앱,js/services/supplierRfqPipeline.js,파일,RFQ·견적·PO 파이프라인,RFQ
+TVC-SM 앱,css/app.css,파일,앱 전체 스타일 (모바일 @768px),UI
+TVC-SM 앱,service-worker.js,파일,PWA·오프라인 캐시,배포 시
+TVC-SM 앱,data/pms-unified.json,파일,PMS 마스터 시드 (Excel import 결과),초기 데이터
+운영·Admin,admin/,폴더,"회사/선박 registry JSON, 계약 템플릿",신규 고객 세팅
+운영·Admin,admin/registry.json,파일,Admin Mode 회사·선박 목록,신규 고객
+데스크톱,electron/,폴더,"Electron 앱 (선박 PC 설치본, 라이선스 게이트)",배포·라이선스
+데스크톱,downloads/,폴더,Vessel Mode 설치 exe (manifest),다운로드 링크
+클라우드 API,api/,폴더,"Vercel serverless (store SEO, sync, feedback 등)",웹 HQ·스토어
+도구,scripts/,폴더,빌드·테스트·IMPA·sitemap·라이선스 유틸,명령만 실행
+도구,scripts/vercel-static-build.mjs,파일,npm run build → dist/ 생성,배포 전
+도구,scripts/export-repo-file-map.mjs,파일,이 CSV 파일 지도 생성,엑셀용
+테스트,e2e/,폴더,Playwright E2E,QA
+테스트,TEST_REPORT.md,파일,E2E 골든 패스 기록,QA
+빌드 결과,dist/,폴더,"npm run build 출력 — Git에 올리지 않음, Vercel이 생성",직접 수정 금지
+의존성,node_modules/,폴더,npm 패키지 — 자동 설치,무시
+릴리스,release/,폴더,버전별 handoff txt/json (내부 전달),히스토리
+소스(미러),src/,폴더,일부 RBAC/DB TypeScript 미러 — 브라우저는 js/ 사용,보통 js/ 우선
+참고,database/schema.sql,파일,Postgres 스키마 참고 (선박은 IndexedDB),참고만
+배포,deploy/,폴더,Bluehost/Vercel 배포 스크립트·env 예시,배포 담당

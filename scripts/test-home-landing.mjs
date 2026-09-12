@@ -17,7 +17,7 @@ function check(name, ok, detail = '') {
 
 check('home/index.html exists', existsSync(join(ROOT, 'home/index.html')));
 check('services/index.html exists', existsSync(join(ROOT, 'services/index.html')));
-check('pms/index.html exists', existsSync(join(ROOT, 'pms/index.html')));
+check('sm/index.html exists', existsSync(join(ROOT, 'sm/index.html')));
 check('contact-us/index.html exists', existsSync(join(ROOT, 'contact-us/index.html')));
 check('js/marketing-shell.js exists', existsSync(join(ROOT, 'js/marketing-shell.js')));
 check('css/marketing-shell.css exists', existsSync(join(ROOT, 'css/marketing-shell.css')));
@@ -32,8 +32,9 @@ check('no / -> /home/ redirect', !redirects.some((r) => r.destination === '/home
 check('app host root rewrite', rewrites.some((r) => r.source === '/' && r.destination === '/app.html'));
 check('marketing host root rewrite', rewrites.some((r) => r.source === '/' && r.destination === '/home/index.html'));
 check('services rewrite', rewrites.some((r) => r.destination === '/services/index.html'));
-check('pms rewrite', rewrites.some((r) => r.destination === '/pms/index.html'));
-check('pms not redirected to app', !redirects.some((r) => r.source === '/pms' && String(r.destination).includes('app.thevesselcode.com')));
+check('sm rewrite', rewrites.some((r) => r.destination === '/sm/index.html'));
+check('no pms redirect to sm', !redirects.some((r) => r.source === '/pms' || r.source === '/pms/'));
+check('pms not rewritten to app', !rewrites.some((r) => r.destination === '/pms/index.html'));
 check('contact-us rewrite', rewrites.some((r) => r.destination === '/contact-us/index.html'));
 
 const shell = readFileSync(join(ROOT, 'js/marketing-shell.js'), 'utf8');
@@ -43,9 +44,9 @@ check('marketing shell script', home.includes('marketing-shell.js'));
 check('hero slogan', home.includes('Decoding the Engineering, Operations, and Economics'));
 check('home hero no photo background', !home.includes('mkt-hero-smart-vessel') && !home.includes('home-hero-variant-picker'));
 check('sync-public-assets script exists', existsSync(join(ROOT, 'scripts/sync-public-assets.mjs')));
-check('home hero eyebrow removed', !home.includes('Former C/E'));
+check('home hero eyebrow removed', !home.includes('Former C/E') && !home.includes('home-eyebrow'));
 check('services link in marketing shell', shell.includes("href: '/services'"));
-check('pms nav internal route', shell.includes("href: '/pms'") && !shell.includes("href: 'https://app.thevesselcode.com', label: 'TVC-PMS'"));
+check('sm nav internal route', shell.includes("href: '/sm'") && shell.includes("id: 'sm'"));
 check('contact us link in marketing footer', shell.includes("href: '/contact-us'"));
 check('no inline services section on home', !home.includes('id="service-superintendent"'));
 check('canonical root', home.includes('https://thevesselcode.com/'));
@@ -55,11 +56,15 @@ check('services page pillars', services.includes('Owner') && services.includes('
 check('services active nav', services.includes('data-mkt-active="services"'));
 check('services no photo card classes', !services.includes('home-service-card--photo'));
 
-const pms = readFileSync(join(ROOT, 'pms/index.html'), 'utf8');
-check('pms page hero title', pms.includes('Fleet Planned Maintenance'));
-check('pms active nav', pms.includes('data-mkt-active="pms"'));
-check('pms go to app CTA', pms.includes('href="https://app.thevesselcode.com"'));
-check('home explore pms internal', home.includes('href="/pms"'));
+const sm = readFileSync(join(ROOT, 'sm/index.html'), 'utf8');
+check('sm page hero title', sm.includes('Integrated Ship Management Platform'));
+check('sm active nav', sm.includes('data-mkt-active="sm"'));
+check('sm launch app CTA', sm.includes('Launch TVC-SM App') && sm.includes('href="https://app.thevesselcode.com"'));
+check('sm fleet demo CTA', sm.includes('Request Fleet Demo') && sm.includes('href="/contact-us"'));
+check('sm sections', sm.includes('Vessel Core (PMS + SPARE)') && sm.includes('Shore Superintendent oversight') && sm.includes('Automated RFQ workflows'));
+check('home explore sm internal', home.includes('href="/sm"'));
+
+check('pms marketing page removed', !existsSync(join(ROOT, 'pms/index.html')));
 
 const contact = readFileSync(join(ROOT, 'contact-us/index.html'), 'utf8');
 check('contact us title', contact.includes('Contact Us | THE VESSEL CODE'));
@@ -76,7 +81,7 @@ const marketingCss = [
     join(ROOT, 'css/marketing-theme.css'),
     join(ROOT, 'home/index.html'),
     join(ROOT, 'services/index.html'),
-    join(ROOT, 'pms/index.html'),
+    join(ROOT, 'sm/index.html'),
     join(ROOT, 'contact-us/index.html'),
 ].map((p) => readFileSync(p, 'utf8')).join('\n');
 check('no unsplash on marketing pages', !/unsplash\.com/i.test(marketingCss));
@@ -96,6 +101,11 @@ if (existsSync(join(ROOT, 'dist/home/index.html'))) {
     const distHome = readFileSync(join(ROOT, 'dist/home/index.html'), 'utf8');
     check('dist/home/index.html is marketing', distHome.includes('marketing-shell.js'));
 }
+if (existsSync(join(ROOT, 'dist/sm/index.html'))) {
+    const distSm = readFileSync(join(ROOT, 'dist/sm/index.html'), 'utf8');
+    check('dist/sm/index.html is TVC-SM intro', distSm.includes('Integrated Ship Management Platform'));
+}
+check('dist has no pms route', !existsSync(join(ROOT, 'dist/pms/index.html')));
 
 const failed = results.filter((r) => !r.ok);
 if (failed.length) {

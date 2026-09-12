@@ -1,4 +1,4 @@
-/** THE VESSEL CODE — Provision HQ / Master logins from admin registry */
+/** THE VESSEL CODE — Provision SM / Master logins from admin registry */
 const TVC_AccountProvisioning = (function () {
     function slugId(value) {
         return String(value || '').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_|_$/g, '').slice(0, 48);
@@ -48,8 +48,8 @@ const TVC_AccountProvisioning = (function () {
                     id: `prov-hq-${slugId(company.company_id)}`,
                     username: String(hq.username).trim(),
                     password_hash: hq.password_hash,
-                    account_type: 'HQ',
-                    role: 'HQ_SUPERVISOR',
+                    account_type: 'SM',
+                    role: 'SM_SUPERVISOR',
                     department: null,
                     vessel_id: null,
                     company_id: company.company_id,

@@ -110,7 +110,7 @@ const coreSitemap = readFileSync(join(root, 'public', 'sitemap-core.xml'), 'utf8
 assertValidXml('sitemap-core.xml', coreSitemap);
 check('core sitemap has home', coreSitemap.includes('<loc>https://www.thevesselcode.com/</loc>'));
 check('core sitemap has toolkit', coreSitemap.includes('<loc>https://www.thevesselcode.com/toolkit</loc>'));
-check('core sitemap has about-contact', coreSitemap.includes('<loc>https://www.thevesselcode.com/about-contact</loc>'));
+check('core sitemap has contact-us', coreSitemap.includes('<loc>https://www.thevesselcode.com/contact-us</loc>'));
 
 const storeChunk = readFileSync(join(root, 'public', 'sitemap-store-1.xml'), 'utf8');
 assertValidXml('sitemap-store-1.xml', storeChunk);

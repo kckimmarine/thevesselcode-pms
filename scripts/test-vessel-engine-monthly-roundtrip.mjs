@@ -127,8 +127,8 @@ const Sync = loadModule('js/services/sync.js', 'TVC_Sync');
 const CE = { username: 'ce', role: 'SHIP_CHIEF', department: 'ENGINE', station: 'ECR', account_type: 'SHIP', vessel_id: 'INCHEON CHEMI' };
 const CO = { username: 'co', role: 'SHIP_CAPTAIN', department: 'DECK', station: 'CCR', account_type: 'SHIP', vessel_id: 'INCHEON CHEMI' };
 const CAPTAIN = { username: 'captain', role: 'SHIP_CAPTAIN', department: null, station: 'CAPTAIN', account_type: 'SHIP', vessel_id: 'INCHEON CHEMI' };
-const HQ = { username: 'hq', role: 'HQ_SUPERVISOR', department: 'ENGINE', account_type: 'HQ', vessel_id: 'INCHEON CHEMI' };
-const HQ_DECK = { username: 'hq', role: 'HQ_SUPERVISOR', department: 'DECK', account_type: 'HQ', vessel_id: 'INCHEON CHEMI' };
+const HQ = { username: 'hq', role: 'HQ_SUPERVISOR', department: 'ENGINE', account_type: 'SM', vessel_id: 'INCHEON CHEMI' };
+const HQ_DECK = { username: 'hq', role: 'HQ_SUPERVISOR', department: 'DECK', account_type: 'SM', vessel_id: 'INCHEON CHEMI' };
 
 let pass = 0;
 let fail = 0;
@@ -240,7 +240,7 @@ async function importBuf(user, buf, name, dept, opts = {}) {
     const vesselId = payload.export_meta?.vessel_id || null;
     await Sync.mergePayload(payload, mergeDept, isHq, vesselId, { importAuthoritative: true });
     if (payload.run_hours && global.TVC_PMS) {
-        const myScope = isHq ? global.TVC_PMS.scopeOf('HQ', vesselId) : 'SHIP';
+        const myScope = isHq ? global.TVC_PMS.scopeOf('SM', vesselId) : 'SHIP';
         const store = global.TVC_PMS.readStore(myScope);
         for (const [k, v] of Object.entries(payload.run_hours)) {
             if (!mergeDept || k.startsWith(mergeDept + '|')) store[k] = v;
@@ -335,7 +335,7 @@ async function main() {
         hqPayload = await importBuf(HQ, masterExp.buf, 'incheonchemi_monthly_engine_20260811_001.zip', 'ENGINE');
         assert('HQ imported 5 reports', countEngineReports() === 5);
         assert('HQ run_hours scope',
-            PMS.readStore(PMS.scopeOf('HQ', 'INCHEON CHEMI'))['ENGINE|01.        MAIN ENGINE']?.expectedNextMonth === 700);
+            PMS.readStore(PMS.scopeOf('SM', 'INCHEON CHEMI'))['ENGINE|01.        MAIN ENGINE']?.expectedNextMonth === 700);
         assert('job count matches engine export',
             stores.maintenance_jobs.length === enginePayload.maintenance_jobs.length);
         assert('imported reports tagged ENGINE dept',

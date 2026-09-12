@@ -1,4 +1,4 @@
-/* Critical Equipment — Work Permit Request Export + HQ Reply */
+/* Critical Equipment — Work Permit Request Export + SM Reply */
 const TVC_WorkPermitSync = (function () {
     const SCHEMA_VERSION = String(TVC_WorkPermit?.SCHEMA_VERSION || 1);
     const now = () => new Date().toISOString();
@@ -39,7 +39,7 @@ const TVC_WorkPermitSync = (function () {
   @media print { body { margin: 10mm; } }
 </style></head><body>
 <div class="meta">
-  <div><b>To:</b> Company (HQ)</div>
+  <div><b>To:</b> Company (SM)</div>
   <div><b>Permit No:</b> ${esc(row.permit_no || '—')}</div>
 </div>
 <h1>CRITICAL EQUIPMENT — WORK PERMIT</h1>
@@ -87,14 +87,14 @@ const TVC_WorkPermitSync = (function () {
     async function resolveVesselId(user, row) {
         return row?.vessel_id
             || await TVC_WorkPermitCaseService.resolveVesselId(user)
-            || await TVC_Sync.resolveExpectedVesselId(user, TVC_RBAC.isHqAccount(user))
+            || await TVC_Sync.resolveExpectedVesselId(user, TVC_RBAC.isSmAccount(user))
             || user?.vessel_id
             || 'UNKNOWN';
     }
 
-    /** scope: engine | deck | hub | engine_hq | deck_hq (HQ reply) */
+    /** scope: engine | deck | hub | engine_hq | deck_hq (SM reply) */
     function resolveExportScope(user, department, { hqReply = false } = {}) {
-        if (TVC_RBAC.isHqAccount(user)) {
+        if (TVC_RBAC.isSmAccount(user)) {
             if (hqReply) {
                 const dept = department
                     || (typeof TVC_App !== 'undefined' ? TVC_App.getAppDepartment?.() : null)
@@ -166,7 +166,7 @@ const TVC_WorkPermitSync = (function () {
                 vessel_id: vesselId,
                 company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
-                direction: 'WORK_PERMIT_REPLY_HQ_TO_SHIP',
+                direction: 'WORK_PERMIT_REPLY_SM_TO_SHIP',
                 package_type: 'WORK_PERMIT_REPLY',
                 department: primary?.department || 'ALL',
                 exported_by: user?.username || '',
@@ -226,7 +226,7 @@ const TVC_WorkPermitSync = (function () {
             }
             row.last_synced_at = ts;
             row.last_export_filename = filename;
-            if (direction === 'WORK_PERMIT_REPLY_HQ_TO_SHIP') {
+            if (direction === 'WORK_PERMIT_REPLY_SM_TO_SHIP') {
                 row.hq_reply_exported_at = ts;
             }
             await TVC_DB.put('work_permits', row);
@@ -246,7 +246,7 @@ const TVC_WorkPermitSync = (function () {
                 ref_key: filename,
                 record_count: rows.length,
                 status: 'SUCCESS',
-                space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
+                space: TVC_RBAC.isSmAccount(user) ? 'SM' : 'SHIP',
             });
         }
     }
@@ -283,11 +283,11 @@ const TVC_WorkPermitSync = (function () {
             zip.file(`WORK_PERMIT_REPLY_${jobCode}.html`, buildPrintHtml(row, row.ship_name));
         });
         zip.file('README.txt',
-            `TVC-PMS Work Permit HQ Reply\nVessel: ${vesselId}\nScope: ${resolveExportScope(user, rows[0]?.department, { hqReply: true })}\nItems: ${rows.length}\nDirection: WORK_PERMIT_REPLY_HQ_TO_SHIP\n\nFilename: ${filename}`);
+            `TVC-PMS Work Permit SM Reply\nVessel: ${vesselId}\nScope: ${resolveExportScope(user, rows[0]?.department, { hqReply: true })}\nItems: ${rows.length}\nDirection: WORK_PERMIT_REPLY_SM_TO_SHIP\n\nFilename: ${filename}`);
 
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
-        await saveBatchExport(user, rows, payload, filename, 'WORK_PERMIT_REPLY_HQ_TO_SHIP');
+        await saveBatchExport(user, rows, payload, filename, 'WORK_PERMIT_REPLY_SM_TO_SHIP');
         return { payload, filename, count: rows.length };
     }
 
@@ -318,13 +318,13 @@ const TVC_WorkPermitSync = (function () {
         const text = await zip.file(jsonName).async('string');
         const payload = JSON.parse(text);
         const direction = payload.export_meta?.direction;
-        const isHq = TVC_RBAC.isHqAccount(user);
+        const isHq = TVC_RBAC.isSmAccount(user);
         const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
 
-        const HQ_ONLY = new Set(['WORK_PERMIT_REQUEST_TO_HQ']);
-        const SHIP_ONLY = new Set(['WORK_PERMIT_REPLY_HQ_TO_SHIP']);
-        if (HQ_ONLY.has(direction) && !isHq && !isHub) {
-            throw new Error('This Work Permit package is for HQ or Master Hub import only.');
+        const SM_ONLY = new Set(['WORK_PERMIT_REQUEST_TO_SM', 'WORK_PERMIT_REQUEST_TO_HQ']);
+        const SHIP_ONLY = new Set(['WORK_PERMIT_REPLY_SM_TO_SHIP']);
+        if (SM_ONLY.has(direction) && !isHq && !isHub) {
+            throw new Error('This Work Permit package is for SM or Captain Hub import only.');
         }
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This Work Permit package is for ship import only.');
@@ -352,7 +352,7 @@ const TVC_WorkPermitSync = (function () {
                 ref_key: file.name || '',
                 record_count: payload.work_permits?.length || 0,
                 status: 'SUCCESS',
-                space: isHq ? 'HQ' : 'SHIP',
+                space: isHq ? 'SM' : 'SHIP',
             });
         }
         return payload;

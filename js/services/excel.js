@@ -7,7 +7,7 @@
  *
  * 컬럼 스키마(헤더명 고정) — 파싱은 헤더명으로 매칭하므로 열 순서가 바뀌어도 안전:
  *   No | Part No | Universal Code | Name | Maker | Model | Unit |
- *   Qty Requested | Unit Price | Currency | Vendor Comment | Qty Approved | HQ Comment
+ *   Qty Requested | Unit Price | Currency | Vendor Comment | Qty Approved | SM Comment
  */
 const TVC_Excel = (function () {
     const SHEET = 'Requisition';
@@ -101,7 +101,7 @@ const TVC_Excel = (function () {
     }
 
     /**
-     * Request Quote — 업체별 견적 요청 xlsx (체크된 품목만, 통화 HQ 지정).
+     * Request Quote — 업체별 견적 요청 xlsx (체크된 품목만, 통화 SM 지정).
      * @param req requisition 레cord
      * @param opts { vendorName, currency, lines, filename }
      */

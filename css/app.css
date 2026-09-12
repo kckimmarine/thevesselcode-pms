@@ -494,7 +494,7 @@ body {
 
 /* 메뉴(CMAXS 스타일): 선박=4열 workflow, HQ=Ship List + 메뉴 */
 .cmaxs-body { padding: 20px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
-.cmaxs-body.hq-mode { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
+.cmaxs-body.sm-mode, .cmaxs-body.hq-mode { grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); }
 .menu-main-col { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .menu-main-col.hidden { display: none !important; }
 .menu-right-col {
@@ -505,10 +505,10 @@ body {
 }
 
 /* HQ — Ship List와 메뉴 카드 분리(세로 스택) */
-.hq-left-col {
+.sm-left-col {
     display: flex; flex-direction: column; gap: 16px; min-width: 0; align-self: start;
 }
-.hq-left-col.hidden { display: none !important; }
+.sm-left-col.hidden { display: none !important; }
 .hq-administration-host {
     display: flex;
     flex-direction: column;
@@ -641,7 +641,7 @@ body {
     cursor: default;
 }
 .fleet-list-panel[data-admin-layout="1"] .fleet-list-toolbar { display: none; }
-.cmaxs-body.hq-mode:has(#fleetListPanel[data-admin-layout="1"]) {
+.cmaxs-body.sm-mode, .cmaxs-body.hq-mode:has(#fleetListPanel[data-admin-layout="1"]) {
     grid-template-columns: minmax(320px, min(520px, 42%)) minmax(0, 1fr);
 }
 .fleet-list-panel[data-admin-layout="1"] .fleet-table-wrap {
@@ -702,8 +702,8 @@ body {
     text-align: center;
 }
 /* HQ Ship List — all column headers and cells center-aligned */
-.cmaxs-body.hq-mode .fleet-table th,
-.cmaxs-body.hq-mode .fleet-table td {
+.cmaxs-body.sm-mode, .cmaxs-body.hq-mode .fleet-table th,
+.cmaxs-body.sm-mode, .cmaxs-body.hq-mode .fleet-table td {
     text-align: center;
 }
 .fleet-table td.fleet-cell-ver,
@@ -791,7 +791,7 @@ body {
 .menu-flow-panel.spare-flow-panel {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
-.cmaxs-body.hq-mode .menu-flow-panel.spare-flow-panel {
+.cmaxs-body.sm-mode, .cmaxs-body.hq-mode .menu-flow-panel.spare-flow-panel {
     grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 .menu-flow-panel .spare-flow-item {
@@ -877,7 +877,7 @@ body {
     min-width: 0; max-width: 100%;
 }
 .cmaxs-body > .hist-panel,
-.cmaxs-body > .hq-left-col,
+.cmaxs-body > .sm-left-col,
 .cmaxs-body > .menu-main-col,
 .cmaxs-body > .menu-right-col { min-width: 0; }
 .hist-head {
@@ -4494,8 +4494,8 @@ input.tvc-date-input::placeholder {
 
 @media (max-width: 1100px) {
     .cmaxs-body,
-    .cmaxs-body.hq-mode,
-    .cmaxs-body.hq-mode:has(#fleetListPanel[data-admin-layout="1"]) {
+    .cmaxs-body.sm-mode, .cmaxs-body.hq-mode,
+    .cmaxs-body.sm-mode, .cmaxs-body.hq-mode:has(#fleetListPanel[data-admin-layout="1"]) {
         grid-template-columns: 1fr;
     }
 }

@@ -12,7 +12,7 @@ const TVC_PMS = (function () {
 
     // 데이터 공간(Space) 분리: HQ와 선박(SHIP)은 Run-hour 저장소를 공유하지 않는다.
     // - 선박: scope = 'SHIP'
-    // - HQ  : scope = 'HQ_<vesselId>'  (선박별 별도 저장소 → Import한 선박만 표시)
+    // - SM  : scope = 'HQ_<vesselId>'  (선박별 별도 저장소 → Import한 선박만 표시)
     let _scope = 'SHIP';
 
     /** 현재 데이터 공간 지정. HQ는 vesselId 별로 분리된다. */
@@ -30,7 +30,10 @@ const TVC_PMS = (function () {
     }
 
     function scopeOf(space, vesselId) {
-        return space === 'HQ' ? `HQ_${vesselId || 'UNKNOWN'}` : 'SHIP';
+        const sp = (typeof TVC_LegacySm !== 'undefined' && TVC_LegacySm.normalizeSpace)
+            ? TVC_LegacySm.normalizeSpace(space)
+            : String(space || '').toUpperCase();
+        return sp === 'SM' ? `SM_${vesselId || 'UNKNOWN'}` : 'SHIP';
     }
 
     function storeKey(scope) { return `tvc_run_hrs_${scope || _scope}`; }

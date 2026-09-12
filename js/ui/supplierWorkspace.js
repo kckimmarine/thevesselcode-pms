@@ -250,6 +250,13 @@ const TVC_SupplierWorkspace = (function () {
         el('supplierLogoutBtn')?.addEventListener('click', () => {
             if (typeof TVC_App !== 'undefined') TVC_App.handleLogout();
         });
+        const drawer = el('supplierQuoteDrawer');
+        if (drawer && drawer.dataset.backdropBound !== '1') {
+            drawer.dataset.backdropBound = '1';
+            drawer.addEventListener('click', (e) => {
+                if (e.target === drawer) closeQuoteDrawer();
+            });
+        }
     }
 
     async function open(user) {

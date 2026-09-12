@@ -17,12 +17,12 @@
                 <tbody>
                     <tr><td class="admin-sop-num">1</td><td><strong>Path B — Universal Setup</strong></td>
                         <td>Register vessel in Registry → <strong>Export Setup handoff</strong><br>
-                        HQ 1 + Vessel Master/Engine/Deck · scope via seat license</td></tr>
+                        SM 1 + Vessel Master/Engine/Deck · scope via seat license</td></tr>
                     <tr><td class="admin-sop-num">2</td><td><strong>Seat license</strong></td>
                         <td>Install PC → machine request → <strong>Issue seat license</strong><br>
                         Issue as needed (new PC · renewal · vessel add)</td></tr>
                     <tr><td class="admin-sop-num">3</td><td><strong>PMS &amp; SPARE MASTER.xlsx</strong></td>
-                        <td>TVC prepares per vessel → deliver to HQ / Vessel<br>
+                        <td>TVC prepares per vessel → deliver to SM / Vessel<br>
                         Customer: app Menu → Master Excel <strong>Import</strong> (outside Admin)</td></tr>
                     <tr><td class="admin-sop-num">4</td><td><strong>Path A — App Update</strong></td>
                         <td><strong>Export App Update ZIP</strong> (shared pool) → HQ/Vessel Import → Install<br>

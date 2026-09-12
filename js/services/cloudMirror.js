@@ -84,20 +84,20 @@ const TVC_CloudMirror = (function () {
         });
         const row = (meta.rows || []).find(r => r.vessel_id === vesselId);
         if (!row?.payload || typeof row.payload !== 'object') return false;
-        const myScope = TVC_PMS.scopeOf('HQ', vesselId);
+        const myScope = TVC_PMS.scopeOf('SM', vesselId);
         const store = TVC_PMS.readStore(myScope);
         for (const [k, v] of Object.entries(row.payload)) store[k] = v;
         TVC_PMS.writeStore(store, myScope);
         return true;
     }
 
-    /** Pull one vessel's cloud sync_records into HQ IndexedDB. */
+    /** Pull one vessel's cloud sync_records into SM IndexedDB. */
     async function mirrorVesselFromCloud(user, opts = {}) {
-        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!TVC_RBAC.isSmAccount(user)) throw new Error('HQ or Admin account required.');
         if (typeof TVC_OnlineSync === 'undefined' || !TVC_OnlineSync.isAvailable()) {
             throw new Error(TVC_OnlineSync?.statusMessage?.() || 'Online sync is not available.');
         }
-        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
+        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_SM_SYNC);
 
         const vesselId = String(opts.vesselId || '').trim();
         if (!vesselId) throw new Error('Select a vessel before cloud mirror.');
@@ -125,7 +125,7 @@ const TVC_CloudMirror = (function () {
             filename: '(cloud DB)',
             record_count: records.length,
             status: 'SUCCESS',
-            space: 'HQ',
+            space: 'SM',
             channel: 'ONLINE',
         });
 
@@ -141,7 +141,7 @@ const TVC_CloudMirror = (function () {
         };
     }
 
-    /** Mirror all visible fleet vessels (company HQ or admin registry). */
+    /** Mirror all visible fleet vessels (company SM or admin registry). */
     async function mirrorVisibleFleet(user, opts = {}) {
         if (!TVC_Fleet?.getVisible) throw new Error('Fleet module not loaded.');
         const vessels = TVC_Fleet.getVisible(user) || [];
@@ -164,7 +164,7 @@ const TVC_CloudMirror = (function () {
 
     /** Auto-mirror on vessel select / login — throttled, silent on failure. */
     async function maybeMirrorSelectedVessel(user, vesselId, opts = {}) {
-        if (!user || !TVC_RBAC.isHqAccount(user)) return { skipped: true, reason: 'not_hq' };
+        if (!user || !TVC_RBAC.isSmAccount(user)) return { skipped: true, reason: 'not_hq' };
         if (!vesselId) return { skipped: true, reason: 'no_vessel' };
         if (typeof TVC_OnlineSync === 'undefined' || !TVC_OnlineSync.isAvailable()) {
             return { skipped: true, reason: 'offline' };
