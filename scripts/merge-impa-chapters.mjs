@@ -6,6 +6,11 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  filterQualityItems,
+  normalizeImpaCode,
+  rowCode,
+} from './lib/impa-quality-gate.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -21,17 +26,13 @@ function loadRows(path) {
   return [];
 }
 
-function rowCode(row) {
-  return String(row?.c || row?.impa_code || row?.code || '').trim();
-}
-
 function main() {
   const byCode = new Map();
   const chapters = [];
+  const rawRows = [];
 
   for (const row of loadRows(SEED_PATH)) {
-    const code = rowCode(row);
-    if (code) byCode.set(code, row);
+    rawRows.push(row);
   }
 
   if (existsSync(CHAPTERS_DIR)) {
@@ -40,13 +41,24 @@ function main() {
       if (!m) continue;
       chapters.push(m[1]);
       for (const row of loadRows(join(CHAPTERS_DIR, file))) {
-        const code = rowCode(row);
-        if (code) byCode.set(code, row);
+        rawRows.push(row);
       }
     }
   }
 
-  const items = [...byCode.values()].sort((a, b) => rowCode(a).localeCompare(rowCode(b)));
+  for (const row of rawRows) {
+    const code = normalizeImpaCode(rowCode(row));
+    if (!code) continue;
+    byCode.set(code, row);
+  }
+
+  const merged = [...byCode.values()];
+  const { kept, rejected } = filterQualityItems(merged);
+  if (rejected.length) {
+    console.warn(`Quality gate rejected ${rejected.length} row(s) (sample):`, rejected.slice(0, 5));
+  }
+
+  const items = kept.sort((a, b) => rowCode(a).localeCompare(rowCode(b)));
   mkdirSync(dirname(OUT_PATH), { recursive: true });
   writeFileSync(
     OUT_PATH,

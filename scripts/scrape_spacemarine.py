@@ -37,6 +37,15 @@ USER_AGENT = (
 PAGE_SIZE = 30
 DEFAULT_DELAY = 0.3
 
+CHAPTER_TITLES = {
+    "23": "Cordage & Ropes",
+    "33": "Deck & Mooring Stores",
+    "59": "Safety Equipment",
+    "61": "Hand Tools",
+    "79": "Paints & Coatings",
+    "81": "Valves & Cocks",
+}
+
 HANGUL_RE = re.compile(r"[\u3131-\uD79D]+")
 CODE_RE = re.compile(r"information\.cfm\?code=(\d{6})&category=(\d+)")
 IMPA_CODE_RE = re.compile(r"^\d{6}$")
@@ -194,12 +203,21 @@ class SpaceMarineScraper:
             return None
         unit = normalize_unit(fields.get("unit", "PCS"))
         plate = extract_plate_filename(soup)
+        meta = CHAPTER_TITLES.get(self.category, f"Chapter {self.category}")
+        specs = {
+            "Catalog Section": meta,
+            "Description": name,
+        }
+        if fields.get("korean"):
+            specs["Reference"] = clean_english_name(fields.get("korean", ""))[:120]
         return {
             "c": impa_code,
             "n": name,
             "u": unit,
             "g": self.category,
             "p": plate,
+            "category": meta,
+            "specs": specs,
         }
 
 
@@ -231,6 +249,8 @@ def scrape_category(
 
     items: list[dict[str, str]] = []
     skipped = 0
+    category = scraper.category
+    checkpoint = OUT_DIR / f"impa-{category}.json"
     for idx, code in enumerate(codes, start=1):
         try:
             row = scraper.fetch_item(code)
@@ -241,6 +261,11 @@ def scrape_category(
         if row:
             items.append(row)
         print(f"  [{idx}/{len(codes)}] {code} -> {row['n'][:60] if row else 'SKIP'}")
+        if idx % 50 == 0 and items:
+            checkpoint.write_text(
+                json.dumps(items, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
     if skipped:
         print(f"WARNING: skipped {skipped} item(s) due to fetch errors", file=sys.stderr)
     return items

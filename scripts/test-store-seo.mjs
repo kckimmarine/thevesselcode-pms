@@ -53,9 +53,15 @@ check('sitemap index exists', sitemap.includes('<sitemapindex'));
 check('sitemap references core pages', sitemap.includes('sitemap-core.xml'));
 check('sitemap references store chunk', sitemap.includes('sitemap-store-1.xml'));
 
-const chunk = readFileSync(join(root, 'public', 'sitemap-store-1.xml'), 'utf8');
-const urlCount = (chunk.match(/<loc>/g) || []).length;
-check('chunk url count matches index', urlCount === index.count, `${urlCount} urls`);
+let storeUrlCount = 0;
+const chunk1 = readFileSync(join(root, 'public', 'sitemap-store-1.xml'), 'utf8');
+storeUrlCount += (chunk1.match(/<loc>/g) || []).length;
+const chunk2Path = join(root, 'public', 'sitemap-store-2.xml');
+if (existsSync(chunk2Path)) {
+    const chunk2 = readFileSync(chunk2Path, 'utf8');
+    storeUrlCount += (chunk2.match(/<loc>/g) || []).length;
+}
+check('store sitemap url count matches index', storeUrlCount === index.count, `${storeUrlCount} urls`);
 
 const robots = readFileSync(join(root, 'public', 'robots.txt'), 'utf8');
 check('robots references sitemap', robots.includes('Sitemap:'));

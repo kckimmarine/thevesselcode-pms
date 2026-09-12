@@ -5,6 +5,12 @@
  */
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import {
+  filterQualityItems,
+  normalizeImpaCode,
+  rowCode,
+  rowName,
+} from './lib/impa-quality-gate.mjs';
 
 const root = process.cwd();
 const sources = [
@@ -19,14 +25,17 @@ if (!sourcePath) {
 
 const bundle = JSON.parse(readFileSync(sourcePath, 'utf8'));
 const items = Array.isArray(bundle.items) ? bundle.items : [];
+const { kept, rejected } = filterQualityItems(items);
+if (rejected.length) {
+    console.warn(`SEO index quality gate skipped ${rejected.length} row(s)`);
+}
 const map = {};
 
-for (const raw of items) {
-    const code = String(raw?.c || raw?.impa_code || raw?.code || '').trim();
-    if (!/^\d{4,6}$/.test(code)) continue;
-    const normalized = code.padStart(6, '0').slice(-6);
+for (const raw of kept) {
+    const normalized = normalizeImpaCode(rowCode(raw));
+    if (!normalized) continue;
     const entry = {
-        n: String(raw.n || raw.name || '').trim(),
+        n: rowName(raw),
         u: String(raw.u || raw.unit || 'PCS').trim() || 'PCS',
         g: String(raw.g || normalized.slice(0, 2) || '').trim(),
         p: String(raw.p || raw.plate_id || raw.plate_no || '').trim(),

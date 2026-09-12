@@ -14,6 +14,8 @@
     "export:gemini-context": "node scripts/export-context-for-gemini.mjs",
     "export:core-frontend": "node scripts/export-tvc-core-frontend.mjs",
     "generate:impa-seo": "node scripts/generate-impa-seo-index.mjs && node scripts/generate-sitemap.mjs",
+    "phase-a:scrape": "node scripts/phase-a-scrape.mjs --target=15000",
+    "inspect:impa-chapters": "node scripts/inspect-impa-chapters.mjs",
     "push:indexing": "node scripts/push-indexing.mjs",
     "ping:sitemaps": "node scripts/ping-sitemaps.mjs",
     "test:push-indexing": "node scripts/test-push-indexing.mjs",
