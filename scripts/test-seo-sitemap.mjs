@@ -51,6 +51,11 @@ check('html og:title format', html.includes(`<meta property="og:title" content="
 check('html og:description plate copy', html.includes('maritime catalog plate illustration'));
 check('html og:image plate url', html.includes('<meta property="og:image" content="https://www.thevesselcode.com/data/plates/'));
 check('html json-ld mpn', html.includes('"mpn"'));
+check('html json-ld offers', html.includes('"offers"') && (html.includes('"@type":"Offer"') || html.includes('"@type": "Offer"')));
+check('html json-ld offer price', html.includes('"price":"0.00"') || html.includes('"price": "0.00"'));
+check('html json-ld offer currency', html.includes('"priceCurrency":"USD"') || html.includes('"priceCurrency": "USD"'));
+check('html json-ld offer availability', html.includes('schema.org/InStock'));
+check('html json-ld invoice price type', html.includes('schema.org/InvoicePrice'));
 check('html json-ld marine category', html.includes('Marine Stores / Ship Equipment'));
 check('html json-ld product', html.includes('"@type":"Product"') || html.includes('"@type": "Product"'));
 check('html json-ld techarticle', html.includes('"@type":"TechArticle"') || html.includes('"@type": "TechArticle"'));

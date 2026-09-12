@@ -159,6 +159,22 @@ function resolveMpn(item) {
     return String(fromSpecs || item.impa_code).trim();
 }
 
+/** Default B2B catalog offer — quote on request (GSC Product snippet requires offers). */
+function buildB2bProductOffer(pageUrl) {
+    return {
+        '@type': 'Offer',
+        price: '0.00',
+        priceCurrency: 'USD',
+        priceSpecification: {
+            '@type': 'UnitPriceSpecification',
+            priceType: 'https://schema.org/InvoicePrice',
+        },
+        availability: 'https://schema.org/InStock',
+        itemCondition: 'https://schema.org/NewCondition',
+        url: pageUrl,
+    };
+}
+
 function buildProductJsonLd(item, pageUrl, imageUrl) {
     return {
         '@context': 'https://schema.org',
@@ -169,6 +185,7 @@ function buildProductJsonLd(item, pageUrl, imageUrl) {
         category: SEO_PRODUCT_CATEGORY,
         description: buildDescription(item),
         url: pageUrl,
+        offers: buildB2bProductOffer(pageUrl),
         brand: {
             '@type': 'Brand',
             name: 'IMPA Marine Stores Guide',
@@ -198,6 +215,7 @@ function buildTechArticleJsonLd(item, pageUrl) {
             '@type': 'Product',
             sku: item.impa_code,
             name: item.name || `IMPA ${item.impa_code}`,
+            offers: buildB2bProductOffer(pageUrl),
         },
     };
 }
@@ -342,6 +360,7 @@ module.exports = {
     derivePlateAssetUrl,
     SEO_PRODUCT_CATEGORY,
     buildDescription,
+    buildB2bProductOffer,
     buildProductJsonLd,
     buildTechArticleJsonLd,
     buildJsonLd,
