@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 16, // v16: SM RFQ ↔ Supplier portal (supplier_* + sm_rfq_cases)
+    DB_VERSION: 17, // v16: SM RFQ ↔ Supplier portal (supplier_* + sm_rfq_cases)
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
