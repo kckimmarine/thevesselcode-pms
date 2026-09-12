@@ -9,7 +9,7 @@
  */
 const TVC_SCHEMA = {
     DB_NAME: 'tvc_pms_v2',
-    DB_VERSION: 15, // v15: impa_master plate_id only (no image blobs in IDB)
+    DB_VERSION: 16, // v16: supplier_rfqs · supplier_quotes · supplier_orders
     STORES: {
         meta: { keyPath: 'key' },
         users: { keyPath: 'id' },
@@ -31,6 +31,10 @@ const TVC_SCHEMA = {
         work_permits: { keyPath: 'id' },                   // Critical Equipment Work Permit
         vessel_documents: { keyPath: 'id' },               // HQ vessel documents (attachments)
         impa_master: { keyPath: 'impa_code' },             // IMPA ship stores catalog (STORE tab)
+        // ── v16 Supplier portal (RFQ → quote → order → invoice) ───────
+        supplier_rfqs: { keyPath: 'rfq_id' },
+        supplier_quotes: { keyPath: 'id' },
+        supplier_orders: { keyPath: 'id' },
     },
     INDEXES: {
         users: [{ name: 'username', keyPath: 'username', unique: true }],
@@ -109,6 +113,20 @@ const TVC_SCHEMA = {
         vessel_documents: [
             { name: 'by_vessel', keyPath: 'vessel_id' },
             { name: 'by_company', keyPath: 'company_id' },
+        ],
+        supplier_rfqs: [
+            { name: 'by_supplier', keyPath: 'supplier_id' },
+            { name: 'by_status', keyPath: 'status' },
+            { name: 'by_deadline', keyPath: 'deadline' },
+        ],
+        supplier_quotes: [
+            { name: 'by_rfq', keyPath: 'rfq_id' },
+            { name: 'by_supplier', keyPath: 'supplier_id' },
+        ],
+        supplier_orders: [
+            { name: 'by_rfq', keyPath: 'rfq_id' },
+            { name: 'by_supplier', keyPath: 'supplier_id' },
+            { name: 'by_status', keyPath: 'status' },
         ],
         impa_master: [
             { name: 'by_category', keyPath: 'category' },

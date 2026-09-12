@@ -103,9 +103,9 @@
                     <li><b>Master</b> · captain</li>
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / co</li>
-                    <li><b>HQ</b> · hq (company vessels only · Department not required)</li>
-                    <li><b>HQ</b> · tvc (HQ Mode SKU · all company vessels)</li>
-                    <li><b>Admin</b> · tvc (Admin Mode SKU · Department not required)</li>
+                    <li><b>SM (HQ)</b> · tvc shipping (company vessels · no Department)</li>
+                    <li><b>Supplier</b> · supplier (Supplier Portal · no Department)</li>
+                    <li><b>Admin</b> · admin (Admin Mode · no Department)</li>
                 </ul>
             </div>
         </div>
@@ -426,6 +426,38 @@
     <input type="file" id="menuXferAppUpdateSetupFile" accept=".exe,application/vnd.microsoft.portable-executable" hidden
         onchange="TVC_App.menuXferAppUpdateOnSetupFile(this.files &amp;&amp; this.files[0]); this.value='';">
     <input type="file" id="importDefectUrgent" accept=".zip" hidden onchange="TVC_App.handleDefectImport(this.files[0]);this.value=''">
+</div>
+
+<div id="tvc-supplier-workspace" class="tvc-supplier-workspace hidden" aria-label="Supplier Portal">
+    <header class="supplier-header">
+        <div class="supplier-brand">
+            <img class="supplier-logo" src="icons/extracted/desktop-48.png?v=20260804-menu-logo" alt="" width="40" height="40" draggable="false">
+            <div>
+                <div id="supplierPortalTitle" class="supplier-portal-title">SUPPLIER PORTAL</div>
+                <div id="supplierCompanyName" class="supplier-company-name">—</div>
+            </div>
+        </div>
+        <div class="supplier-header-meta">
+            <span id="supplierUserBadge" class="supplier-user-badge">—</span>
+            <button type="button" id="supplierLogoutBtn" class="btn btn-red">End</button>
+        </div>
+    </header>
+    <nav class="supplier-nav" aria-label="Supplier navigation">
+        <button type="button" class="supplier-nav-btn active" data-supplier-view="rfq">📥 RFQ Inbox</button>
+        <button type="button" class="supplier-nav-btn" data-supplier-view="delivery">📦 Delivery / Repair</button>
+        <button type="button" class="supplier-nav-btn" data-supplier-view="invoices">🧾 Invoices</button>
+        <button type="button" class="supplier-nav-btn" data-supplier-view="account">⚙️ Account</button>
+    </nav>
+    <div id="supplierPipeline" class="supplier-pipeline" aria-label="Workflow pipeline">
+        <span class="supplier-pipe-step active" data-pipeline-step="1">1. Quotation</span>
+        <span class="supplier-pipe-arrow" aria-hidden="true">➔</span>
+        <span class="supplier-pipe-step" data-pipeline-step="2">2. Delivery / Repair</span>
+        <span class="supplier-pipe-arrow" aria-hidden="true">➔</span>
+        <span class="supplier-pipe-step" data-pipeline-step="3">3. Receiving</span>
+        <span class="supplier-pipe-arrow" aria-hidden="true">➔</span>
+        <span class="supplier-pipe-step" data-pipeline-step="4">4. Invoice</span>
+    </div>
+    <main id="supplierMainPane" class="supplier-main"></main>
 </div>
 </div><!-- /#tvcAppRoot -->
 
@@ -873,6 +905,7 @@
 <script src="js/ui/workPermit.js?v=20260902-hq-attach"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
+<script src="js/ui/supplierWorkspace.js?v=20260912-supplier-portal"></script>
 <script src="js/app.js?v=20260903-web-cloud"></script>
 <script src="js/pwa.js?v=20260902-date-picker"></script>
 </body>

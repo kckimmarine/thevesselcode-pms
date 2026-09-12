@@ -79,6 +79,7 @@ const TVC_License = (function () {
         const type = String(accountType || '').toUpperCase();
         const isHq = type === 'HQ';
         const isAdmin = type === 'ADMIN';
+        const isSupplier = type === 'SUPPLIER';
         const adminOnly = !!st.allowAdmin && !st.allowHq && !(st.loginModes || []).length;
 
         if (isAdmin) {
@@ -100,8 +101,17 @@ const TVC_License = (function () {
                 error: `This installation (${st.skuLabel || st.sku}) is TVC Admin Mode only. Use the tvc account.`,
             };
         }
+        if (isSupplier) {
+            if (adminOnly) {
+                return {
+                    ok: false,
+                    error: `This installation (${st.skuLabel || st.sku}) is TVC Admin Mode only.`,
+                };
+            }
+            return { ok: true };
+        }
         if (st.allowHq) {
-            if (!isHq) {
+            if (!isHq && !isSupplier) {
                 return {
                     ok: false,
                     error: `This installation (${st.skuLabel || st.sku}) is for company HQ. Use Superintendent (hq) or TVC Admin (tvc).`,

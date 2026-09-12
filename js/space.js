@@ -116,7 +116,7 @@ const TVC_Space = (function () {
     /** Login gate — loginMode: MASTER | DECK | ENGINE */
     function validateLogin(user, loginMode) {
         if (!user) return { ok: false, error: 'Unable to verify account.' };
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
+        if (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
             return { ok: false, error: 'HQ accounts must sign in without selecting a Department.' };
         }
 
@@ -254,6 +254,7 @@ const TVC_Space = (function () {
     function getUiFeatures(user) {
         const base = { ...TVC_RBAC.getUiFeatures(user) };
         if (!user) return base;
+        if (TVC_RBAC.isSupplierAccount?.(user)) return base;
         if (TVC_RBAC.isSuperHqAccount?.(user)) {
             base.showRunningHours = true;
             base.canEditRunningHours = true;
@@ -340,9 +341,10 @@ const TVC_Space = (function () {
         if (!user) return '—';
         if (TVC_RBAC.isAdminAccount?.(user)) return 'Admin Mode';
         if (TVC_RBAC.isFleetMonitorAccount?.(user)) return 'Fleet Monitor';
-        if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'HQ Mode';
+        if (TVC_RBAC.isSupplierAccount?.(user)) return 'Supplier Mode';
+        if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'SM Mode';
         if (TVC_RBAC.isSuperHqAccount?.(user)) return 'Admin Mode';
-        if (TVC_RBAC.isHqAccount(user)) return 'HQ Mode';
+        if (TVC_RBAC.isHqAccount(user)) return 'SM Mode';
         if (isCaptainHub(user)) return 'Vessel Mode - Master';
         const station = getStation(user);
         if (station === Station.CCR) return 'Vessel Mode - Deck';

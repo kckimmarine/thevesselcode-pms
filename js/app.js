@@ -1131,6 +1131,20 @@ const TVC_App = (function () {
     async function onLogin(user) {
         const role = user.role || TVC_RBAC.resolveUserRole(user);
         state.user = role && role !== user.role ? { ...user, role } : user;
+        if (TVC_RBAC.isSupplierAccount?.(state.user)) {
+            stopHqLiveSync();
+            state.space = 'SUPPLIER';
+            showSupplierApp();
+            try {
+                if (typeof TVC_SupplierWorkspace !== 'undefined') {
+                    await TVC_SupplierWorkspace.open(state.user);
+                }
+            } catch (e) {
+                console.error('[TVC] supplier workspace', e);
+            }
+            try { TVC_Config?.applyEmbedChrome?.(); } catch (_) {}
+            return;
+        }
         const isSuperHq = TVC_RBAC.isSuperHqAccount?.(state.user);
         const isHq = TVC_RBAC.isHqAccount(state.user);
         // HQ ↔ Ship data stays isolated until Export/Import (ZIP or cloud sync storage).
@@ -1266,14 +1280,22 @@ const TVC_App = (function () {
         if (typeof TVC_HqLiveSync !== 'undefined') TVC_HqLiveSync.stop();
     }
 
+    function showSupplierApp() {
+        document.getElementById('loginScreen')?.classList.add('hidden');
+        document.getElementById('appShell')?.classList.add('hidden');
+        document.getElementById('tvc-supplier-workspace')?.classList.remove('hidden');
+    }
     function showLogin() {
         document.getElementById('appShell')?.classList.add('hidden');
+        document.getElementById('tvc-supplier-workspace')?.classList.add('hidden');
         document.getElementById('loginScreen')?.classList.remove('hidden');
+        if (typeof TVC_SupplierWorkspace !== 'undefined') TVC_SupplierWorkspace.close();
         setLoginBusy(false);
         syncWindowTitle(null);
     }
     function showApp() {
         document.getElementById('loginScreen')?.classList.add('hidden');
+        document.getElementById('tvc-supplier-workspace')?.classList.add('hidden');
         document.getElementById('appShell')?.classList.remove('hidden');
     }
 
@@ -1382,22 +1404,22 @@ const TVC_App = (function () {
             || !!(typeof window !== 'undefined' && window.tvcElectron?.isElectron);
     }
 
+    function fallbackModeBadge(user) {
+        if (TVC_RBAC.isAdminAccount?.(user)) return 'Admin Mode';
+        if (TVC_RBAC.isFleetMonitorAccount?.(user)) return 'Fleet Monitor';
+        if (TVC_RBAC.isSupplierAccount?.(user)) return 'Supplier Mode';
+        if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'SM Mode';
+        if (TVC_RBAC.isSuperHqAccount?.(user)) return 'Admin Mode';
+        if (TVC_RBAC.isHqAccount(user)) return 'SM Mode';
+        if (user?.department === 'DECK') return 'Vessel Mode - Deck';
+        if (user?.department === 'ENGINE') return 'Vessel Mode - Engine';
+        return 'Vessel Mode';
+    }
+
     function updateUserBar(user) {
         const badge = typeof TVC_Space !== 'undefined'
             ? TVC_Space.getModeBadge(user)
-            : (TVC_RBAC.isAdminAccount?.(user)
-                ? 'Admin Mode'
-                : (TVC_RBAC.isFleetMonitorAccount?.(user)
-                    ? 'Fleet Monitor'
-                    : (TVC_RBAC.isTvcPilotAccount?.(user)
-                        ? 'HQ Mode'
-                        : (TVC_RBAC.isSuperHqAccount?.(user)
-                            ? 'Admin Mode'
-                            : (TVC_RBAC.isHqAccount(user)
-                                ? 'HQ Mode'
-                                : (user.department === 'DECK' ? 'Vessel Mode - Deck'
-                                    : user.department === 'ENGINE' ? 'Vessel Mode - Engine'
-                                        : 'Vessel Mode'))))));
+            : fallbackModeBadge(user);
         const title = getHeaderRegistryUserLabel(user);
         const hideHqBadge = isElectronApp() && !!(user && TVC_RBAC.isHqAccount(user));
         document.querySelectorAll('.userBadgeEl').forEach(el => {

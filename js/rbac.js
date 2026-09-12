@@ -1,6 +1,6 @@
 /** THE VESSEL CODE — Browser RBAC (mirrors src/auth/rbac.js) */
 const TVC_RBAC = (function () {
-    const AccountType = { SHIP: 'SHIP', HQ: 'HQ', ADMIN: 'ADMIN' };
+    const AccountType = { SHIP: 'SHIP', HQ: 'HQ', ADMIN: 'ADMIN', SUPPLIER: 'SUPPLIER' };
 
     const Department = { DECK: 'DECK', ENGINE: 'ENGINE' };
 
@@ -13,6 +13,7 @@ const TVC_RBAC = (function () {
         SHIP_CHIEF: 'SHIP_CHIEF',       // legacy engine approver
         HQ_SUPERVISOR: 'HQ_SUPERVISOR',
         TVC_ADMIN: 'TVC_ADMIN',
+        SUPPLIER: 'SUPPLIER',
     };
 
     // 승인 권한을 가진 선박 역할 (부서 책임자)
@@ -99,6 +100,7 @@ const TVC_RBAC = (function () {
         SHIP_CHIEF: 'Chief Engineer',
         HQ_SUPERVISOR: 'HQ Superintendent',
         TVC_ADMIN: 'TVC Admin',
+        SUPPLIER: 'Supplier',
     };
 
     const DEPT_LABELS = { DECK: 'Deck', ENGINE: 'Engine' };
@@ -196,6 +198,9 @@ const TVC_RBAC = (function () {
         TVC_ADMIN: new Set([
             Action.VIEW_AUDIT_LOG,
         ]),
+        SUPPLIER: new Set([
+            Action.VIEW_AUDIT_LOG,
+        ]),
     };
 
     const ACCOUNT_UI_FEATURES = {
@@ -226,6 +231,26 @@ const TVC_RBAC = (function () {
             showDefectInbox: true,
             showDefectUrgentExport: false,
             showDefectImportUrgent: true,
+        },
+        SUPPLIER: {
+            showDailyReportSubmit: false,
+            showMaintenanceExecute: false,
+            showApprovalQueue: false,
+            showHqConfirmPanel: false,
+            showExportShip: false,
+            showImportShip: false,
+            showExportHq: false,
+            showImportHq: false,
+            showDefectReport: false,
+            showDefectInbox: false,
+            showDefectUrgentExport: false,
+            showDefectImportUrgent: false,
+            showDataXfer: false,
+            showSpareTab: false,
+            showRunningHours: false,
+            showUpdateWorkPlan: false,
+            showModifyOriginalPlan: false,
+            canEditRunningHours: false,
         },
         ADMIN: {
             showDailyReportSubmit: false,
@@ -284,6 +309,7 @@ const TVC_RBAC = (function () {
     function isShipAccount(user) { return user?.account_type === AccountType.SHIP; }
     /** Company HQ account (superintendent) — Ship List scoped to that company. */
     function isCompanyHqAccount(user) { return user?.account_type === AccountType.HQ; }
+    function isSupplierAccount(user) { return user?.account_type === AccountType.SUPPLIER; }
     /** HQ Mode session: company HQ superintendent or TVC super-admin / fleet-wide viewer. */
     function isHqAccount(user) {
         if (!user) return false;
@@ -743,7 +769,7 @@ const TVC_RBAC = (function () {
         AccountType, Role, Department, ReportStatus, Action,
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForWorkReport, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
-        isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isTvcPilotAccount, isPms21Account, isFleetMonitorAccount, canMasterExcelAccount, isCompanyHqAccount, isHqSku, isApprover,
+        isShipAccount, isHqAccount, isSuperHqAccount, isAdminAccount, isTvcPilotAccount, isPms21Account, isFleetMonitorAccount, canMasterExcelAccount, isCompanyHqAccount, isSupplierAccount, isHqSku, isApprover,
         isDeckApproverRole, isEngineApproverRole, isShipAuthorRole,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,

@@ -5,7 +5,7 @@ const TVC_Auth = (function () {
     const AUTH_SESSION_KEY = 'tvc_auth_session';
     const AUTH_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
     const DEMO_PASSWORD = '0000';
-    const USERS_SEED_VERSION = 17;
+    const USERS_SEED_VERSION = 18;
 
     const DEFAULT_USERS = [
         // Contract vessel — TVC No1 (ship accounts)
@@ -17,6 +17,19 @@ const TVC_Auth = (function () {
         { id: 'user-tvc-shipping', username: 'tvc shipping', display_name: 'TVC Shipping', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null, company_id: 'TVC_SHIPPING', seed_password: '0000' },
         // TVC internal — Admin Mode (registry / license / app update)
         { id: 'user-tvc-admin', username: 'admin', display_name: 'Admin', account_type: 'ADMIN', role: 'TVC_ADMIN', department: null, vessel_id: null, seed_password: 'admin' },
+        // Supplier portal — RFQ inbox prototype (offline IndexedDB)
+        {
+            id: 'user-supplier-demo',
+            username: 'supplier',
+            display_name: 'Korea Marine Spares',
+            account_type: 'SUPPLIER',
+            role: 'SUPPLIER',
+            department: null,
+            vessel_id: null,
+            supplier_id: 'SUP_KMS',
+            company_name: 'Korea Marine Spares Co.',
+            seed_password: '0000',
+        },
     ];
 
     const DEPRECATED_USERNAMES = [
@@ -138,10 +151,13 @@ const TVC_Auth = (function () {
             ...session,
             role,
             account_type: user.account_type,
-            department: (user.account_type === 'HQ' || user.account_type === 'ADMIN') ? null : user.department,
+            department: (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER')
+                ? null : user.department,
             display_name: user.display_name,
             vessel_id: user.vessel_id,
             company_id: user.company_id || null,
+            supplier_id: user.supplier_id || session.supplier_id || null,
+            company_name: user.company_name || session.company_name || null,
             station,
             login_mode: session.login_mode || null,
         };
@@ -176,19 +192,23 @@ const TVC_Auth = (function () {
             if (!licCheck.ok) return licCheck;
         }
 
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
+        if (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
             if (loginMode) {
                 return {
                     ok: false,
                     error: user.account_type === 'ADMIN'
                         ? 'Admin accounts must sign in without selecting a Department.'
-                        : 'Superintendent (hq) accounts must sign in without selecting a Department.',
+                        : (user.account_type === 'SUPPLIER'
+                            ? 'Supplier accounts must sign in without selecting a Department.'
+                            : 'Superintendent accounts must sign in without selecting a Department.'),
                 };
             }
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,
                 account_type: user.account_type, role: sessionRole,
                 department: null, vessel_id: user.vessel_id, company_id: user.company_id || null,
+                supplier_id: user.supplier_id || null,
+                company_name: user.company_name || user.display_name || null,
                 station: null, login_mode: null,
             };
             sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -304,11 +324,13 @@ const TVC_Auth = (function () {
             }
         }
 
-        if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
+        if (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,
                 account_type: user.account_type, role: sessionRole,
                 department: null, vessel_id: user.vessel_id, company_id: user.company_id || null,
+                supplier_id: user.supplier_id || null,
+                company_name: user.company_name || user.display_name || null,
                 station: null, login_mode: null,
             };
             sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
@@ -335,6 +357,8 @@ const TVC_Auth = (function () {
             account_type: user.account_type, role: sessionRole,
             department: user.department, vessel_id: user.vessel_id,
             company_id: user.company_id || null,
+            supplier_id: user.supplier_id || null,
+            company_name: user.company_name || null,
             station: station || null, login_mode: loginMode || null,
         };
         sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
