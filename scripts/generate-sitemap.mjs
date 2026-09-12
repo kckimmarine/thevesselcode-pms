@@ -100,9 +100,11 @@ const sitemapAllowLines = [
   'Allow: /sitemap.xml',
   'Allow: /sitemap-core.xml',
   ...chunkFiles.map((fileName) => `Allow: /${fileName}`),
+  'Allow: /data/plates/',
 ];
 const sitemapDirectiveLines = [
   `Sitemap: ${origin}/sitemap.xml`,
+  `Sitemap: ${origin}/sitemap-core.xml`,
   ...chunkFiles.map((fileName) => `Sitemap: ${origin}/${fileName}`),
 ];
 

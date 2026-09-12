@@ -39,9 +39,10 @@ const item = impaSeo.getItemByCode(sampleCode);
 check('lookup sample item', !!item?.name, sampleCode);
 
 const html = impaSeo.buildStoreItemHtml(item, { origin: 'https://app.thevesselcode.com' });
-check('html has title', html.includes('Specs, Dimensions &amp; Marine Stores Guide'));
+check('html has title', html.includes('THE VESSEL CODE Maritime Catalog'));
 check('html has canonical', html.includes(`/store/${sampleCode}`));
-check('html has description meta', html.includes('Technical specifications, dimensions, and marine store catalog details'));
+check('html has description meta', html.includes('maritime catalog plate illustration'));
+check('html has og:image', html.includes('property="og:image"'));
 check('html has spec table', html.includes('spec-table'));
 check('html has toolkit link', html.includes('toolkit?impa='));
 check('html has json-ld', html.includes('application/ld+json'));

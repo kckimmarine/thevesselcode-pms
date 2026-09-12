@@ -44,13 +44,24 @@ check(`${TEST_CODE} exists in seo index`, !!item?.name, item?.name || 'missing')
 
 const html = impaSeo.buildStoreItemHtml(item);
 check('default seo origin is www', impaSeo.storeSeoOrigin() === CANONICAL_ORIGIN);
-check('html title format', html.includes(`<title>IMPA ${TEST_CODE} (${item.name}) Specs, Dimensions &amp; Marine Stores Guide | The Vessel Code</title>`));
-check('html h1 format', html.includes(`<h1 itemprop="name">IMPA CODE ${TEST_CODE}: ${item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</h1>`));
+const escName = item.name.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+check('html title format', html.includes(`<title>IMPA CODE ${TEST_CODE} - ${escName} | THE VESSEL CODE Maritime Catalog</title>`));
+check('html h1 format', html.includes(`<h1 itemprop="name">IMPA CODE ${TEST_CODE} - ${escName}</h1>`));
+check('html og:title format', html.includes(`<meta property="og:title" content="IMPA CODE ${TEST_CODE} - ${escName}">`));
+check('html og:description plate copy', html.includes('maritime catalog plate illustration'));
+check('html og:image plate url', html.includes('<meta property="og:image" content="https://www.thevesselcode.com/data/plates/'));
+check('html json-ld mpn', html.includes('"mpn"'));
+check('html json-ld offers', html.includes('"offers"') && (html.includes('"@type":"Offer"') || html.includes('"@type": "Offer"')));
+check('html json-ld offer price', html.includes('"price":"0.00"') || html.includes('"price": "0.00"'));
+check('html json-ld offer currency', html.includes('"priceCurrency":"USD"') || html.includes('"priceCurrency": "USD"'));
+check('html json-ld offer availability', html.includes('schema.org/InStock'));
+check('html json-ld invoice price type', html.includes('schema.org/InvoicePrice'));
+check('html json-ld marine category', html.includes('Marine Stores / Ship Equipment'));
 check('html json-ld product', html.includes('"@type":"Product"') || html.includes('"@type": "Product"'));
 check('html json-ld techarticle', html.includes('"@type":"TechArticle"') || html.includes('"@type": "TechArticle"'));
 check('html canonical uses www', html.includes(`<link rel="canonical" href="${CANONICAL_ORIGIN}/store/${TEST_CODE}">`));
 check('html og:url uses www', html.includes(`<meta property="og:url" content="${CANONICAL_ORIGIN}/store/${TEST_CODE}">`));
-check('html meta description', html.includes('Technical specifications, dimensions, and marine store catalog details'));
+check('html meta description', html.includes('Technical specification, dimensions, unit, and maritime catalog plate illustration'));
 check('html spec table', html.includes('<table class="spec-table">'));
 check('html rating row', html.includes('<th scope="row">Rating</th>'));
 check('html material row', html.includes('<th scope="row">Material</th>'));
@@ -123,10 +134,17 @@ storeChunks.forEach((fileName) => {
   check(`robots allow ${fileName}`, robotsTxt.includes(`Allow: /${fileName}`));
   check(`robots sitemap ${fileName}`, robotsTxt.includes(`Sitemap: https://www.thevesselcode.com/${fileName}`));
 });
-check('robots sitemap count matches index', (robotsTxt.match(/^Sitemap: /gm) || []).length === storeChunks.length + 1);
+check('robots references sitemap core', robotsTxt.includes('Sitemap: https://www.thevesselcode.com/sitemap-core.xml'));
+check('robots sitemap count matches index', (robotsTxt.match(/^Sitemap: /gm) || []).length === storeChunks.length + 2);
 
 const home = readFileSync(join(root, 'home', 'index.html'), 'utf8');
-check('home store index link', home.includes('<a href="/store/812101">Marine Store Spec Index (IMPA 812101)</a>'));
+check('home popular impa section', home.includes('Popular Marine Stores'));
+check('home links impa 232436', home.includes('href="/store/232436"'));
+check('home links impa 812204', home.includes('href="/store/812204"'));
+
+const toolkit = readFileSync(join(root, 'toolkit.html'), 'utf8');
+check('toolkit popular impa section', toolkit.includes('Popular Marine Stores'));
+check('toolkit canonical', toolkit.includes('rel="canonical" href="https://www.thevesselcode.com/toolkit"'));
 
 HUB_CODES.forEach((code) => {
     const hubItem = impaSeo.getItemByCode(code);
