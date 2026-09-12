@@ -500,51 +500,6 @@
         </div>
     </div>
 </div>
-<div id="supplier-register-modal" class="modal hidden supplier-register-modal" role="dialog" aria-labelledby="supplierRegisterTitle" aria-modal="true">
-    <div class="modal-box supplier-register-box" onclick="event.stopPropagation()">
-        <button type="button" id="supplierRegisterCloseBtn" class="modal-x" aria-label="Close">×</button>
-        <h3 id="supplierRegisterTitle">Register as Supplier / Partner</h3>
-        <p class="supplier-register-sub muted">Create your Supplier Portal account. Data is stored locally on this device.</p>
-        <form id="supplierRegisterForm" class="supplier-register-form" novalidate>
-            <div class="login-field">
-                <label for="supplierRegUserId">User ID</label>
-                <input id="supplierRegUserId" type="text" autocomplete="username" required maxlength="64">
-            </div>
-            <div class="login-field">
-                <label for="supplierRegPassword">Password</label>
-                <input id="supplierRegPassword" type="password" autocomplete="new-password" required minlength="4">
-            </div>
-            <div class="login-field">
-                <label for="supplierRegCompany">Supplier / Company Name</label>
-                <input id="supplierRegCompany" type="text" autocomplete="organization" required maxlength="120">
-            </div>
-            <fieldset id="supplierRegScope" class="supplier-scope-fieldset">
-                <legend>Business Scope</legend>
-                <label class="login-check"><input type="checkbox" value="spares"> <span>Spares Supply</span></label>
-                <label class="login-check"><input type="checkbox" value="engine"> <span>Engine Repair</span></label>
-                <label class="login-check"><input type="checkbox" value="stores"> <span>Stores</span></label>
-                <label class="login-check"><input type="checkbox" value="electrical"> <span>Electrical</span></label>
-            </fieldset>
-            <div class="login-field">
-                <label for="supplierRegContact">Contact Person</label>
-                <input id="supplierRegContact" type="text" autocomplete="name" required maxlength="80">
-            </div>
-            <div class="login-field">
-                <label for="supplierRegEmail">Contact Email</label>
-                <input id="supplierRegEmail" type="email" autocomplete="email" required maxlength="120">
-            </div>
-            <div class="login-field">
-                <label for="supplierRegPorts">Service Base Ports</label>
-                <input id="supplierRegPorts" type="text" required maxlength="200" placeholder="e.g. Busan, Singapore">
-            </div>
-            <div id="supplierRegErr" class="login-err" role="alert"></div>
-            <div class="modal-actions supplier-register-actions">
-                <button type="button" id="supplierRegisterCancelBtn" class="btn">Cancel</button>
-                <button type="submit" class="btn btn-green">Create Supplier Account</button>
-            </div>
-        </form>
-    </div>
-</div>
 <div id="jobDetailModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('jobDetailModal')">
     <div class="modal-box"><button class="modal-x" onclick="TVC_App.closeModal('jobDetailModal')">×</button>
         <div id="jobDetailBody"></div>

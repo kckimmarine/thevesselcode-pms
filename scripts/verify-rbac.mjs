@@ -166,7 +166,7 @@ assert('선박은 세션 부서 자동 (DECK)', shipAutoDept === 'DECK');
 console.log('\n═══ 3단계: menuAction → switchTab 매핑 검증 ═══\n');
 
 const MENU_TAB_MAP = {
-    checkPlan: 'actual', inputReport: 'actual', approveReport: 'actual', hqConfirm: 'actual',
+    checkPlan: 'actual', inputReport: 'actual', approveReport: 'actual',
     runHour: 'runhrs', originalPlan: 'actual', modifyItem: 'actual',
 };
 for (const [action, tab] of Object.entries(MENU_TAB_MAP)) {

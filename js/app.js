@@ -1306,7 +1306,7 @@ const TVC_App = (function () {
 
     async function openSmRfqWorkspace() {
         if (!state.user || !TVC_RBAC.isHqAccount(state.user)) {
-            await TVC_Dialog.alert('RFQ Cases are available in SM (HQ) Mode only.');
+            await TVC_Dialog.alert('RFQ Cases are available in SM Mode only.');
             return;
         }
         if (typeof TVC_RfqWorkspace === 'undefined') {
@@ -1347,12 +1347,6 @@ const TVC_App = (function () {
         window.scrollTo(0, 0);
         if (typeof TVC_PWA !== 'undefined') TVC_PWA.closeMobileNav();
         requestAnimationFrame(() => bindTabSearchClearInputs());
-    }
-
-    /** legacy alias */
-    function navigate(view) {
-        const map = { menu: 'menu', dashboard: 'actual', workplan: 'actual' };
-        switchTab(map[view] || view);
     }
 
     function rerenderCurrentTab() { (TAB_RENDERERS[state.currentTab] || renderMainMenu)(); }
@@ -9940,7 +9934,6 @@ const TVC_App = (function () {
                 }
                 menuNavigate('history');
                 break;
-            case 'hqConfirm': menuNavigate('history'); break;
             case 'runHour':
                 if (!runningHoursMenuVisible()) break;
                 openRunHoursModal();
@@ -18869,7 +18862,7 @@ const TVC_App = (function () {
     function escAttr(s) { return esc(s).replace(/'/g, '&#39;'); }
 
     return {
-        boot, switchTab, navigate,
+        boot, switchTab,
         setDepartment, setCaptainView, setHistView, setHistTab, menuAction, openSmRfqWorkspace, resolveDeptPick,
         setFleetView, setFleetSearch, setFleetCompanyFilter, selectVessel,
         openVesselDocsModal, uploadVesselDocsAttachment, removeVesselDocsAttachment,
