@@ -1,8 +1,8 @@
-/* Vessel Profile — HQ Export → Ship Import (identity metadata only) */
+/* Vessel Profile — SM Export → Ship Import (identity metadata only) */
 const TVC_VesselProfileSync = (function () {
     const KIND = 'TVC_VESSEL_PROFILE';
     const VERSION = 1;
-    const DIRECTION = 'VESSEL_PROFILE_HQ_TO_SHIP';
+    const DIRECTION = 'VESSEL_PROFILE_SM_TO_SHIP';
     const JSON_NAME = 'tvc_vessel_profile.json';
 
     const FIELDS = [
@@ -66,7 +66,7 @@ const TVC_VesselProfileSync = (function () {
     }
 
     async function exportZip(user, opts = {}) {
-        if (!user || !TVC_RBAC.isHqAccount(user)) {
+        if (!user || !TVC_RBAC.isSmAccount(user)) {
             throw Object.assign(new Error('Vessel Profile Export is available in SM Mode only.'), { code: 'FORBIDDEN' });
         }
         const vesselId = opts.vesselId
@@ -110,7 +110,7 @@ const TVC_VesselProfileSync = (function () {
                 filename,
                 record_count: 1,
                 status: 'SUCCESS',
-                space: 'HQ',
+                space: 'SM',
                 peer: 'Ship',
             });
         }
@@ -161,7 +161,7 @@ const TVC_VesselProfileSync = (function () {
     }
 
     async function validateForShip(payload, user) {
-        if (!user || TVC_RBAC.isHqAccount(user)) {
+        if (!user || TVC_RBAC.isSmAccount(user)) {
             return { ok: false, error: 'Vessel Profile Import is available in vessel mode only.' };
         }
         const expected = await resolveShipVesselId(user);

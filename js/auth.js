@@ -145,7 +145,7 @@ const TVC_Auth = (function () {
             ...session,
             role,
             account_type: user.account_type,
-            department: (user.account_type === 'HQ' || user.account_type === 'SM'
+            department: (user.account_type === 'SM' || user.account_type === 'SM'
                 || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER')
                 ? null : user.department,
             display_name: user.display_name,
@@ -291,7 +291,7 @@ const TVC_Auth = (function () {
             if (!licCheck.ok) return licCheck;
         }
 
-        if (user.account_type === 'HQ' || user.account_type === 'SM'
+        if (user.account_type === 'SM' || user.account_type === 'SM'
             || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
             if (loginMode) {
                 return {
@@ -428,7 +428,7 @@ const TVC_Auth = (function () {
             }
         }
 
-        if (user.account_type === 'HQ' || user.account_type === 'SM'
+        if (user.account_type === 'SM' || user.account_type === 'SM'
             || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,

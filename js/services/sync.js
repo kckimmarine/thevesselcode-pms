@@ -1,13 +1,13 @@
 /* File-based Delta Sync (.zip) — 부서(DECK/ENGINE) 단위로 완전히 이원화
- * + 데이터 공간(Space) 분리: HQ ↔ 선박(SHIP)은 오직 이 ZIP 파일로만 데이터를 주고받는다. */
+ * + 데이터 공간(Space) 분리: SM ↔ 선박(SHIP)은 오직 이 ZIP 파일로만 데이터를 주고받는다. */
 const TVC_Sync = (function () {
     const now = () => new Date().toISOString();
-    const spaceOf = (user) => (TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP');
+    const spaceOf = (user) => (TVC_RBAC.isSmAccount(user) ? 'SM' : 'SHIP');
 
-    const SHIP_DEFECT_INBOUND = new Set(['SHIP_TO_HQ', 'STATION_TO_HUB', 'DEFECT_URGENT_TO_HQ']);
+    const SHIP_DEFECT_INBOUND = new Set(['SHIP_TO_SM', 'STATION_TO_HUB', 'DEFECT_URGENT_TO_SM']);
 
-    /** HQ import — defect-only or monthly: Confirmed/Ship-submitted cases → awaiting Initial Reply */
-    function normalizeShipDefectForHq(row, direction) {
+    /** SM import — defect-only or monthly: Confirmed/Ship-submitted cases → awaiting Initial Reply */
+    function normalizeShipDefectForSm(row, direction) {
         if (!row || !SHIP_DEFECT_INBOUND.has(direction)) return;
         if (row.phase2_locked || row.status === TVC_DefectCase.Status.COMPANY_REVIEWED) return;
         const listSt = TVC_DefectCase.listWorkflowStatus(row);
@@ -59,8 +59,8 @@ const TVC_Sync = (function () {
         const s = String(scope || '').toLowerCase();
         if (s === 'deck') return 'Deck';
         if (s === 'engine') return 'Engine';
-        if (s === 'deck_hq') return 'Deck (HQ reply)';
-        if (s === 'engine_hq') return 'Engine (HQ reply)';
+        if (s === 'deck_hq') return 'Deck (SM reply)';
+        if (s === 'engine_hq') return 'Engine (SM reply)';
         if (s === 'hq') return 'HQ (legacy)';
         if (s === 'hub') return 'Hub (Master)';
         return s || '—';
@@ -107,10 +107,13 @@ const TVC_Sync = (function () {
         );
     }
 
-    /** Enforce Engine/Deck import routing — Master·HQ toggle, station direct HQ reply, no cross-dept merge. */
+    /** Enforce Engine/Deck import routing — Master·HQ toggle, station direct SM reply, no cross-dept merge. */
     function validateImportPackageScope(user, file, payload, opts = {}) {
-        const direction = String(payload?.export_meta?.direction || '');
-        const isHq = TVC_RBAC.isHqAccount(user);
+        let direction = String(payload?.export_meta?.direction || '');
+        if (typeof TVC_LegacySm !== 'undefined' && TVC_LegacySm.normalizeSyncDirection) {
+            direction = TVC_LegacySm.normalizeSyncDirection(direction);
+        }
+        const isHq = TVC_RBAC.isSmAccount(user);
         const isMaster = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
         const isEngineStation = typeof TVC_Space !== 'undefined' && TVC_Space.isEngineVesselMode(user);
         const isDeckStation = typeof TVC_Space !== 'undefined' && TVC_Space.isDeckVesselMode(user);
@@ -141,8 +144,8 @@ const TVC_Sync = (function () {
             return { ok: true, activeDept, fileDept, route: isMaster ? 'hub_merge' : 'hq_direct' };
         }
 
-        const hqImportFromShip = isHq && direction === 'SHIP_TO_HQ';
-        const shipImportFromHq = !isHq && direction === 'HQ_TO_SHIP';
+        const hqImportFromShip = isHq && direction === 'SHIP_TO_SM';
+        const shipImportFromHq = !isHq && direction === 'SM_TO_SHIP';
 
         if (hqImportFromShip) {
             if (!activeDept) {
@@ -161,13 +164,13 @@ const TVC_Sync = (function () {
 
         if (shipImportFromHq) {
             if (isHq) {
-                throw new Error('Import HQ reply ZIP on the vessel (Master / Engine / Deck Mode).');
+                throw new Error('Import SM reply ZIP on the vessel (Master / Engine / Deck Mode).');
             }
             if (fileDept === 'ENGINE' && isDeckStation) {
-                throw new Error('Engine HQ reply is not applied in Deck Mode. Import in Engine Mode or Captain Mode (Engine toggle).');
+                throw new Error('Engine SM reply is not applied in Deck Mode. Import in Engine Mode or Captain Mode (Engine toggle).');
             }
             if (fileDept === 'DECK' && isEngineStation) {
-                throw new Error('Deck HQ reply is not applied in Engine Mode. Import in Deck Mode or Captain Mode (Deck toggle).');
+                throw new Error('Deck SM reply is not applied in Engine Mode. Import in Deck Mode or Captain Mode (Deck toggle).');
             }
             if (parsed) {
                 if (parsed.isHqReply && parsed.department) {
@@ -175,13 +178,13 @@ const TVC_Sync = (function () {
                         const expectedScope = TVC_Filename.scopeToken(activeDept, false);
                         if (parsed.department !== expectedScope) {
                             throw new Error(
-                                `Department mismatch: current department is ${TVC_RBAC.getDeptLabel(activeDept)}, but the import file is ${importScopeLabel(parsed.department)} HQ reply data.\n\nFile: ${filename}\n\nImport on the correct department PC/toggle.`
+                                `Department mismatch: current department is ${TVC_RBAC.getDeptLabel(activeDept)}, but the import file is ${importScopeLabel(parsed.department)} SM reply data.\n\nFile: ${filename}\n\nImport on the correct department PC/toggle.`
                             );
                         }
                     }
                 } else if (parsed.scope !== 'hq' && !parsed.isHqReply) {
                     throw new Error(
-                        `Invalid HQ reply file (scope: ${importScopeLabel(parsed.scope)}). HQ reply ZIP must use {engine|deck}_hq format.\n\nFile: ${filename}`
+                        `Invalid SM reply file (scope: ${importScopeLabel(parsed.scope)}). SM reply ZIP must use {engine|deck}_hq format.\n\nFile: ${filename}`
                     );
                 }
             }
@@ -204,7 +207,7 @@ const TVC_Sync = (function () {
         if (!exp) return { ok: true, warning: 'expected_unconfigured' };
         if (exp !== got) {
             const ctx = isHq
-                ? `Selected vessel in HQ is "${exp}".`
+                ? `Selected vessel in SM is "${exp}".`
                 : `Registered vessel on this PC is "${exp}".`;
             return {
                 ok: false,
@@ -429,12 +432,12 @@ const TVC_Sync = (function () {
     }
 
     async function buildExportZipBlob(user, direction, dept, opts = {}) {
-        const hubRelayHqReply = direction === 'HQ_TO_SHIP'
+        const hubRelayHqReply = direction === 'SM_TO_SHIP'
             && typeof TVC_Space !== 'undefined'
             && TVC_Space.isCaptainHub(user)
-            && !TVC_RBAC.isHqAccount(user);
-        const action = (direction === 'HQ_TO_SHIP' && !hubRelayHqReply)
-            ? TVC_RBAC.Action.EXPORT_HQ_FEEDBACK
+            && !TVC_RBAC.isSmAccount(user);
+        const action = (direction === 'SM_TO_SHIP' && !hubRelayHqReply)
+            ? TVC_RBAC.Action.EXPORT_SM_FEEDBACK
             : TVC_RBAC.Action.EXPORT_SHIP_SYNC;
         TVC_RBAC.assert(user, action);
         if (direction === 'STATION_TO_HUB' && typeof TVC_Space !== 'undefined') {
@@ -448,7 +451,7 @@ const TVC_Sync = (function () {
 
         const hubRelayPending = typeof TVC_HubRelay !== 'undefined'
             && TVC_HubRelay.isHubRelayExport(user)
-            && direction === 'SHIP_TO_HQ';
+            && direction === 'SHIP_TO_SM';
 
         const delta = opts.caseReview
             ? await collectCaseReview(dept, opts.caseReview)
@@ -470,7 +473,7 @@ const TVC_Sync = (function () {
         if (opts.caseReview && recordCount === 0) {
             throw new Error('No Case Reports to export.');
         }
-        const isHq = TVC_RBAC.isHqAccount(user);
+        const isHq = TVC_RBAC.isSmAccount(user);
         const vesselId = await resolveExpectedVesselId(user, isHq, opts.expectedVesselId);
         if (!vesselId) throw new Error('Vessel ID is missing. Select a vessel first.');
         const companyId = licensedCompanyId();
@@ -516,7 +519,7 @@ const TVC_Sync = (function () {
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         let filename;
         if (opts.monthlyExport && typeof TVC_Filename !== 'undefined') {
-            const scope = direction === 'HQ_TO_SHIP'
+            const scope = direction === 'SM_TO_SHIP'
                 ? TVC_Filename.hqReplyScopeToken(dept)
                 : undefined;
             filename = await TVC_Filename.build({
@@ -528,7 +531,7 @@ const TVC_Sync = (function () {
                 dateTag: exportDate,
             });
         } else if (opts.caseReview && typeof TVC_Filename !== 'undefined') {
-            const scope = direction === 'HQ_TO_SHIP'
+            const scope = direction === 'SM_TO_SHIP'
                 ? TVC_Filename.hqReplyScopeToken(dept)
                 : undefined;
             filename = await TVC_Filename.build({
@@ -540,7 +543,7 @@ const TVC_Sync = (function () {
                 dateTag: exportDate,
             });
         } else if (opts.caseReview) {
-            const scope = direction === 'HQ_TO_SHIP'
+            const scope = direction === 'SM_TO_SHIP'
                 ? `${String(dept || 'ENGINE').toLowerCase()}_hq`
                 : String(dept || 'ENGINE').toLowerCase();
             filename = `${String(vesselId || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '')}_casereport_${scope}_${exportDate}_001.zip`;
@@ -588,7 +591,7 @@ const TVC_Sync = (function () {
                 ? (built.hubRelayHqReply ? 'Station' : 'Captain/HQ')
                 : (direction === 'STATION_TO_HUB'
                     ? 'Captain'
-                    : (direction === 'SHIP_TO_HQ' || direction === 'HQ_TO_SHIP' ? 'Company' : null)),
+                    : (direction === 'SHIP_TO_SM' || direction === 'SM_TO_SHIP' ? 'Company' : null)),
         });
     }
 
@@ -636,9 +639,9 @@ const TVC_Sync = (function () {
     }
 
     async function markExported(delta, user, direction) {
-        const hubStationForward = direction === 'HQ_TO_SHIP'
+        const hubStationForward = direction === 'SM_TO_SHIP'
             && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user)
-            && !TVC_RBAC.isHqAccount(user);
+            && !TVC_RBAC.isSmAccount(user);
         const stores = ['maintenance_jobs', 'daily_work_reports', 'spare_parts', 'ship_components', 'audit_logs', 'requisitions', 'job_bom', 'universal_catalog', 'maintenance_groups', 'spare_groups', 'defect_cases', 'work_permits', 'consume_logs'];
         for (const store of stores) {
             for (const row of delta[store] || []) {
@@ -650,12 +653,12 @@ const TVC_Sync = (function () {
                 row.last_synced_at = now();
                 if (hubStationForward) {
                     if (store === 'defect_cases'
-                        && typeof TVC_DefectCase?.isHqReplyStationForwardPending === 'function'
-                        && TVC_DefectCase.isHqReplyStationForwardPending(row)) {
+                        && typeof TVC_DefectCase?.isSmReplyStationForwardPending === 'function'
+                        && TVC_DefectCase.isSmReplyStationForwardPending(row)) {
                         TVC_DefectCase.stampHqReplyStationForwarded(row);
                     } else if (store === 'work_permits'
-                        && typeof TVC_WorkPermit?.isHqReplyStationForwardPending === 'function'
-                        && TVC_WorkPermit.isHqReplyStationForwardPending(row)) {
+                        && typeof TVC_WorkPermit?.isSmReplyStationForwardPending === 'function'
+                        && TVC_WorkPermit.isSmReplyStationForwardPending(row)) {
                         TVC_WorkPermit.stampHqReplyStationForwarded(row);
                     } else if (store === 'daily_work_reports') {
                         TVC_WorkReport.fromLegacy?.(row);
@@ -673,16 +676,16 @@ const TVC_Sync = (function () {
     }
 
     async function importZip(user, file, dept, opts = {}) {
-        const isHq = TVC_RBAC.isHqAccount(user);
+        const isHq = TVC_RBAC.isSmAccount(user);
         const isHubMerge = !!opts.allowHubMerge;
         const directionHint = opts.expectedDirection;
 
         if (isHubMerge) {
             if (typeof TVC_Space !== 'undefined') TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.HUB_IMPORT);
         } else {
-            TVC_RBAC.assert(user, isHq ? TVC_RBAC.Action.IMPORT_HQ_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC);
+            TVC_RBAC.assert(user, isHq ? TVC_RBAC.Action.IMPORT_SM_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC);
             if (typeof TVC_Space !== 'undefined' && user?.station) {
-                TVC_Space.assertAction(user, isHq ? TVC_RBAC.Action.IMPORT_HQ_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC);
+                TVC_Space.assertAction(user, isHq ? TVC_RBAC.Action.IMPORT_SM_SYNC : TVC_RBAC.Action.IMPORT_SHIP_SYNC);
             }
         }
 
@@ -698,11 +701,11 @@ const TVC_Sync = (function () {
         dept = dept || scope.fileDept || fileDept || user.department;
 
         const isCloudRestore = payload.export_meta?.package_type === 'CLOUD_RESTORE'
-            && fileDirection === 'HQ_TO_SHIP';
+            && fileDirection === 'SM_TO_SHIP';
         if (isCloudRestore) dept = 'ALL';
 
         if (isHubMerge) {
-            if (fileDirection && fileDirection !== 'STATION_TO_HUB' && fileDirection !== 'SHIP_TO_HQ') {
+            if (fileDirection && fileDirection !== 'STATION_TO_HUB' && fileDirection !== 'SHIP_TO_SM') {
                 throw new Error('Captain Hub can merge Station Export (STATION_TO_HUB) packages only.');
             }
         } else if (fileDirection === 'STATION_TO_HUB') {
@@ -771,7 +774,7 @@ const TVC_Sync = (function () {
         }
 
         if (payload.run_hours && typeof TVC_PMS !== 'undefined') {
-            const myScope = isHq ? TVC_PMS.scopeOf('HQ', importVesselId) : 'SHIP';
+            const myScope = isHq ? TVC_PMS.scopeOf('SM', importVesselId) : 'SHIP';
             const store = TVC_PMS.readStore(myScope);
             for (const [k, v] of Object.entries(payload.run_hours)) {
                 if (!mergeDept || k.startsWith(mergeDept + '|')) store[k] = v;
@@ -801,7 +804,7 @@ const TVC_Sync = (function () {
             package_type: payload.export_meta?.package_type || undefined,
             peer: isHubMerge && importDir === 'STATION_TO_HUB'
                 ? (dept === 'ENGINE' ? 'Engine' : (dept === 'DECK' ? 'Deck' : 'Station'))
-                : (importDir === 'HQ_TO_SHIP' || importDir === 'SHIP_TO_HQ' ? (isHq ? null : 'Company') : null),
+                : (importDir === 'SM_TO_SHIP' || importDir === 'SHIP_TO_SM' ? (isHq ? null : 'Company') : null),
         });
         return payload;
     }
@@ -823,7 +826,7 @@ const TVC_Sync = (function () {
         const stamp = (row, kind) => {
             row.sync_status = 'SYNCED';
             if (vesselId && (kind === 'report' || kind === 'job' || kind === 'requisition' || kind === 'defect' || kind === 'work_permit')) row.vessel_id = vesselId;
-            if (isHq && (kind === 'report' || kind === 'defect' || kind === 'work_permit')) row.hq_synced = true;
+            if (isHq && (kind === 'report' || kind === 'defect' || kind === 'work_permit')) row.sm_synced = true;
         };
         const stampImported = (row, kind) => {
             stamp(row, kind);
@@ -831,8 +834,8 @@ const TVC_Sync = (function () {
             const direction = payload.export_meta?.direction || '';
             if (kind === 'report' && !row.department && metaDept && metaDept !== 'ALL') row.department = metaDept;
             if (kind === 'defect' && !row.department && metaDept && metaDept !== 'ALL') row.department = metaDept;
-            if (isHq && kind === 'defect') normalizeShipDefectForHq(row, direction);
-            if (!isHq && kind === 'defect' && (direction === 'HQ_TO_SHIP' || direction === 'DEFECT_REPLY_HQ_TO_SHIP')) {
+            if (isHq && kind === 'defect') normalizeShipDefectForSm(row, direction);
+            if (!isHq && kind === 'defect' && (direction === 'SM_TO_SHIP' || direction === 'DEFECT_REPLY_SM_TO_SHIP')) {
                 if (!row.approved_at && !row.approved_by) {
                     row.approved_at = now().slice(0, 10);
                     row.approved_by = payload.export_meta?.exported_by || 'Company';
@@ -846,7 +849,7 @@ const TVC_Sync = (function () {
                     row.hq_reply_forward_pending = true;
                 }
             }
-            if (!isHq && kind === 'report' && (direction === 'HQ_TO_SHIP' || direction === 'POSTPONE_REPLY_HQ_TO_SHIP')) {
+            if (!isHq && kind === 'report' && (direction === 'SM_TO_SHIP' || direction === 'POSTPONE_REPLY_SM_TO_SHIP')) {
                 TVC_WorkReport.fromLegacy?.(row);
                 const wt = String(row.work_type || '').toUpperCase();
                 const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub
@@ -861,8 +864,8 @@ const TVC_Sync = (function () {
                 if ((!row.department || row.department === 'ALL') && metaDeptWp && metaDeptWp !== 'ALL') {
                     row.department = metaDeptWp;
                 }
-                if (!isHq && (direction === 'WORK_PERMIT_REPLY_HQ_TO_SHIP' || direction === 'HQ_TO_SHIP')) {
-                    if (direction === 'WORK_PERMIT_REPLY_HQ_TO_SHIP' && !row.approved_at && !row.approved_by) {
+                if (!isHq && (direction === 'WORK_PERMIT_REPLY_SM_TO_SHIP' || direction === 'SM_TO_SHIP')) {
+                    if (direction === 'WORK_PERMIT_REPLY_SM_TO_SHIP' && !row.approved_at && !row.approved_by) {
                         row.approved_at = payload.export_meta?.export_date || now().slice(0, 10);
                         row.approved_by = payload.export_meta?.exported_by || 'Company';
                     }
@@ -874,7 +877,7 @@ const TVC_Sync = (function () {
                 }
             }
         };
-        /** Import ZIP은 선박 Export가 단일 진실원 — 타임스탬프가 없거나 HQ 쪽이 더 오래됐으면 반영 */
+        /** Import ZIP은 선박 Export가 단일 진실원 — 타임스탬프가 없거나 SM 쪽이 더 오래됐으면 반영 */
         const shouldApplyIncoming = (existing, incoming) => {
             const inTs = incoming.updated_at || incoming.last_synced_at || '';
             const exTs = existing.updated_at || existing.last_synced_at || '';
@@ -910,7 +913,7 @@ const TVC_Sync = (function () {
                 if (importAuthoritative || shouldApplyIncoming(existing, incoming)) {
                     preserveAuthorFields(existing, incoming);
                     const keepShipDefect = (!isHq && kind === 'defect'
-                        && /HQ_TO_SHIP|DEFECT_REPLY|DEFECT_CLOSE/i.test(payload.export_meta?.direction || ''))
+                        && /SM_TO_SHIP|DEFECT_REPLY|DEFECT_CLOSE/i.test(payload.export_meta?.direction || ''))
                         ? {
                             defect_cleared: existing.defect_cleared,
                             phase3_locked: existing.phase3_locked,
@@ -1089,7 +1092,7 @@ const TVC_Sync = (function () {
                 target.is_locked = true;
                 target.sync_status = 'SYNCED';
                 if (vesselId) target.vessel_id = vesselId;
-                if (isHq) target.hq_synced = true;
+                if (isHq) target.sm_synced = true;
                 await TVC_DB.put('daily_work_reports', target);
             }
         }
@@ -1128,7 +1131,7 @@ const TVC_Sync = (function () {
                 vessel_id: vesselId,
                 company_id: companyId,
                 export_date: now().slice(0, 10),
-                direction: 'SHIP_TO_HQ',
+                direction: 'SHIP_TO_SM',
                 department: 'ALL',
                 station_id: 'CAPTAIN',
                 exported_by: user.username,
@@ -1145,18 +1148,18 @@ const TVC_Sync = (function () {
         const zip = new JSZip();
         zip.file('tvc_sync.json', JSON.stringify(payload, null, 2));
         zip.file('tvc_company_report.json', JSON.stringify(payload, null, 2));
-        zip.file('README.txt', `TVC-PMS Company Report Package\nVessel: ${vesselId}\nDate: ${payload.export_meta.export_date}\nDirection: SHIP_TO_HQ`);
+        zip.file('README.txt', `TVC-PMS Company Report Package\nVessel: ${vesselId}\nDate: ${payload.export_meta.export_date}\nDirection: SHIP_TO_SM`);
 
         const filename = `${vesselId}_COMPANY_REPORT_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         const recordCount = Object.values(merged).reduce((sum, rows) => sum + (rows?.length || 0), 0);
 
         if (!opts.skipMarkExported) {
-            await markExported(merged, user, 'SHIP_TO_HQ');
+            await markExported(merged, user, 'SHIP_TO_SM');
             await TVC_DB.setMeta(TVC_META_KEYS.LAST_EXPORT, now());
             await TVC_DB.put('audit_logs', {
                 timestamp: new Date().toLocaleString(),
-                log: `📦 [Export/SHIP_TO_HQ/ALL] ${filename}`,
+                log: `📦 [Export/SHIP_TO_SM/ALL] ${filename}`,
                 sync_status: 'SYNCED',
             });
         }
@@ -1169,7 +1172,7 @@ const TVC_Sync = (function () {
         await TVC_FileExport.save(built.blob, built.filename);
         await recordSyncHistory({
             type: 'EXPORT',
-            direction: 'SHIP_TO_HQ',
+            direction: 'SHIP_TO_SM',
             department: 'ALL',
             vessel_id: built.vessel_id,
             filename: built.filename,
@@ -1190,7 +1193,7 @@ const TVC_Sync = (function () {
             allowHubMerge: opts.allowHubMerge,
         });
         let dept = opts.dept || scope.fileDept || payload.export_meta?.department || user.department;
-        if (!dept && fileDirection === 'SHIP_TO_HQ') dept = 'ALL';
+        if (!dept && fileDirection === 'SHIP_TO_SM') dept = 'ALL';
 
         const importVesselId = payload.export_meta?.vessel_id || null;
         const expectedVesselId = await resolveExpectedVesselId(user, false, opts.expectedVesselId);
@@ -1226,7 +1229,7 @@ const TVC_Sync = (function () {
             station_id: payload.export_meta?.station_id || null,
             peer: fileDirection === 'STATION_TO_HUB'
                 ? (dept === 'ENGINE' ? 'Engine' : (dept === 'DECK' ? 'Deck' : 'Station'))
-                : (fileDirection === 'HQ_TO_SHIP' || fileDirection === 'SHIP_TO_HQ' ? 'Company' : null),
+                : (fileDirection === 'SM_TO_SHIP' || fileDirection === 'SHIP_TO_SM' ? 'Company' : null),
         });
         return payload;
     }

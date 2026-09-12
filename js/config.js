@@ -17,7 +17,7 @@ const TVC_Config = (function () {
     /** Optional — when set on Vercel (SYNC_CLOUD_RESTORE_KEY), same value for cloud restore publish/download. */
     const SYNC_CLOUD_RESTORE_KEY = '';
 
-    /** Vessel Mode Setup — GitHub Releases (not HQ Office; ship PC installers only). */
+    /** Vessel Mode Setup — GitHub Releases (not SM Office; ship PC installers only). */
     const VESSEL_SETUP_DOWNLOAD_URL = 'https://github.com/kckimmarine/thevesselcode-pms/releases/latest';
 
     const WEB_HOSTS = new Set([
@@ -68,7 +68,7 @@ const TVC_Config = (function () {
         return isWebDeploy();
     }
 
-    /** Admin menu on web — full Administration box on web HQ Admin. */
+    /** Admin menu on web — full Administration box on web SM Admin. */
     function filterAdminMenuSections(sections) {
         return sections;
     }

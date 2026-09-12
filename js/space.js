@@ -9,8 +9,8 @@ const TVC_Space = (function () {
 
     const Direction = {
         STATION_TO_HUB: 'STATION_TO_HUB',
-        SHIP_TO_HQ: 'SHIP_TO_HQ',
-        HQ_TO_SHIP: 'HQ_TO_SHIP',
+        SHIP_TO_SM: 'SHIP_TO_SM',
+        SM_TO_SHIP: 'SM_TO_SHIP',
     };
 
     /** Logical API endpoints guarded per station */
@@ -24,7 +24,7 @@ const TVC_Space = (function () {
         HUB_IMPORT: 'HUB_IMPORT',
         COMPANY_EXPORT: 'COMPANY_EXPORT',
         MONITOR_ALL: 'MONITOR_ALL',
-        HQ_FEEDBACK_IMPORT: 'HQ_FEEDBACK_IMPORT',
+        SM_FEEDBACK_IMPORT: 'SM_FEEDBACK_IMPORT',
     };
 
     const STATION_LABELS = {
@@ -36,16 +36,16 @@ const TVC_Space = (function () {
     const STATION_ENDPOINTS = {
         [Station.CCR]: new Set([
             Endpoint.DECK_WORK, Endpoint.PENDING_REPORT, Endpoint.STATION_EXPORT,
-            Endpoint.APPROVE_DECK, Endpoint.HQ_FEEDBACK_IMPORT,
+            Endpoint.APPROVE_DECK, Endpoint.SM_FEEDBACK_IMPORT,
         ]),
         [Station.ECR]: new Set([
             Endpoint.ENGINE_WORK, Endpoint.PENDING_REPORT, Endpoint.STATION_EXPORT,
-            Endpoint.APPROVE_ENGINE, Endpoint.HQ_FEEDBACK_IMPORT,
+            Endpoint.APPROVE_ENGINE, Endpoint.SM_FEEDBACK_IMPORT,
         ]),
         [Station.CAPTAIN]: new Set([
             Endpoint.MONITOR_ALL, Endpoint.DECK_WORK, Endpoint.ENGINE_WORK,
             Endpoint.PENDING_REPORT, Endpoint.APPROVE_DECK, Endpoint.APPROVE_ENGINE,
-            Endpoint.HUB_IMPORT, Endpoint.COMPANY_EXPORT, Endpoint.HQ_FEEDBACK_IMPORT,
+            Endpoint.HUB_IMPORT, Endpoint.COMPANY_EXPORT, Endpoint.SM_FEEDBACK_IMPORT,
         ]),
     };
 
@@ -116,8 +116,8 @@ const TVC_Space = (function () {
     /** Login gate — loginMode: MASTER | DECK | ENGINE */
     function validateLogin(user, loginMode) {
         if (!user) return { ok: false, error: 'Unable to verify account.' };
-        if (user.account_type === 'HQ' || user.account_type === 'SM'
-            || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
+        const acct = TVC_RBAC.normalizeAccountType?.(user.account_type) || user.account_type;
+        if (acct === 'SM' || acct === 'ADMIN' || acct === 'SUPPLIER') {
             return { ok: false, error: 'Company accounts must sign in without selecting a Department.' };
         }
 
@@ -138,7 +138,7 @@ const TVC_Space = (function () {
     /** Client-side endpoint middleware */
     function canEndpoint(user, endpoint) {
         if (!user) return false;
-        if (TVC_RBAC.isHqAccount(user)) return true;
+        if (TVC_RBAC.isSmAccount(user)) return true;
         const station = getStation(user);
         if (!station) return false;
         const allowed = STATION_ENDPOINTS[station];
@@ -159,7 +159,7 @@ const TVC_Space = (function () {
 
     /** Map RBAC actions → station endpoints */
     function assertAction(user, action) {
-        if (!user || TVC_RBAC.isHqAccount(user)) return;
+        if (!user || TVC_RBAC.isSmAccount(user)) return;
         const station = getStation(user);
         if (!station) return;
 
@@ -168,7 +168,7 @@ const TVC_Space = (function () {
             [TVC_RBAC.Action.EDIT_OWN_PENDING_REPORT]: Endpoint.PENDING_REPORT,
             [TVC_RBAC.Action.APPROVE_DAILY_REPORT]: TVC_RBAC.isDeckApproverRole(user.role) ? Endpoint.APPROVE_DECK : Endpoint.APPROVE_ENGINE,
             [TVC_RBAC.Action.EXPORT_SHIP_SYNC]: Endpoint.STATION_EXPORT,
-            [TVC_RBAC.Action.IMPORT_SHIP_SYNC]: Endpoint.HQ_FEEDBACK_IMPORT,
+            [TVC_RBAC.Action.IMPORT_SHIP_SYNC]: Endpoint.SM_FEEDBACK_IMPORT,
         };
         const ep = map[action];
         if (ep) assertEndpoint(user, ep);
@@ -185,7 +185,7 @@ const TVC_Space = (function () {
 
     function canAccessDepartment(user, dept) {
         if (!user) return false;
-        if (TVC_RBAC.isHqAccount(user)) return TVC_RBAC.canAccessDepartment(user, dept);
+        if (TVC_RBAC.isSmAccount(user)) return TVC_RBAC.canAccessDepartment(user, dept);
         if (isCaptainHub(user)) return true;
         const fd = fixedDepartment(getStation(user));
         if (fd) return !dept || dept === fd;
@@ -212,7 +212,7 @@ const TVC_Space = (function () {
     }
 
     function isDeckVesselMode(user) {
-        if (!user || TVC_RBAC.isHqAccount(user)) return false;
+        if (!user || TVC_RBAC.isSmAccount(user)) return false;
         if (isCaptainHub(user)) return false;
         const station = getStation(user);
         if (station === Station.CCR) return true;
@@ -220,7 +220,7 @@ const TVC_Space = (function () {
     }
 
     function isEngineVesselMode(user) {
-        if (!user || TVC_RBAC.isHqAccount(user)) return false;
+        if (!user || TVC_RBAC.isSmAccount(user)) return false;
         if (isCaptainHub(user) || isDeckVesselMode(user)) return false;
         const station = getStation(user);
         if (station === Station.ECR) return true;
@@ -242,7 +242,7 @@ const TVC_Space = (function () {
     /** Station PC Data Export/Import — Deck: co only · Engine: ce only · Captain hub / HQ: hub rules */
     function canStationDataXfer(user) {
         if (!user) return false;
-        if (TVC_RBAC.isHqAccount(user)) return true;
+        if (TVC_RBAC.isSmAccount(user)) return true;
         const station = getStation(user);
         if (station === Station.CCR) return isDeckChief(user);
         if (station === Station.ECR) return isEngineChief(user);
@@ -254,7 +254,7 @@ const TVC_Space = (function () {
         const base = { ...TVC_RBAC.getUiFeatures(user) };
         if (!user) return base;
         if (TVC_RBAC.isSupplierAccount?.(user)) return base;
-        if (TVC_RBAC.isSuperHqAccount?.(user)) {
+        if (TVC_RBAC.isSuperSmAccount?.(user)) {
             base.showRunningHours = true;
             base.canEditRunningHours = true;
             base.showSpareTab = true;
@@ -264,7 +264,7 @@ const TVC_Space = (function () {
             base.showAppUpdateImport = true;
             return base;
         }
-        if (TVC_RBAC.isHqAccount(user)) {
+        if (TVC_RBAC.isSmAccount(user)) {
             base.showRunningHours = true;
             base.canEditRunningHours = true;
             base.showSpareTab = true;
@@ -331,7 +331,7 @@ const TVC_Space = (function () {
         } else {
             base.showSpareTab = !isDeckVesselMode(user);
         }
-        // HQ / Vessel may Import App Update packages (app binary only — not Master/History)
+        // SM / Vessel may Import App Update packages (app binary only — not Master/History)
         base.showAppUpdateImport = true;
         return base;
     }
@@ -342,8 +342,8 @@ const TVC_Space = (function () {
         if (TVC_RBAC.isFleetMonitorAccount?.(user)) return 'Fleet Monitor';
         if (TVC_RBAC.isSupplierAccount?.(user)) return 'Supplier Mode';
         if (TVC_RBAC.isTvcPilotAccount?.(user)) return 'SM Mode';
-        if (TVC_RBAC.isSuperHqAccount?.(user)) return 'Admin Mode';
-        if (TVC_RBAC.isHqAccount(user)) return 'SM Mode';
+        if (TVC_RBAC.isSuperSmAccount?.(user)) return 'Admin Mode';
+        if (TVC_RBAC.isSmAccount(user)) return 'SM Mode';
         if (isCaptainHub(user)) return 'Captain Mode';
         const station = getStation(user);
         if (station === Station.CCR) return 'Vessel Mode - Deck';
@@ -354,7 +354,7 @@ const TVC_Space = (function () {
     }
 
     function canSwitchDepartmentView(user) {
-        return TVC_RBAC.isHqAccount(user) || isCaptainHub(user);
+        return TVC_RBAC.isSmAccount(user) || isCaptainHub(user);
     }
 
     return {

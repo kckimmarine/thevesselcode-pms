@@ -2,7 +2,7 @@
 const TVC_License = (function () {
     const COMPANY_ID = 'TVC';
     const PILOT_VESSEL_ID = 'TVC Voyager';
-    const HQ_ALLOWED_VESSEL_IDS = [
+    const SM_ALLOWED_VESSEL_IDS = [
         'TVC Voyager',
     ];
 
@@ -21,7 +21,7 @@ const TVC_License = (function () {
                 enforced: false,
                 companyId: COMPANY_ID,
                 vesselId: null,
-                allowedVesselIds: HQ_ALLOWED_VESSEL_IDS.slice(),
+                allowedVesselIds: SM_ALLOWED_VESSEL_IDS.slice(),
                 sku: 'DEV_BROWSER',
                 skuLabel: 'Browser Dev',
                 loginModes: ['MASTER', 'ENGINE', 'DECK'],
@@ -77,7 +77,7 @@ const TVC_License = (function () {
             return { ok: true };
         }
         const type = String(accountType || '').toUpperCase();
-        const isHq = type === 'HQ' || type === 'SM';
+        const isSm = type === 'SM' || type === 'HQ';
         const isAdmin = type === 'ADMIN';
         const isSupplier = type === 'SUPPLIER';
         const adminOnly = !!st.allowAdmin && !st.allowHq && !(st.loginModes || []).length;
@@ -111,15 +111,15 @@ const TVC_License = (function () {
             return { ok: true };
         }
         if (st.allowHq) {
-            if (!isHq && !isSupplier) {
+            if (!isSm && !isSupplier) {
                 return {
                     ok: false,
-                    error: `This installation (${st.skuLabel || st.sku}) is for company HQ. Use Superintendent (hq) or TVC Admin (tvc).`,
+                    error: `This installation (${st.skuLabel || st.sku}) is for company SM. Use Superintendent (tvc shipping) or TVC Admin (admin).`,
                 };
             }
             return { ok: true };
         }
-        if (isHq) {
+        if (isSm) {
             return {
                 ok: false,
                 error: `This installation (${st.skuLabel || st.sku}) is for vessel use only. SM login is not allowed.`,

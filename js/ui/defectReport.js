@@ -1,4 +1,4 @@
-/* Defect Report UI — Phase 1 (Ship) · Phase 2 (HQ) */
+/* Defect Report UI — Phase 1 (Ship) · Phase 2 (SM) */
 const TVC_DefectReport = (function () {
     let _ctx = null;
 
@@ -1026,7 +1026,7 @@ const TVC_DefectReport = (function () {
 
     function isHq() {
         const s = getState();
-        return s.user && TVC_RBAC.isHqAccount(s.user);
+        return s.user && TVC_RBAC.isSmAccount(s.user);
     }
 
     function filteredCases() {
@@ -1034,7 +1034,7 @@ const TVC_DefectReport = (function () {
         let rows = [...(s.defectCases || [])];
         if (isHq()) {
             rows = rows.filter(r =>
-                r.hq_synced === true
+                r.sm_synced === true
                 || r.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
                 || r.status === TVC_DefectCase.Status.AWAITING_COMPLETION
                 || (r.status === TVC_DefectCase.Status.DRAFT && r.visible_in_list !== false)
@@ -1174,7 +1174,7 @@ const TVC_DefectReport = (function () {
         return TVC_RBAC.canModifyDeleteListReport(getState().user, row.department, st);
     }
 
-    /** HQ — ship DC (Phase 3) complete — Company inspection comments */
+    /** SM — ship DC (Phase 3) complete — Company inspection comments */
     function canModifyDfHqFinalRow(row) {
         if (!row || !getState().user || !isHq()) return false;
         return TVC_DefectCase.isPhase4Editable(row);
@@ -1185,12 +1185,12 @@ const TVC_DefectReport = (function () {
         return TVC_DefectCase.isPhase4Editable(row);
     }
 
-    /** HQ — HQ reply export 전까지 Modify (Approved 포함); Phase 4 inspection after ship DC */
+    /** SM — SM reply export 전까지 Modify (Approved 포함); Phase 4 inspection after ship DC */
     function canModifyDfHqRow(row) {
         if (!row || !getState().user || !isHq()) return false;
         if (TVC_DefectCase.isPhase4Editable(row)) return true;
         if (row.status === TVC_DefectCase.Status.CLOSED) return false;
-        if (TVC_DefectCase.isHqReplyExported(row)) return false;
+        if (TVC_DefectCase.isSmReplyExported(row)) return false;
         const shipSubmitted = !!(row.confirmed_at || row.confirmed_by || row.phase1_locked || row.submitted_at
             || row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
             || row.status === TVC_DefectCase.Status.COMPANY_REVIEWED);
@@ -1199,7 +1199,7 @@ const TVC_DefectReport = (function () {
 
     function canEditDfCompanyReply(row, forceView) {
         if (forceView || !isHq() || !row) return false;
-        if (TVC_DefectCase.isHqReplyExported(row)) return false;
+        if (TVC_DefectCase.isSmReplyExported(row)) return false;
         if (row.status === TVC_DefectCase.Status.CLOSED) return false;
         const shipSubmitted = !!(row.confirmed_at || row.confirmed_by || row.phase1_locked || row.submitted_at
             || row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
@@ -1233,7 +1233,7 @@ const TVC_DefectReport = (function () {
         if (!row || canOpenDfModifyRow(row)) return '';
         if (isHq()) {
             if (TVC_DefectCase.isPhase4Editable(row)) return '';
-            if (TVC_DefectCase.isHqReplyExported(row)) return 'HQ reply exported — modify not available';
+            if (TVC_DefectCase.isSmReplyExported(row)) return 'SM reply exported — modify not available';
             return 'Modify not available';
         }
         const st = TVC_DefectCase.listWorkflowStatus(row);
@@ -1254,8 +1254,8 @@ const TVC_DefectReport = (function () {
             }
         } else {
             if (canModifyDfHqFinalRow(row)) return true;
-            if (TVC_DefectCase.isHqReplyExported(row)) return false;
-            if ((row.approved_at || row.approved_by) && TVC_RBAC.canApproveHqReport(getState().user)) return true;
+            if (TVC_DefectCase.isSmReplyExported(row)) return false;
+            if ((row.approved_at || row.approved_by) && TVC_RBAC.canApproveSmReport(getState().user)) return true;
         }
         return canModifyDfListRow(row) || canModifyDfShipCommentsOnly(row) || canModifyDfHqRow(row)
             || canModifyDfHqFinalRow(row);
@@ -1285,7 +1285,7 @@ const TVC_DefectReport = (function () {
     function dfListCheckDisabledTitle(row) {
         if (!getState().user) return 'Sign in required';
         if (isHq()) {
-            if (row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Only items awaiting HQ review can be selected';
+            if (row.status !== TVC_DefectCase.Status.SUBMITTED_TO_COMPANY) return 'Only items awaiting SM review can be selected';
             return 'Not selectable';
         }
         if (row.status !== TVC_DefectCase.Status.DRAFT && !canDeleteDfListRow(row)) return 'No delete permission';
@@ -1675,7 +1675,7 @@ const TVC_DefectReport = (function () {
 
         if (isHq()) {
             const pending = rows.filter(r => r.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY);
-            if (!pending.length) await TVC_Dialog.alert('Only SUBMITTED items awaiting HQ review can be confirmed.');
+            if (!pending.length) await TVC_Dialog.alert('Only SUBMITTED items awaiting SM review can be confirmed.');
             openCase(pending[0].id, 'edit');
             return;
         }
@@ -1869,13 +1869,13 @@ const TVC_DefectReport = (function () {
         const isApproved = !!(row.approved_at || row.approved_by);
         const approvalLive = s._defectMode === 'view';
         const hq = isHq();
-        const hqPreExport = hq && !TVC_DefectCase.isHqReplyExported(row);
+        const hqPreExport = hq && !TVC_DefectCase.isSmReplyExported(row);
         const canConfirmNew = approvalLive && !hq && isDefectReportConfirmable(row);
         const canUnconfirmNow = approvalLive && !hq && isConfirmed && !isApproved
             && !!user && TVC_RBAC.canConfirmDepartment(user, row.department);
         const canConfirmNow = canConfirmNew || canUnconfirmNow;
-        const canApproveNow = approvalLive && hqPreExport && !!user && TVC_RBAC.canApproveHqReport(user)
-            && (isConfirmed || TVC_RBAC.canHqDirectApprove(user, row) || isApproved);
+        const canApproveNow = approvalLive && hqPreExport && !!user && TVC_RBAC.canApproveSmReport(user)
+            && (isConfirmed || TVC_RBAC.canSmDirectApprove(user, row) || isApproved);
         return {
             isConfirmed,
             isApproved,
@@ -2123,7 +2123,7 @@ const TVC_DefectReport = (function () {
         const doApprove = apCb?.checked && !apCb.disabled;
         const doUnapprove = apCb && !apCb.disabled && !apCb.checked
             && (row.approved_at || row.approved_by)
-            && isHq() && !TVC_DefectCase.isHqReplyExported(row);
+            && isHq() && !TVC_DefectCase.isSmReplyExported(row);
         if (doUnapprove) {
             await TVC_DefectCaseService.saveApprovalMeta(user, id, { unapprove: true });
         }
@@ -2152,9 +2152,9 @@ const TVC_DefectReport = (function () {
         const canEditP4 = !forceView && hq && TVC_DefectCase.isPhase4Editable(row);
         const canEditCompanyFinal = canEditDfCompanyFinalComment(row, forceView);
         const hqBothAttach = hq && !forceView;
-        const canHqApproveOnly = !forceView && hq && approval.canApproveNow;
+        const canSmApproveOnly = !forceView && hq && approval.canApproveNow;
         const canSave = !forceView && (
-            canEditP1 || canEditCompanyReply || canEditShipVerify || canEditShoreSupport || canEditP4 || canEditCompanyFinal || canHqApproveOnly
+            canEditP1 || canEditCompanyReply || canEditShipVerify || canEditShoreSupport || canEditP4 || canEditCompanyFinal || canSmApproveOnly
         );
         const titleText = fromListNav || fromHistoryNav
             ? 'Defect Report'
@@ -2581,7 +2581,7 @@ const TVC_DefectReport = (function () {
             await TVC_Dialog.alert('Company reply saved.');
             if (andExport) await TVC_DefectSync.exportHqReplyZip(s.user, id);
         } catch (e) {
-            await TVC_Dialog.alert(e.message || e.code || 'HQ reply failed');
+            await TVC_Dialog.alert(e.message || e.code || 'SM reply failed');
         }
     }
 
@@ -2741,13 +2741,13 @@ const TVC_DefectReport = (function () {
         const row = getDefectModalRow();
         if (!row?.id) return;
         const user = s.user;
-        if (!user || !TVC_RBAC.isHqAccount(user)) return;
+        if (!user || !TVC_RBAC.isSmAccount(user)) return;
         const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name');
         const superLabel = hqSuperintendentApprovalLabel(user);
 
         if (!apCb.checked) {
             if ((row.approved_at || row.approved_by) && s._defectMode === 'view'
-                && !TVC_DefectCase.isHqReplyExported(row) && TVC_RBAC.canApproveHqReport(user)) {
+                && !TVC_DefectCase.isSmReplyExported(row) && TVC_RBAC.canApproveSmReport(user)) {
                 try {
                     await TVC_DefectCaseService.saveApprovalMeta(user, row.id, { unapprove: true });
                     const fresh = await TVC_DefectCaseService.get(row.id);
@@ -2762,7 +2762,7 @@ const TVC_DefectReport = (function () {
                 }
                 return;
             }
-            if ((row.approved_at || row.approved_by) && !TVC_DefectCase.isHqReplyExported(row)) {
+            if ((row.approved_at || row.approved_by) && !TVC_DefectCase.isSmReplyExported(row)) {
                 if (input) input.value = '';
                 return;
             }
@@ -2783,12 +2783,12 @@ const TVC_DefectReport = (function () {
             if (input) input.value = superLabel;
             return;
         }
-        if (!TVC_RBAC.canApproveHqReport(user)) {
+        if (!TVC_RBAC.canApproveSmReport(user)) {
             apCb.checked = false;
             if (input) input.value = '';
             return;
         }
-        if (!row.confirmed_at && !row.confirmed_by && !TVC_RBAC.canHqDirectApprove(user, row)) {
+        if (!row.confirmed_at && !row.confirmed_by && !TVC_RBAC.canSmDirectApprove(user, row)) {
             apCb.checked = false;
             if (input) input.value = '';
             await TVC_Dialog.alert('Confirm required before Approve.');
@@ -2883,7 +2883,7 @@ const TVC_DefectReport = (function () {
         const user = s.user;
         if (!row || !user) return;
         if (isHq()) {
-            if (!TVC_RBAC.canApproveHqReport(user)) {
+            if (!TVC_RBAC.canApproveSmReport(user)) {
                 await TVC_Dialog.alert('This action is available in SM Mode only.');
                 return;
             }

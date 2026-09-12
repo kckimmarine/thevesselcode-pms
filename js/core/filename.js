@@ -1,8 +1,8 @@
 /** Export filename — {vessel}_{type}_{scope}_{YYYYMMDD}_{seq}.{ext}
  *  Case Report:         {vessel}_casereport_{engine|deck}_{YYYYMMDD}_{seq}.zip
- *  Case Report HQ reply:{vessel}_casereport_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
- *  HQ Work Permit reply: {vessel}_workpermit_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
- *  HQ Defect reply:     {vessel}_defect_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
+ *  Case Report SM reply:{vessel}_casereport_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
+ *  SM Work Permit reply: {vessel}_workpermit_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
+ *  SM Defect reply:     {vessel}_defect_{engine|deck}_hq_{YYYYMMDD}_{seq}.zip
  *  PMS Backup:          {vessel}_pms_backup_{engine|deck}_{YYYYMMDD}_{seq}.zip
  *  SPARE Backup:        {vessel}_spare_backup_{engine|deck}_{YYYYMMDD}_{seq}.zip */
 const TVC_Filename = (function () {
@@ -35,7 +35,7 @@ const TVC_Filename = (function () {
         return 'engine';
     }
 
-    /** HQ reply export scope: engine_hq | deck_hq */
+    /** SM reply export scope: engine_hq | deck_hq */
     function hqReplyScopeToken(dept) {
         return `${scopeToken(dept, false)}_hq`;
     }
@@ -93,7 +93,7 @@ const TVC_Filename = (function () {
         return `${prefix}${seq}.${ext}`;
     }
 
-    /** Parse scoped export filename (5- or 6-column Work Permit HQ reply). */
+    /** Parse scoped export filename (5- or 6-column Work Permit SM reply). */
     function parseScoped(filename) {
         const base = String(filename || '').trim().replace(/\.[^./\\]+$/i, '');
         let m = base.match(/^([a-z0-9]+)_([a-z0-9_]+)_(engine|deck)_hq_(\d{8})_(\d{3})$/i);

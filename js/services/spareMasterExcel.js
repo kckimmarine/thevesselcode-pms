@@ -1,7 +1,7 @@
 /* SPARE Master Excel — Export / Import (Group · Equipment · Spare Parts)
  * Filename: {vessel}_spare_master_{deck|engine}_{YYYYMMDD}_{seq}.xlsx
  * Group/Equipment header columns match PMS Master (Jobs/Parts ref name differs).
- * Schema is identical across Engine · Master · HQ (ENGINE) and Deck · Master · HQ (DECK).
+ * Schema is identical across Engine · Master · SM (ENGINE) and Deck · Master · SM (DECK).
  */
 const TVC_SpareMasterExcel = (function () {
     const NAVY = 'FF1A365D';
@@ -286,7 +286,7 @@ const TVC_SpareMasterExcel = (function () {
         const dept = normDept(department);
         let scope;
         const user = opts.user || null;
-        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isHqAccount?.(user) && typeof TVC_Filename !== 'undefined') {
+        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSmAccount?.(user) && typeof TVC_Filename !== 'undefined') {
             scope = TVC_Filename.hqReplyScopeToken(dept);
         } else if (user && typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub?.(user) && typeof TVC_Filename !== 'undefined') {
             scope = TVC_Filename.masterHubScopeToken(dept);
@@ -541,7 +541,7 @@ const TVC_SpareMasterExcel = (function () {
         const wsG = wb.addWorksheet('Group Headers', { views: [{ state: 'frozen', ySplit: HDR_ROW }] });
         addMetaRows(wsG, [
             `Vessel: ${vesselId}  ·  SPARE Master — ${department} — Group Headers`,
-            'Format shared: Engine · Master · HQ (this DEPARTMENT). Deck uses a separate DECK file.',
+            'Format shared: Engine · Master · SM (this DEPARTMENT). Deck uses a separate DECK file.',
             'Live DB snapshot — SPARE GROUP Tree (spare_groups) for this department only. Re-export after UI changes.',
             'CRITICAL EQUIPMENT = Yes / No. If Group is Yes, that group is marked Critical.',
         ]);
@@ -602,7 +602,7 @@ const TVC_SpareMasterExcel = (function () {
         const codeMap = simplifyCodes !== false ? simplifiedExportCodes(exportSpares, groupNodes, spareGroups) : null;
         addMetaRows(wsP, [
             `Vessel: ${vesselId}  ·  ${department} — ${exportSpares.length} spare parts`,
-            'Format shared: Engine · Master · HQ (this DEPARTMENT). Deck uses a separate DECK file.',
+            'Format shared: Engine · Master · SM (this DEPARTMENT). Deck uses a separate DECK file.',
             setupExport
                 ? 'Setup template: ROB/Work zeroed · Code = GG-EE-III (e.g. 01-01-001; EE=00 if no Equipment). Match by DEPARTMENT + Code.'
                 : 'Code = GG-EE-III (Group-Equipment-Item). Match by DEPARTMENT + Code. Generator Engine → GROUP 03 · GENERATOR ENGINE.',

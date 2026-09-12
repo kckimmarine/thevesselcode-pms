@@ -1,4 +1,4 @@
-/** THE VESSEL CODE — Online sync (Master ↔ HQ via cloud storage)
+/** THE VESSEL CODE — Online sync (Master ↔ SM via cloud storage)
  *  Offline ZIP remains the fallback for FBB. V-SAT: long timeout (up to 10 min). */
 const TVC_OnlineSync = (function () {
     const META_KEY = 'sync_api_base_url';
@@ -60,8 +60,8 @@ const TVC_OnlineSync = (function () {
         }
     }
 
-    /** Master — push aggregated SHIP_TO_HQ package (application/zip body). */
-    async function pushShipToHq(user, blob, meta = {}) {
+    /** Master — push aggregated SHIP_TO_SM package (application/zip body). */
+    async function pushShipToSm(user, blob, meta = {}) {
         TVC_RBAC.assert(user, TVC_RBAC.Action.EXPORT_SHIP_SYNC);
         if (typeof TVC_Space !== 'undefined') TVC_Space.assertEndpoint(user, TVC_Space.Endpoint.COMPANY_EXPORT);
         if (!isAvailable()) throw new Error(statusMessage());
@@ -81,7 +81,7 @@ const TVC_OnlineSync = (function () {
 
         await TVC_Sync.recordSyncHistory({
             type: 'EXPORT',
-            direction: 'SHIP_TO_HQ',
+            direction: 'SHIP_TO_SM',
             department: 'ALL',
             vessel_id: meta.vessel_id || user.vessel_id || '—',
             filename: meta.filename || 'online_push.zip',
@@ -93,31 +93,31 @@ const TVC_OnlineSync = (function () {
         return result;
     }
 
-    /** HQ — pull latest ship package metadata + signed download URL. */
+    /** SM — pull latest ship package metadata + signed download URL. */
     async function pullShipFromVessel(user, vesselId) {
-        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
-        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ account required.');
+        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_SM_SYNC);
+        if (!TVC_RBAC.isSmAccount(user)) throw new Error('HQ account required.');
         if (!isAvailable()) throw new Error(statusMessage());
         const vid = String(vesselId || '').trim();
         if (!vid) throw new Error('Select a vessel before online sync.');
 
-        return apiFetch(`/api/sync/hq/pull?vessel_id=${encodeURIComponent(vid)}&direction=SHIP_TO_HQ`);
+        return apiFetch(`/api/sync/hq/pull?vessel_id=${encodeURIComponent(vid)}&direction=SHIP_TO_SM`);
     }
 
-    /** Master — pull latest HQ_TO_SHIP feedback package metadata + signed download URL. */
-    async function pullHqFeedback(user, vesselId) {
-        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
+    /** Master — pull latest SM_TO_SHIP feedback package metadata + signed download URL. */
+    async function pullSmFeedback(user, vesselId) {
+        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_SM_SYNC);
         if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
-            throw new Error('Online pull from HQ is available from Captain Hub only.');
+            throw new Error('Online pull from SM is available from Captain Hub only.');
         }
         if (!isAvailable()) throw new Error(statusMessage());
         const vid = String(vesselId || user.vessel_id || '').trim();
         if (!vid) throw new Error('Vessel ID is missing.');
 
-        return apiFetch(`/api/sync/ship/pull?vessel_id=${encodeURIComponent(vid)}&direction=HQ_TO_SHIP`);
+        return apiFetch(`/api/sync/ship/pull?vessel_id=${encodeURIComponent(vid)}&direction=SM_TO_SHIP`);
     }
 
-    /** HQ — download pulled ship package and import into IndexedDB. */
+    /** SM — download pulled ship package and import into IndexedDB. */
     async function importPulledPackage(user, meta) {
         const url = meta?.download_url;
         if (!url) throw new Error('Pull response has no download_url.');
@@ -129,20 +129,20 @@ const TVC_OnlineSync = (function () {
         await TVC_Sync.importZip(user, file, null);
         await TVC_Sync.recordSyncHistory({
             type: 'IMPORT',
-            direction: 'SHIP_TO_HQ',
+            direction: 'SHIP_TO_SM',
             department: 'ALL',
             vessel_id: meta.vessel_id || '—',
             filename,
             record_count: meta.record_count || 0,
             status: 'SUCCESS',
-            space: 'HQ',
+            space: 'SM',
             channel: 'ONLINE',
         });
         return { filename, vessel_id: meta.vessel_id };
     }
 
-    /** Master — download HQ feedback package and import into IndexedDB. */
-    async function importHqFeedbackPackage(user, meta) {
+    /** Master — download SM feedback package and import into IndexedDB. */
+    async function importSmFeedbackPackage(user, meta) {
         const url = meta?.download_url;
         if (!url) throw new Error('Pull response has no download_url.');
         const zipRes = await fetch(url);
@@ -153,7 +153,7 @@ const TVC_OnlineSync = (function () {
         await TVC_Sync.importZip(user, file, null);
         await TVC_Sync.recordSyncHistory({
             type: 'IMPORT',
-            direction: 'HQ_TO_SHIP',
+            direction: 'SM_TO_SHIP',
             department: meta.department || 'ALL',
             vessel_id: meta.vessel_id || '—',
             filename,
@@ -165,9 +165,9 @@ const TVC_OnlineSync = (function () {
         return { filename, vessel_id: meta.vessel_id };
     }
 
-    /** HQ — push HQ_TO_SHIP feedback package. */
-    async function pushHqFeedback(user, blob, meta = {}) {
-        TVC_RBAC.assert(user, TVC_RBAC.Action.EXPORT_HQ_FEEDBACK);
+    /** SM — push SM_TO_SHIP feedback package. */
+    async function pushSmFeedback(user, blob, meta = {}) {
+        TVC_RBAC.assert(user, TVC_RBAC.Action.EXPORT_SM_FEEDBACK);
         if (!isAvailable()) throw new Error(statusMessage());
 
         const result = await apiFetch('/api/sync/hq/push', {
@@ -179,20 +179,20 @@ const TVC_OnlineSync = (function () {
                 'X-Filename': meta.filename || 'hq_feedback.zip',
                 'X-Exported-By': user.username || '',
                 'X-Record-Count': String(meta.record_count || 0),
-                'X-Direction': 'HQ_TO_SHIP',
+                'X-Direction': 'SM_TO_SHIP',
             },
             body: blob,
         });
 
         await TVC_Sync.recordSyncHistory({
             type: 'EXPORT',
-            direction: 'HQ_TO_SHIP',
+            direction: 'SM_TO_SHIP',
             department: meta.department || 'ALL',
             vessel_id: meta.vessel_id || '—',
             filename: meta.filename || 'online_hq_push.zip',
             record_count: meta.record_count || 0,
             status: 'SUCCESS',
-            space: 'HQ',
+            space: 'SM',
             channel: 'ONLINE',
         });
         return result;
@@ -208,21 +208,21 @@ const TVC_OnlineSync = (function () {
         return null;
     }
 
-    /** Unified entry — Master ↔ HQ online sync. */
+    /** Unified entry — Master ↔ SM online sync. */
     async function syncNow(user, direction, opts = {}) {
         if (!isAvailable()) {
             return { channel: 'OFFLINE', status: 'OFFLINE', message: statusMessage() };
         }
 
-        if (direction === 'SHIP_TO_HQ') {
+        if (direction === 'SHIP_TO_SM') {
             if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
-                throw new Error('Online push to HQ is available from Captain Hub only.');
+                throw new Error('Online push to SM is available from Captain Hub only.');
             }
             if (typeof TVC_Sync.buildCompanyZipBlob !== 'function') {
                 throw new Error('Sync export module is not loaded.');
             }
             const built = await TVC_Sync.buildCompanyZipBlob(user);
-            const pushResult = await pushShipToHq(user, built.blob, {
+            const pushResult = await pushShipToSm(user, built.blob, {
                 filename: built.filename,
                 vessel_id: built.vessel_id,
                 company_id: built.company_id,
@@ -238,7 +238,7 @@ const TVC_OnlineSync = (function () {
             };
         }
 
-        if (direction === 'HQ_PULL') {
+        if (direction === 'SM_PULL' || direction === 'HQ_PULL') {
             const vesselId = opts.vesselId;
             const meta = await pullShipFromVessel(user, vesselId);
             const imported = await importPulledPackage(user, meta);
@@ -252,19 +252,19 @@ const TVC_OnlineSync = (function () {
             };
         }
 
-        if (direction === 'HQ_PUSH') {
-            if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ account required.');
+        if (direction === 'SM_PUSH' || direction === 'HQ_PUSH') {
+            if (!TVC_RBAC.isSmAccount(user)) throw new Error('HQ account required.');
             const vesselId = opts.vesselId;
             if (!vesselId) throw new Error('Select a vessel in Ship List before online push.');
             const dept = resolveSyncDept(user, opts);
-            if (!dept) throw new Error('Select Deck or Engine toggle before pushing HQ reply online.');
+            if (!dept) throw new Error('Select Deck or Engine toggle before pushing SM reply online.');
             if (typeof TVC_Sync.buildExportZipBlob !== 'function') {
                 throw new Error('Sync export module is not loaded.');
             }
-            const built = await TVC_Sync.buildExportZipBlob(user, 'HQ_TO_SHIP', dept, {
+            const built = await TVC_Sync.buildExportZipBlob(user, 'SM_TO_SHIP', dept, {
                 expectedVesselId: vesselId,
             });
-            const pushResult = await pushHqFeedback(user, built.blob, {
+            const pushResult = await pushSmFeedback(user, built.blob, {
                 filename: built.filename,
                 vessel_id: built.vessel_id,
                 company_id: built.company_id,
@@ -272,7 +272,7 @@ const TVC_OnlineSync = (function () {
                 department: dept,
             });
             if (typeof TVC_Sync.finalizeZipExport === 'function') {
-                await TVC_Sync.finalizeZipExport(user, 'HQ_TO_SHIP', dept, built.delta, built, {
+                await TVC_Sync.finalizeZipExport(user, 'SM_TO_SHIP', dept, built.delta, built, {
                     skipSyncHistory: true,
                 });
             }
@@ -280,7 +280,7 @@ const TVC_OnlineSync = (function () {
                 channel: 'ONLINE',
                 status: 'OK',
                 direction,
-                message: `Uploaded HQ reply ${built.filename} to cloud sync storage.`,
+                message: `Uploaded SM reply ${built.filename} to cloud sync storage.`,
                 vessel_id: built.vessel_id,
                 package_id: pushResult?.package_id || null,
             };
@@ -288,16 +288,16 @@ const TVC_OnlineSync = (function () {
 
         if (direction === 'SHIP_PULL') {
             if (typeof TVC_Space !== 'undefined' && !TVC_Space.isCaptainHub(user)) {
-                throw new Error('Online pull from HQ is available from Captain Hub only.');
+                throw new Error('Online pull from SM is available from Captain Hub only.');
             }
             const vesselId = opts.vesselId || user.vessel_id;
-            const meta = await pullHqFeedback(user, vesselId);
-            const imported = await importHqFeedbackPackage(user, meta);
+            const meta = await pullSmFeedback(user, vesselId);
+            const imported = await importSmFeedbackPackage(user, meta);
             return {
                 channel: 'ONLINE',
                 status: 'OK',
                 direction,
-                message: `Imported HQ reply ${imported.filename} from cloud sync storage.`,
+                message: `Imported SM reply ${imported.filename} from cloud sync storage.`,
                 vessel_id: imported.vessel_id,
                 package_id: meta.package_id || null,
             };
@@ -336,7 +336,7 @@ const TVC_OnlineSync = (function () {
 
     /** Phase C — cloud DB summary (HQ: company scope; Admin: all or filtered). */
     async function fetchCloudStats(user, opts = {}) {
-        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!TVC_RBAC.isSmAccount(user)) throw new Error('HQ or Admin account required.');
         if (!isAvailable()) throw new Error(statusMessage());
         const vesselId = String(opts.vesselId || user.vessel_id || '').trim();
         const companyId = resolveCloudCompanyId(user, vesselId);
@@ -349,7 +349,7 @@ const TVC_OnlineSync = (function () {
 
     /** Phase C — paginated sync_records from cloud DB. */
     async function fetchCloudRecords(user, opts = {}) {
-        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!TVC_RBAC.isSmAccount(user)) throw new Error('HQ or Admin account required.');
         if (!isAvailable()) throw new Error(statusMessage());
         const vesselId = String(opts.vesselId || user.vessel_id || '').trim();
         const companyId = resolveCloudCompanyId(user, vesselId);
@@ -365,9 +365,9 @@ const TVC_OnlineSync = (function () {
         return apiFetch(`/api/sync/cloud/records?${params}`, { headers: cloudQueryHeaders(user) });
     }
 
-    /** Web HQ — upsert local IndexedDB rows into cloud sync_records. */
+    /** Web SM — upsert local IndexedDB rows into cloud sync_records. */
     async function upsertCloudRecords(user, opts = {}) {
-        if (!TVC_RBAC.isHqAccount(user)) throw new Error('HQ or Admin account required.');
+        if (!TVC_RBAC.isSmAccount(user)) throw new Error('HQ or Admin account required.');
         if (!isAvailable()) throw new Error(statusMessage());
         const vesselId = String(opts.vesselId || '').trim();
         if (!vesselId) throw new Error('vessel_id is required.');
@@ -402,12 +402,12 @@ const TVC_OnlineSync = (function () {
         fetchCloudStats,
         fetchCloudRecords,
         upsertCloudRecords,
-        pushShipToHq,
+        pushShipToSm,
         pullShipFromVessel,
-        pullHqFeedback,
+        pullSmFeedback,
         importPulledPackage,
-        importHqFeedbackPackage,
-        pushHqFeedback,
+        importSmFeedbackPackage,
+        pushSmFeedback,
         syncNow,
     };
 })();

@@ -4,7 +4,7 @@ const TVC_SetupExport = (function () {
     const VERSION = 1;
     const JSON_NAME = 'tvc_setup_handoff.json';
     const SETUPS_DIR = 'setups/';
-    const HANDOFF_SKUS = ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+    const HANDOFF_SKUS = ['SM_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
     const VESSEL_SETUP_SKUS = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
 
     function sanitizeSetupFilename(name) {
@@ -28,7 +28,7 @@ const TVC_SetupExport = (function () {
         const verTag = ver ? ` v${ver}` : '';
         const co = sanitizeSetupFilename(companyId);
         const vessel = sanitizeSetupFilename(vesselId);
-        if (String(sku).toUpperCase() === 'HQ_OFFICE' && co) {
+        if (String(sku).toUpperCase() === 'SM_OFFICE' && co) {
             return sanitizeSetupFilename(`TVC-PMS ${co}${verTag} Setup.exe`);
         }
         const role = skuRoleLabel(sku);
@@ -290,7 +290,7 @@ const TVC_SetupExport = (function () {
             masterLines.push(`  - SPARE: ${s.spare_parts} parts · ${s.spare_groups} groups`);
         }
         zip.file('README.txt', [
-            'TVC-PMS Setup Handoff (Path B — Universal HQ + Vessel)',
+            'TVC-PMS Setup Handoff (Path B — Universal SM + Vessel)',
             '',
             `Company: ${manifest.company_name} (${manifest.company_id})`,
             `Vessel: ${primaryVesselId || '—'}`,

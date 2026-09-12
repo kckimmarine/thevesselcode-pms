@@ -1,4 +1,4 @@
-/* HQ Fleet registry — 1~100+ vessels (localStorage, offline-first) */
+/* SM Fleet registry — 1~100+ vessels (localStorage, offline-first) */
 const TVC_Fleet = (function () {
     const STORAGE_KEY = 'tvc_fleet_v1';
     const SELECTED_KEY = 'tvc_fleet_selected';
@@ -127,10 +127,10 @@ const TVC_Fleet = (function () {
         return String(vessel?.company_id || COMPANY_ID).trim() || COMPANY_ID;
     }
 
-    /** HQ superintendent — license company + allowedVesselIds. Super-admin sees registry-active fleet. */
+    /** SM superintendent — license company + allowedVesselIds. Super-admin sees registry-active fleet. */
     function getVisible(user) {
         const all = getAll();
-        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSuperHqAccount?.(user)) {
+        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSuperSmAccount?.(user)) {
             if (typeof TVC_AdminRegistry !== 'undefined') {
                 try {
                     const activeRows = TVC_AdminRegistry.listVessels({ includeInactive: false });
@@ -142,7 +142,7 @@ const TVC_Fleet = (function () {
             }
             return all;
         }
-        const companyScoped = !!(user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isCompanyHqAccount?.(user));
+        const companyScoped = !!(user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isCompanySmAccount?.(user));
         if (!companyScoped) return all;
         const companyId = String(user.company_id || licenseCompanyId()).trim() || COMPANY_ID;
         const allowed = licenseAllowedVesselIds();
@@ -203,7 +203,7 @@ const TVC_Fleet = (function () {
         return getAll();
     }
 
-    /** HQ Fleet에서 선박 삭제 (마지막 1척은 삭제 불가) */
+    /** SM Fleet에서 선박 삭제 (마지막 1척은 삭제 불가) */
     function remove(id) {
         const target = String(id || '').trim();
         if (!target) return getAll();
@@ -215,7 +215,7 @@ const TVC_Fleet = (function () {
         return getAll();
     }
 
-    /** HQ license allowedVesselIds → Ship List upsert */
+    /** SM license allowedVesselIds → Ship List upsert */
     function syncFromAllowedVesselIds(ids) {
         const list = (ids || []).map(String).filter(Boolean);
         if (!list.length) return getAll();
@@ -254,7 +254,7 @@ const TVC_Fleet = (function () {
         return getAll();
     }
 
-    /** Super HQ — admin/registry.json vessels → Ship List (all companies). */
+    /** Super SM — admin/registry.json vessels → Ship List (all companies). */
     function syncFromAdminRegistry() {
         if (typeof TVC_AdminRegistry === 'undefined') return getAll();
         const activeRows = TVC_AdminRegistry.listVessels({ includeInactive: false });

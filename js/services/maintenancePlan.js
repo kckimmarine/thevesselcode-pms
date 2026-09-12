@@ -77,7 +77,7 @@ const TVC_MaintenancePlan = (function () {
         assertDept(user, job);
 
         const vesselId = await resolveVessel(user, { vessel_id: job.vessel_id || patch?.vessel_id, selectedVesselId: patch?.selectedVesselId });
-        if (TVC_RBAC.isHqAccount(user) && job.vessel_id && !sameVessel(job, vesselId)) {
+        if (TVC_RBAC.isSmAccount(user) && job.vessel_id && !sameVessel(job, vesselId)) {
             throw Object.assign(new Error('VESSEL_FORBIDDEN'), { code: 'FORBIDDEN' });
         }
 
@@ -162,7 +162,7 @@ const TVC_MaintenancePlan = (function () {
         if (!job) throw Object.assign(new Error('JOB_NOT_FOUND'), { code: 'NOT_FOUND' });
         assertDept(user, job);
 
-        if (TVC_RBAC.isHqAccount(user)) {
+        if (TVC_RBAC.isSmAccount(user)) {
             const vesselId = await resolveVessel(user, {});
             if (job.vessel_id && !sameVessel(job, vesselId)) {
                 throw Object.assign(new Error('VESSEL_FORBIDDEN'), { code: 'FORBIDDEN' });

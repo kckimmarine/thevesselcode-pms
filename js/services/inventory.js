@@ -172,7 +172,7 @@ const TVC_Inventory = (function () {
         EXPORTED: 'EXPORTED',  // Data Export 완료 (레거시)
         SUBMITTED: 'SUBMITTED', // Data Export 완료 (Submitted)
         QUOTED: 'QUOTED',      // 업체 견적 회신 반영
-        HQ_REVIEW: 'HQ_REVIEW',// 본사 검토(수량 조정)
+        SM_REVIEW: 'SM_REVIEW',// 본사 검토(수량 조정)
         APPROVED: 'APPROVED',  // 본사 승인/발주 확정
     };
 
@@ -314,7 +314,7 @@ const TVC_Inventory = (function () {
     }
 
     /**
-     * 선박 Order import — HQ (Data Export) Order ZIP/Excel의 Eval·Ordered 메타 반영
+     * 선박 Order import — SM (Data Export) Order ZIP/Excel의 Eval·Ordered 메타 반영
      */
     async function applyVesselOrderImport(reqId, importedReq) {
         const res = await applyHqAdjustment(reqId, (importedReq?.lines || []).map(l => ({

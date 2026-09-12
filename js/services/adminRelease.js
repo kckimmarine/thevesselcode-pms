@@ -83,7 +83,7 @@ const TVC_AdminRelease = (function () {
         if (!co || !ver) return out;
         const list = Array.isArray(skus) && skus.length
             ? skus
-            : ['HQ_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
+            : ['SM_OFFICE', 'VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
         if (recordSetup) {
             out.push({ companyId: co, kind: 'setup', appVersion: ver });
         }

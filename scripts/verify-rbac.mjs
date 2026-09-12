@@ -13,7 +13,7 @@ const ROOT = path.join(__dirname, '..');
 const APPROVER = new Set(['SHIP_CAPTAIN', 'SHIP_CHIEF']);
 
 function canExportImport(user) {
-    if (user.account_type === 'HQ') return false; // HQ uses different actions
+    if (user.account_type === 'SM' || user.account_type === 'HQ') return false;
     return APPROVER.has(user.role);
 }
 
@@ -22,7 +22,10 @@ function showExportImportMenu(user) {
     return APPROVER.has(user.role);
 }
 
-function isHqAccount(user) { return user?.account_type === 'HQ'; }
+function isSmAccount(user) {
+    const t = String(user?.account_type || '').toUpperCase();
+    return t === 'SM' || t === 'HQ';
+}
 function isApprover(user) { return APPROVER.has(user?.role); }
 
 function canApproveDepartment(user, dept) {
@@ -32,7 +35,7 @@ function canApproveDepartment(user, dept) {
 
 function canAccessDepartment(user, dept) {
     if (!dept) return true;
-    if (isHqAccount(user)) return true;
+    if (isSmAccount(user)) return true;
     return user?.department === dept;
 }
 
@@ -47,12 +50,12 @@ const USERS = {
     captain: { username: 'captain', account_type: 'SHIP', role: 'SHIP_CAPTAIN', department: 'DECK', vessel_id: 'TEST_V01' },
     engineer: { username: 'engineer', account_type: 'SHIP', role: 'SHIP_OFFICER', department: 'ENGINE', vessel_id: 'TEST_V01' },
     chief: { username: 'ce', account_type: 'SHIP', role: 'SHIP_CHIEF', department: 'ENGINE', vessel_id: 'TEST_V01' },
-    hq: { username: 'hq', account_type: 'HQ', role: 'HQ_SUPERVISOR', department: null, vessel_id: null },
+    sm: { username: 'tvc shipping', account_type: 'SM', role: 'SM_SUPERVISOR', department: null, vessel_id: null },
 };
 
 // ── loadData() 시뮬레이션 ─────────────────────────────────────────────
 function simulateLoadData(user, allJobs, allComponents, allReports) {
-    if (user && !isHqAccount(user) && user.department) {
+    if (user && !isSmAccount(user) && user.department) {
         const dept = user.department;
         const jobs = allJobs.filter(j => j.department === dept);
         const components = allComponents.filter(c => !c.path || c.path[0] === dept);
@@ -110,11 +113,11 @@ assert('Chief → DECK Approve 불가', !canApproveDepartment(USERS.chief, 'DECK
 
 // HQ — 부서 토글 시뮬레이션 (All / DECK / ENGINE)
 console.log('\n[hq / 부서 뷰 전환]');
-const hqData = simulateLoadData(USERS.hq, allJobs, allComponents, allReports);
+const smData = simulateLoadData(USERS.sm, allJobs, allComponents, allReports);
 const t0 = performance.now();
-const deckView = deptJobs(hqData.jobs, 'DECK');
-const engineView = deptJobs(hqData.jobs, 'ENGINE');
-const allView = deptJobs(hqData.jobs, null);
+const deckView = deptJobs(smData.jobs, 'DECK');
+const engineView = deptJobs(smData.jobs, 'ENGINE');
+const allView = deptJobs(smData.jobs, null);
 const elapsed = performance.now() - t0;
 assert('HQ All view = 전체', allView.length === allJobs.length);
 assert('HQ DECK view', deckView.length === allJobs.filter(j => j.department === 'DECK').length);
@@ -123,7 +126,7 @@ assert(`부서 전환 < 100ms (${elapsed.toFixed(2)}ms)`, elapsed < 100);
 
 // 선박 계정 — 부서 토글 없음 (HQ만 접근)
 console.log('\n[부서 토글 표시 조건]');
-assert('HQ만 다중 부서 접근', canAccessDepartment(USERS.hq, 'DECK') && canAccessDepartment(USERS.hq, 'ENGINE'));
+assert('SM만 다중 부서 접근', canAccessDepartment(USERS.sm, 'DECK') && canAccessDepartment(USERS.sm, 'ENGINE'));
 assert('Officer DECK 접근', canAccessDepartment(USERS.officer, 'DECK'));
 assert('Officer ENGINE 접근 차단', !canAccessDepartment(USERS.officer, 'ENGINE'));
 
@@ -155,9 +158,9 @@ assert('ENGINE delta에 DECK job 없음', engineDelta.every(j => j.department ==
 
 // HQ Import — 부서 선택 필요 (dept null이면 오류)
 console.log('\n[Import 부서 선택]');
-const hqNeedsDeptPick = isHqAccount(USERS.hq);
+const smNeedsDeptPick = isSmAccount(USERS.sm);
 const shipAutoDept = USERS.officer.department;
-assert('HQ는 Import 시 부서 선택 필요', hqNeedsDeptPick);
+assert('SM은 Import 시 부서 선택 필요', smNeedsDeptPick);
 assert('선박은 세션 부서 자동 (DECK)', shipAutoDept === 'DECK');
 
 console.log('\n═══ 3단계: menuAction → switchTab 매핑 검증 ═══\n');

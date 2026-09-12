@@ -1,4 +1,4 @@
-/* HQ / Ship — PMS·SPARE Master vessel_id scoping */
+/* SM / Ship — PMS·SPARE Master vessel_id scoping */
 const TVC_MasterVesselScope = (function () {
     const MASTER_STORES = [
         'maintenance_jobs',
@@ -27,7 +27,7 @@ const TVC_MasterVesselScope = (function () {
     /** HQ: Fleet 선택 · Ship: meta / user.vessel_id */
     async function resolve(user, opts = {}) {
         if (opts.vesselId) return normId(opts.vesselId);
-        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isHqAccount(user)) {
+        if (user && typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSmAccount(user)) {
             const id = normId(opts.selectedVesselId)
                 || (typeof TVC_Fleet !== 'undefined' ? normId(TVC_Fleet.getSelectedId()) : '');
             if (!id) {

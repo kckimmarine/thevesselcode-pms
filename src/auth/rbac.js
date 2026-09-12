@@ -1,16 +1,18 @@
 const { getDb } = require('../db/connection');
 
-/** 선박용(SHIP) / 회사용(HQ) 계정 타입 */
+/** 선박용(SHIP) / 회사용(SM) 계정 타입 — legacy HQ read as SM */
 const AccountType = {
     SHIP: 'SHIP',
-    HQ: 'HQ',
+    SM: 'SM',
+    HQ: 'SM',
 };
 
 /** 역할 — TVC_DESIGN_SPEC RBAC */
 const Role = {
     SHIP_OFFICER: 'SHIP_OFFICER',       // 사관
     SHIP_CHIEF: 'SHIP_CHIEF',           // 선기장
-    HQ_SUPERVISOR: 'HQ_SUPERVISOR',     // 본사 공무감독
+    SM_SUPERVISOR: 'SM_SUPERVISOR',
+    HQ_SUPERVISOR: 'SM_SUPERVISOR',     // legacy alias
 };
 
 /** Daily_Work_Reports 결재 상태 */
@@ -42,8 +44,10 @@ const Action = {
     // 동기화
     EXPORT_SHIP_SYNC: 'EXPORT_SHIP_SYNC',
     IMPORT_SHIP_SYNC: 'IMPORT_SHIP_SYNC',
-    IMPORT_HQ_SYNC: 'IMPORT_HQ_SYNC',
-    EXPORT_HQ_FEEDBACK: 'EXPORT_HQ_FEEDBACK',
+    IMPORT_SM_SYNC: 'IMPORT_SM_SYNC',
+    EXPORT_SM_FEEDBACK: 'EXPORT_SM_FEEDBACK',
+    IMPORT_HQ_SYNC: 'IMPORT_SM_SYNC',
+    EXPORT_HQ_FEEDBACK: 'EXPORT_SM_FEEDBACK',
 
     // 본사 전용
     REVIEW_MASTER_PLAN: 'REVIEW_MASTER_PLAN',
@@ -83,11 +87,11 @@ const ROLE_PERMISSIONS = {
         Action.SUPPLY_PARTS,
         Action.VIEW_AUDIT_LOG,
     ]),
-    [Role.HQ_SUPERVISOR]: new Set([
+    [Role.SM_SUPERVISOR]: new Set([
         Action.VIEW_INVENTORY,
         Action.VIEW_PMS_SCHEDULE,
-        Action.IMPORT_HQ_SYNC,
-        Action.EXPORT_HQ_FEEDBACK,
+        Action.IMPORT_SM_SYNC,
+        Action.EXPORT_SM_FEEDBACK,
         Action.REVIEW_MASTER_PLAN,
         Action.APPROVE_ORIGINAL_PLAN,
         Action.ADD_COMPANY_COMMENT,
@@ -107,18 +111,18 @@ const ACCOUNT_UI_FEATURES = {
         showDailyReportForm: true,
         showApprovalQueue: true,
         showInventoryModify: false,       // 사관은 재고 수동 수정 불가 (선기장만)
-        showHqConfirmPanel: false,
-        showExportToHq: false,
-        showImportFromHq: false,
+        showSmConfirmPanel: false,
+        showExportToSm: false,
+        showImportFromSm: false,
     },
-    [AccountType.HQ]: {
+    [AccountType.SM]: {
         showMachineryPanel: false,
         showDailyReportForm: false,
         showApprovalQueue: false,
         showInventoryModify: false,
-        showHqConfirmPanel: true,
-        showExportToHq: false,
-        showImportFromHq: false,
+        showSmConfirmPanel: true,
+        showExportToSm: false,
+        showImportFromSm: false,
         showExportFeedback: true,
         showImportShipData: true,
     },
@@ -143,19 +147,29 @@ class RBAC {
         return user?.account_type === AccountType.SHIP;
     }
 
-    static isHqAccount(user) {
-        return user?.account_type === AccountType.HQ;
+    static normalizeAccountType(accountType) {
+        const t = String(accountType || '').trim().toUpperCase();
+        return t === 'HQ' ? 'SM' : t;
     }
 
+    static isSmAccount(user) {
+        const t = RBAC.normalizeAccountType(user?.account_type);
+        return t === 'SM';
+    }
+
+    /** @deprecated use isSmAccount */
+    static isHqAccount(user) { return RBAC.isSmAccount(user); }
+
     static getUiFeatures(user) {
-        const base = ACCOUNT_UI_FEATURES[user.account_type] || {};
+        const type = RBAC.normalizeAccountType(user?.account_type);
+        const base = ACCOUNT_UI_FEATURES[type] || {};
         const features = { ...base };
 
         if (user.role === Role.SHIP_CHIEF) {
             features.showInventoryModify = true;
             features.showApprovalQueue = true;
-            features.showExportToHq = true;
-            features.showImportFromHq = true;
+            features.showExportToSm = true;
+            features.showImportFromSm = true;
         }
         if (user.role === Role.SHIP_OFFICER) {
             features.showApprovalQueue = false;
@@ -172,7 +186,7 @@ class RBAC {
             [Role.SHIP_CHIEF]: {
                 [ReportStatus.PENDING]: [ReportStatus.APPROVED, ReportStatus.POSTPONED],
             },
-            [Role.HQ_SUPERVISOR]: {
+            [Role.SM_SUPERVISOR]: {
                 [ReportStatus.APPROVED]: [ReportStatus.CONFIRMED, ReportStatus.POSTPONED],
             },
         };

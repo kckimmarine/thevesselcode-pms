@@ -5,7 +5,7 @@ const TVC_AdminRegistry = (function () {
     const LS_VESSEL = 'tvc_admin_selected_vessel';
     const LS_REGISTRY_CACHE = 'tvc_admin_registry_cache_v2';
     const STATUS_OPTS = ['active', 'inactive'];
-    const HQ_SKU_OPTS = ['HQ_OFFICE'];
+    const SM_SKU_OPTS = ['SM_OFFICE'];
     const VESSEL_SKUS = ['VESSEL_MASTER', 'VESSEL_ENGINE', 'VESSEL_DECK'];
     const PILOT_COMPANY_ID = 'TVC';
     const PILOT_VESSEL_ID = 'TVC Voyager';
@@ -21,7 +21,7 @@ const TVC_AdminRegistry = (function () {
             hq_password: 'tvc1234',
         },
         vessel: {
-            vessel_id: 'TVC No1',
+            vessel_id: 'TVC Voyager',
             code: '1',
             imo_no: '9999999',
         },
@@ -269,7 +269,7 @@ const TVC_AdminRegistry = (function () {
             name: String(c.name || c.company_id || '').trim(),
             name_en: String(c.name_en || '').trim(),
             status: normalizeStatus(c.status),
-            hq_sku: String(c.hq_sku || 'HQ_OFFICE').trim(),
+            hq_sku: String(c.hq_sku || 'SM_OFFICE').trim(),
             notes: String(c.notes || '').trim(),
             address: String(c.address || '').trim(),
             contact_name: String(c.contact_name || '').trim(),
@@ -435,7 +435,7 @@ const TVC_AdminRegistry = (function () {
                 vd.last_handoff_at = today;
             }
         } else if (kind === 'update') {
-            if (sku === 'HQ_OFFICE') {
+            if (sku === 'SM_OFFICE') {
                 const cd = ensureCompanyDeploy(company);
                 if (appVersion) cd.app_version = appVersion;
                 cd.app_updated_at = today;
@@ -450,7 +450,7 @@ const TVC_AdminRegistry = (function () {
                 }
             }
         } else if (kind === 'license') {
-            if (sku === 'HQ_OFFICE') {
+            if (sku === 'SM_OFFICE') {
                 const cd = ensureCompanyDeploy(company);
                 cd.license_issued_at = today;
                 if (appVersion) {
@@ -543,7 +543,7 @@ const TVC_AdminRegistry = (function () {
             name: String(input.name || '').trim(),
             name_en: String(input.name_en || '').trim(),
             status: normalizeStatus(input.status),
-            hq_sku: String(input.hq_sku || 'HQ_OFFICE').trim() || 'HQ_OFFICE',
+            hq_sku: String(input.hq_sku || 'SM_OFFICE').trim() || 'SM_OFFICE',
             notes: String(input.notes || '').trim(),
             address: String(input.address || '').trim(),
             contact_name: String(input.contact_name || '').trim(),
@@ -620,7 +620,7 @@ const TVC_AdminRegistry = (function () {
         const company = getCompany(companyId);
         if (!company) throw new Error(`Company "${companyId}" not found.`);
         company.hq_login = normalizeLoginAccount(login);
-        if (!company.hq_login) throw new Error('Invalid HQ login.');
+        if (!company.hq_login) throw new Error('Invalid SM login.');
         _cache.updated_at = todayIso();
         return company.hq_login;
     }
@@ -711,7 +711,7 @@ const TVC_AdminRegistry = (function () {
                     name: c.name,
                     name_en: c.name_en || '',
                     status: c.status || 'active',
-                    hq_sku: c.hq_sku || 'HQ_OFFICE',
+                    hq_sku: c.hq_sku || 'SM_OFFICE',
                     vessels: (c.vessels || []).map(v => {
                         const vr = {
                             vessel_id: v.vessel_id,
@@ -750,7 +750,7 @@ const TVC_AdminRegistry = (function () {
                     name: c.name,
                     name_en: c.name_en || '',
                     status: c.status || 'active',
-                    hq_sku: c.hq_sku || 'HQ_OFFICE',
+                    hq_sku: c.hq_sku || 'SM_OFFICE',
                     notes: c.notes || '',
                     address: c.address || '',
                     contact_name: c.contact_name || '',
@@ -847,7 +847,7 @@ const TVC_AdminRegistry = (function () {
         validateCompanyInput,
         validateVesselInput,
         STATUS_OPTS,
-        HQ_SKU_OPTS,
+        SM_SKU_OPTS,
         VESSEL_SKUS,
         TVC_LAB_COMPANY_ID: PILOT_COMPANY_ID,
         TVC_LAB_VESSEL_ID: PILOT_VESSEL_ID,

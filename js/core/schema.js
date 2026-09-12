@@ -29,7 +29,7 @@ const TVC_SCHEMA = {
         consume_logs: { keyPath: 'id' },                   // Consumed Parts 일지 (배치)
         defect_cases: { keyPath: 'id' },                   // Defect Report Case
         work_permits: { keyPath: 'id' },                   // Critical Equipment Work Permit
-        vessel_documents: { keyPath: 'id' },               // HQ vessel documents (attachments)
+        vessel_documents: { keyPath: 'id' },               // SM vessel documents (attachments)
         impa_master: { keyPath: 'impa_code' },             // IMPA ship stores catalog (STORE tab)
         // ── v16 Supplier portal (RFQ → quote → order → invoice) ───────
         supplier_rfqs: { keyPath: 'rfq_id' },
@@ -981,7 +981,7 @@ const TVC_DefectCase = (function () {
             close_forwarded_at: null,
             last_export_filename: '',
             reported_by: overrides.reported_by || '',
-            hq_synced: false,
+            sm_synced: false,
             visible_in_list: overrides.visible_in_list !== false,
             ...overrides,
         };
@@ -1037,7 +1037,7 @@ const TVC_DefectCase = (function () {
             || row.status === Status.CLOSED;
     }
 
-    /** Phase 3 — Ship DC (Defect Cleared); editable after Phase 1 export, even before HQ Approve */
+    /** Phase 3 — Ship DC (Defect Cleared); editable after Phase 1 export, even before SM Approve */
     function isPhase3Editable(row) {
         if (!row || row.phase3_locked) return false;
         if (row.status === Status.CLOSED) return false;
@@ -1049,12 +1049,12 @@ const TVC_DefectCase = (function () {
         return !!(row && row.defect_cleared && row.phase3_locked);
     }
 
-    /** HQ Approve 후 선박 — Verified by Ship / DEFECT CLEARED (alias) */
+    /** SM Approve 후 선박 — Verified by Ship / DEFECT CLEARED (alias) */
     function isShipVerificationEditable(row) {
         return isPhase3Editable(row);
     }
 
-    /** Phase 4 — HQ Company inspection comments (after ship DC) */
+    /** Phase 4 — SM Company inspection comments (after ship DC) */
     function isPhase4Editable(row) {
         if (!row || !isPhase3DcComplete(row)) return false;
         return true;
@@ -1101,7 +1101,7 @@ const TVC_DefectCase = (function () {
         return { ok: !missing.length, missing };
     }
 
-    /** HQ Defect reply ZIP export 전 필수 항목 */
+    /** SM Defect reply ZIP export 전 필수 항목 */
     function validateHqDefectReplyExport(row) {
         const missing = [];
         const phase2 = validatePhase2(row);
@@ -1113,7 +1113,7 @@ const TVC_DefectCase = (function () {
         return { ok: !missing.length, missing };
     }
 
-    function isHqReplyExported(row) {
+    function isSmReplyExported(row) {
         return !!(row?.hq_reply_exported_at);
     }
 
@@ -1122,7 +1122,7 @@ const TVC_DefectCase = (function () {
         return /completion/i.test(String(row.last_export_filename || ''));
     }
 
-    /** Phase 3 DC ZIP — Captain Hub still needs to export to HQ */
+    /** Phase 3 DC ZIP — Captain Hub still needs to export to SM */
     function isPhase3CompletionHubPending(row) {
         if (!isPhase3DcComplete(row)) return false;
         if (looksLikeCompletionExport(row) && row.hub_sync_status === 'SYNCED') return false;
@@ -1154,7 +1154,7 @@ const TVC_DefectCase = (function () {
         return row;
     }
 
-    /** HQ Approve 회신을 선박(Master / Station)이 받은 뒤 — Phase 1 잠그고 본선 DC 가능하게. */
+    /** SM Approve 회신을 선박(Master / Station)이 받은 뒤 — Phase 1 잠그고 본선 DC 가능하게. */
     function applyHqReplyOnShip(row) {
         if (!row || !(row.approved_at || row.approved_by)) return row;
         row.phase1_locked = true;
@@ -1164,7 +1164,7 @@ const TVC_DefectCase = (function () {
         }
         return row;
     }
-    function isHqReplyStationForwardPending(row) {
+    function isSmReplyStationForwardPending(row) {
         if (!row) return false;
         if (!(row.approved_at || row.approved_by)) return false;
         if (row.hq_reply_forwarded_at) return false;
@@ -1240,7 +1240,7 @@ const TVC_DefectCase = (function () {
         blank, fromJob, isPhase1Editable, isPhase2Editable, isPhase3Editable, isPhase4Editable,
         isPhase1Exported, isPhase3DcComplete,
         canStartWork, validatePhase1, validatePhase2, validatePhase3, validatePhase4, validateHqDefectReplyExport,
-        isHqReplyExported, isHqReplyStationForwardPending, stampHqReplyStationForwarded, applyHqReplyOnShip,
+        isSmReplyExported, isSmReplyStationForwardPending, stampHqReplyStationForwarded, applyHqReplyOnShip,
         isPhase3CompletionHubPending, isPhase4CloseForwardPending,
         markPhase4CloseForwardPending, stampPhase4CloseForwarded, clearHubStampForNewOutbound,
         belongsToDepartment,
@@ -1315,13 +1315,13 @@ const TVC_WorkPermit = (function () {
         return 'Reported';
     }
 
-    function isHqReplyExported(row) {
+    function isSmReplyExported(row) {
         if (!row) return false;
         if (row.hq_reply_exported_at) return true;
-        return !!(row.hq_synced && (row.approved_at || row.approved_by) && row.sync_status === 'SYNCED');
+        return !!(row.sm_synced && (row.approved_at || row.approved_by) && row.sync_status === 'SYNCED');
     }
 
-    function isHqReplyStationForwardPending(row) {
+    function isSmReplyStationForwardPending(row) {
         if (!row) return false;
         if (listWorkflowStatus(row) !== 'Approved') return false;
         return !row.hq_reply_forwarded_at;
@@ -1336,8 +1336,8 @@ const TVC_WorkPermit = (function () {
     function canModifyListWorkflow(row) {
         if (!row) return false;
         const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser() : null;
-        if (user && TVC_RBAC.isHqAccount(user) && (row.approved_at || row.approved_by)) {
-            return !isHqReplyExported(row);
+        if (user && TVC_RBAC.isSmAccount(user) && (row.approved_at || row.approved_by)) {
+            return !isSmReplyExported(row);
         }
         if (row.approved_at || row.approved_by) return false;
         if (row.sync_status === 'SYNCED') return false;
@@ -1348,7 +1348,7 @@ const TVC_WorkPermit = (function () {
         if (!row) return false;
         if (listWorkflowStatus(row) === 'Submitted') return false;
         const user = typeof TVC_Auth !== 'undefined' ? TVC_Auth.getCurrentUser() : null;
-        if (user && TVC_RBAC.isHqAccount(user) && row.hq_synced
+        if (user && TVC_RBAC.isSmAccount(user) && row.sm_synced
             && (row.approved_at || row.approved_by) && row.sync_status !== 'SYNCED') {
             return true;
         }
@@ -1361,8 +1361,8 @@ const TVC_WorkPermit = (function () {
     }
 
     return {
-        SCHEMA_VERSION, Status, blank, listWorkflowStatus, isHqReplyExported,
-        isHqReplyStationForwardPending, stampHqReplyStationForwarded,
+        SCHEMA_VERSION, Status, blank, listWorkflowStatus, isSmReplyExported,
+        isSmReplyStationForwardPending, stampHqReplyStationForwarded,
         canModifyListWorkflow, canDeleteListWorkflow, belongsToDepartment,
     };
 })();

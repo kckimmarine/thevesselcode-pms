@@ -175,18 +175,18 @@ const TVC_DefectCaseService = (function () {
     }
 
     async function saveHqPhase2(user, id, phase2) {
-        if (!TVC_RBAC.isHqAccount(user)) {
+        if (!TVC_RBAC.isSmAccount(user)) {
             throw Object.assign(new Error('HQ only.'), { code: 'FORBIDDEN' });
         }
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
-        if (TVC_DefectCase.isHqReplyExported(row)) {
-            throw Object.assign(new Error('HQ reply already exported.'), { code: 'LOCKED' });
+        if (TVC_DefectCase.isSmReplyExported(row)) {
+            throw Object.assign(new Error('SM reply already exported.'), { code: 'LOCKED' });
         }
         const shipSubmitted = !!(row.confirmed_at || row.confirmed_by || row.phase1_locked || row.submitted_at);
         const awaitingHqReply = row.status === TVC_DefectCase.Status.SUBMITTED_TO_COMPANY
             || row.status === TVC_DefectCase.Status.COMPANY_REVIEWED
-            || (shipSubmitted && !TVC_DefectCase.isHqReplyExported(row));
+            || (shipSubmitted && !TVC_DefectCase.isSmReplyExported(row));
         if (!awaitingHqReply) {
             throw Object.assign(new Error('Case is not awaiting company review.'), { code: 'INVALID_STATUS' });
         }
@@ -197,7 +197,7 @@ const TVC_DefectCaseService = (function () {
         Object.assign(row, phase2, {
             reply_by: phase2.reply_by || row.reply_by || TVC_RBAC.getRankLabel(user),
             reply_date: phase2.reply_date ?? row.reply_date ?? '',
-            hq_synced: true,
+            sm_synced: true,
         });
         markPending(row);
         await TVC_DB.put('defect_cases', row);
@@ -222,7 +222,7 @@ const TVC_DefectCaseService = (function () {
     }
 
     async function saveShipPhase3(user, id, phase3) {
-        if (TVC_RBAC.isHqAccount(user)) {
+        if (TVC_RBAC.isSmAccount(user)) {
             throw Object.assign(new Error('Ship only.'), { code: 'FORBIDDEN' });
         }
         const row = await get(id);
@@ -257,13 +257,13 @@ const TVC_DefectCaseService = (function () {
     }
 
     async function saveHqPhase4(user, id, payload) {
-        if (!TVC_RBAC.isHqAccount(user)) {
+        if (!TVC_RBAC.isSmAccount(user)) {
             throw Object.assign(new Error('HQ only.'), { code: 'FORBIDDEN' });
         }
         const row = await get(id);
         if (!row) throw Object.assign(new Error('Case not found.'), { code: 'NOT_FOUND' });
         if (!TVC_DefectCase.isPhase4Editable(row)) {
-            throw Object.assign(new Error('Ship must report DEFECT CLEARED (Phase 3) before HQ inspection comments.'), { code: 'INVALID_STATUS' });
+            throw Object.assign(new Error('Ship must report DEFECT CLEARED (Phase 3) before SM inspection comments.'), { code: 'INVALID_STATUS' });
         }
         if (payload.company_comment !== undefined) row.company_comment = payload.company_comment;
         if (payload.company_attachments !== undefined) row.company_attachments = payload.company_attachments;
@@ -279,7 +279,7 @@ const TVC_DefectCaseService = (function () {
                     ? false
                     : null;
         }
-        row.hq_synced = true;
+        row.sm_synced = true;
         markPending(row);
         await TVC_DB.put('defect_cases', row);
         await TVC_DB.put('audit_logs', {
@@ -336,10 +336,10 @@ const TVC_DefectCaseService = (function () {
             changed = true;
         }
         if (unapprove && (row.approved_at || row.approved_by)) {
-            if (!TVC_RBAC.isHqAccount(user)) {
+            if (!TVC_RBAC.isSmAccount(user)) {
                 throw Object.assign(new Error('HQ unapprove only.'), { code: 'FORBIDDEN' });
             }
-            if (TVC_DefectCase.isHqReplyExported(row)) {
+            if (TVC_DefectCase.isSmReplyExported(row)) {
                 throw Object.assign(new Error('Exported case cannot be unapproved.'), { code: 'LOCKED' });
             }
             row.approved_by = '';
@@ -347,14 +347,14 @@ const TVC_DefectCaseService = (function () {
             changed = true;
         }
         if (approve && !row.approved_at) {
-            if (!TVC_RBAC.isHqAccount(user)) {
+            if (!TVC_RBAC.isSmAccount(user)) {
                 throw Object.assign(new Error('HQ approval only.'), { code: 'FORBIDDEN' });
             }
-            const hqDirect = TVC_RBAC.canHqDirectApprove(user, row);
+            const hqDirect = TVC_RBAC.canSmDirectApprove(user, row);
             if (!row.confirmed_at && !hqDirect) {
                 throw Object.assign(new Error('Confirm required before Approve.'), { code: 'INVALID_STATUS' });
             }
-            // HQ 작성분: Confirmed 없이 Approve — 표시 일관성을 위해 Confirmed도 함께 기록
+            // SM 작성분: Confirmed 없이 Approve — 표시 일관성을 위해 Confirmed도 함께 기록
             if (!row.confirmed_at && hqDirect) {
                 row.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(row.department, user)
                 || TVC_RBAC.getRankLabel(user);
@@ -382,7 +382,7 @@ const TVC_DefectCaseService = (function () {
     }
 
     async function saveShipVerification(user, id, payload) {
-        if (TVC_RBAC.isHqAccount(user)) {
+        if (TVC_RBAC.isSmAccount(user)) {
             throw Object.assign(new Error('Ship only.'), { code: 'FORBIDDEN' });
         }
         const row = await get(id);
@@ -417,7 +417,7 @@ const TVC_DefectCaseService = (function () {
     }
 
     async function saveHqCompanyFields(user, id, payload) {
-        if (!TVC_RBAC.isHqAccount(user)) {
+        if (!TVC_RBAC.isSmAccount(user)) {
             throw Object.assign(new Error('HQ only.'), { code: 'FORBIDDEN' });
         }
         const row = await get(id);
@@ -431,7 +431,7 @@ const TVC_DefectCaseService = (function () {
 
     /** Ship's Comments 박스 — Draft~Approved Modify 시 선박 확인 섹션만 저장 */
     async function saveShipCommentsFields(user, id, payload) {
-        if (TVC_RBAC.isHqAccount(user)) {
+        if (TVC_RBAC.isSmAccount(user)) {
             throw Object.assign(new Error('Ship only.'), { code: 'FORBIDDEN' });
         }
         const row = await get(id);

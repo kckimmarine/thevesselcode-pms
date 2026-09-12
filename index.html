@@ -56,7 +56,7 @@
             <div class="login-card-head">
                 <h2 class="login-card-title">Sign in</h2>
                 <p class="login-card-sub">Enter your credentials to access the platform</p>
-                <p id="loginBetaBadge" class="login-beta-badge hidden" aria-label="Beta version">Beta · Cloud HQ Portal</p>
+                <p id="loginBetaBadge" class="login-beta-badge hidden" aria-label="Beta version">Beta · Cloud SM Portal</p>
                 <p id="loginLicenseBadge" class="login-license-badge muted hidden" aria-live="polite"></p>
             </div>
            <form class="login-form" novalidate onsubmit="event.preventDefault();TVC_App.handleLogin();">
@@ -99,7 +99,7 @@
                 <button type="button" id="loginDownloadBtn" class="login-download-btn">
                     Download Vessel Mode (PC installer)
                 </button>
-                <p class="login-download-note">Install on ship PC · sync to HQ via web portal</p>
+                <p class="login-download-note">Install on ship PC · sync to SM via web portal</p>
             </div>
             <div class="login-hint">
                 <span class="login-hint-label">Demo access</span>
@@ -189,7 +189,7 @@
         <section id="tab-menu" class="tab-pane">
             <div id="captainViewDashboard" class="captain-view-dashboard hidden"></div>
             <div class="cmaxs-body" id="cmaxsMenuBody">
-                <div class="hq-left-col hidden" id="hqLeftCol">
+                <div class="sm-left-col hidden" id="smLeftCol">
                     <div class="hq-administration-host" id="cmaxsCardsSidebar"></div>
                     <aside id="fleetListPanel" class="fleet-list-panel" data-admin-layout="1">
                         <div class="fleet-search-bar">
@@ -324,7 +324,7 @@
                 <div class="hist-toolbar hist-toolbar-actions filter-bar">
                     <button type="button" id="histBtnDetail" class="btn btn-sm" disabled onclick="TVC_App.histDetailWorkReport()">Detail Report</button>
                     <button type="button" id="histBtnApprove" class="btn btn-sm btn-green" disabled onclick="TVC_App.histReportApproval()">Confirm</button>
-                    <button type="button" id="histBtnHqApprove" class="btn btn-sm btn-green hidden" disabled onclick="TVC_App.histHqReportApproval()">Approve</button>
+                    <button type="button" id="histBtnSmApprove" class="btn btn-sm btn-green hidden" disabled onclick="TVC_App.histSmReportApproval()">Approve</button>
                     <span class="orig-toolbar-sep"></span>
                     <button type="button" id="histBtnModify" class="btn btn-sm hidden" disabled onclick="TVC_App.histModifyReport()">Modify</button>
                     <button type="button" id="histBtnDelete" class="btn btn-sm btn-red" disabled onclick="TVC_App.histDeleteReport()">Delete</button>
@@ -891,6 +891,7 @@
 <script src="vendor/exceljs.min.js"></script>
 <script src="vendor/xlsx.full.min.js"></script>
 <script src="js/config.js?v=20260903-signin-cleanup"></script>
+<script src="js/core/legacySm.js?v=20260912-sm-rename"></script>
 <script src="js/rbac.js?v=20260901-account-roles"></script>
 <script src="js/core/schema.js?v=20260906-plate-pipeline"></script>
 <script src="js/core/db.js?v=20260906-plate-pipeline"></script>
@@ -947,7 +948,7 @@
 <script src="js/services/onlineSync.js?v=20260903-web-cloud"></script>
 <script src="js/services/cloudMirror.js?v=20260903-web-cloud"></script>
 <script src="js/services/webCloudState.js?v=20260903-web-cloud"></script>
-<script src="js/services/hqLiveSync.js?v=20260903-web-cloud"></script>
+<script src="js/services/smLiveSync.js?v=20260912-sm-rename"></script>
 <script src="js/services/fleet.js?v=20260831-tvc-ref"></script>
 <script src="js/services/adminRegistry.js?v=20260831-tvc-ref"></script>
 <script src="js/services/accountProvisioning.js?v=20260831-tvc-ref"></script>

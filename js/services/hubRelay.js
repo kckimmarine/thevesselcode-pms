@@ -11,7 +11,7 @@ const TVC_HubRelay = (function () {
     }
 
     function isHubRelayExport(user) {
-        return isCaptainHub(user) && !(typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isHqAccount(user));
+        return isCaptainHub(user) && !(typeof TVC_RBAC !== 'undefined' && TVC_RBAC.isSmAccount(user));
     }
 
     function isStationSynced(row) {

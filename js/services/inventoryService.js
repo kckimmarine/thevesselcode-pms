@@ -452,7 +452,7 @@ const TVC_InventoryService = (function () {
     }
 
     async function applyHqAssessment(user, assessment, opts = {}) {
-        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_HQ_SYNC);
+        TVC_RBAC.assert(user, TVC_RBAC.Action.IMPORT_SM_SYNC);
         const payload = assessment.payload || assessment;
         const spares = Array.isArray(payload.spares) ? payload.spares : (payload.spare_parts || []);
         let updated = 0;
@@ -468,9 +468,9 @@ const TVC_InventoryService = (function () {
             if (!Number.isNaN(incStock) && incStock !== curStock) {
                 const delta = incStock - curStock;
                 if (delta > 0) {
-                    await TVC_DB.SparePart.addStock(existing.id, delta, { type: 'HQ_IMPORT', ref: 'HQ', note: opts.note || 'HQ Assessment' });
+                    await TVC_DB.SparePart.addStock(existing.id, delta, { type: 'SM_IMPORT', ref: 'SM', note: opts.note || 'SM Assessment' });
                 } else if (delta < 0) {
-                    await TVC_DB.SparePart.deductStock(existing.id, -delta, { type: 'HQ_IMPORT', ref: 'HQ', note: opts.note || 'HQ Assessment' });
+                    await TVC_DB.SparePart.deductStock(existing.id, -delta, { type: 'SM_IMPORT', ref: 'SM', note: opts.note || 'SM Assessment' });
                 }
                 const row = await TVC_DB.get('spare_parts', existing.id);
                 await TVC_DB.InventoryHistory.append({
@@ -484,9 +484,9 @@ const TVC_InventoryService = (function () {
                     operator_id: user.id,
                     operator_name: operatorName(user),
                     department: user.department || '',
-                    ref: 'HQ_IMPORT',
-                    source_type: 'hq_import',
-                    note: opts.note || 'HQ Assessment applied',
+                    ref: 'SM_IMPORT',
+                    source_type: 'sm_import',
+                    note: opts.note || 'SM Assessment applied',
                 });
                 updated++;
             }

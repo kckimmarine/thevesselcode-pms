@@ -37,7 +37,7 @@ const TVC_SpareMenu = (function () {
     let _reqListXferExportKind = null; // null | requisition | quotation | reply-evaluation | purchase-order | received
     /** Where export list Back returns: 'sync' | 'req-work' | 'req-work-select-vendor' */
     let _reqListXferExportReturn = null;
-    /** HQ requisition import mode: vendor-quote | hq-adjustment */
+    /** SM requisition import mode: vendor-quote | hq-adjustment */
     let _reqImportMode = null;
     let _consumeDraft = null;
     let _consumeLineBySpareId = null;
@@ -112,7 +112,7 @@ const TVC_SpareMenu = (function () {
     const SPARE_REQ_BASE_COLGROUP = `<colgroup>${SPARE_REQ_BASE_COL_WIDTHS.map(w => `<col style="width:${w}px">`).join('')}</colgroup>`;
     const SPARE_REQ_EXTRA_COLS = SPARE_REQ_EXTRA_COL_WIDTHS.map(w => `<col style="width:${w}px">`).join('');
     const SPARE_REQ_COLGROUP = SPARE_REQ_BASE_COLGROUP.replace('</colgroup>', SPARE_REQ_EXTRA_COLS + '</colgroup>');
-    /** HQ Request Quote view — Work~Rcvd replaced by Req/Eval + 2 vendor blocks (chk+price each). */
+    /** SM Request Quote view — Work~Rcvd replaced by Req/Eval + 2 vendor blocks (chk+price each). */
     const SPARE_REQ_QUOTE_VENDOR_SLOTS = 2;
     /** chk + Code~Items + Unit + Req + Eval */
     const SPARE_REQ_QUOTE_LEFT_COLSPAN = 9;
@@ -153,8 +153,8 @@ const TVC_SpareMenu = (function () {
         CONFIRMED: 'confirmed', SUBMITTED: 'submitted',
         ASSESSED: 'assessed', RECEIVED: 'received',
     };
-    /** HQ Requisition List — Status column (workflow) */
-    const HQ_REQ_LIST_STATUS = {
+    /** SM Requisition List — Status column (workflow) */
+    const SM_REQ_LIST_STATUS = {
         REQUISITION: 'Requisition',
         REQ_QUOTE: 'Req Quote',
         QUOTED: 'Quoted',
@@ -163,8 +163,8 @@ const TVC_SpareMenu = (function () {
         ORDERED: 'Ordered',
         RECEIVED: 'Received',
     };
-    /** HQ Report History phase tabs — distinct from vessel REQ_LIST_PHASE */
-    const HQ_REQ_LIST_PHASE = {
+    /** SM Report History phase tabs — distinct from vessel REQ_LIST_PHASE */
+    const SM_REQ_LIST_PHASE = {
         REQUISITION: 'hq_requisition',
         REQ_QUOTE: 'hq_req_quote',
         EVALUATING: 'hq_evaluating',
@@ -636,7 +636,7 @@ const TVC_SpareMenu = (function () {
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isEngineVesselMode) {
             return TVC_Space.isEngineVesselMode(user);
         }
-        if (!user || !window.TVC_RBAC || TVC_RBAC.isHqAccount(user)) return false;
+        if (!user || !window.TVC_RBAC || TVC_RBAC.isSmAccount(user)) return false;
         return user.department === 'ENGINE';
     }
 
@@ -1592,7 +1592,7 @@ const TVC_SpareMenu = (function () {
     async function savePlanCriticalEquipment(rawVal) {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or SM Superintendent permission required.');
             return;
         }
         if (!st.selectedGroupKey || st.selectedGroupKey === CRITICAL_GROUP_KEY) return;
@@ -2585,7 +2585,7 @@ const TVC_SpareMenu = (function () {
     async function reloadSpareGroupsCache() {
         const st = getState();
         if (!st || !window.TVC_DB) return;
-        const isHq = window.TVC_RBAC && TVC_RBAC.isHqAccount(st.user);
+        const isHq = window.TVC_RBAC && TVC_RBAC.isSmAccount(st.user);
         const metaVessel = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null);
         const masterVesselId = isHq ? st.selectedVesselId : (metaVessel || st.user?.vessel_id);
         const masterBelongs = (row) => {
@@ -2608,7 +2608,7 @@ const TVC_SpareMenu = (function () {
     async function reloadSparesCache(opts = {}) {
         const st = getState();
         if (!st) return;
-        const isHq = window.TVC_RBAC && TVC_RBAC.isHqAccount(st.user);
+        const isHq = window.TVC_RBAC && TVC_RBAC.isSmAccount(st.user);
         const metaVessel = await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID).catch(() => null);
         const scopeVessel = isHq ? st.selectedVesselId : (metaVessel || st.user?.vessel_id);
         const extraVessel = opts.vesselId || opts.includeVesselId || null;
@@ -2677,11 +2677,11 @@ const TVC_SpareMenu = (function () {
             reqWorkTreeOpen: false,
             reqWorkListMode: false,
             reqWorkListDocPreview: false,
-            reqWorkHqQuoteView: false,
-            reqWorkHqEvalView: false,
-            reqWorkHqFlowStage: 'requisition',
-            reqWorkHqFlowReqId: null,
-            reqWorkHqStickySelectVendorReqId: null,
+            reqWorkSmQuoteView: false,
+            reqWorkSmEvalView: false,
+            reqWorkSmFlowStage: 'requisition',
+            reqWorkSmFlowReqId: null,
+            reqWorkSmStickySelectVendorReqId: null,
             reqWorkVesselFlowStage: 'report',
             reqWorkVesselFlowReqId: null,
             reqListCheckedIds: {},
@@ -3160,7 +3160,7 @@ const TVC_SpareMenu = (function () {
     /** Vessel Requisition — Ordered / Received 탭 (조회 전용, Received는 Rcvd만 예외) */
     function reqWorkVesselOrderedOrReceivedView() {
         const m = modState(getState());
-        if (!isRequisitionListWindow(m) || isReqListHqUser(getState())) return false;
+        if (!isRequisitionListWindow(m) || isReqListSmUser(getState())) return false;
         const stage = m.reqWorkVesselFlowStage;
         return stage === 'evaluated' || stage === 'received';
     }
@@ -3216,7 +3216,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (m.reqWorkPreview || m.reqWorkListDocPreview || m.reqWorkCompleted) return false;
         const id = input.id;
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const listMode = isRequisitionListWindow(m);
         if (isHq && (id === 'reqWorkAssessedOn' || id === 'reqWorkOrderedOn')) return true;
         if (id === 'reqWorkReceivedOn' && reqWorkVesselReceivedRcvdOnlyEdit()) return true;
@@ -3336,7 +3336,7 @@ const TVC_SpareMenu = (function () {
             if (locked && unlockReqWorkVesselReceivedMetaField(el)) return;
             if (locked && reqWorkQuoteControlKeepEnabled(el)) {
                 const slotRaw = el.dataset?.quoteCol ?? el.dataset?.quoteRow;
-                if (slotRaw != null && reqWorkHqQuoteViewActive()) {
+                if (slotRaw != null && reqWorkSmQuoteViewActive()) {
                     const req = getReqWorkSession();
                     const vendor = reqWorkQuoteVendors(req)[Number(slotRaw)];
                     if (!reqWorkQuoteSlotReady(vendor)) {
@@ -3374,7 +3374,7 @@ const TVC_SpareMenu = (function () {
         const evalQty = line.qty_approved != null && line.qty_approved !== ''
             ? Number(line.qty_approved) || 0
             : reqQty;
-        const editable = !locked && reqWorkHqEvalEditActive();
+        const editable = !locked && reqWorkSmEvalEditActive();
         if (!editable) return esc(String(evalQty));
         return `<input type="number" min="0" step="1" inputmode="numeric" pattern="[0-9]*" class="spare-req-qty-input spare-req-eval-qty-input" value="${evalQty}"
             onclick="event.stopPropagation()" onmousedown="event.stopPropagation()"
@@ -3384,23 +3384,23 @@ const TVC_SpareMenu = (function () {
             onchange="TVC_SpareMenu.reqWorkSetEvalQty('${sid}', this.value)">`;
     }
 
-    function reqWorkHqQuoteViewActive() {
+    function reqWorkSmQuoteViewActive() {
         const m = modState(getState());
-        return !!m.reqWorkHqQuoteView && isRequisitionListWindow(m);
+        return !!m.reqWorkSmQuoteView && isRequisitionListWindow(m);
     }
 
     /** Evaluation 단계 — Eval 열만 편집, Req·체크·통화·업체·Price 잠금 */
-    function reqWorkHqEvalStageActive() {
+    function reqWorkSmEvalStageActive() {
         const m = modState(getState());
-        return !!m.reqWorkHqEvalView && reqWorkHqQuoteViewActive();
+        return !!m.reqWorkSmEvalView && reqWorkSmQuoteViewActive();
     }
 
-    /** HQ Request Quote view — keep quote controls active while list is locked (Evaluation 단계는 Eval만). */
+    /** SM Request Quote view — keep quote controls active while list is locked (Evaluation 단계는 Eval만). */
     function reqWorkQuoteControlKeepEnabled(el) {
-        if (!el || !reqWorkHqQuoteViewActive()) return false;
+        if (!el || !reqWorkSmQuoteViewActive()) return false;
         const cls = el.classList;
         if (!cls) return false;
-        if (reqWorkHqEvalStageActive()) {
+        if (reqWorkSmEvalStageActive()) {
             return cls.contains('spare-req-eval-qty-input');
         }
         if (cls.contains('spare-req-qty-input')
@@ -3415,17 +3415,17 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkActiveColWidths() {
-        return reqWorkHqQuoteViewActive()
+        return reqWorkSmQuoteViewActive()
             ? SPARE_REQ_QUOTE_COL_WIDTHS
             : SPARE_REQ_BASE_COL_WIDTHS.concat(SPARE_REQ_EXTRA_COL_WIDTHS);
     }
 
     function reqWorkActiveColgroup() {
-        return reqWorkHqQuoteViewActive() ? SPARE_REQ_QUOTE_COLGROUP : SPARE_REQ_COLGROUP;
+        return reqWorkSmQuoteViewActive() ? SPARE_REQ_QUOTE_COLGROUP : SPARE_REQ_COLGROUP;
     }
 
     function reqWorkActiveMinWidth() {
-        return reqWorkHqQuoteViewActive() ? SPARE_REQ_QUOTE_MIN_WIDTH : SPARE_REQ_MIN_WIDTH;
+        return reqWorkSmQuoteViewActive() ? SPARE_REQ_QUOTE_MIN_WIDTH : SPARE_REQ_MIN_WIDTH;
     }
 
     function parseQuoteCurrencyToken(raw) {
@@ -3527,7 +3527,7 @@ const TVC_SpareMenu = (function () {
 
     function reqWorkQuoteLineQty(line) {
         const m = modState(getState());
-        const useEval = !!m.reqWorkHqEvalView && reqWorkHqQuoteViewActive();
+        const useEval = !!m.reqWorkSmEvalView && reqWorkSmQuoteViewActive();
         if (useEval) {
             if (line.qty_approved != null && line.qty_approved !== '') {
                 return Number(line.qty_approved) || 0;
@@ -3569,7 +3569,7 @@ const TVC_SpareMenu = (function () {
         return !!String(v?.vendorName || '').trim();
     }
 
-    function reqWorkHqHasQuoteDraft(req) {
+    function reqWorkSmHasQuoteDraft(req) {
         const q = req?.hq_quote;
         if (!q) return false;
         const hasVendor = (q.vendors || []).some(v => reqWorkQuoteSlotReady(v));
@@ -3578,7 +3578,7 @@ const TVC_SpareMenu = (function () {
     }
 
     /** Request Quote 작성 완료 — 업체·통화·체크 1개 이상 (어느 슬롯이든) */
-    function reqWorkHqQuoteSetupReady(req) {
+    function reqWorkSmQuoteSetupReady(req) {
         if (!req) return false;
         const q = ensureReqWorkQuoteState(req);
         return reqWorkQuoteVendors(req).some((v, slot) => {
@@ -3589,28 +3589,28 @@ const TVC_SpareMenu = (function () {
     }
 
     /** Request Quote(견적 ZIP) Export 완료 — Import Quote 탭 활성화 기준 */
-    function reqWorkHqQuoteExportComplete(req) {
+    function reqWorkSmQuoteExportComplete(req) {
         if (!req) return false;
         if (req?.hq_quote?.quoteExported) return true;
         return reqHqFlowStageReached(req, 'export-quote');
     }
 
     /** Import Quote 완료 — Evaluation / Reply Evaluation 탭 활성화 기준 */
-    function reqWorkHqImportQuoteComplete(req) {
+    function reqWorkSmImportQuoteComplete(req) {
         if (!req) return false;
-        if (reqWorkHqVendorQuoteImported(req)) return true;
+        if (reqWorkSmVendorQuoteImported(req)) return true;
         return reqHqFlowStageReached(req, 'import-quote');
     }
 
     /** Reply Evaluation Export 완료 — Purchase Order 탭 활성화 기준 */
-    function reqWorkHqReplyEvalExportComplete(req) {
+    function reqWorkSmReplyEvalExportComplete(req) {
         if (!req) return false;
         if (req?.hq_quote?.replyExported) return true;
         return reqHqFlowStageReached(req, 'purchase-order');
     }
 
-    /** 선박 Received + HQ Import 완료 — Received 탭 활성화 기준 */
-    function reqWorkHqReceivedImportComplete(req) {
+    /** 선박 Received + SM Import 완료 — Received 탭 활성화 기준 */
+    function reqWorkSmReceivedImportComplete(req) {
         if (!req) return false;
         if (req?.hq_quote?.receivedImported) return true;
         const hasReceivedDate = !!reqListReceivedDate(req);
@@ -3721,27 +3721,27 @@ const TVC_SpareMenu = (function () {
         return { updated, total: (rows || []).length, req };
     }
 
-    function reqWorkHqHasQuotePrices(req) {
+    function reqWorkSmHasQuotePrices(req) {
         const prices = req?.hq_quote?.prices;
         if (!prices) return false;
         return Object.values(prices).some(p => p != null && p !== '' && Number.isFinite(Number(p)));
     }
 
     /** Check Quote import 또는 Price 칸 수기 입력 — 업체 견적 1건 이상 */
-    function reqWorkHqVendorQuoteImported(req) {
+    function reqWorkSmVendorQuoteImported(req) {
         if (!req) return false;
         const RS = TVC_Inventory?.REQ_STATUS || {};
         const st = String(req.status || '').toUpperCase();
-        if (st === RS.QUOTED || st === RS.HQ_REVIEW || st === RS.APPROVED) return true;
+        if (st === RS.QUOTED || st === RS.SM_REVIEW || st === RS.APPROVED) return true;
         if ((req.lines || []).some(l => l.price != null && l.price !== '' && Number.isFinite(Number(l.price)))) return true;
-        return reqWorkHqHasQuotePrices(req);
+        return reqWorkSmHasQuotePrices(req);
     }
 
-    function reqWorkHqEvaluationReady(req) {
+    function reqWorkSmEvaluationReady(req) {
         if (!req) return false;
         const RS = TVC_Inventory?.REQ_STATUS || {};
         const st = String(req.status || '').toUpperCase();
-        if (st === RS.APPROVED || st === RS.HQ_REVIEW) return true;
+        if (st === RS.APPROVED || st === RS.SM_REVIEW) return true;
         const lines = (req.lines || []).filter(l => (Number(l.qty_requested) || 0) > 0);
         if (!lines.length) return false;
         return lines.every(l => l.qty_approved != null && l.qty_approved !== '');
@@ -3756,21 +3756,21 @@ const TVC_SpareMenu = (function () {
         });
     }
 
-    function reqWorkHqEvalEditActive() {
+    function reqWorkSmEvalEditActive() {
         const m = modState(getState());
-        if (!m.reqWorkHqEvalView || !isRequisitionListWindow(m)) return false;
+        if (!m.reqWorkSmEvalView || !isRequisitionListWindow(m)) return false;
         const st = getState();
-        if (!window.TVC_RBAC?.isHqAccount?.(spareInventoryUser(st))) return false;
-        return reqWorkHqVendorQuoteImported(getReqWorkSession());
+        if (!window.TVC_RBAC?.isSmAccount?.(spareInventoryUser(st))) return false;
+        return reqWorkSmVendorQuoteImported(getReqWorkSession());
     }
 
     function applyReqWorkHqStageOnLoad(req, m) {
         if (!req || !m) return;
-        if (!isReqListHqUser(getState())) return;
+        if (!isReqListSmUser(getState())) return;
         reqHqSyncMaxFlowStage(req);
         const homeStage = reqHqStatusFlowStage(req, m);
-        m.reqWorkHqFlowStage = homeStage;
-        m.reqWorkHqFlowReqId = req.id;
+        m.reqWorkSmFlowStage = homeStage;
+        m.reqWorkSmFlowReqId = req.id;
         applyHqFlowStageToUi(m, req, homeStage);
     }
 
@@ -3782,7 +3782,7 @@ const TVC_SpareMenu = (function () {
         try {
             await TVC_Inventory.saveRequisition(req);
         } catch (e) {
-            console.warn('[HQ_QUOTE] persist failed', e);
+            console.warn('[SM_QUOTE] persist failed', e);
         }
     }
 
@@ -3794,7 +3794,7 @@ const TVC_SpareMenu = (function () {
     function spareReqQuoteTableHeadHtml(req) {
         const vendors = reqWorkQuoteVendors(req);
         const totals = reqWorkQuoteColumnTotals(req);
-        const evalStage = reqWorkHqEvalStageActive();
+        const evalStage = reqWorkSmEvalStageActive();
         const metaVendorCells = vendors.map((v, slot) => {
             const currency = reqWorkQuoteCurrency(v, slot, req);
             const total = fmtQuoteAmount(totals[slot], currency);
@@ -3842,7 +3842,7 @@ const TVC_SpareMenu = (function () {
         const req = getReqWorkSession();
         const vendors = reqWorkQuoteVendors(req);
         const q = ensureReqWorkQuoteState(req);
-        const evalStage = reqWorkHqEvalStageActive();
+        const evalStage = reqWorkSmEvalStageActive();
         const quoteFieldsLocked = evalStage;
         const line = reqLineForSpareRow(s);
         const vendorCells = vendors.map((v, slot) => {
@@ -3865,16 +3865,16 @@ const TVC_SpareMenu = (function () {
                     onclick="event.stopPropagation()" onchange="TVC_SpareMenu.reqWorkToggleQuoteRowCheck(${slot}, '${sidAttr}', this.checked)"></td>
                 <td class="c-quote-price c-n">${priceCell}</td>`;
         }).join('');
-        const reqLocked = evalStage || (locked && !reqWorkHqQuoteViewActive());
+        const reqLocked = evalStage || (locked && !reqWorkSmQuoteViewActive());
         const reqCls = reqQtyMismatchClass('req', line);
         const assessCls = reqQtyMismatchClass('assess', line);
         return `<td class="c-req${reqCls}">${reqWorkRequestCellHtml(s, sid, reqLocked)}</td>
-            <td class="c-assess${assessCls}">${reqWorkEvalCellHtml(s, sid, locked && !reqWorkHqEvalEditActive())}</td>
+            <td class="c-assess${assessCls}">${reqWorkEvalCellHtml(s, sid, locked && !reqWorkSmEvalEditActive())}</td>
             ${vendorCells}`;
     }
 
     function syncReqWorkQuoteTotalsDom() {
-        if (!reqWorkHqQuoteViewActive()) return;
+        if (!reqWorkSmQuoteViewActive()) return;
         const req = getReqWorkSession();
         if (!req) return;
         const vendors = reqWorkQuoteVendors(req);
@@ -3888,7 +3888,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function refreshReqWorkQuoteHeadDom() {
-        if (!reqWorkHqQuoteViewActive()) return;
+        if (!reqWorkSmQuoteViewActive()) return;
         closeReqQuoteCurrencyPick();
         const req = getReqWorkSession();
         if (!req) return;
@@ -4018,7 +4018,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function toggleReqQuoteCurrencyPick(ev, slot) {
-        if (reqWorkHqEvalStageActive()) return;
+        if (reqWorkSmEvalStageActive()) return;
         ev?.stopPropagation?.();
         const trigger = ev?.currentTarget;
         if (!trigger) return;
@@ -4269,12 +4269,12 @@ const TVC_SpareMenu = (function () {
         v.vendorId = id;
         v.vendorName = name;
         refreshReqWorkQuoteHeadDom();
-        if (reqWorkHqQuoteViewActive()) refreshReqWorkListUi();
+        if (reqWorkSmQuoteViewActive()) refreshReqWorkListUi();
         touchReqWorkHqDraft();
     }
 
     function toggleReqQuoteVendorPick(ev, slot) {
-        if (reqWorkHqEvalStageActive()) return;
+        if (reqWorkSmEvalStageActive()) return;
         ev?.stopPropagation?.();
         const trigger = ev?.currentTarget;
         if (!trigger) return;
@@ -4341,7 +4341,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function pickReqQuoteVendor(slot, vendorId, vendorName) {
-        if (reqWorkHqEvalStageActive()) return;
+        if (reqWorkSmEvalStageActive()) return;
         const name = String(vendorName || '').trim();
         if (!name) return;
         const id = String(vendorId || '').trim();
@@ -4370,7 +4370,7 @@ const TVC_SpareMenu = (function () {
         }
         refreshReqWorkQuoteHeadDom();
         refreshReqQuoteVendorPickMenu(slot, updated.name);
-        if (reqWorkHqQuoteViewActive()) refreshReqWorkListUi();
+        if (reqWorkSmQuoteViewActive()) refreshReqWorkListUi();
         showReqQuoteVendorAddStatus(slot, `Updated: ${updated.name}`);
     }
 
@@ -4392,12 +4392,12 @@ const TVC_SpareMenu = (function () {
         }
         refreshReqWorkQuoteHeadDom();
         refreshReqQuoteVendorPickMenu(slot);
-        if (reqWorkHqQuoteViewActive()) refreshReqWorkListUi();
+        if (reqWorkSmQuoteViewActive()) refreshReqWorkListUi();
         showReqQuoteVendorAddStatus(slot, `Removed: ${v.name}`);
     }
 
     function reqWorkSetQuoteCurrency(slot, currency) {
-        if (reqWorkHqEvalStageActive()) return;
+        if (reqWorkSmEvalStageActive()) return;
         const req = getReqWorkSession();
         if (!req) return;
         const q = ensureReqWorkQuoteState(req);
@@ -4405,12 +4405,12 @@ const TVC_SpareMenu = (function () {
         if (!v) return;
         v.currency = String(currency || 'USD').trim().toUpperCase() || 'USD';
         refreshReqWorkQuoteHeadDom();
-        if (reqWorkHqQuoteViewActive()) refreshReqWorkListUi();
+        if (reqWorkSmQuoteViewActive()) refreshReqWorkListUi();
         touchReqWorkHqDraft();
     }
 
     function reqWorkToggleQuoteColCheck(slot, checked) {
-        if (reqWorkHqEvalStageActive()) return;
+        if (reqWorkSmEvalStageActive()) return;
         const req = getReqWorkSession();
         if (!req) return;
         const v = reqWorkQuoteVendors(req)[slot];
@@ -4424,13 +4424,13 @@ const TVC_SpareMenu = (function () {
             else delete q.rowChecks[key];
         });
         refreshReqWorkQuoteHeadDom();
-        if (reqWorkHqQuoteViewActive()) refreshReqWorkListUi();
+        if (reqWorkSmQuoteViewActive()) refreshReqWorkListUi();
         syncReqWorkQuoteTotalsDom();
         touchReqWorkHqDraft();
     }
 
     function reqWorkToggleQuoteRowCheck(slot, spareId, checked) {
-        if (reqWorkHqEvalStageActive()) return;
+        if (reqWorkSmEvalStageActive()) return;
         const req = getReqWorkSession();
         if (!req) return;
         const v = reqWorkQuoteVendors(req)[slot];
@@ -4445,7 +4445,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkSetQuotePrice(slot, spareId, raw, opts = {}) {
-        if (reqWorkHqEvalStageActive()) return;
+        if (reqWorkSmEvalStageActive()) return;
         const req = getReqWorkSession();
         if (!req) return;
         const q = ensureReqWorkQuoteState(req);
@@ -4459,7 +4459,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkListHeadHtml() {
-        const quote = reqWorkHqQuoteViewActive();
+        const quote = reqWorkSmQuoteViewActive();
         const req = getReqWorkSession();
         const tableCls = `spare-data-table spare-data-head spare-data-table-req${quote ? ' is-quote-view' : ''}`;
         const thead = quote ? spareReqQuoteTableHeadHtml(req) : SPARE_REQ_TABLE_HEAD;
@@ -4475,7 +4475,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(getState());
         const st = getState();
         if (isRequisitionListWindow(m)) {
-            if (isReqListHqUser(st)) {
+            if (isReqListSmUser(st)) {
                 if (reqListWorkflowLabel(req) !== 'Received') return false;
                 return !!m.reqWorkListEditing;
             }
@@ -4975,12 +4975,12 @@ const TVC_SpareMenu = (function () {
         return !!(typeof TVC_RBAC !== 'undefined' && user && TVC_RBAC.can(user, TVC_RBAC.Action.SUPPLY_PARTS));
     }
 
-    /** New Requisition Complete — Chief Engineer or HQ Superintendent */
+    /** New Requisition Complete — Chief Engineer or SM Superintendent */
     function canCompleteRequisition(st) {
         const user = spareInventoryUser(st);
         if (!user || !window.TVC_RBAC) return false;
         const role = TVC_RBAC.resolveUserRole(user);
-        return TVC_RBAC.isEngineApproverRole(role) || role === TVC_RBAC.Role.HQ_SUPERVISOR;
+        return TVC_RBAC.isEngineApproverRole(role) || role === TVC_RBAC.Role.SM_SUPERVISOR;
     }
 
     function getFocusedSpareId(st) {
@@ -5194,7 +5194,7 @@ const TVC_SpareMenu = (function () {
 
     async function vesselScope() {
         const st = getState();
-        const isHq = window.TVC_RBAC && TVC_RBAC.isHqAccount(st.user);
+        const isHq = window.TVC_RBAC && TVC_RBAC.isSmAccount(st.user);
         const vesselId = isHq ? st.selectedVesselId : (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID));
         return { st, isHq, vesselId };
     }
@@ -5609,7 +5609,7 @@ const TVC_SpareMenu = (function () {
         const modifyIds = spareActionIds('modify');
         const deleteIds = spareActionIds('delete');
         const checkedCount = getCheckedSpareIds(st).length;
-        const permTip = 'Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required';
+        const permTip = 'Chief Engineer, Chief Officer, Captain, or SM Superintendent permission required';
         const pickTip = 'Click a row or select using the checkbox';
         const editingTip = 'Not available while editing';
         return {
@@ -5875,7 +5875,7 @@ const TVC_SpareMenu = (function () {
         const pipe = sparePipelineCols(s, reqLine);
         const stockCell = pipe.stock;
         const locked = ctx === 'reqWork' && reqWorkFormLocked();
-        const quoteView = ctx === 'reqWork' && reqWorkHqQuoteViewActive();
+        const quoteView = ctx === 'reqWork' && reqWorkSmQuoteViewActive();
         const vesselPostOrderRo = ctx === 'reqWork' && reqWorkVesselOrderedOrReceivedView();
         const rcvdEdit = ctx === 'reqWork' && reqWorkReceivedQtyEditable() && !quoteView
             && (!locked || reqWorkVesselReceivedRcvdOnlyEdit());
@@ -6263,7 +6263,7 @@ const TVC_SpareMenu = (function () {
         const canConfirmNow = initiated && !isConfirmed && !isApproved
             && !!user && TVC_RBAC.canConfirmDepartment(user, dept);
         const canApproveNow = isConfirmed && !isApproved
-            && !!user && TVC_RBAC.canApproveHqReport(user);
+            && !!user && TVC_RBAC.canApproveSmReport(user);
         return {
             isConfirmed,
             isApproved,
@@ -6369,70 +6369,70 @@ const TVC_SpareMenu = (function () {
 
     function reqListStatusLabel(req, st) {
         st = st || getState();
-        if (isReqListHqUser(st)) return reqHqListWorkflowStatus(req);
+        if (isReqListSmUser(st)) return reqSmListWorkflowStatus(req);
         return reqVesselListWorkflowStatus(req);
     }
 
-    function reqHqListWorkflowStatus(req) {
-        if (!req) return HQ_REQ_LIST_STATUS.REQUISITION;
+    function reqSmListWorkflowStatus(req) {
+        if (!req) return SM_REQ_LIST_STATUS.REQUISITION;
 
-        if (reqWorkHqReceivedImportComplete(req)) return HQ_REQ_LIST_STATUS.RECEIVED;
+        if (reqWorkSmReceivedImportComplete(req)) return SM_REQ_LIST_STATUS.RECEIVED;
         const hasReceivedDate = !!reqListReceivedDate(req);
         const hasLineReceived = (req.lines || []).some(l => Number(l.qty_received) > 0);
-        if (hasReceivedDate && hasLineReceived) return HQ_REQ_LIST_STATUS.RECEIVED;
+        if (hasReceivedDate && hasLineReceived) return SM_REQ_LIST_STATUS.RECEIVED;
 
-        if (reqWorkHqPurchaseOrderExportComplete(req)) return HQ_REQ_LIST_STATUS.ORDERED;
+        if (reqWorkSmPurchaseOrderExportComplete(req)) return SM_REQ_LIST_STATUS.ORDERED;
 
-        if (reqWorkHqImportQuoteComplete(req)) return HQ_REQ_LIST_STATUS.EVALUATING;
+        if (reqWorkSmImportQuoteComplete(req)) return SM_REQ_LIST_STATUS.EVALUATING;
 
-        if (reqWorkHqQuoteExportComplete(req)) return HQ_REQ_LIST_STATUS.REQ_QUOTE;
+        if (reqWorkSmQuoteExportComplete(req)) return SM_REQ_LIST_STATUS.REQ_QUOTE;
 
-        return HQ_REQ_LIST_STATUS.REQUISITION;
+        return SM_REQ_LIST_STATUS.REQUISITION;
     }
 
     function reqHqWorkflowPhase(req) {
-        switch (reqHqListWorkflowStatus(req)) {
-            case HQ_REQ_LIST_STATUS.RECEIVED: return REQ_LIST_PHASE.RECEIVED;
-            case HQ_REQ_LIST_STATUS.ORDERED:
-            case HQ_REQ_LIST_STATUS.EVALUATING: return REQ_LIST_PHASE.ASSESSED;
-            case HQ_REQ_LIST_STATUS.REQ_QUOTE: return REQ_LIST_PHASE.CONFIRMED;
-            case HQ_REQ_LIST_STATUS.REQUISITION: return REQ_LIST_PHASE.SUBMITTED;
+        switch (reqSmListWorkflowStatus(req)) {
+            case SM_REQ_LIST_STATUS.RECEIVED: return REQ_LIST_PHASE.RECEIVED;
+            case SM_REQ_LIST_STATUS.ORDERED:
+            case SM_REQ_LIST_STATUS.EVALUATING: return REQ_LIST_PHASE.ASSESSED;
+            case SM_REQ_LIST_STATUS.REQ_QUOTE: return REQ_LIST_PHASE.CONFIRMED;
+            case SM_REQ_LIST_STATUS.REQUISITION: return REQ_LIST_PHASE.SUBMITTED;
             default: return REQ_LIST_PHASE.DRAFT;
         }
     }
 
-    /** HQ Report History — phase tab key (Evaluating vs Ordered kept separate) */
+    /** SM Report History — phase tab key (Evaluating vs Ordered kept separate) */
     function reqHqListPhaseKey(req) {
-        switch (reqHqListWorkflowStatus(req)) {
-            case HQ_REQ_LIST_STATUS.RECEIVED: return HQ_REQ_LIST_PHASE.RECEIVED;
-            case HQ_REQ_LIST_STATUS.ORDERED: return HQ_REQ_LIST_PHASE.ORDERED;
-            case HQ_REQ_LIST_STATUS.EVALUATING: return HQ_REQ_LIST_PHASE.EVALUATING;
-            case HQ_REQ_LIST_STATUS.REQ_QUOTE: return HQ_REQ_LIST_PHASE.REQ_QUOTE;
-            default: return HQ_REQ_LIST_PHASE.REQUISITION;
+        switch (reqSmListWorkflowStatus(req)) {
+            case SM_REQ_LIST_STATUS.RECEIVED: return SM_REQ_LIST_PHASE.RECEIVED;
+            case SM_REQ_LIST_STATUS.ORDERED: return SM_REQ_LIST_PHASE.ORDERED;
+            case SM_REQ_LIST_STATUS.EVALUATING: return SM_REQ_LIST_PHASE.EVALUATING;
+            case SM_REQ_LIST_STATUS.REQ_QUOTE: return SM_REQ_LIST_PHASE.REQ_QUOTE;
+            default: return SM_REQ_LIST_PHASE.REQUISITION;
         }
     }
 
     function reqHqListPhaseLabel(phaseKey) {
         switch (phaseKey) {
-            case HQ_REQ_LIST_PHASE.REQUISITION: return HQ_REQ_LIST_STATUS.REQUISITION;
-            case HQ_REQ_LIST_PHASE.REQ_QUOTE: return HQ_REQ_LIST_STATUS.REQ_QUOTE;
-            case HQ_REQ_LIST_PHASE.EVALUATING: return HQ_REQ_LIST_STATUS.EVALUATING;
-            case HQ_REQ_LIST_PHASE.ORDERED: return HQ_REQ_LIST_STATUS.ORDERED;
-            case HQ_REQ_LIST_PHASE.RECEIVED: return HQ_REQ_LIST_STATUS.RECEIVED;
+            case SM_REQ_LIST_PHASE.REQUISITION: return SM_REQ_LIST_STATUS.REQUISITION;
+            case SM_REQ_LIST_PHASE.REQ_QUOTE: return SM_REQ_LIST_STATUS.REQ_QUOTE;
+            case SM_REQ_LIST_PHASE.EVALUATING: return SM_REQ_LIST_STATUS.EVALUATING;
+            case SM_REQ_LIST_PHASE.ORDERED: return SM_REQ_LIST_STATUS.ORDERED;
+            case SM_REQ_LIST_PHASE.RECEIVED: return SM_REQ_LIST_STATUS.RECEIVED;
             default: return phaseKey;
         }
     }
 
     function reqHqStatusFlowStage(req, m) {
         if (!req) return 'requisition';
-        const status = reqHqListWorkflowStatus(req);
+        const status = reqSmListWorkflowStatus(req);
         switch (status) {
-            case HQ_REQ_LIST_STATUS.RECEIVED: return 'received';
-            case HQ_REQ_LIST_STATUS.ORDERED: return 'ordered';
-            case HQ_REQ_LIST_STATUS.EVALUATING: return 'evaluation';
-            case HQ_REQ_LIST_STATUS.REQ_QUOTE: return 'quoted';
+            case SM_REQ_LIST_STATUS.RECEIVED: return 'received';
+            case SM_REQ_LIST_STATUS.ORDERED: return 'ordered';
+            case SM_REQ_LIST_STATUS.EVALUATING: return 'evaluation';
+            case SM_REQ_LIST_STATUS.REQ_QUOTE: return 'quoted';
             default:
-                if (m?.reqWorkHqStickySelectVendorReqId === req?.id) return 'request-quote';
+                if (m?.reqWorkSmStickySelectVendorReqId === req?.id) return 'request-quote';
                 return 'requisition';
         }
     }
@@ -6440,18 +6440,18 @@ const TVC_SpareMenu = (function () {
     function applyHqFlowStageToUi(m, req, stage) {
         if (!m) return;
         const quoteStages = new Set(['request-quote', 'export-quote', 'quoted', 'import-quote', 'evaluation']);
-        m.reqWorkHqQuoteView = quoteStages.has(stage);
-        m.reqWorkHqEvalView = stage === 'evaluation';
+        m.reqWorkSmQuoteView = quoteStages.has(stage);
+        m.reqWorkSmEvalView = stage === 'evaluation';
         if (stage === 'evaluation' && req) initReqWorkEvalQtyFromReq(req);
         else closeReqQuoteHeadPicks();
     }
 
     function reqHqSetViewFlowStage(m, req, stage) {
         if (!m || !req?.id || !stage) return;
-        m.reqWorkHqFlowStage = stage;
-        m.reqWorkHqFlowReqId = req.id;
-        if (stage === 'request-quote') m.reqWorkHqStickySelectVendorReqId = req.id;
-        if (stage === 'requisition') m.reqWorkHqStickySelectVendorReqId = null;
+        m.reqWorkSmFlowStage = stage;
+        m.reqWorkSmFlowReqId = req.id;
+        if (stage === 'request-quote') m.reqWorkSmStickySelectVendorReqId = req.id;
+        if (stage === 'requisition') m.reqWorkSmStickySelectVendorReqId = null;
         applyHqFlowStageToUi(m, req, stage);
     }
 
@@ -6581,9 +6581,9 @@ const TVC_SpareMenu = (function () {
     }
 
     const REQ_VESSEL_FLOW_STAGES = ['report', 'confirm', 'submit', 'submitted', 'evaluation-import', 'evaluated', 'received', 'received-export'];
-    const REQ_HQ_FLOW_STAGES = ['requisition', 'request-quote', 'export-quote', 'quoted', 'import-quote', 'evaluation', 'purchase-order', 'ordered', 'received-import', 'received'];
+    const REQ_SM_FLOW_STAGES = ['requisition', 'request-quote', 'export-quote', 'quoted', 'import-quote', 'evaluation', 'purchase-order', 'ordered', 'received-import', 'received'];
 
-    function normalizeHqFlowStage(stage) {
+    function normalizeSmFlowStage(stage) {
         const s = String(stage || '');
         if (s === 'reply-evaluation') return 'purchase-order';
         if (s === 'order') return 'ordered';
@@ -6607,7 +6607,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqHqBumpMaxFlowStage(req, stage) {
-        reqFlowBumpMaxStage(REQ_HQ_FLOW_STAGES, ensureReqWorkQuoteState(req), 'maxFlowStage', normalizeHqFlowStage(stage));
+        reqFlowBumpMaxStage(REQ_SM_FLOW_STAGES, ensureReqWorkQuoteState(req), 'maxFlowStage', normalizeSmFlowStage(stage));
     }
 
     function reqVesselSyncMaxFlowStage(req) {
@@ -6623,7 +6623,7 @@ const TVC_SpareMenu = (function () {
         const q = ensureReqWorkQuoteState(req);
         if (!q.maxFlowStage && q.flowStage) reqHqBumpMaxFlowStage(req, q.flowStage);
         const idx = reqHqFlowProgressIndex(req);
-        if (idx >= 0) q.maxFlowStage = REQ_HQ_FLOW_STAGES[idx];
+        if (idx >= 0) q.maxFlowStage = REQ_SM_FLOW_STAGES[idx];
     }
 
     function reqVesselFlowProgressIndex(req) {
@@ -6655,16 +6655,16 @@ const TVC_SpareMenu = (function () {
         if (!req) return 0;
         let maxIdx = 0;
         const bump = (stage) => {
-            const idx = REQ_HQ_FLOW_STAGES.indexOf(normalizeHqFlowStage(stage));
+            const idx = REQ_SM_FLOW_STAGES.indexOf(normalizeSmFlowStage(stage));
             if (idx >= 0) maxIdx = Math.max(maxIdx, idx);
         };
         const q = req.hq_quote || {};
         if (q.maxFlowStage) bump(q.maxFlowStage);
-        if (q.receivedImported || reqWorkHqReceivedImportComplete(req)) bump('received');
+        if (q.receivedImported || reqWorkSmReceivedImportComplete(req)) bump('received');
         if (q.orderExported || String(req.ordered_on || '').trim()) bump('ordered');
         if (q.replyExported) bump('purchase-order');
-        if (reqWorkHqEvaluationReady(req)) bump('evaluation');
-        if (reqWorkHqVendorQuoteImported(req)) bump('import-quote');
+        if (reqWorkSmEvaluationReady(req)) bump('evaluation');
+        if (reqWorkSmVendorQuoteImported(req)) bump('import-quote');
         if (q.quoteExported) bump('quoted');
         return maxIdx;
     }
@@ -6675,7 +6675,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqHqFlowStageReached(req, stage) {
-        const stageIdx = REQ_HQ_FLOW_STAGES.indexOf(stage);
+        const stageIdx = REQ_SM_FLOW_STAGES.indexOf(stage);
         return stageIdx >= 0 && stageIdx <= reqHqFlowProgressIndex(req);
     }
 
@@ -6746,9 +6746,9 @@ const TVC_SpareMenu = (function () {
 
     function applyReqWorkVesselStageOnLoad(req, m) {
         if (!req || !m) return;
-        if (isReqListHqUser(getState())) return;
-        m.reqWorkHqQuoteView = false;
-        m.reqWorkHqEvalView = false;
+        if (isReqListSmUser(getState())) return;
+        m.reqWorkSmQuoteView = false;
+        m.reqWorkSmEvalView = false;
         reqVesselSyncMaxFlowStage(req);
         m.reqWorkVesselFlowStage = reqVesselStatusFlowStage(req);
         m.reqWorkVesselFlowReqId = req.id;
@@ -6768,7 +6768,7 @@ const TVC_SpareMenu = (function () {
 
     function reqListDisplayStatusLabel(req, st) {
         st = st || getState();
-        if (isReqListHqUser(st)) return reqHqListWorkflowStatus(req);
+        if (isReqListSmUser(st)) return reqSmListWorkflowStatus(req);
         return reqVesselListWorkflowStatus(req);
     }
 
@@ -6879,9 +6879,9 @@ const TVC_SpareMenu = (function () {
 
     function filterReqList(reqs, st) {
         const m = modState(st);
-        if (isReqListHqUser(st)) {
+        if (isReqListSmUser(st)) {
             const cur = m.reqListPhaseTab || REQ_LIST_PHASE.ALL;
-            if (cur !== REQ_LIST_PHASE.ALL && !Object.values(HQ_REQ_LIST_PHASE).includes(cur)) {
+            if (cur !== REQ_LIST_PHASE.ALL && !Object.values(SM_REQ_LIST_PHASE).includes(cur)) {
                 m.reqListPhaseTab = REQ_LIST_PHASE.ALL;
             }
         }
@@ -6903,9 +6903,9 @@ const TVC_SpareMenu = (function () {
     function reqListPhaseCounts(allReqs, st) {
         const filtered = reqListFilterBase(allReqs, st);
         const counts = { all: filtered.length };
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         if (isHq) {
-            Object.values(HQ_REQ_LIST_PHASE).forEach(p => { counts[p] = 0; });
+            Object.values(SM_REQ_LIST_PHASE).forEach(p => { counts[p] = 0; });
         } else {
             Object.values(REQ_LIST_PHASE).forEach(p => { if (p !== REQ_LIST_PHASE.ALL) counts[p] = 0; });
         }
@@ -6927,14 +6927,14 @@ const TVC_SpareMenu = (function () {
 
     function reqListPhaseTabsHtml(m, counts, st) {
         st = st || getState();
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const tabs = isHq ? [
             [REQ_LIST_PHASE.ALL, 'All'],
-            [HQ_REQ_LIST_PHASE.REQUISITION, HQ_REQ_LIST_STATUS.REQUISITION],
-            [HQ_REQ_LIST_PHASE.REQ_QUOTE, HQ_REQ_LIST_STATUS.REQ_QUOTE],
-            [HQ_REQ_LIST_PHASE.EVALUATING, HQ_REQ_LIST_STATUS.EVALUATING],
-            [HQ_REQ_LIST_PHASE.ORDERED, HQ_REQ_LIST_STATUS.ORDERED],
-            [HQ_REQ_LIST_PHASE.RECEIVED, HQ_REQ_LIST_STATUS.RECEIVED],
+            [SM_REQ_LIST_PHASE.REQUISITION, SM_REQ_LIST_STATUS.REQUISITION],
+            [SM_REQ_LIST_PHASE.REQ_QUOTE, SM_REQ_LIST_STATUS.REQ_QUOTE],
+            [SM_REQ_LIST_PHASE.EVALUATING, SM_REQ_LIST_STATUS.EVALUATING],
+            [SM_REQ_LIST_PHASE.ORDERED, SM_REQ_LIST_STATUS.ORDERED],
+            [SM_REQ_LIST_PHASE.RECEIVED, SM_REQ_LIST_STATUS.RECEIVED],
         ] : [
             [REQ_LIST_PHASE.ALL, 'All'],
             [REQ_LIST_PHASE.REPORTED, 'Reported'],
@@ -6991,9 +6991,9 @@ const TVC_SpareMenu = (function () {
         return '—';
     }
 
-    function isReqListHqUser(st) {
+    function isReqListSmUser(st) {
         const user = spareInventoryUser(st);
-        return !!(user && TVC_RBAC?.isHqAccount?.(user));
+        return !!(user && TVC_RBAC?.isSmAccount?.(user));
     }
 
     function reqListApprovalFlags(req) {
@@ -7019,7 +7019,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqListIsConfirmedForApprove(req) {
-        // legacy helper — HQ Approve now uses Submitted only (reqListIsSubmittedForApprove)
+        // legacy helper — SM Approve now uses Submitted only (reqListIsSubmittedForApprove)
         const flags = reqListApprovalFlags(req);
         if (!flags.isConfirmed || flags.isApproved) return false;
         return flags.workflowLabel === 'Confirmed'
@@ -7041,17 +7041,17 @@ const TVC_SpareMenu = (function () {
     function reqListIsEvaluatingForApprove(req, st) {
         if (!req) return false;
         st = st || getState();
-        if (!isReqListHqUser(st)) return false;
-        return reqHqListWorkflowStatus(req) === HQ_REQ_LIST_STATUS.EVALUATING;
+        if (!isReqListSmUser(st)) return false;
+        return reqSmListWorkflowStatus(req) === SM_REQ_LIST_STATUS.EVALUATING;
     }
 
     function reqListIsHqRequisitionStatus(req) {
-        return reqHqListWorkflowStatus(req) === HQ_REQ_LIST_STATUS.REQUISITION;
+        return reqSmListWorkflowStatus(req) === SM_REQ_LIST_STATUS.REQUISITION;
     }
 
     function reqListIsHqEvaluatingApproved(req) {
         if (!req) return false;
-        if (reqHqListWorkflowStatus(req) !== HQ_REQ_LIST_STATUS.EVALUATING) return false;
+        if (reqSmListWorkflowStatus(req) !== SM_REQ_LIST_STATUS.EVALUATING) return false;
         return reqListApprovalFlags(req).isApproved;
     }
 
@@ -7060,7 +7060,7 @@ const TVC_SpareMenu = (function () {
         const user = spareInventoryUser(st);
         if (!user) return false;
         // Confirm = vessel mode only; Reported enables, Confirmed+ disables
-        if (isReqListHqUser(st)) return false;
+        if (isReqListSmUser(st)) return false;
         if (!reqListIsReportedForConfirm(req)) return false;
         const dept = req.department || st.department;
         return TVC_RBAC.canConfirmDepartment(user, dept);
@@ -7069,7 +7069,7 @@ const TVC_SpareMenu = (function () {
     function requisitionConfirmByLabel(st, req) {
         const user = spareInventoryUser(st);
         const dept = req?.department || st?.department;
-        if (window.TVC_RBAC?.isHqAccount?.(user)) return 'Superintendent';
+        if (window.TVC_RBAC?.isSmAccount?.(user)) return 'Superintendent';
         return TVC_RBAC.getDepartmentConfirmLabel(dept, user) || TVC_RBAC.getRankLabel(user);
     }
 
@@ -7101,10 +7101,10 @@ const TVC_SpareMenu = (function () {
     function canApproveRequisition(st, req) {
         if (!req) return false;
         const user = spareInventoryUser(st);
-        if (!user || !TVC_RBAC.canApproveHqReport(user)) return false;
+        if (!user || !TVC_RBAC.canApproveSmReport(user)) return false;
         if (reqListApprovalFlags(req).isApproved) return false;
-        // HQ Superintendent 작성분: Reported만 있어도 Approve 가능
-        if (TVC_RBAC.canHqDirectApprove(user, req)) {
+        // SM Superintendent 작성분: Reported만 있어도 Approve 가능
+        if (TVC_RBAC.canSmDirectApprove(user, req)) {
             return spareListStatus(req) !== SPARE_LIST_STATUS.DRAFT;
         }
         // Evaluating — Company Approve 후 Order Export 가능
@@ -7368,7 +7368,7 @@ const TVC_SpareMenu = (function () {
         }
         if (m.reqListFilterOpen) filterParts.push('Open');
         if (m.reqListPhaseTab && m.reqListPhaseTab !== REQ_LIST_PHASE.ALL) {
-            const phaseLabel = isReqListHqUser(getState())
+            const phaseLabel = isReqListSmUser(getState())
                 ? reqHqListPhaseLabel(m.reqListPhaseTab)
                 : m.reqListPhaseTab;
             filterParts.push(`Phase: ${phaseLabel}`);
@@ -7952,8 +7952,8 @@ const TVC_SpareMenu = (function () {
         const m0 = modState(st0);
         const uiMounted = isRequisitionListWindow(m0) && m0.reqWorkOpen && !!document.getElementById('reqWorkListScroll');
         const prevLayout = uiMounted ? (reqWorkUsesGroupedList(st0) ? 'grouped' : 'virtual') : null;
-        const prevQuoteView = !!m0.reqWorkHqQuoteView;
-        const prevEvalView = !!m0.reqWorkHqEvalView;
+        const prevQuoteView = !!m0.reqWorkSmQuoteView;
+        const prevEvalView = !!m0.reqWorkSmEvalView;
 
         _reqWorkDraft = {
             ...req,
@@ -7967,7 +7967,7 @@ const TVC_SpareMenu = (function () {
         m.reqWorkListEditing = !!opts.keepEditing;
         m.reqWorkPostSaveView = !!opts.postSaveView;
         if (!opts.keepFromHistory && !opts.postSaveView) m.reqWorkFromHistory = false;
-        if (isReqListHqUser(st)) {
+        if (isReqListSmUser(st)) {
             applyReqWorkHqStageOnLoad(_reqWorkDraft, m);
         } else {
             applyReqWorkVesselStageOnLoad(_reqWorkDraft, m);
@@ -7986,7 +7986,7 @@ const TVC_SpareMenu = (function () {
         const histScrollTop = histScroll?.scrollTop ?? 0;
         const nextLayout = reqWorkUsesGroupedList(st) ? 'grouped' : 'virtual';
         const layoutChanged = !!prevLayout && prevLayout !== nextLayout;
-        const viewModeChanged = prevQuoteView !== !!m.reqWorkHqQuoteView || prevEvalView !== !!m.reqWorkHqEvalView;
+        const viewModeChanged = prevQuoteView !== !!m.reqWorkSmQuoteView || prevEvalView !== !!m.reqWorkSmEvalView;
         const reportChrome = !!m.reqWorkFromHistory || !!m.reqWorkPostSaveView || !!opts.postSaveView || !!opts.keepFromHistory;
         const canPatchInPlace = uiMounted && !m.reqWorkListDocPreview && !opts.forceFullRender
             && !opts.skipRender
@@ -8052,8 +8052,8 @@ const TVC_SpareMenu = (function () {
         m.reqWorkFromHistory = false;
         m.reqWorkShowSelectedOnly = true;
         m.reqWorkLastSavedId = null;
-        m.reqWorkHqQuoteView = false;
-        m.reqWorkHqEvalView = false;
+        m.reqWorkSmQuoteView = false;
+        m.reqWorkSmEvalView = false;
         m.reqWorkVesselFlowStage = 'report';
         m.reqWorkVesselFlowReqId = null;
         resetReqWorkQuoteState(_reqWorkDraft);
@@ -8204,7 +8204,7 @@ const TVC_SpareMenu = (function () {
         const exportXferTitle = exportXferMeta?.title || '';
         const exportXferHint = exportXferMeta?.hint || '';
 
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const isAuthor = isSpareAuthorAccount(spareInventoryUser(st));
         const showConfirm = !isHq && !isAuthor;
         const showCloseOs = !isAuthor;
@@ -8566,9 +8566,9 @@ const TVC_SpareMenu = (function () {
         if (!log || !canCreateConsume(st)) return false;
         const status = spareListStatus(log);
         if (status === SPARE_LIST_STATUS.APPROVED || log.approved_by || log.approved_at) {
-            return isReqListHqUser(st);
+            return isReqListSmUser(st);
         }
-        if (isReqListHqUser(st)) return true;
+        if (isReqListSmUser(st)) return true;
         return !consumeLogIsSubmitted(log);
     }
 
@@ -8592,14 +8592,14 @@ const TVC_SpareMenu = (function () {
     function consumeLogCanApprove(st, log) {
         if (!log) return false;
         const user = spareInventoryUser(st);
-        if (!user || !TVC_RBAC.canApproveHqReport(user)) return false;
+        if (!user || !TVC_RBAC.canApproveSmReport(user)) return false;
         const status = spareListStatus(log);
         const isConfirmed = status === SPARE_LIST_STATUS.CONFIRMED || status === SPARE_LIST_STATUS.APPROVED
             || !!(log?.confirmed_by || log?.confirmed_at);
         const isApproved = status === SPARE_LIST_STATUS.APPROVED || !!(log?.approved_by || log?.approved_at);
         if (isApproved) return false;
-        // HQ Superintendent 작성분: Reported만 있어도 Approve 가능
-        if (TVC_RBAC.canHqDirectApprove(user, log) || TVC_RBAC.canApproveHqReport(user)) {
+        // SM Superintendent 작성분: Reported만 있어도 Approve 가능
+        if (TVC_RBAC.canSmDirectApprove(user, log) || TVC_RBAC.canApproveSmReport(user)) {
             return status !== SPARE_LIST_STATUS.DRAFT;
         }
         return isConfirmed;
@@ -8852,7 +8852,7 @@ const TVC_SpareMenu = (function () {
 
         updateConsumeLogHeadCheckAll(logs);
 
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const canConfirm = consumeLogAnyCheckedCanConfirm(m, allLogs, st);
         const canApprove = isHq && consumeLogAnyCheckedCanApprove(m, allLogs, st);
         const canDelete = consumeLogCanDeleteSelection(m, st);
@@ -8906,7 +8906,7 @@ const TVC_SpareMenu = (function () {
         if (!isConsumedLogWindow(m)) return;
         const { st, vesselId } = await vesselScope();
         const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const canConfirm = consumeLogAnyCheckedCanConfirm(m, allLogs, st);
         const canApprove = isHq && consumeLogAnyCheckedCanApprove(m, allLogs, st);
         const canDelete = consumeLogCanDeleteSelection(m, st);
@@ -8973,7 +8973,7 @@ const TVC_SpareMenu = (function () {
         const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
         const logs = filterConsumeLogs(allLogs, st);
         const rows = buildConsumeLogRowsHtml(logs);
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const isAuthor = isSpareAuthorAccount(spareInventoryUser(st));
         const showConfirm = !isHq && !isAuthor;
         const canConfirm = consumeLogAnyCheckedCanConfirm(m, allLogs, st);
@@ -9271,7 +9271,7 @@ const TVC_SpareMenu = (function () {
         const navBtns = TVC_App?.histNavButtonsHtml
             ? TVC_App.histNavButtonsHtml('TVC_App.navWorkHistoryEntry(-1)', 'TVC_App.navWorkHistoryEntry(1)')
             : '';
-        const isHqUser = isReqListHqUser(st);
+        const isHqUser = isReqListSmUser(st);
         const histActionLabel = isHqUser ? 'Approve' : 'Confirm';
         const consumeAppr = consumeLogApprovalState(draft, st.department, { listMode: true, listEditing });
         const histActionOk = !listEditing && (isHqUser
@@ -9591,7 +9591,7 @@ const TVC_SpareMenu = (function () {
         const allLogs = await TVC_Inventory.listConsumeLogs(vesselId);
         const logs = filterConsumeLogs(allLogs, st);
         const rows = buildConsumeLogRowsHtml(logs);
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const isAuthor = isSpareAuthorAccount(spareInventoryUser(st));
         const showConfirm = !isHq && !isAuthor;
         const canConfirm = consumeLogAnyCheckedCanConfirm(m, allLogs, st);
@@ -9730,7 +9730,7 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToConfirm.length) {
             if (checkedIds.length) {
-                await TVC_Dialog.alert('None of the selected logs can be confirmed. Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected logs can be confirmed. Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             } else {
                 await TVC_Dialog.alert('Select one or more Reported logs to confirm.');
             }
@@ -9764,7 +9764,7 @@ const TVC_SpareMenu = (function () {
 
     async function consumeLogReportApprove() {
         const st = getState();
-        if (!isReqListHqUser(st)) {
+        if (!isReqListSmUser(st)) {
             await TVC_Dialog.alert('This action is available in SM Mode only.');
         }
         const m = modState(st);
@@ -9776,7 +9776,7 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToApprove.length) {
             if (checkedIds.length) {
-                await TVC_Dialog.alert('None of the selected logs can be approved. Confirmed logs, or HQ-authored Reported logs, can be approved with HQ Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected logs can be approved. Confirmed logs, or SM-authored Reported logs, can be approved with SM Superintendent permission.');
             } else {
                 await TVC_Dialog.alert('Select one or more approvable Consumption logs to approve.');
             }
@@ -9790,7 +9790,7 @@ const TVC_SpareMenu = (function () {
         for (const id of idsToApprove) {
             const log = await TVC_Inventory.getConsumeLog(id);
             if (!log || !consumeLogCanApprove(st, log)) continue;
-            if (!log.confirmed_at && !log.confirmed_by && TVC_RBAC.canHqDirectApprove(user, log)) {
+            if (!log.confirmed_at && !log.confirmed_by && TVC_RBAC.canSmDirectApprove(user, log)) {
                 log.confirmed_by = requisitionConfirmByLabel(st, log);
                 log.confirmed_at = now;
             }
@@ -9827,7 +9827,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         const now = new Date().toISOString();
-        if (isReqListHqUser(st)) {
+        if (isReqListSmUser(st)) {
             if (log.approved_by || log.approved_at) {
                 try {
                     log.approved_by = '';
@@ -9857,7 +9857,7 @@ const TVC_SpareMenu = (function () {
                 log.list_status = SPARE_LIST_STATUS.APPROVED;
                 await TVC_Inventory.saveConsumeLog(log);
                 await reloadConsumeLogKeepView(logId);
-                await TVC_Dialog.alert('Approved by HQ.');
+                await TVC_Dialog.alert('Approved by Superintendent.');
             } catch (e) {
                 await TVC_Dialog.alert(e.message || e.code || 'Approve failed');
             }
@@ -9881,7 +9881,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!consumeLogCanConfirm(st, log)) {
-            await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+            await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             return;
         }
         try {
@@ -10919,7 +10919,7 @@ const TVC_SpareMenu = (function () {
             throw new Error('Quotation Excel export is not available.');
         }
         const labels = reqWorkQuoteFlowLabels();
-        if (!reqWorkHqQuoteSetupReady(req)) {
+        if (!reqWorkSmQuoteSetupReady(req)) {
             throw new Error(`Complete ${labels.selectVendor} first: vendor, currency, and checked items.`);
         }
         const quoteMode = opts.quoteMode === 'order' ? 'order' : 'vendor';
@@ -11086,7 +11086,7 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToConfirm.length) {
             if (checkedIds.length) {
-                await TVC_Dialog.alert('None of the selected requisitions can be confirmed. Only Reported requisitions can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected requisitions can be confirmed. Only Reported requisitions can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             }
             await TVC_Dialog.alert('Select one or more Reported requisitions to confirm.');
         }
@@ -11127,7 +11127,7 @@ const TVC_SpareMenu = (function () {
             : [];
         if (!idsToApprove.length) {
             if (checkedIds.length) {
-                await TVC_Dialog.alert('None of the selected requisitions can be approved. Submitted or Evaluating requisitions, or HQ-authored Reported requisitions, can be approved with HQ Superintendent permission.');
+                await TVC_Dialog.alert('None of the selected requisitions can be approved. Submitted or Evaluating requisitions, or SM-authored Reported requisitions, can be approved with SM Superintendent permission.');
             }
             await TVC_Dialog.alert('Select one or more approvable requisitions to approve.');
         }
@@ -11139,7 +11139,7 @@ const TVC_SpareMenu = (function () {
         for (const id of idsToApprove) {
             const req = await TVC_Inventory.getRequisition(id);
             if (!req || !reqListCanApprove(st, req)) continue;
-            if (!req.confirmed_at && !req.confirmed_by && TVC_RBAC.canHqDirectApprove(user, req)) {
+            if (!req.confirmed_at && !req.confirmed_by && TVC_RBAC.canSmDirectApprove(user, req)) {
                 req.confirmed_by = requisitionConfirmByLabel(st, req);
                 req.confirmed_at = now;
             }
@@ -11218,7 +11218,7 @@ const TVC_SpareMenu = (function () {
                 return;
             }
             if (xferKind === 'reply-evaluation') {
-                const notReady = reqs.filter(r => !reqWorkHqEvaluationReady(r));
+                const notReady = reqs.filter(r => !reqWorkSmEvaluationReady(r));
                 if (notReady.length) {
                     const nos = notReady.map(r => r.req_no || r.id).join(', ');
                     await TVC_Dialog.alert(`Complete evaluation for all items first: ${nos}`);
@@ -11229,7 +11229,7 @@ const TVC_SpareMenu = (function () {
                 const notReady = reqs.filter(r => !reqListCanPurchaseOrderExport(r));
                 if (notReady.length) {
                     const nos = notReady.map(r => r.req_no || r.id).join(', ');
-                    await TVC_Dialog.alert(`Only ${HQ_REQ_LIST_STATUS.EVALUATING} and Approved requisitions can be exported: ${nos}`);
+                    await TVC_Dialog.alert(`Only ${SM_REQ_LIST_STATUS.EVALUATING} and Approved requisitions can be exported: ${nos}`);
                     return;
                 }
             }
@@ -11291,10 +11291,10 @@ const TVC_SpareMenu = (function () {
                     showSpicsModal('spareReqWorkModal');
                     await loadRequisitionIntoListWindow(reloadId, { preserveHistPopover: true });
                     const m = modState(getState());
-                    if (isReqListHqUser(getState())) {
+                    if (isReqListSmUser(getState())) {
                         if (xferKind === 'purchase-order') await applyHqOrderedViewState();
                         else if (xferKind === 'quotation') {
-                            m.reqWorkHqStickySelectVendorReqId = null;
+                            m.reqWorkSmStickySelectVendorReqId = null;
                             applyReqWorkHqStageOnLoad(_reqWorkDraft, m);
                         }
                     }
@@ -11393,7 +11393,7 @@ const TVC_SpareMenu = (function () {
         if (reqWorkSpareActionBlocked()) return;
         if (window.TVC_App?.openSpareAppend) return TVC_App.openSpareAppend();
         if (!canModifySpare(getState())) {
-            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or SM Superintendent permission required.');
         }
         append();
     }
@@ -11705,7 +11705,7 @@ const TVC_SpareMenu = (function () {
     async function appendGroupFromTree() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             return;
         }
         if (st.currentTab === 'actual') {
@@ -11734,7 +11734,7 @@ const TVC_SpareMenu = (function () {
     async function deleteGroupFromTree() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             return;
         }
         if (st.currentTab === 'actual') {
@@ -11769,7 +11769,7 @@ const TVC_SpareMenu = (function () {
     async function startGroupHeaderEdit() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             return;
         }
         const key = activeTreeGroupKey(st);
@@ -11811,7 +11811,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(st);
         if (!m.groupHeaderEdit) return;
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+            await TVC_Dialog.alert('Modify, append, and delete require Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             return;
         }
         const g = (id) => { const el = document.getElementById(id); return el ? el.value.trim() : ''; };
@@ -12539,7 +12539,7 @@ const TVC_SpareMenu = (function () {
         const { st, isHq, vesselId } = await vesselScope();
         const req = await resolveExportRequisition(id);
         const labels = reqWorkQuoteFlowLabels();
-        if (!reqWorkHqQuoteSetupReady(req)) {
+        if (!reqWorkSmQuoteSetupReady(req)) {
             throw new Error(`${labels.selectVendor} not complete for this requisition.`);
         }
         if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
@@ -12586,7 +12586,7 @@ const TVC_SpareMenu = (function () {
             dq.quoteExported = true;
             reqHqBumpMaxFlowStage(_reqWorkDraft, 'quoted');
             const m = modState(getState());
-            m.reqWorkHqStickySelectVendorReqId = null;
+            m.reqWorkSmStickySelectVendorReqId = null;
             applyReqWorkHqStageOnLoad(_reqWorkDraft, m);
         }
         await refreshReqListModalIfOpen();
@@ -12597,7 +12597,7 @@ const TVC_SpareMenu = (function () {
     async function exportReplyEvaluationReq(id) {
         const { st, isHq } = await vesselScope();
         const req = await resolveExportRequisition(id);
-        if (!reqWorkHqEvaluationReady(req)) throw new Error('Evaluation not complete for this requisition.');
+        if (!reqWorkSmEvaluationReady(req)) throw new Error('Evaluation not complete for this requisition.');
         if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
         if (!TVC_Excel?.buildSparePartsRequisitionBuffer) throw new Error('Reply Evaluation Excel export is not available.');
         if (_reqWorkDraft?.id && String(_reqWorkDraft.id) === String(id)) {
@@ -12620,7 +12620,7 @@ const TVC_SpareMenu = (function () {
         const { st, isHq } = await vesselScope();
         const req = await resolveExportRequisition(id);
         if (!reqListCanPurchaseOrderExport(req)) {
-            throw new Error(`Only ${HQ_REQ_LIST_STATUS.EVALUATING} and Approved requisitions can be exported as Purchase Order.`);
+            throw new Error(`Only ${SM_REQ_LIST_STATUS.EVALUATING} and Approved requisitions can be exported as Purchase Order.`);
         }
         if (typeof TVC_SpareSync === 'undefined') throw new Error('SPARE ZIP export is not available.');
         if (!TVC_Excel?.buildSparePartsRequisitionBuffer) throw new Error('Purchase Order Excel export is not available.');
@@ -12700,7 +12700,7 @@ const TVC_SpareMenu = (function () {
         };
     }
 
-    const HQ_IMPORT_TYPES = [
+    const SM_IMPORT_TYPES = [
         { key: 'requisition', label: 'Requisition' },
         { key: 'quotation', label: 'Quotation' },
         { key: 'received', label: 'Received' },
@@ -12737,7 +12737,7 @@ const TVC_SpareMenu = (function () {
                 count: entry.count ?? null,
                 operator_name: user?.display_name || user?.username || '',
                 peer: entry.peer || spareHistPeerLabel({ direction: entry.direction, peer: entry.peer }, user),
-                space: window.TVC_RBAC?.isHqAccount?.(user) ? 'HQ' : 'SHIP',
+                space: window.TVC_RBAC?.isSmAccount?.(user) ? 'SM' : 'SHIP',
                 vessel_id: entry.vessel_id || st.selectedVesselId || user?.vessel_id || null,
                 department: entry.department || st.department || user?.department || null,
             });
@@ -12749,7 +12749,7 @@ const TVC_SpareMenu = (function () {
         const user = st.user;
         let rows = await TVC_DB.getAll('sync_history').catch(() => []);
         rows = rows.filter(r => r.scope === 'SPARE');
-        if (window.TVC_RBAC?.isHqAccount?.(user) && st.selectedVesselId) {
+        if (window.TVC_RBAC?.isSmAccount?.(user) && st.selectedVesselId) {
             rows = rows.filter(r => !r.vessel_id || r.vessel_id === st.selectedVesselId);
         }
         return rows
@@ -12795,7 +12795,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function spareHistTabsForUser(user) {
-        if (window.TVC_RBAC?.isHqAccount?.(user)) {
+        if (window.TVC_RBAC?.isSmAccount?.(user)) {
             return ['requisition', 'quotation', 'evaluation', 'order', 'received', 'inventory'];
         }
         return ['requisition', 'evaluation', 'received', 'inventory'];
@@ -12815,22 +12815,22 @@ const TVC_SpareMenu = (function () {
     }
 
     function spareHistAccountHint(user) {
-        if (window.TVC_RBAC?.isHqAccount?.(user)) {
+        if (window.TVC_RBAC?.isSmAccount?.(user)) {
             return 'SM Mode — shows SPARE Export / Import history for the vessel (Captain).';
         }
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub?.(user)) {
-            return 'Hub (Captain) — shows SPARE Export / Import history with stations and Company (HQ).';
+            return 'Hub (Captain) — shows SPARE Export / Import history with stations and Company (SM).';
         }
-        return 'Confirmer — primarily exports/imports SPARE data with Captain. Company (HQ) packages are also recorded if Captain Hub PC is unavailable.';
+        return 'Confirmer — primarily exports/imports SPARE data with Captain. Company (SM) packages are also recorded if Captain Hub PC is unavailable.';
     }
 
-    /** Vessel SPARE: Master 기본 · HQ 직송은 Company · HQ Mode: Vessel */
+    /** Vessel SPARE: Master 기본 · SM 직송은 Company · SM Mode: Vessel */
     function spareHistPeerLabel(row, user) {
         if (row?.peer) return row.peer;
         if (typeof TVC_App !== 'undefined' && typeof TVC_App.menuHistPeerLabel === 'function') {
             return TVC_App.menuHistPeerLabel(row, user);
         }
-        if (window.TVC_RBAC?.isHqAccount?.(user)) {
+        if (window.TVC_RBAC?.isSmAccount?.(user)) {
             const vid = row?.vessel_id;
             if (vid && vid !== '—') {
                 const fleet = typeof TVC_Fleet !== 'undefined' ? TVC_Fleet.resolveById?.(vid) : null;
@@ -12858,7 +12858,7 @@ const TVC_SpareMenu = (function () {
         const body = document.getElementById('spareSyncBody');
         if (!body) return;
         const st = getState();
-        const isHq = !!(window.TVC_RBAC?.isHqAccount?.(st.user));
+        const isHq = !!(window.TVC_RBAC?.isSmAccount?.(st.user));
         const isMaster = !isHq && isSpareMasterHub(st.user);
         const step = _spareXfer.step || 'mode';
         let content = '';
@@ -12879,7 +12879,7 @@ const TVC_SpareMenu = (function () {
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferOpenReceivedExportList()">Received</button>
                     <button type="button" class="btn spare-sync-btn" onclick="TVC_SpareMenu.spareXferExportInventory()">${esc(SPARE_XFER_MONTHLY_REPORT_LABEL)}</button>`;
             content = `
-                <p class="spare-sync-hint">${isHq ? 'Select the data type to export.' : isMaster ? 'Select the data type to export after import (relay to HQ / Station).' : 'Select the data type to export to Master PC.'}</p>
+                <p class="spare-sync-hint">${isHq ? 'Select the data type to export.' : isMaster ? 'Select the data type to export after import (relay to SM / Station).' : 'Select the data type to export to Master PC.'}</p>
                 <p class="spare-sync-note muted">Exports are saved as <strong>.zip</strong> packages (tvc_spare_sync.json inside), same as PMS.</p>
                 <div class="spare-sync-actions">
                     ${isHq ? hqExportBtns : vesselExportBtns}
@@ -12887,7 +12887,7 @@ const TVC_SpareMenu = (function () {
         } else if (step === 'import') {
             if (isHq) {
                 const hqType = _spareXfer.hqImportType || '';
-                const typeBtns = HQ_IMPORT_TYPES.map(t => `
+                const typeBtns = SM_IMPORT_TYPES.map(t => `
                     <button type="button" class="btn spare-sync-btn spare-sync-check-btn${hqType === t.key ? ' is-checked' : ''}"
                         aria-pressed="${hqType === t.key ? 'true' : 'false'}"
                         onclick="TVC_SpareMenu.spareXferSelectHqImportType('${t.key}')">${esc(t.label)}${hqType === t.key ? ' ✓' : ''}</button>`).join('');
@@ -12997,7 +12997,7 @@ const TVC_SpareMenu = (function () {
 
     function spareXferSelectHqImportType(key) {
         const k = String(key || '');
-        if (!HQ_IMPORT_TYPES.some(t => t.key === k)) return;
+        if (!SM_IMPORT_TYPES.some(t => t.key === k)) return;
         _spareXfer.hqImportType = _spareXfer.hqImportType === k ? null : k;
         renderSpareXferModal();
     }
@@ -13012,7 +13012,7 @@ const TVC_SpareMenu = (function () {
 
     async function spareXferTriggerImport(kind = 'general') {
         const st = getState();
-        const isHq = !!(window.TVC_RBAC?.isHqAccount?.(st.user));
+        const isHq = !!(window.TVC_RBAC?.isSmAccount?.(st.user));
         const isMaster = !isHq && isSpareMasterHub(st.user);
         // Station Import: Evaluation / Inventory 선택 후 Open file
         if (!isHq && !isMaster && _spareXfer.step === 'import') {
@@ -13030,7 +13030,7 @@ const TVC_SpareMenu = (function () {
             }
             kind = _spareXfer.masterImportType;
         }
-        // HQ Import: 유형 선택 후 Open file
+        // SM Import: 유형 선택 후 Open file
         if (isHq && _spareXfer.step === 'import') {
             if (!_spareXfer.hqImportType) {
                 await TVC_Dialog.alert('Select an import type first.');
@@ -13121,7 +13121,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function isVesselOrderImportContext(importKind, category) {
-        if (isReqListHqUser(getState())) return false;
+        if (isReqListSmUser(getState())) return false;
         return importKind === 'evaluation'
             || spareVesselOrderImportCategories().includes(category);
     }
@@ -13130,9 +13130,9 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         const req = getReqWorkSession();
-        if (!req || !isRequisitionListWindow(m) || isReqListHqUser(st)) return false;
-        m.reqWorkHqQuoteView = false;
-        m.reqWorkHqEvalView = false;
+        if (!req || !isRequisitionListWindow(m) || isReqListSmUser(st)) return false;
+        m.reqWorkSmQuoteView = false;
+        m.reqWorkSmEvalView = false;
         const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
         vf.orderImported = true;
         if (!String(_reqWorkDraft.ordered_on || '').trim()) {
@@ -13214,7 +13214,7 @@ const TVC_SpareMenu = (function () {
         if (typeof TVC_License !== 'undefined') {
             await TVC_License.refresh();
             const st = getState();
-            const vesselId = window.TVC_RBAC?.isHqAccount?.(st.user)
+            const vesselId = window.TVC_RBAC?.isSmAccount?.(st.user)
                 ? st.selectedVesselId
                 : (await TVC_DB.getMeta(TVC_META_KEYS.VESSEL_ID));
             const lic = TVC_License.assertExportImport(
@@ -13324,11 +13324,11 @@ const TVC_SpareMenu = (function () {
         render();
         if (isRequisitionListWindow(modState(getState())) && String(_reqWorkDraft?.id) === String(req.id)) {
             await loadRequisitionIntoListWindow(req.id, { preserveHistPopover: true });
-            if (opts.category === SPARE_XFER_EXPORT.RECEIVED && isReqListHqUser(getState())) {
+            if (opts.category === SPARE_XFER_EXPORT.RECEIVED && isReqListSmUser(getState())) {
                 await applyHqReceivedViewState();
-            } else if ((importAsVendor || opts.category === SPARE_XFER_EXPORT.QUOTATION) && isReqListHqUser(getState())) {
+            } else if ((importAsVendor || opts.category === SPARE_XFER_EXPORT.QUOTATION) && isReqListSmUser(getState())) {
                 await applyHqEvaluationViewState();
-            } else if (isReqListHqUser(getState()) && (opts.category === SPARE_XFER_EXPORT.REQUISITION || !importAsVendor)) {
+            } else if (isReqListSmUser(getState()) && (opts.category === SPARE_XFER_EXPORT.REQUISITION || !importAsVendor)) {
                 applyReqWorkHqStageOnLoad(_reqWorkDraft, modState(getState()));
                 syncReqWorkFlowBtns();
             } else if (isVesselOrderImportContext(_spareXfer.importKind || 'evaluation', opts.category)) {
@@ -13378,9 +13378,9 @@ const TVC_SpareMenu = (function () {
             if (target?.id && (isRequisitionListWindow(m) || m.reqListOpen)) {
                 if (isRequisitionListWindow(m)) {
                     await loadRequisitionIntoListWindow(target.id, { preserveHistPopover: true });
-                    if ((importKind === 'received' || category === SPARE_XFER_EXPORT.RECEIVED) && isReqListHqUser(getState())) {
+                    if ((importKind === 'received' || category === SPARE_XFER_EXPORT.RECEIVED) && isReqListSmUser(getState())) {
                         await applyHqReceivedViewState();
-                    } else if ((importKind === 'quotation' || category === SPARE_XFER_EXPORT.QUOTATION || importMode === 'vendor-quote') && isReqListHqUser(getState())) {
+                    } else if ((importKind === 'quotation' || category === SPARE_XFER_EXPORT.QUOTATION || importMode === 'vendor-quote') && isReqListSmUser(getState())) {
                         await applyHqEvaluationViewState();
                     } else if (isVesselOrderImportContext(importKind, category)) {
                         await applyVesselOrderedViewState();
@@ -13407,7 +13407,7 @@ const TVC_SpareMenu = (function () {
 
             if (importKind === 'evaluation') {
                 if (!isSpareEvaluationImportFile(file)) {
-                    await TVC_Dialog.alert('Only order/evaluation files can be uploaded.\n· HQ Order .zip\n· *_ORDER.xlsx / *_EVAL_REPLY.xlsx\n· Assessment .json');
+                    await TVC_Dialog.alert('Only order/evaluation files can be uploaded.\n· SM Order .zip\n· *_ORDER.xlsx / *_EVAL_REPLY.xlsx\n· Assessment .json');
                     return;
                 }
                 if (name.endsWith('.json')) {
@@ -13424,7 +13424,7 @@ const TVC_SpareMenu = (function () {
                     return;
                 }
                 const orderExcel = /_order\.xlsx$/i.test(name);
-                if (!isReqListHqUser(getState())) _reqImportMode = 'hq-adjustment';
+                if (!isReqListSmUser(getState())) _reqImportMode = 'hq-adjustment';
                 await spareXferImportRequisitionExcel(file, {
                     category: orderExcel ? SPARE_XFER_EXPORT.PURCHASE_ORDER : SPARE_XFER_EXPORT.REPLY_EVALUATION,
                     summary: orderExcel ? 'Order imported' : 'Reply Evaluation imported',
@@ -13438,7 +13438,7 @@ const TVC_SpareMenu = (function () {
                     await TVC_Dialog.alert('Requisition Import accepts .xlsx files only.');
                     return;
                 }
-                if (window.TVC_RBAC?.isHqAccount?.(getState().user)) {
+                if (window.TVC_RBAC?.isSmAccount?.(getState().user)) {
                     _reqImportMode = 'hq-adjustment';
                 }
                 await spareXferImportRequisitionExcel(file, {
@@ -13611,8 +13611,8 @@ const TVC_SpareMenu = (function () {
             return;
         }
         reqVesselSetViewFlowStage(m, _reqWorkDraft, 'confirm');
-        m.reqWorkHqQuoteView = false;
-        m.reqWorkHqEvalView = false;
+        m.reqWorkSmQuoteView = false;
+        m.reqWorkSmEvalView = false;
         await refreshReqWorkListUi();
         syncReqWorkFlowBtns();
     }
@@ -13655,8 +13655,8 @@ const TVC_SpareMenu = (function () {
             return;
         }
         reqVesselSetViewFlowStage(m, _reqWorkDraft, 'submitted');
-        m.reqWorkHqQuoteView = false;
-        m.reqWorkHqEvalView = false;
+        m.reqWorkSmQuoteView = false;
+        m.reqWorkSmEvalView = false;
         await refreshReqWorkListUi();
         syncReqWorkFlowBtns();
     }
@@ -13694,8 +13694,8 @@ const TVC_SpareMenu = (function () {
             return;
         }
         reqVesselSetViewFlowStage(m, _reqWorkDraft, 'evaluated');
-        m.reqWorkHqQuoteView = false;
-        m.reqWorkHqEvalView = false;
+        m.reqWorkSmQuoteView = false;
+        m.reqWorkSmEvalView = false;
         await refreshReqWorkListUi();
         syncReqWorkFlowBtns();
     }
@@ -13749,7 +13749,7 @@ const TVC_SpareMenu = (function () {
     async function hqRequisitionView() {
         const m = modState(getState());
         if (!isRequisitionListWindow(m)) return;
-        if (!reqWorkHqRequestQuoteEnabled(m)) await TVC_Dialog.alert('Select a requisition first.');
+        if (!reqWorkSmRequestQuoteEnabled(m)) await TVC_Dialog.alert('Select a requisition first.');
         closeReqQuoteHeadPicks();
         reqHqSetViewFlowStage(m, _reqWorkDraft, 'requisition');
         await refreshReqWorkListUi();
@@ -13763,8 +13763,8 @@ const TVC_SpareMenu = (function () {
             if (isHq) return hqRequestQuotation();
             return;
         }
-        if (!reqWorkHqRequestQuoteEnabled(m)) await TVC_Dialog.alert('Select a requisition first.');
-        if (m.reqWorkHqFlowReqId === _reqWorkDraft?.id && m.reqWorkHqFlowStage === 'request-quote' && m.reqWorkHqQuoteView) {
+        if (!reqWorkSmRequestQuoteEnabled(m)) await TVC_Dialog.alert('Select a requisition first.');
+        if (m.reqWorkSmFlowReqId === _reqWorkDraft?.id && m.reqWorkSmFlowStage === 'request-quote' && m.reqWorkSmQuoteView) {
             syncReqWorkHqFlowBtns();
             return;
         }
@@ -13821,7 +13821,7 @@ const TVC_SpareMenu = (function () {
         }
         const req = getReqWorkSession();
         const labels = reqWorkQuoteFlowLabels();
-        if (!reqWorkHqQuoteSetupReady(req)) {
+        if (!reqWorkSmQuoteSetupReady(req)) {
             await TVC_Dialog.alert(`Complete ${labels.selectVendor} first: select vendor, currency, and check at least one item.`);
             return;
         }
@@ -13838,7 +13838,7 @@ const TVC_SpareMenu = (function () {
     async function hqCheckQuotation() {
         const req = getReqWorkSession();
         const labels = reqWorkQuoteFlowLabels();
-        if (!reqWorkHqQuoteExportComplete(req)) {
+        if (!reqWorkSmQuoteExportComplete(req)) {
             await TVC_Dialog.alert(`Complete ${labels.exportQuote} first: export quotation ZIP before importing vendor quote.`);
             return;
         }
@@ -13850,7 +13850,7 @@ const TVC_SpareMenu = (function () {
     async function hqReplyCompanyAssessment() {
         const m = modState(getState());
         const req = getReqWorkSession();
-        if (!reqWorkHqVendorQuoteImported(req)) {
+        if (!reqWorkSmVendorQuoteImported(req)) {
             await TVC_Dialog.alert('Complete Import Quote first: enter vendor price or import quote.');
             return;
         }
@@ -13865,7 +13865,7 @@ const TVC_SpareMenu = (function () {
         const { isHq } = await vesselScope();
         if (!isHq || !isRequisitionListWindow(m)) await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
         if (!reqWorkListHasDisplayedReq(m)) await TVC_Dialog.alert('Select a requisition first.');
-        if (!reqWorkHqImportQuoteComplete(getReqWorkSession())) {
+        if (!reqWorkSmImportQuoteComplete(getReqWorkSession())) {
             await TVC_Dialog.alert('Complete Import Quote first before Reply Evaluation.');
             return;
         }
@@ -13879,7 +13879,7 @@ const TVC_SpareMenu = (function () {
         const { isHq } = await vesselScope();
         if (!isHq || !isRequisitionListWindow(m)) await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
         if (!reqWorkListHasDisplayedReq(m)) await TVC_Dialog.alert('Select a requisition first.');
-        if (!reqWorkHqEvaluationReady(getReqWorkSession())) {
+        if (!reqWorkSmEvaluationReady(getReqWorkSession())) {
             await TVC_Dialog.alert('Complete Evaluation first before Purchase Order.');
             return;
         }
@@ -13890,7 +13890,7 @@ const TVC_SpareMenu = (function () {
     async function applyHqReceivedViewState() {
         const m = modState(getState());
         const req = getReqWorkSession();
-        if (!req || !isRequisitionListWindow(m) || !isReqListHqUser(getState())) return false;
+        if (!req || !isRequisitionListWindow(m) || !isReqListSmUser(getState())) return false;
         const q = ensureReqWorkQuoteState(_reqWorkDraft);
         q.receivedImported = true;
         reqHqBumpMaxFlowStage(_reqWorkDraft, 'received');
@@ -13905,7 +13905,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         const req = getReqWorkSession();
-        if (!req || !isRequisitionListWindow(m) || !isReqListHqUser(st)) return false;
+        if (!req || !isRequisitionListWindow(m) || !isReqListSmUser(st)) return false;
         const q = ensureReqWorkQuoteState(_reqWorkDraft);
         q.evalActive = true;
         await persistReqWorkHqDraft();
@@ -13923,7 +13923,7 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert('Select a requisition first.');
             return;
         }
-        if (!reqWorkHqFlowStageEnabled(req, 'quoted', true)) {
+        if (!reqWorkSmFlowStageEnabled(req, 'quoted', true)) {
             await TVC_Dialog.alert('Export Req Quote first (Data Export).');
             return;
         }
@@ -13940,7 +13940,7 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert('Select a requisition first.');
             return;
         }
-        if (!reqWorkHqFlowStageEnabled(req, 'ordered', true)) {
+        if (!reqWorkSmFlowStageEnabled(req, 'ordered', true)) {
             await TVC_Dialog.alert('Export Order first (Data Export).');
             return;
         }
@@ -13951,7 +13951,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         const req = getReqWorkSession();
-        if (!req || !isRequisitionListWindow(m) || !isReqListHqUser(st)) return false;
+        if (!req || !isRequisitionListWindow(m) || !isReqListSmUser(st)) return false;
         closeReqQuoteHeadPicks();
         const q = ensureReqWorkQuoteState(_reqWorkDraft);
         q.orderExported = true;
@@ -13965,7 +13965,7 @@ const TVC_SpareMenu = (function () {
 
     async function hqReceivedImportView() {
         const req = getReqWorkSession();
-        if (!reqWorkHqPurchaseOrderExportComplete(req)) {
+        if (!reqWorkSmPurchaseOrderExportComplete(req)) {
             await TVC_Dialog.alert('Export Order first (Data Export).');
             return;
         }
@@ -13981,7 +13981,7 @@ const TVC_SpareMenu = (function () {
             await TVC_Dialog.alert('Select a requisition first.');
             return;
         }
-        if (!reqWorkHqReceivedImportComplete(getReqWorkSession())) {
+        if (!reqWorkSmReceivedImportComplete(getReqWorkSession())) {
             await TVC_Dialog.alert('Import Received data from vessel first (Data Export & Import → Import → Received).');
             return;
         }
@@ -13994,7 +13994,7 @@ const TVC_SpareMenu = (function () {
         const { isHq } = await vesselScope();
         if (!isHq || !isRequisitionListWindow(m)) await TVC_Dialog.alert('Open Requisition List and select a requisition first.');
         if (!reqWorkListHasDisplayedReq(m)) await TVC_Dialog.alert('Select a requisition first.');
-        if (!reqWorkHqReceivedImportComplete(getReqWorkSession())) {
+        if (!reqWorkSmReceivedImportComplete(getReqWorkSession())) {
             await TVC_Dialog.alert('Import Received data from vessel first (Data Export & Import → Import → Received).');
             return;
         }
@@ -14036,12 +14036,12 @@ const TVC_SpareMenu = (function () {
     function renderSpareWorkFlowCard() {
         const st = getState() || {};
         const user = spareInventoryUser(st);
-        const isHq = !!(user && window.TVC_RBAC && TVC_RBAC.isHqAccount(user));
+        const isHq = !!(user && window.TVC_RBAC && TVC_RBAC.isSmAccount(user));
         const canRequisition = canCreateRequisition(st);
         const canModify = canModifySpare(st);
         const canConsume = canCreateConsume(st);
         const canDeliver = canCreateDeliver(st);
-        const canHqImport = !!(window.TVC_RBAC && user && TVC_RBAC.can(user, TVC_RBAC.Action.IMPORT_HQ_SYNC));
+        const canHqImport = !!(window.TVC_RBAC && user && TVC_RBAC.can(user, TVC_RBAC.Action.IMPORT_SM_SYNC));
         const body = renderSpicsMenuHtml({
             canConsume, canDeliver, canRequisition, canHqImport, canModify, user, isHq,
         });
@@ -14103,7 +14103,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function historyReqListToolbarHtml(st, m, allReqs) {
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const isAuthor = isSpareAuthorAccount(spareInventoryUser(st));
         const showConfirm = !isHq && !isAuthor;
         const showCloseOs = !isAuthor;
@@ -14243,7 +14243,7 @@ const TVC_SpareMenu = (function () {
         return !!reqNo || hasLines;
     }
 
-    function reqWorkHqRequestQuoteEnabled(m) {
+    function reqWorkSmRequestQuoteEnabled(m) {
         return isRequisitionListWindow(m) && reqWorkListHasDisplayedReq(m);
     }
 
@@ -14288,20 +14288,20 @@ const TVC_SpareMenu = (function () {
 
     function canModifyReqHistory(st, req) {
         if (!req || !canCreateRequisition(st)) return false;
-        if (!isReqListHqUser(st) && reqVesselReceivedExportComplete(req)) return false;
+        if (!isReqListSmUser(st) && reqVesselReceivedExportComplete(req)) return false;
         if (reqWorkVesselOrderedOrReceivedView()) return false;
         const status = spareListStatus(req);
         if (status === SPARE_LIST_STATUS.APPROVED || req.approved_by || req.approved_at) {
-            return isReqListHqUser(st);
+            return isReqListSmUser(st);
         }
-        if (isReqListHqUser(st)) return true;
+        if (isReqListSmUser(st)) return true;
         return !reqListIsSubmittedForApprove(req);
     }
 
     function reqHistModifyDisabledTitle(st, req) {
         if (canModifyReqHistory(st, req)) return '';
         if (!canCreateRequisition(st)) return 'No permission';
-        if (!isReqListHqUser(st) && reqVesselReceivedExportComplete(req)) {
+        if (!isReqListSmUser(st) && reqVesselReceivedExportComplete(req)) {
             return 'Received data has been exported and cannot be changed.';
         }
         if (reqWorkVesselOrderedOrReceivedView()) return reqWorkVesselPostOrderLockTip();
@@ -14416,7 +14416,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkApprovalActionState(st, req) {
-        const isHqUser = isReqListHqUser(st);
+        const isHqUser = isReqListSmUser(st);
         const appr = reqListApprovalFlags(req);
         const ok = isHqUser
             ? (canApproveRequisition(st, req) || appr.isApproved)
@@ -14451,7 +14451,7 @@ const TVC_SpareMenu = (function () {
             await refreshReqListUi();
             await syncReportedWaitAndRefreshList();
         };
-        if (isReqListHqUser(st)) {
+        if (isReqListSmUser(st)) {
             if (req.approved_by || req.approved_at) {
                 try {
                     req.approved_by = '';
@@ -14505,7 +14505,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         if (!canConfirmRequisition(st, req)) {
-            await TVC_Dialog.alert('Only Reported requisitions can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+            await TVC_Dialog.alert('Only Reported requisitions can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             return;
         }
         try {
@@ -14598,8 +14598,8 @@ const TVC_SpareMenu = (function () {
 
         const base = reqWorkActiveColWidths();
         const baseSum = base.reduce((a, b) => a + b, 0);
-        const mins = reqWorkHqQuoteViewActive() ? SPARE_REQ_QUOTE_COL_MINS : SPARE_REQ_COL_MINS;
-        const flexFloor = reqWorkHqQuoteViewActive()
+        const mins = reqWorkSmQuoteViewActive() ? SPARE_REQ_QUOTE_COL_MINS : SPARE_REQ_COL_MINS;
+        const flexFloor = reqWorkSmQuoteViewActive()
             ? [24, 48, mins[2], 28, 72, 52, mins[6], mins[7], mins[8], mins[9], mins[10], mins[11], mins[12]]
             : [24, 48, mins[2], 28, 72, 52, mins[6], mins[7], mins[8], mins[9], mins[10], mins[11], mins[12], mins[13], mins[14]];
         let scaled = base.map((w, i) => Math.max(mins[i] || 22, Math.round(w * tableW / baseSum)));
@@ -14650,7 +14650,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkGroupListHeadHtml(isFirst) {
-        const quote = reqWorkHqQuoteViewActive();
+        const quote = reqWorkSmQuoteViewActive();
         const req = getReqWorkSession();
         const thead = quote
             ? (isFirst ? spareReqQuoteTableHeadHtml(req) : spareReqQuoteTableHeadGroupHtml())
@@ -14827,8 +14827,8 @@ const TVC_SpareMenu = (function () {
         const user = spareInventoryUser(st);
         if (!String(req.made_by || '').trim()) ensureReqReportedByAuthor(req, user);
         if (!String(req.made_on || '').trim()) req.made_on = reqListReportedDateToday();
-        if (user && TVC_RBAC.isHqAccount(user)) {
-            req.reporter_role = TVC_RBAC.resolveUserRole(user) || user.role || TVC_RBAC.Role.HQ_SUPERVISOR;
+        if (user && TVC_RBAC.isSmAccount(user)) {
+            req.reporter_role = TVC_RBAC.resolveUserRole(user) || user.role || TVC_RBAC.Role.SM_SUPERVISOR;
         } else if (!req.reporter_role && user) {
             req.reporter_role = TVC_RBAC.resolveUserRole(user) || user.role || '';
         }
@@ -14921,7 +14921,7 @@ const TVC_SpareMenu = (function () {
         if (role === 'SHIP_CAPTAIN') return 'Captain';
         if (role === 'SHIP_CO') return 'Chief officer';
         if (role === 'SHIP_CHIEF' || role === 'SHIP_CE') return 'Chief engineer';
-        if (role === 'HQ_SUPERVISOR') return 'Superintendent';
+        if (role === 'SM_SUPERVISOR') return 'Superintendent';
         if (role === 'SHIP_ENGINEER') return 'Engineer';
         if (role === 'SHIP_OFFICER') return 'Officer';
         return user.display_name || '';
@@ -15017,7 +15017,7 @@ const TVC_SpareMenu = (function () {
         const hasLineReceived = (req.lines || []).some(l => Number(l.qty_received) > 0);
         const hasAssessed = !!(req.assessed_on || req.ordered_on)
             || (req.lines || []).some(l => l.qty_approved != null && l.qty_approved !== '')
-            || invStatus === RS.QUOTED || invStatus === RS.HQ_REVIEW || invStatus === RS.APPROVED
+            || invStatus === RS.QUOTED || invStatus === RS.SM_REVIEW || invStatus === RS.APPROVED
             || listStatus === SPARE_LIST_STATUS.APPROVED;
         const isExported = (TVC_Inventory?.isRequisitionSubmittedExport?.(req))
             || invStatus === RS.EXPORTED || invStatus === RS.SUBMITTED;
@@ -15032,14 +15032,14 @@ const TVC_SpareMenu = (function () {
 
     function reqListWorkflowLabel(req) {
         const st = getState();
-        if (!isReqListHqUser(st)) {
+        if (!isReqListSmUser(st)) {
             const phase = reqWorkflowPhase(req);
             if (phase === REQ_LIST_PHASE.RECEIVED && !reqListReceivedDate(req) && !reqVesselReceivedExportComplete(req)) {
                 return 'Partial Recv';
             }
             return reqVesselListWorkflowStatus(req);
         }
-        return reqHqListWorkflowStatus(req);
+        return reqSmListWorkflowStatus(req);
     }
 
     function reqListStatusCell(req, st) {
@@ -15052,7 +15052,7 @@ const TVC_SpareMenu = (function () {
     function reqListMatchesPhase(req, tab, st) {
         if (!tab || tab === REQ_LIST_PHASE.ALL) return true;
         st = st || getState();
-        if (isReqListHqUser(st)) {
+        if (isReqListSmUser(st)) {
             return reqHqListPhaseKey(req) === tab;
         }
         const phase = reqWorkflowPhase(req);
@@ -15075,7 +15075,7 @@ const TVC_SpareMenu = (function () {
     function reqListCanReceivedExport(req) {
         if (!req) return false;
         const st = getState();
-        if (isReqListHqUser(st)) return reqHqListWorkflowStatus(req) === HQ_REQ_LIST_STATUS.RECEIVED;
+        if (isReqListSmUser(st)) return reqSmListWorkflowStatus(req) === SM_REQ_LIST_STATUS.RECEIVED;
         if (reqVesselReceivedExportComplete(req)) return false;
         return reqVesselListWorkflowStatus(req) === VESSEL_REQ_LIST_STATUS.RECEIVED;
     }
@@ -15083,19 +15083,19 @@ const TVC_SpareMenu = (function () {
     function reqListCanQuotationExport(req) {
         if (!req) return false;
         const st = getState();
-        if (isReqListHqUser(st)) return reqListIsHqRequisitionStatus(req);
-        return reqWorkHqQuoteSetupReady(req);
+        if (isReqListSmUser(st)) return reqListIsHqRequisitionStatus(req);
+        return reqWorkSmQuoteSetupReady(req);
     }
 
     function reqListCanReplyEvalExport(req) {
-        return reqWorkHqEvaluationReady(req);
+        return reqWorkSmEvaluationReady(req);
     }
 
     function reqListCanPurchaseOrderExport(req) {
         if (!req) return false;
         const st = getState();
-        if (isReqListHqUser(st)) return reqListIsHqEvaluatingApproved(req);
-        return reqWorkHqEvaluationReady(req);
+        if (isReqListSmUser(st)) return reqListIsHqEvaluatingApproved(req);
+        return reqWorkSmEvaluationReady(req);
     }
 
     function reqListXferExportMeta(kind) {
@@ -15169,14 +15169,14 @@ const TVC_SpareMenu = (function () {
         if (_reqListXferExportKind === 'received') {
             const st = getState();
             const label = reqListDisplayStatusLabel(req, st);
-            if (label === HQ_REQ_LIST_STATUS.RECEIVED || label === 'Received') return 'Not exportable';
+            if (label === SM_REQ_LIST_STATUS.RECEIVED || label === 'Received') return 'Not exportable';
             if (label === 'Partial Recv') return 'Partial Recv — complete received date first';
             return `${label} — only Received status can be exported`;
         }
         if (_reqListXferExportKind === 'quotation') {
             const label = reqListDisplayStatusLabel(req, getState());
-            if (label !== HQ_REQ_LIST_STATUS.REQUISITION) {
-                return `${label} — only ${HQ_REQ_LIST_STATUS.REQUISITION} status can be exported`;
+            if (label !== SM_REQ_LIST_STATUS.REQUISITION) {
+                return `${label} — only ${SM_REQ_LIST_STATUS.REQUISITION} status can be exported`;
             }
             const labels = reqWorkQuoteFlowLabels();
             return `Complete ${labels.selectVendor} (vendor, currency, checked items) first`;
@@ -15186,11 +15186,11 @@ const TVC_SpareMenu = (function () {
         }
         if (_reqListXferExportKind === 'purchase-order') {
             const label = reqListDisplayStatusLabel(req, getState());
-            if (label !== HQ_REQ_LIST_STATUS.EVALUATING) {
-                return `${label} — only ${HQ_REQ_LIST_STATUS.EVALUATING} status can be exported`;
+            if (label !== SM_REQ_LIST_STATUS.EVALUATING) {
+                return `${label} — only ${SM_REQ_LIST_STATUS.EVALUATING} status can be exported`;
             }
             if (!reqListApprovalFlags(req).isApproved) {
-                return `${HQ_REQ_LIST_STATUS.EVALUATING} — Approve first before Order export`;
+                return `${SM_REQ_LIST_STATUS.EVALUATING} — Approve first before Order export`;
             }
             return 'Order export not available';
         }
@@ -15203,7 +15203,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkListConfirmCheckboxEnabled(st, record, listEditing) {
-        if (!record || isReqListHqUser(st)) return false;
+        if (!record || isReqListSmUser(st)) return false;
         const canConfirm = canConfirmRequisition(st, record);
         const canUnconfirm = canUnconfirmRequisition(st, record);
         const m = modState(st);
@@ -15231,7 +15231,7 @@ const TVC_SpareMenu = (function () {
         const hasKey = !!(record?.log_id || record?.id);
         const listMode = !!opts.listMode;
         const listEditing = !!opts.listEditing;
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const canApproveRequisitionNow = canApproveRequisition(st, record);
         const canConfirmNow = hasKey && reqWorkListConfirmCheckboxEnabled(st, record, listEditing);
         const canApproveNow = hasKey && isHq && canApproveRequisitionNow
@@ -15304,20 +15304,20 @@ const TVC_SpareMenu = (function () {
         });
     }
 
-    function reqWorkHqResolvedFlowStage(req) {
+    function reqWorkSmResolvedFlowStage(req) {
         return reqHqStatusFlowStage(req);
     }
 
-    function reqWorkHqActiveFlowStage(m, req) {
-        if (req?.id && m?.reqWorkHqFlowReqId === req.id && m.reqWorkHqFlowStage) {
-            const stage = m.reqWorkHqFlowStage;
-            if (reqWorkHqFlowStageEnabled(req, stage, true)) return stage;
+    function reqWorkSmActiveFlowStage(m, req) {
+        if (req?.id && m?.reqWorkSmFlowReqId === req.id && m.reqWorkSmFlowStage) {
+            const stage = m.reqWorkSmFlowStage;
+            if (reqWorkSmFlowStageEnabled(req, stage, true)) return stage;
         }
         return reqHqStatusFlowStage(req, m);
     }
 
     /** Purchase Order Export 완료 — Received Import 탭 활성화 기준 */
-    function reqWorkHqPurchaseOrderExportComplete(req) {
+    function reqWorkSmPurchaseOrderExportComplete(req) {
         if (!req) return false;
         const q = req?.hq_quote || {};
         if (q.orderExported) return true;
@@ -15325,7 +15325,7 @@ const TVC_SpareMenu = (function () {
         return reqHqFlowStageReached(req, 'ordered');
     }
 
-    function reqWorkHqFlowStageEnabled(req, stage, hasDisplayedReq) {
+    function reqWorkSmFlowStageEnabled(req, stage, hasDisplayedReq) {
         if (!hasDisplayedReq || !req) return false;
         if (reqHqFlowStageReached(req, stage)) return true;
         switch (stage) {
@@ -15333,33 +15333,33 @@ const TVC_SpareMenu = (function () {
             case 'request-quote':
                 return true;
             case 'export-quote':
-                return reqWorkHqQuoteSetupReady(req) || reqWorkHqQuoteExportComplete(req);
+                return reqWorkSmQuoteSetupReady(req) || reqWorkSmQuoteExportComplete(req);
             case 'quoted':
             case 'import-quote':
-                return reqWorkHqQuoteExportComplete(req);
+                return reqWorkSmQuoteExportComplete(req);
             case 'evaluation':
-                return reqWorkHqImportQuoteComplete(req);
+                return reqWorkSmImportQuoteComplete(req);
             case 'purchase-order':
-                return reqWorkHqEvaluationReady(req);
+                return reqWorkSmEvaluationReady(req);
             case 'ordered':
-                return reqWorkHqPurchaseOrderExportComplete(req);
+                return reqWorkSmPurchaseOrderExportComplete(req);
             case 'received-import':
-                return reqWorkHqPurchaseOrderExportComplete(req) && !reqWorkHqReceivedImportComplete(req);
+                return reqWorkSmPurchaseOrderExportComplete(req) && !reqWorkSmReceivedImportComplete(req);
             case 'received':
-                return reqWorkHqReceivedImportComplete(req);
+                return reqWorkSmReceivedImportComplete(req);
             default:
                 return false;
         }
     }
 
-    /** HQ Requisition Work Flow tab labels */
+    /** SM Requisition Work Flow tab labels */
     function reqWorkQuoteFlowLabels() {
         return { selectVendor: 'Select Vendor', exportQuote: 'Req Quote' };
     }
 
     function renderReqWorkVesselWorkflowBar(hasDisplayedReq = false, activeStage = 'report', req = null) {
         const m = modState(getState());
-        if (isReqListHqUser(getState()) || !isRequisitionListWindow(m)) return '';
+        if (isReqListSmUser(getState()) || !isRequisitionListWindow(m)) return '';
         const btn = (stageId, label, onclick, enabled = true, disabledTitle = '') => {
             const activeCls = stageId === activeStage ? ' spare-req-hq-flow-btn-active' : '';
             return `<button type="button" class="spare-req-hq-flow-btn${activeCls}" onclick="${onclick}"${enabled ? '' : ` disabled title="${escAttr(disabledTitle || 'Not available')}"`}${stageId === activeStage ? ' aria-current="step"' : ''}>${esc(label)}</button>`;
@@ -15388,7 +15388,7 @@ const TVC_SpareMenu = (function () {
             btn('received', 'Received', 'TVC_SpareMenu.vesselReceivedView()', receivedOk, receivedOk ? '' : reqVesselReceivedTabHint(req)),
             btnStacked('received-export', '(Data Export)', 'Received', 'TVC_SpareMenu.vesselReceivedExportView()', receivedExportOk, receivedExportOk ? '' : reqVesselReceivedExportTabHint(req)),
         ];
-        return `<div id="reqWorkHqFlowBar" class="spare-req-hq-flow-bar" aria-label="Requisition Work Flow">
+        return `<div id="reqWorkSmFlowBar" class="spare-req-hq-flow-bar" aria-label="Requisition Work Flow">
             <span class="spare-req-hq-flow-title">Requisition Work Flow</span>
             <div class="spare-req-hq-flow-steps" role="tablist">${steps.map((step, i) => (i ? arrow : '') + step).join('')}</div>
         </div>`;
@@ -15398,7 +15398,7 @@ const TVC_SpareMenu = (function () {
         const m = modState(getState());
         if (!isHq || !isRequisitionListWindow(m)) return '';
         const labels = reqWorkQuoteFlowLabels();
-        const activeStage = reqWorkHqActiveFlowStage(m, req);
+        const activeStage = reqWorkSmActiveFlowStage(m, req);
         const btn = (stageId, label, onclick, enabled = true, disabledTitle = '') => {
             const activeCls = stageId === activeStage ? ' spare-req-hq-flow-btn-active' : '';
             return `<button type="button" class="spare-req-hq-flow-btn${activeCls}" onclick="${onclick}"${enabled ? '' : ` disabled title="${escAttr(disabledTitle || 'Not available')}"`}${stageId === activeStage ? ' aria-current="step"' : ''}>${esc(label)}</button>`;
@@ -15409,10 +15409,10 @@ const TVC_SpareMenu = (function () {
         };
         const arrow = '<span class="spare-req-hq-flow-arrow" aria-hidden="true">→</span>';
         const reqOk = hasDisplayedReq;
-        const quoteExported = reqWorkHqQuoteExportComplete(req);
-        const importQuoteDone = reqWorkHqImportQuoteComplete(req);
-        const orderExported = reqWorkHqPurchaseOrderExportComplete(req);
-        const receivedImported = reqWorkHqReceivedImportComplete(req);
+        const quoteExported = reqWorkSmQuoteExportComplete(req);
+        const importQuoteDone = reqWorkSmImportQuoteComplete(req);
+        const orderExported = reqWorkSmPurchaseOrderExportComplete(req);
+        const receivedImported = reqWorkSmReceivedImportComplete(req);
         const exportQuoteHint = 'Complete Select Vendor first: vendor, currency, and checked items';
         const quotedHint = 'Export Req Quote first (Data Export)';
         const importQuoteHint = 'Complete Req Quote export first';
@@ -15425,16 +15425,16 @@ const TVC_SpareMenu = (function () {
         const steps = [
             btn('requisition', 'Requisition', 'TVC_SpareMenu.hqRequisitionView()', reqOk),
             btn('request-quote', labels.selectVendor, 'TVC_SpareMenu.hqRequestQuoteView()', reqOk),
-            btnStacked('export-quote', '(Data Export)', labels.exportQuote, 'TVC_SpareMenu.hqExportQuote()', reqWorkHqFlowStageEnabled(req, 'export-quote', reqOk), reqOk ? exportQuoteHint : 'Select a requisition first'),
-            btn('quoted', 'Reqtd Quote', 'TVC_SpareMenu.hqQuotedView()', reqWorkHqFlowStageEnabled(req, 'quoted', reqOk), quotedHint),
-            btnStacked('import-quote', '(Data Import)', 'Quotation', 'TVC_SpareMenu.hqCheckQuotation()', reqWorkHqFlowStageEnabled(req, 'import-quote', reqOk), importQuoteHint),
-            btn('evaluation', 'Evaluating', 'TVC_SpareMenu.hqReplyCompanyAssessment()', reqWorkHqFlowStageEnabled(req, 'evaluation', reqOk), evalHint),
-            btnStacked('purchase-order', '(Data Export)', 'Order', 'TVC_SpareMenu.hqPurchaseOrder()', reqWorkHqFlowStageEnabled(req, 'purchase-order', reqOk), orderHint),
-            btn('ordered', 'Ordered', 'TVC_SpareMenu.hqOrderedView()', reqWorkHqFlowStageEnabled(req, 'ordered', reqOk), orderedHint),
-            btnStacked('received-import', '(Data Import)', 'Received', 'TVC_SpareMenu.hqReceivedImportView()', reqWorkHqFlowStageEnabled(req, 'received-import', reqOk), receivedImportHint),
-            btn('received', 'Received', 'TVC_SpareMenu.hqReceivedView()', reqWorkHqFlowStageEnabled(req, 'received', reqOk), receivedHint),
+            btnStacked('export-quote', '(Data Export)', labels.exportQuote, 'TVC_SpareMenu.hqExportQuote()', reqWorkSmFlowStageEnabled(req, 'export-quote', reqOk), reqOk ? exportQuoteHint : 'Select a requisition first'),
+            btn('quoted', 'Reqtd Quote', 'TVC_SpareMenu.hqQuotedView()', reqWorkSmFlowStageEnabled(req, 'quoted', reqOk), quotedHint),
+            btnStacked('import-quote', '(Data Import)', 'Quotation', 'TVC_SpareMenu.hqCheckQuotation()', reqWorkSmFlowStageEnabled(req, 'import-quote', reqOk), importQuoteHint),
+            btn('evaluation', 'Evaluating', 'TVC_SpareMenu.hqReplyCompanyAssessment()', reqWorkSmFlowStageEnabled(req, 'evaluation', reqOk), evalHint),
+            btnStacked('purchase-order', '(Data Export)', 'Order', 'TVC_SpareMenu.hqPurchaseOrder()', reqWorkSmFlowStageEnabled(req, 'purchase-order', reqOk), orderHint),
+            btn('ordered', 'Ordered', 'TVC_SpareMenu.hqOrderedView()', reqWorkSmFlowStageEnabled(req, 'ordered', reqOk), orderedHint),
+            btnStacked('received-import', '(Data Import)', 'Received', 'TVC_SpareMenu.hqReceivedImportView()', reqWorkSmFlowStageEnabled(req, 'received-import', reqOk), receivedImportHint),
+            btn('received', 'Received', 'TVC_SpareMenu.hqReceivedView()', reqWorkSmFlowStageEnabled(req, 'received', reqOk), receivedHint),
         ];
-        return `<div id="reqWorkHqFlowBar" class="spare-req-hq-flow-bar" aria-label="Requisition Work Flow">
+        return `<div id="reqWorkSmFlowBar" class="spare-req-hq-flow-bar" aria-label="Requisition Work Flow">
             <span class="spare-req-hq-flow-title">Requisition Work Flow</span>
             <div class="spare-req-hq-flow-steps" role="tablist">${steps.map((step, i) => (i ? arrow : '') + step).join('')}</div>
         </div>`;
@@ -15449,11 +15449,11 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (!isRequisitionListWindow(m)) return;
-        const isHq = isReqListHqUser(st);
-        const bar = document.getElementById('reqWorkHqFlowBar');
-        const hasDisplayedReq = isHq ? reqWorkHqRequestQuoteEnabled(m) : reqWorkListHasDisplayedReq(m);
+        const isHq = isReqListSmUser(st);
+        const bar = document.getElementById('reqWorkSmFlowBar');
+        const hasDisplayedReq = isHq ? reqWorkSmRequestQuoteEnabled(m) : reqWorkListHasDisplayedReq(m);
         const html = isHq
-            ? renderReqWorkHqWorkflowBar(isHq, hasDisplayedReq, !!m.reqWorkHqQuoteView, !!m.reqWorkHqEvalView, _reqWorkDraft)
+            ? renderReqWorkHqWorkflowBar(isHq, hasDisplayedReq, !!m.reqWorkSmQuoteView, !!m.reqWorkSmEvalView, _reqWorkDraft)
             : renderReqWorkVesselWorkflowBar(hasDisplayedReq, reqVesselActiveFlowStage(m, _reqWorkDraft), _reqWorkDraft);
         if (!html) {
             if (bar) bar.remove();
@@ -15490,14 +15490,14 @@ const TVC_SpareMenu = (function () {
         const isApproved = status === SPARE_LIST_STATUS.APPROVED || !!(record?.approved_by || record?.approved_at);
         const hasKey = !!(record?.log_id || record?.id);
         const listEditing = !!opts.listEditing;
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const approvalLive = !listEditing;
         const canUnconfirmNow = hasKey && !isHq && approvalLive
             && isConfirmed && !isApproved
             && !!spareInventoryUser(st)
             && TVC_RBAC.canConfirmDepartment(spareInventoryUser(st), dept);
         const canUnapproveNow = hasKey && isHq && approvalLive
-            && isApproved && TVC_RBAC.canApproveHqReport(spareInventoryUser(st));
+            && isApproved && TVC_RBAC.canApproveSmReport(spareInventoryUser(st));
         const canConfirmNow = canUnconfirmNow
             || (approvalLive && hasKey && consumeLogCanConfirm(st, { ...record, department: dept }));
         const canApproveNow = canUnapproveNow
@@ -15576,7 +15576,7 @@ const TVC_SpareMenu = (function () {
         if (!canConfirmRequisition(st, req)) {
             cfCb.checked = false;
             if (input) input.value = '';
-            await TVC_Dialog.alert('Cannot confirm this requisition. Only Reported requisitions can be confirmed with Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+            await TVC_Dialog.alert('Cannot confirm this requisition. Only Reported requisitions can be confirmed with Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
             return;
         }
         if (spareListStatus(req) === SPARE_LIST_STATUS.CONFIRMED
@@ -15618,7 +15618,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (m.consumeLogListEditing) return;
-        if (isReqListHqUser(st)) {
+        if (isReqListSmUser(st)) {
             cfCb.checked = !!(getConsumeSession()?.confirmed_by || getConsumeSession()?.confirmed_at);
             return;
         }
@@ -15664,7 +15664,7 @@ const TVC_SpareMenu = (function () {
             if (!log || !consumeLogCanConfirm(st, log)) {
                 cfCb.checked = false;
                 if (input) input.value = '';
-                await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission.');
+                await TVC_Dialog.alert('Only Reported logs can be confirmed, and you need Chief Engineer, Chief Officer, Captain, or SM Superintendent permission.');
                 return;
             }
             log.confirmed_by = TVC_RBAC.getDepartmentConfirmLabel(log.department || st.department, user)
@@ -15687,12 +15687,12 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (m.consumeLogListEditing) return;
-        if (!isReqListHqUser(st)) return;
+        if (!isReqListSmUser(st)) return;
         const draft = getConsumeSession();
         const logId = draft?.log_id || m.selectedConsumeLogId;
         const user = spareInventoryUser(st);
         const input = apCb.closest('.wr-maint-approval-item')?.querySelector('.wr-approval-name, .wr-maint-date');
-        if (!logId || !user || !TVC_RBAC.canApproveHqReport(user)) return;
+        if (!logId || !user || !TVC_RBAC.canApproveSmReport(user)) return;
 
         if (!apCb.checked) {
             try {
@@ -15733,7 +15733,7 @@ const TVC_SpareMenu = (function () {
             log.list_status = SPARE_LIST_STATUS.APPROVED;
             await TVC_Inventory.saveConsumeLog(log);
             await reloadConsumeLogKeepView(logId);
-            await TVC_Dialog.alert('Approved by HQ.');
+            await TVC_Dialog.alert('Approved by Superintendent.');
         } catch (e) {
             apCb.checked = false;
             if (input) input.value = '';
@@ -15793,14 +15793,14 @@ const TVC_SpareMenu = (function () {
             }
         }
         const canApprove = prefix === 'reqWork'
-            ? (isReqListHqUser(st) && canApproveRequisition(st, record))
+            ? (isReqListSmUser(st) && canApproveRequisition(st, record))
             : (prefix === 'consumeLog' || prefix === 'consume')
             ? consumeLogCanApprove(st, { ...record, department: dept })
-            : TVC_RBAC.canApproveHqReport(user);
+            : TVC_RBAC.canApproveSmReport(user);
         if (apCb?.checked && !apCb.disabled && canApprove) {
             if (!record.approved_by && !record.approved_at) {
-                // HQ 작성분 직접 Approve 시 Confirmed도 함께 기록
-                if (!record.confirmed_at && !record.confirmed_by && TVC_RBAC.canHqDirectApprove(user, record)) {
+                // SM 작성분 직접 Approve 시 Confirmed도 함께 기록
+                if (!record.confirmed_at && !record.confirmed_by && TVC_RBAC.canSmDirectApprove(user, record)) {
                     record.confirmed_by = prefix === 'reqWork'
                         ? requisitionConfirmByLabel(st, record)
                         : (TVC_RBAC.getDepartmentConfirmLabel(dept) || TVC_RBAC.getRankLabel(user));
@@ -15837,7 +15837,7 @@ const TVC_SpareMenu = (function () {
         }
         if (after === SPARE_LIST_STATUS.CONFIRMED) await TVC_Dialog.alert('Confirmed.');
         else if (after === SPARE_LIST_STATUS.APPROVED) {
-            await TVC_Dialog.alert(kind === 'consume' ? 'Approved by HQ.' : 'Approved by Superintendent.');
+            await TVC_Dialog.alert(kind === 'consume' ? 'Approved by Superintendent.' : 'Approved by Superintendent.');
         }
         return true;
     }
@@ -15856,12 +15856,12 @@ const TVC_SpareMenu = (function () {
         req.req_no = g('reqWorkReqNo').trim();
         req.made_on = g('reqWorkMadeOn');
         ensureReqReportedByAuthor(req, spareInventoryUser(st));
-        if (isReqListHqUser(st)) {
+        if (isReqListSmUser(st)) {
             req.assessed_on = g('reqWorkAssessedOn');
             req.assessed_by = g('reqWorkAssessedBy');
             req.ordered_on = g('reqWorkOrderedOn');
             req.ordered_by = g('reqWorkOrderedBy');
-        } else if (!isReqListHqUser(st) && modState(st).reqWorkVesselFlowStage === 'received'
+        } else if (!isReqListSmUser(st) && modState(st).reqWorkVesselFlowStage === 'received'
             && !reqVesselReceivedExportComplete(req)) {
             const recvDate = g('reqWorkReceivedOn').trim();
             req.received_on = recvDate;
@@ -15876,7 +15876,7 @@ const TVC_SpareMenu = (function () {
         const preview = !!opts.preview;
         const docPreview = !!opts.docPreview;
         const st = getState();
-        const isHq = isReqListHqUser(st);
+        const isHq = isReqListSmUser(st);
         const listMode = !!opts.listMode;
         const listEditing = !!modState(st).reqWorkListEditing;
         const vesselReceivedEdit = reqWorkVesselReceivedRcvdOnlyEdit();
@@ -16114,7 +16114,7 @@ const TVC_SpareMenu = (function () {
         const countLabel = `${reqs.length}${reqs.length !== allReqs.length ? ` / ${allReqs.length}` : ''} item(s)`;
         let headHtml;
         if (listMode) {
-            const isHq = isReqListHqUser(st);
+            const isHq = isReqListSmUser(st);
             const isAuthor = isSpareAuthorAccount(spareInventoryUser(st));
             const showConfirm = !isHq && !isAuthor;
             const showCloseOs = !isAuthor;
@@ -16353,7 +16353,7 @@ const TVC_SpareMenu = (function () {
         const saveQtyBlocked = reqWorkReqQtyValidationActive(m) && !reqWorkSaveQtyValid(m);
         const printPreviewDisabled = listMode && !hasDisplayedReq;
         const canRequisition = canCreateRequisition(st);
-        const isHqListEarly = listMode && !docPreview && isReqListHqUser(st);
+        const isHqListEarly = listMode && !docPreview && isReqListSmUser(st);
         const vesselPostOrder = listMode && !docPreview && !isHqListEarly && reqWorkVesselOrderedOrReceivedView();
         const postOrderTip = escAttr(reqWorkVesselPostOrderLockTip());
         const headNewDisabled = !canRequisition || m.reqWorkListEditing || docPreview || vesselPostOrder;
@@ -16389,10 +16389,10 @@ const TVC_SpareMenu = (function () {
         const listEditing = listMode && !docPreview && !preview && !!m.reqWorkListEditing;
         const postSaveView = listMode && !docPreview && !preview && !listEditing && !fromHistory && !!m.reqWorkPostSaveView;
         const reportChrome = listEditing || postSaveView || fromHistory;
-        const isHqList = listMode && !docPreview && !reportChrome && isReqListHqUser(st);
+        const isHqList = listMode && !docPreview && !reportChrome && isReqListSmUser(st);
         const isVesselList = listMode && !docPreview && !reportChrome && !isHqList;
         const flowBar = isHqList
-            ? renderReqWorkHqWorkflowBar(isHqList, hasDisplayedReq, !!m.reqWorkHqQuoteView, !!m.reqWorkHqEvalView, req)
+            ? renderReqWorkHqWorkflowBar(isHqList, hasDisplayedReq, !!m.reqWorkSmQuoteView, !!m.reqWorkSmEvalView, req)
             : isVesselList
                 ? renderReqWorkVesselWorkflowBar(hasDisplayedReq, reqVesselActiveFlowStage(m, req), req)
                 : '';
@@ -16585,8 +16585,8 @@ const TVC_SpareMenu = (function () {
         m.reqWorkFromHistory = false;
         m.reqWorkPreview = false;
         m.reqWorkListDocPreview = false;
-        m.reqWorkHqQuoteView = false;
-        m.reqWorkHqEvalView = false;
+        m.reqWorkSmQuoteView = false;
+        m.reqWorkSmEvalView = false;
         closeReqQuoteHeadPicks();
         m.reqWorkShowSelectedOnly = !!opts.listMode;
         m.reqWorkCompleted = false;
@@ -16646,8 +16646,8 @@ const TVC_SpareMenu = (function () {
         m.modalSpareGroupKey = null;
         m.reqWorkCompleted = false;
         m.reqWorkLastSavedId = null;
-        m.reqWorkHqQuoteView = false;
-        m.reqWorkHqEvalView = false;
+        m.reqWorkSmQuoteView = false;
+        m.reqWorkSmEvalView = false;
         closeReqQuoteHeadPicks();
         st.requisitionDraft = [];
         _reqWorkDraft = null;
@@ -16742,7 +16742,7 @@ const TVC_SpareMenu = (function () {
             return;
         }
         const displayedEarly = getReqWorkSession();
-        if (!isReqListHqUser(st) && reqVesselReceivedExportComplete(displayedEarly)) {
+        if (!isReqListSmUser(st) && reqVesselReceivedExportComplete(displayedEarly)) {
             await TVC_Dialog.alert('Received data has been exported and cannot be changed.');
             return;
         }
@@ -16822,7 +16822,7 @@ const TVC_SpareMenu = (function () {
         const st = getState();
         const m = modState(st);
         if (m.reqWorkCompleted) return;
-        if (!isReqListHqUser(st) && reqVesselReceivedExportComplete(_reqWorkDraft || getReqWorkSession())) {
+        if (!isReqListSmUser(st) && reqVesselReceivedExportComplete(_reqWorkDraft || getReqWorkSession())) {
             await TVC_Dialog.alert('Received data has been exported and cannot be changed.');
             return;
         }
@@ -16845,7 +16845,7 @@ const TVC_SpareMenu = (function () {
             const cfCb = document.getElementById('reqWorkConfirmedBy');
             pendingConfirm = !!(cfCb?.checked && !cfCb.disabled);
             applySpareApprovalFromUi(_reqWorkDraft, 'reqWork', dept);
-            if (!isReqListHqUser(st) && m.reqWorkVesselFlowStage === 'received') {
+            if (!isReqListSmUser(st) && m.reqWorkVesselFlowStage === 'received') {
                 const vf = ensureReqWorkVesselFlowState(_reqWorkDraft);
                 const hasReceived = (_reqWorkDraft.lines || []).some(l => Number(l.qty_received) > 0);
                 const hasDate = !!String(_reqWorkDraft.received_on || _reqWorkDraft.received_date || '').trim();
@@ -16981,8 +16981,8 @@ const TVC_SpareMenu = (function () {
             return;
         }
         const m = modState(ctx.st);
-        const isHq = !!(window.TVC_RBAC?.isHqAccount?.(ctx.st.user));
-        const activeStage = reqWorkHqActiveFlowStage(m, ctx.req);
+        const isHq = !!(window.TVC_RBAC?.isSmAccount?.(ctx.st.user));
+        const activeStage = reqWorkSmActiveFlowStage(m, ctx.req);
         const hqFormStages = ['requisition', 'evaluation', 'reply-evaluation', 'ordered', 'received'];
         if (isHq && isRequisitionListWindow(m) && hqFormStages.includes(activeStage)) {
             try {
@@ -17094,7 +17094,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function reqWorkRowQtyFocusEnabled() {
-        return reqWorkEditable() || reqWorkHqEvalEditActive() || reqWorkVesselReceivedRcvdOnlyEdit();
+        return reqWorkEditable() || reqWorkSmEvalEditActive() || reqWorkVesselReceivedRcvdOnlyEdit();
     }
 
     function reqWorkEditable() {
@@ -17188,7 +17188,7 @@ const TVC_SpareMenu = (function () {
     }
 
     function focusReqWorkEvalInput(spareId) {
-        if (!spareId || !reqWorkHqEvalEditActive()) return false;
+        if (!spareId || !reqWorkSmEvalEditActive()) return false;
         const table = findReqWorkRowTable(spareId);
         const input = table?.querySelector('.spare-req-eval-qty-input:not([disabled])');
         if (!input) return false;
@@ -17209,7 +17209,7 @@ const TVC_SpareMenu = (function () {
 
     function focusReqWorkQtyInputOnce(spareId) {
         if (reqWorkVesselReceivedRcvdOnlyEdit()) return focusReqWorkReceivedInput(spareId);
-        if (reqWorkHqEvalEditActive()) return focusReqWorkEvalInput(spareId);
+        if (reqWorkSmEvalEditActive()) return focusReqWorkEvalInput(spareId);
         return focusReqWorkRequestInput(spareId);
     }
 
@@ -17282,7 +17282,7 @@ const TVC_SpareMenu = (function () {
         const t = e.target;
         if (!t.closest?.('#reqWorkListScroll')) return;
         if (t.tagName === 'INPUT') {
-            const evalMode = reqWorkHqEvalEditActive();
+            const evalMode = reqWorkSmEvalEditActive();
             const isEvalQty = t.classList.contains('spare-req-eval-qty-input');
             const isRcvdQty = t.classList.contains('spare-req-rcvd-qty-input');
             const isReqQty = t.classList.contains('spare-req-qty-input') && !isEvalQty && !isRcvdQty;
@@ -17322,7 +17322,7 @@ const TVC_SpareMenu = (function () {
     /** Req. 클릭/포커스 시 좌측 체크박스 자동 선택 (라인 생성, DOM만 갱신) */
     function reqWorkEnsureRowChecked(spareId) {
         if (reqWorkVesselOrderedOrReceivedView()) return false;
-        if (reqWorkFormLocked() && !reqWorkHqQuoteViewActive()) return false;
+        if (reqWorkFormLocked() && !reqWorkSmQuoteViewActive()) return false;
         const req = getReqWorkSession();
         if (!req) return false;
         const sid = reqWorkSpareIdKey(spareId);
@@ -17377,8 +17377,8 @@ const TVC_SpareMenu = (function () {
 
     function reqWorkSetRequestQty(spareId, rawQty, opts = {}) {
         if (reqWorkVesselOrderedOrReceivedView()) return;
-        if (reqWorkHqEvalStageActive()) return;
-        if (reqWorkFormLocked() && !reqWorkHqQuoteViewActive()) return;
+        if (reqWorkSmEvalStageActive()) return;
+        if (reqWorkFormLocked() && !reqWorkSmQuoteViewActive()) return;
         const req = getReqWorkSession();
         if (!req) return;
         const sid = reqWorkSpareIdKey(spareId);
@@ -17405,19 +17405,19 @@ const TVC_SpareMenu = (function () {
         } else {
             refreshReqWorkListUiSoft();
         }
-        if (reqWorkHqQuoteViewActive()) syncReqWorkQuoteTotalsDom();
+        if (reqWorkSmQuoteViewActive()) syncReqWorkQuoteTotalsDom();
     }
 
     function reqWorkEvalQtyKeydown(e, spareId) {
         if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
-        if (!reqWorkHqEvalEditActive()) return;
+        if (!reqWorkSmEvalEditActive()) return;
         e.preventDefault();
         e.stopPropagation();
         reqWorkMoveFocusRow(e.key === 'ArrowDown' ? 1 : -1);
     }
 
     function reqWorkSetEvalQty(spareId, rawQty, opts = {}) {
-        if (!reqWorkHqEvalEditActive()) return;
+        if (!reqWorkSmEvalEditActive()) return;
         const req = getReqWorkSession();
         if (!req) return;
         const sid = reqWorkSpareIdKey(spareId);
@@ -17426,7 +17426,7 @@ const TVC_SpareMenu = (function () {
         if (!line) return;
         line.qty_approved = qty;
         syncReqLineMap();
-        if (reqWorkHqQuoteViewActive()) syncReqWorkQuoteTotalsDom();
+        if (reqWorkSmQuoteViewActive()) syncReqWorkQuoteTotalsDom();
         syncReqWorkHqFlowBtns();
         if (opts.syncOnly) return;
         touchReqWorkHqDraft();
@@ -17816,7 +17816,7 @@ const TVC_SpareMenu = (function () {
 
     function isBroadLoginDepartment(dept) {
         const d = String(dept || '').trim().toUpperCase();
-        return !d || d === 'MASTER' || d === 'HQ' || d === 'ADMIN';
+        return !d || d === 'MASTER' || d === 'SM' || d === 'ADMIN';
     }
 
     /** JOB CODE lookup — ENGINE·DECK may share codes; prefer group then department. */
@@ -21088,8 +21088,8 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
             created_by_username: draft.created_by_username
                 || (draft.log_id ? '' : (user?.username || '')),
             reporter_role: draft.reporter_role
-                || (user && TVC_RBAC.isHqAccount(user)
-                    ? (TVC_RBAC.resolveUserRole(user) || user.role || TVC_RBAC.Role.HQ_SUPERVISOR)
+                || (user && TVC_RBAC.isSmAccount(user)
+                    ? (TVC_RBAC.resolveUserRole(user) || user.role || TVC_RBAC.Role.SM_SUPERVISOR)
                     : (user ? (TVC_RBAC.resolveUserRole(user) || user.role || '') : '')),
             sort1: draft.sort1 || '',
             sort2: draft.sort2 || '',
@@ -21733,7 +21733,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         await syncReportedWaitAndRefreshList();
         syncReqWorkListWindowHeadButtons();
         if (reqOsWaived(req)) {
-            await TVC_Dialog.alert('Outstanding quantity closed — approved by HQ.');
+            await TVC_Dialog.alert('Outstanding quantity closed — approved by Superintendent.');
             closeCloseOsModal();
             return;
         }
@@ -22511,7 +22511,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         try {
             _hqAssessment = await TVC_InventoryService.diffHqImport(JSON.parse(await file.text()));
             openAssessmentModal();
-        } catch (e) { await TVC_Dialog.alert('HQ Import JSON failed: ' + (e.message || e)); }
+        } catch (e) { await TVC_Dialog.alert('SM Import JSON failed: ' + (e.message || e)); }
         finally { const fi = document.getElementById('spareHqImportFile'); if (fi) fi.value = ''; }
     }
 
@@ -22526,7 +22526,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         </tr>`).join('') || '<tr><td colspan="6" class="muted" style="text-align:center">No differences</td></tr>';
         body.innerHTML = `
             <button class="modal-x" onclick="TVC_SpareMenu.closeAssessmentModal()">×</button>
-            <h3>Assessment Result (HQ Import Diff)</h3>
+            <h3>Assessment Result (SM Import Diff)</h3>
             <div class="spics-assess-summary">Total: <b>${s.total}</b> · New: <b>${s.newItems}</b> · Stock Δ: <b>${s.stockChanges}</b> · Price Δ: <b>${s.priceChanges}</b></div>
             <div class="spics-tx-lines-wrap"><table class="spics-tx-table"><thead><tr>
                 <th>Type</th><th>Part No</th><th>Name</th><th>Field</th><th>Before</th><th>After</th>
@@ -22558,7 +22558,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     let _shHistoryCacheKey = '';
 
     function spareItemNoteEditDeniedMessage() {
-        return 'Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.';
+        return 'Chief Engineer, Chief Officer, Captain, or SM Superintendent permission required.';
     }
 
     function renderSpareItemNoteAttachmentList(attachments, canRemove) {
@@ -23252,7 +23252,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         if (!body) return;
         const st = getState();
         const user = st.user;
-        const isHq = !!(window.TVC_RBAC?.isHqAccount?.(user));
+        const isHq = !!(window.TVC_RBAC?.isSmAccount?.(user));
         const all = await listSpareDataXferHistory(120);
         const tabKeys = spareHistTabsForUser(user);
         const cat = spareHistNormalizeCategory(_spareHistCategory, user);
@@ -23524,7 +23524,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function openEquipmentListModal() {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or SM Superintendent permission required.');
             return;
         }
         const groupKey = equipmentListGroupKey(st);
@@ -23594,7 +23594,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
         const st = getState();
         const m = modState(st);
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or SM Superintendent permission required.');
             return;
         }
         const groupLabel = equipmentListGroupLabel(st);
@@ -23700,7 +23700,7 @@ ${renderWrSpareMetaHtml(meta, { readonly: ro, allowAdd: !!meta.allowAdd })}
     async function deleteEquipmentListItem(name) {
         const st = getState();
         if (!canEditGroupHeader(st)) {
-            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or HQ Superintendent permission required.');
+            await TVC_Dialog.alert('Chief Engineer, Chief Officer, Captain, or SM Superintendent permission required.');
             return;
         }
         const groupLabel = equipmentListGroupLabel(st);

@@ -505,10 +505,10 @@ body {
 }
 
 /* HQ — Ship List와 메뉴 카드 분리(세로 스택) */
-.hq-left-col {
+.sm-left-col {
     display: flex; flex-direction: column; gap: 16px; min-width: 0; align-self: start;
 }
-.hq-left-col.hidden { display: none !important; }
+.sm-left-col.hidden { display: none !important; }
 .hq-administration-host {
     display: flex;
     flex-direction: column;
@@ -877,7 +877,7 @@ body {
     min-width: 0; max-width: 100%;
 }
 .cmaxs-body > .hist-panel,
-.cmaxs-body > .hq-left-col,
+.cmaxs-body > .sm-left-col,
 .cmaxs-body > .menu-main-col,
 .cmaxs-body > .menu-right-col { min-width: 0; }
 .hist-head {

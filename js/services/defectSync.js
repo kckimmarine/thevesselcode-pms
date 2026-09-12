@@ -1,4 +1,4 @@
-/* Defect Case — Urgent Export (DEFECT_URGENT_TO_HQ) + HQ Reply (DEFECT_REPLY_HQ_TO_SHIP) */
+/* Defect Case — Urgent Export (DEFECT_URGENT_TO_SM) + SM Reply (DEFECT_REPLY_SM_TO_SHIP) */
 const TVC_DefectSync = (function () {
     const now = () => new Date().toISOString();
 
@@ -109,7 +109,7 @@ const TVC_DefectSync = (function () {
                 vessel_id: vesselId,
                 company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
-                direction: 'DEFECT_URGENT_TO_HQ',
+                direction: 'DEFECT_URGENT_TO_SM',
                 package_type: 'DEFECT_CASE',
                 urgency: 'IMMEDIATE',
                 department: primary?.department || user?.department || 'ALL',
@@ -135,15 +135,15 @@ const TVC_DefectSync = (function () {
         return row?.vessel_id
             || await TVC_DefectCaseService.resolveVesselId(user)
             || (typeof TVC_Sync !== 'undefined'
-                ? await TVC_Sync.resolveExpectedVesselId(user, TVC_RBAC.isHqAccount(user))
+                ? await TVC_Sync.resolveExpectedVesselId(user, TVC_RBAC.isSmAccount(user))
                 : null)
             || user?.vessel_id
             || 'UNKNOWN';
     }
 
-    /** scope: engine | deck | hub | engine_hq | deck_hq (HQ reply) */
+    /** scope: engine | deck | hub | engine_hq | deck_hq (SM reply) */
     function resolveExportScope(user, department, { hqReply = false } = {}) {
-        if (TVC_RBAC.isHqAccount(user)) {
+        if (TVC_RBAC.isSmAccount(user)) {
             if (hqReply) {
                 const dept = department
                     || (typeof TVC_App !== 'undefined' ? TVC_App.getAppDepartment?.() : null)
@@ -197,7 +197,7 @@ const TVC_DefectSync = (function () {
                 vessel_id: vesselId,
                 company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
-                direction: 'DEFECT_REPLY_HQ_TO_SHIP',
+                direction: 'DEFECT_REPLY_SM_TO_SHIP',
                 package_type: 'DEFECT_CASE_REPLY',
                 department: primary?.department || user?.department || 'ALL',
                 exported_by: user?.username || '',
@@ -216,16 +216,16 @@ const TVC_DefectSync = (function () {
         for (const id of ids) {
             const row = await TVC_DefectCaseService.get(id);
             if (!row) throw new Error('Defect case not found.');
-            if (!hubForward && TVC_DefectCase.isHqReplyExported(row)) {
-                throw new Error(`${row.case_no}: HQ reply already exported.`);
+            if (!hubForward && TVC_DefectCase.isSmReplyExported(row)) {
+                throw new Error(`${row.case_no}: SM reply already exported.`);
             }
-            if (hubForward && !TVC_DefectCase.isHqReplyStationForwardPending(row)) {
-                throw new Error(`${row.case_no}: HQ reply already forwarded to Station.`);
+            if (hubForward && !TVC_DefectCase.isSmReplyStationForwardPending(row)) {
+                throw new Error(`${row.case_no}: SM reply already forwarded to Station.`);
             }
             if (!hubForward) {
                 const v = TVC_DefectCase.validateHqDefectReplyExport(row);
                 if (!v.ok) {
-                    throw new Error(`${row.case_no}: ${v.missing.join(', ')} required before HQ export.`);
+                    throw new Error(`${row.case_no}: ${v.missing.join(', ')} required before SM export.`);
                 }
             }
             rows.push(row);
@@ -260,14 +260,14 @@ const TVC_DefectSync = (function () {
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
                 type: 'EXPORT',
-                direction: 'DEFECT_REPLY_HQ_TO_SHIP',
+                direction: 'DEFECT_REPLY_SM_TO_SHIP',
                 department: payload.export_meta?.department || 'ALL',
                 vessel_id: payload.export_meta?.vessel_id,
                 filename,
                 ref_key: filename,
                 record_count: rows.length,
                 status: 'SUCCESS',
-                space: 'HQ',
+                space: 'SM',
             });
         }
     }
@@ -285,7 +285,7 @@ const TVC_DefectSync = (function () {
             zip.file(`DEFECT_REPLY_${row.case_no}.html`, buildPrintHtml(row, row.ship_name));
         });
         zip.file('README.txt',
-            `TVC-PMS Defect HQ Reply\nVessel: ${vesselId}\nScope: ${resolveExportScope(user, rows[0]?.department, { hqReply: true })}\nItems: ${rows.length}\nDirection: DEFECT_REPLY_HQ_TO_SHIP\n\nFilename: ${filename}`);
+            `TVC-PMS Defect SM Reply\nVessel: ${vesselId}\nScope: ${resolveExportScope(user, rows[0]?.department, { hqReply: true })}\nItems: ${rows.length}\nDirection: DEFECT_REPLY_SM_TO_SHIP\n\nFilename: ${filename}`);
 
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
@@ -355,14 +355,14 @@ const TVC_DefectSync = (function () {
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
                 type: 'EXPORT',
-                direction: 'DEFECT_URGENT_TO_HQ',
+                direction: 'DEFECT_URGENT_TO_SM',
                 department: payload.export_meta?.department || 'ALL',
                 vessel_id: payload.export_meta?.vessel_id,
                 filename,
                 ref_key: filename,
                 record_count: rows.length,
                 status: 'SUCCESS',
-                space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
+                space: TVC_RBAC.isSmAccount(user) ? 'SM' : 'SHIP',
             });
         }
     }
@@ -386,7 +386,7 @@ const TVC_DefectSync = (function () {
             zip.file(`DEFECT_${row.case_no}.html`, buildPrintHtml(row, row.ship_name));
         });
         zip.file('README.txt',
-            `TVC-PMS Defect Report Export\nVessel: ${vesselId}\nScope: ${resolveExportScope(user, rows[0]?.department)}\nItems: ${rows.length}\nDirection: DEFECT_URGENT_TO_HQ\n\nFilename: ${filename}`);
+            `TVC-PMS Defect Report Export\nVessel: ${vesselId}\nScope: ${resolveExportScope(user, rows[0]?.department)}\nItems: ${rows.length}\nDirection: DEFECT_URGENT_TO_SM\n\nFilename: ${filename}`);
 
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
         await TVC_FileExport.save(blob, filename);
@@ -440,7 +440,7 @@ const TVC_DefectSync = (function () {
                 vessel_id: vesselId,
                 company_id: (typeof TVC_Sync !== 'undefined' && TVC_Sync.licensedCompanyId) ? TVC_Sync.licensedCompanyId() : 'TVC',
                 export_date: now().slice(0, 10),
-                direction: 'DEFECT_CLOSE_HQ_TO_SHIP',
+                direction: 'DEFECT_CLOSE_SM_TO_SHIP',
                 package_type: 'DEFECT_CASE_CLOSE',
                 case_no: caseRow.case_no,
                 exported_by: user?.username || '',
@@ -497,7 +497,7 @@ const TVC_DefectSync = (function () {
                 ref_key: filename,
                 record_count: 1,
                 status: 'SUCCESS',
-                space: TVC_RBAC.isHqAccount(user) ? 'HQ' : 'SHIP',
+                space: TVC_RBAC.isSmAccount(user) ? 'SM' : 'SHIP',
             });
         }
         return { payload, filename };
@@ -512,11 +512,11 @@ const TVC_DefectSync = (function () {
         const isHub = typeof TVC_HubRelay !== 'undefined' && TVC_HubRelay.isHubRelayExport(user);
         const isStation = typeof TVC_Space !== 'undefined' && TVC_Space.isStationPc(user);
         if (isStation) {
-            throw new Error('Station cannot export HQ close-out. Import the Master-forwarded close ZIP.');
+            throw new Error('Station cannot export SM close-out. Import the Master-forwarded close ZIP.');
         }
         if (isHub) {
             if (!TVC_DefectCase.isPhase4CloseForwardPending(row)) {
-                throw new Error(`${row.case_no}: already forwarded to Station, or HQ close ZIP not imported yet.`);
+                throw new Error(`${row.case_no}: already forwarded to Station, or SM close ZIP not imported yet.`);
             }
             TVC_DefectCase.stampPhase4CloseForwarded(row);
         }
@@ -526,7 +526,7 @@ const TVC_DefectSync = (function () {
         const zip = new JSZip();
         zip.file('defect_case_close.json', JSON.stringify(payload, null, 2));
         zip.file(`DEFECT_CLOSE_${row.case_no}.html`, html);
-        zip.file('README.txt', `TVC-PMS Defect Close-out\nCase: ${row.case_no}\nDirection: DEFECT_CLOSE_HQ_TO_SHIP`);
+        zip.file('README.txt', `TVC-PMS Defect Close-out\nCase: ${row.case_no}\nDirection: DEFECT_CLOSE_SM_TO_SHIP`);
 
         const filename = `${payload.export_meta.vessel_id}_DEFECT_CLOSE_${row.case_no}_${exportDate}.zip`;
         const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
@@ -538,14 +538,14 @@ const TVC_DefectSync = (function () {
         if (typeof TVC_Sync !== 'undefined' && TVC_Sync.recordSyncHistory) {
             await TVC_Sync.recordSyncHistory({
                 type: 'EXPORT',
-                direction: 'DEFECT_CLOSE_HQ_TO_SHIP',
+                direction: 'DEFECT_CLOSE_SM_TO_SHIP',
                 department: row.department || 'ALL',
                 vessel_id: payload.export_meta.vessel_id,
                 filename,
                 case_no: row.case_no,
                 record_count: 1,
                 status: 'SUCCESS',
-                space: isHub ? 'SHIP' : 'HQ',
+                space: isHub ? 'SHIP' : 'SM',
             });
         }
         return { payload, filename };
@@ -563,7 +563,7 @@ const TVC_DefectSync = (function () {
                 TVC_DefectCase.clearHubStampForNewOutbound(row);
                 row.sync_status = 'SYNCED';
                 await TVC_DB.put('defect_cases', row);
-            } else if (!isHq && (direction === 'DEFECT_REPLY_HQ_TO_SHIP' || direction === 'HQ_TO_SHIP')) {
+            } else if (!isHq && (direction === 'DEFECT_REPLY_SM_TO_SHIP' || direction === 'SM_TO_SHIP')) {
                 if (row.approved_at || row.approved_by) {
                     if (typeof TVC_DefectCase.applyHqReplyOnShip === 'function') {
                         TVC_DefectCase.applyHqReplyOnShip(row);
@@ -573,10 +573,10 @@ const TVC_DefectSync = (function () {
                     }
                     await TVC_DB.put('defect_cases', row);
                 }
-            } else if (isHub && direction === 'DEFECT_CLOSE_HQ_TO_SHIP') {
+            } else if (isHub && direction === 'DEFECT_CLOSE_SM_TO_SHIP') {
                 TVC_DefectCase.markPhase4CloseForwardPending(row);
                 await TVC_DB.put('defect_cases', row);
-            } else if (!isHq && !isHub && direction === 'DEFECT_CLOSE_HQ_TO_SHIP') {
+            } else if (!isHq && !isHub && direction === 'DEFECT_CLOSE_SM_TO_SHIP') {
                 row.close_forward_pending = false;
                 await TVC_DB.put('defect_cases', row);
             }
@@ -592,13 +592,13 @@ const TVC_DefectSync = (function () {
         const text = await zip.file(jsonName).async('string');
         const payload = JSON.parse(text);
         const direction = payload.export_meta?.direction;
-        const isHq = TVC_RBAC.isHqAccount(user);
+        const isHq = TVC_RBAC.isSmAccount(user);
         const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user);
 
-        const HQ_ONLY = new Set(['DEFECT_URGENT_TO_HQ', 'DEFECT_COMPLETION_TO_HQ']);
-        const SHIP_ONLY = new Set(['DEFECT_REPLY_HQ_TO_SHIP', 'DEFECT_CLOSE_HQ_TO_SHIP']);
-        if (HQ_ONLY.has(direction) && !isHq && !isHub) {
-            throw new Error('This defect package is for HQ or Captain Hub import only.');
+        const SM_ONLY = new Set(['DEFECT_URGENT_TO_SM', 'DEFECT_COMPLETION_TO_SM', 'DEFECT_COMPLETION_TO_HQ']);
+        const SHIP_ONLY = new Set(['DEFECT_REPLY_SM_TO_SHIP', 'DEFECT_CLOSE_SM_TO_SHIP']);
+        if (SM_ONLY.has(direction) && !isHq && !isHub) {
+            throw new Error('This defect package is for SM or Captain Hub import only.');
         }
         if (SHIP_ONLY.has(direction) && isHq) {
             throw new Error('This defect package is for ship import only.');
@@ -626,14 +626,14 @@ const TVC_DefectSync = (function () {
                 filename: file.name || '(defect)',
                 record_count: payload.defect_cases?.length || 0,
                 status: 'SUCCESS',
-                space: isHq ? 'HQ' : 'SHIP',
+                space: isHq ? 'SM' : 'SHIP',
             });
         }
         return payload;
     }
 
     async function stampCaseReportExport(user, caseIds, filename) {
-        const isHq = TVC_RBAC.isHqAccount(user);
+        const isHq = TVC_RBAC.isSmAccount(user);
         const isHub = typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub(user) && !isHq;
         const ts = now();
         for (const id of caseIds || []) {
@@ -641,9 +641,9 @@ const TVC_DefectSync = (function () {
                 let row = await TVC_DefectCaseService.get(id);
                 if (!row) continue;
                 if (isHq) {
-                    if (row.status === TVC_DefectCase.Status.CLOSED && TVC_DefectCase.isHqReplyExported(row)) {
+                    if (row.status === TVC_DefectCase.Status.CLOSED && TVC_DefectCase.isSmReplyExported(row)) {
                         row.sync_status = 'SYNCED';
-                    } else if (!TVC_DefectCase.isHqReplyExported(row)) {
+                    } else if (!TVC_DefectCase.isSmReplyExported(row)) {
                         row.status = TVC_DefectCase.Status.COMPANY_REVIEWED;
                         row.phase2_locked = true;
                         row.hq_reply_exported_at = ts;
@@ -654,7 +654,7 @@ const TVC_DefectSync = (function () {
                     const alreadyForwarded = isHub && !!row.hq_reply_forwarded_at;
                     const completionReady = row.status === TVC_DefectCase.Status.AWAITING_COMPLETION
                         || (row.status === TVC_DefectCase.Status.CLOSED && row.defect_cleared && row.phase3_locked);
-                    if (isHub && TVC_DefectCase.isHqReplyStationForwardPending(row)) {
+                    if (isHub && TVC_DefectCase.isSmReplyStationForwardPending(row)) {
                         TVC_DefectCase.stampHqReplyStationForwarded(row);
                     } else if (alreadyForwarded) {
                         /* Master already stamped HQ-reply forward during Case ZIP */
