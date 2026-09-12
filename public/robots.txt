@@ -5,7 +5,7 @@ Allow: /sitemap-store-1.xml
 Allow: /store/
 Allow: /toolkit
 Allow: /services
-Allow: /pms
+Allow: /sm
 Allow: /contact-us
 
 Sitemap: https://www.thevesselcode.com/sitemap.xml

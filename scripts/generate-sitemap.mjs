@@ -111,7 +111,7 @@ ${sitemapAllowLines.join('\n')}
 Allow: /store/
 Allow: /toolkit
 Allow: /services
-Allow: /pms
+Allow: /sm
 Allow: /contact-us
 
 ${sitemapDirectiveLines.join('\n')}
