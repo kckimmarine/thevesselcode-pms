@@ -36,7 +36,7 @@ const TVC_SupplierWorkspace = (function () {
             {
                 rfq_id: 'RFQ-2026-0142',
                 supplier_id: sid,
-                vessel_name: 'INCHEON CHEMI',
+                vessel_name: 'TVC Voyager',
                 category: 'Spare Parts',
                 inquiry_type: 'Urgent supply',
                 items_count: 6,
@@ -48,7 +48,7 @@ const TVC_SupplierWorkspace = (function () {
             {
                 rfq_id: 'RFQ-2026-0138',
                 supplier_id: sid,
-                vessel_name: 'TVC No1',
+                vessel_name: 'TVC Voyager',
                 category: 'Deck stores',
                 inquiry_type: 'Routine requisition',
                 items_count: 12,
@@ -60,7 +60,7 @@ const TVC_SupplierWorkspace = (function () {
             {
                 rfq_id: 'RFQ-2026-0091',
                 supplier_id: sid,
-                vessel_name: 'INCHEON CHEMI',
+                vessel_name: 'TVC Voyager',
                 category: 'Engine repair',
                 inquiry_type: 'Workshop repair',
                 items_count: 1,

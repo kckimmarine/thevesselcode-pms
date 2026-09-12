@@ -17,7 +17,8 @@ const TVC_RBAC = (function () {
     };
 
     // 승인 권한을 가진 선박 역할 (부서 책임자)
-    const APPROVER_ROLES = new Set(['SHIP_CAPTAIN', 'SHIP_CHIEF', 'SHIP_CO', 'SHIP_CE']);
+    // Captain (hub) is not a dept confirmer — relay only; co/ce approve Deck/Engine
+    const APPROVER_ROLES = new Set(['SHIP_CHIEF', 'SHIP_CO', 'SHIP_CE']);
 
     function isDeckApproverRole(role) {
         return role === Role.SHIP_CAPTAIN || role === Role.SHIP_CO;
@@ -170,16 +171,11 @@ const TVC_RBAC = (function () {
             Action.MODIFY_MAINTENANCE_ITEM,
             Action.SUBMIT_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
         ]),
+        /** Captain Hub — SM ↔ Deck/Engine relay (no dept Confirm/Approve) */
         SHIP_CAPTAIN: new Set([
-            Action.CREATE_DAILY_REPORT, Action.APPROVE_DAILY_REPORT,
-            Action.POSTPONE_DAILY_REPORT, Action.VIEW_INVENTORY,
-            Action.DEDUCT_INVENTORY, Action.MODIFY_INVENTORY,
-            Action.EXECUTE_MAINTENANCE, Action.SUPPLY_PARTS,
-            Action.VIEW_PMS_SCHEDULE, Action.UPDATE_RUN_HOURS,
+            Action.VIEW_INVENTORY, Action.VIEW_PMS_SCHEDULE, Action.VIEW_AUDIT_LOG,
             Action.EXPORT_SHIP_SYNC, Action.IMPORT_SHIP_SYNC,
-            Action.CREATE_REQUISITION, Action.VIEW_AUDIT_LOG,
-            Action.MODIFY_MAINTENANCE_ITEM,
-            Action.SUBMIT_DEFECT_REPORT, Action.IMPORT_DEFECT_URGENT,
+            Action.IMPORT_DEFECT_URGENT,
         ]),
         HQ_SUPERVISOR: new Set([
             Action.CREATE_DAILY_REPORT, Action.EDIT_OWN_PENDING_REPORT,
@@ -399,7 +395,7 @@ const TVC_RBAC = (function () {
         const transitions = {
             SHIP_OFFICER: { REPORTED: [] },
             SHIP_ENGINEER: { REPORTED: [] },
-            SHIP_CAPTAIN: { REPORTED: ['CONFIRMED'] },
+            SHIP_CAPTAIN: { REPORTED: [] },
             SHIP_CO: { REPORTED: ['CONFIRMED'] },
             SHIP_CHIEF: { REPORTED: ['CONFIRMED'] },
             SHIP_CE: { REPORTED: ['CONFIRMED'] },
@@ -569,7 +565,7 @@ const TVC_RBAC = (function () {
     }
 
     /** Work Plan Modify / Append / Delete — ce · co · captain · hq 만 */
-    const MAINT_PLAN_EDITOR_USERNAMES = new Set(['ce', 'co', 'captain', 'hq']);
+    const MAINT_PLAN_EDITOR_USERNAMES = new Set(['ce', 'co', 'hq']);
 
     function isMaintPlanEditor(user) {
         if (!user) return false;

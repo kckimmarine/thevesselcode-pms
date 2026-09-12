@@ -67,7 +67,7 @@ const TVC_VesselProfileSync = (function () {
 
     async function exportZip(user, opts = {}) {
         if (!user || !TVC_RBAC.isHqAccount(user)) {
-            throw Object.assign(new Error('Vessel Profile Export is available in HQ Mode only.'), { code: 'FORBIDDEN' });
+            throw Object.assign(new Error('Vessel Profile Export is available in SM Mode only.'), { code: 'FORBIDDEN' });
         }
         const vesselId = opts.vesselId
             || opts.selectedVesselId

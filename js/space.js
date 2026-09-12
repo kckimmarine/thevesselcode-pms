@@ -192,14 +192,12 @@ const TVC_Space = (function () {
         return TVC_RBAC.canAccessDepartment(user, dept);
     }
 
-    /** Approval: Captain hub → all depts; ECR(C/E) → Engine; CCR(C/O) → Deck */
+    /** Approval: ECR(ce) → Engine; CCR(co) → Deck · Captain hub does not approve */
     function canApproveReport(user, dept) {
         if (!user || !TVC_RBAC.isApprover(user)) return false;
+        if (isCaptainHub(user)) return false;
         dept = String(dept || '').trim().toUpperCase();
         if (!dept) return false;
-        if (isCaptainHub(user)) {
-            return TVC_RBAC.isDeckApproverRole(user.role);
-        }
         const station = getStation(user);
         if (station === Station.ECR) {
             return TVC_RBAC.isEngineApproverRole(user.role) && dept === 'ENGINE';
@@ -248,7 +246,7 @@ const TVC_Space = (function () {
         const station = getStation(user);
         if (station === Station.CCR) return isDeckChief(user);
         if (station === Station.ECR) return isEngineChief(user);
-        if (isCaptainHub(user)) return TVC_RBAC.isDeckApproverRole(user.role);
+        if (isCaptainHub(user)) return true;
         return false;
     }
 
@@ -309,19 +307,19 @@ const TVC_Space = (function () {
         if (isCaptainHub(user)) {
             base.showCaptainDashboard = false;
             base.showHubImport = true;
-            base.showCompanyExport = TVC_RBAC.isDeckApproverRole(user.role);
-            base.showCompanyImport = TVC_RBAC.isDeckApproverRole(user.role);
-            base.showHubStationExport = TVC_RBAC.isApprover(user);
+            base.showCompanyExport = true;
+            base.showCompanyImport = true;
+            base.showHubStationExport = true;
             base.showStationExport = false;
             base.showExportShip = false;
             base.showImportShip = true;
             base.showDataXfer = true;
             base.showOnlineSync = true;
-            base.showApprovalQueue = TVC_RBAC.isApprover(user);
+            base.showApprovalQueue = false;
             base.showDefectReport = true;
             base.showDefectInbox = true;
-            base.showDefectImportUrgent = true;
-            base.showDefectUrgentExport = TVC_RBAC.isApprover(user);
+            base.showDefectImportUrgent = false;
+            base.showDefectUrgentExport = true;
             // Captain Hub aggregates station data — no local RH / Original Plan update
             base.showUpdateWorkPlan = false;
             base.showModifyOriginalPlan = false;

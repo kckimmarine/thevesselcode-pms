@@ -258,6 +258,7 @@ const TVC_App = (function () {
         } catch (e) { console.warn('[SPICS] syncOnBoot', e); }
         try { await TVC_DataPurge.run(); } catch (e) { console.warn('[TVC_DataPurge]', e); }
         try { await TVC_DataPurge.migrateIncheonChemiMasterToTvcNo1Once(); } catch (e) { console.warn('[TVC_DataPurge] master migrate', e); }
+        try { await TVC_DataPurge.migratePilotVesselIdToVoyagerOnce(); } catch (e) { console.warn('[TVC_DataPurge] voyager migrate', e); }
         try {
             const reqPurge = await TVC_DataPurge.purgeAllRequisitionsOnce();
             if (reqPurge?.requisitions) {
@@ -6157,7 +6158,7 @@ const TVC_App = (function () {
     async function menuXferConfirmVesselProfileExport() {
         const user = TVC_Auth.getCurrentUser();
         if (!user || !TVC_RBAC.isHqAccount(user)) {
-            await TVC_Dialog.alert('This action is available in HQ Mode only.');
+            await TVC_Dialog.alert('This action is available in SM Mode only.');
             return;
         }
         if (!state.selectedVesselId) {
@@ -6775,7 +6776,7 @@ const TVC_App = (function () {
                                         ? TVC_Sync.resolveFileDepartment(payload, file.name)
                                         : null),
                             )
-                            : 'Import station export ZIP in Captain Mode or HQ Mode (matching department toggle).'
+                            : 'Import station export ZIP in Captain Mode or SM Mode (matching department toggle).'
                     );
                 }
                 if (TVC_RBAC.isHqAccount(user) && (dir === 'SHIP_TO_HQ' || payload.export_meta?.package_type === 'COMPANY_REPORT')) {
@@ -6907,7 +6908,7 @@ const TVC_App = (function () {
 
     function menuHistAccountHint(user) {
         const kind = menuHistViewerKind(user);
-        if (kind === 'hq') return 'HQ Mode — shows Export / Import history for the vessel (Captain).';
+        if (kind === 'hq') return 'SM Mode — shows Export / Import history for the vessel (Captain).';
         if (kind === 'hub') return 'Hub (Captain) — shows Export / Import history with Engine/Deck stations and Company (HQ).';
         if (kind === 'station') {
             return 'Confirmer — primarily exports/imports with Captain. Company (HQ) packages are also recorded if Captain Hub PC is unavailable.';
@@ -11197,7 +11198,7 @@ const TVC_App = (function () {
         if (ok || state.currentTab === 'actual') renderActualPlan();
     }
 
-    /** HQ Mode — Work Plan Approve (Menu · Work Plan tab) */
+    /** SM Mode — Work Plan Approve (Menu · Work Plan tab) */
     async function approveWorkPlanFromHq() {
         if (!TVC_RBAC.isHqAccount(state.user)) return;
         if (!TVC_RBAC.can(state.user, TVC_RBAC.Action.APPROVE_ORIGINAL_PLAN)) {
@@ -16069,7 +16070,7 @@ const TVC_App = (function () {
         if (!user || !rep || !job) return;
         if (TVC_RBAC.isHqAccount(user)) {
             if (!TVC_RBAC.canApproveHqReport(user)) {
-                await TVC_Dialog.alert('This action is available in HQ Mode only.');
+                await TVC_Dialog.alert('This action is available in SM Mode only.');
                 return;
             }
             if (reportIsApproved(rep)) {

@@ -2884,7 +2884,7 @@ const TVC_DefectReport = (function () {
         if (!row || !user) return;
         if (isHq()) {
             if (!TVC_RBAC.canApproveHqReport(user)) {
-                await TVC_Dialog.alert('This action is available in HQ Mode only.');
+                await TVC_Dialog.alert('This action is available in SM Mode only.');
                 return;
             }
             if (row.approved_at || row.approved_by) {

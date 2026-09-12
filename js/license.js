@@ -1,9 +1,9 @@
 /* THE VESSEL CODE — Renderer license bridge (Electron + browser dev) */
 const TVC_License = (function () {
     const COMPANY_ID = 'TVC';
-    const PILOT_VESSEL_ID = 'TVC No1';
+    const PILOT_VESSEL_ID = 'TVC Voyager';
     const HQ_ALLOWED_VESSEL_IDS = [
-        'TVC No1',
+        'TVC Voyager',
     ];
 
     let _cache = null;
@@ -86,13 +86,13 @@ const TVC_License = (function () {
             if (!st.allowAdmin && !st.allowHq) {
                 return {
                     ok: false,
-                    error: `This installation (${st.skuLabel || st.sku}) is not Admin Mode. Use HQ or Vessel login.`,
+                    error: `This installation (${st.skuLabel || st.sku}) is not Admin Mode. Use SM or Vessel login.`,
                 };
             }
             if (st.allowHq || st.allowAdmin) return { ok: true };
             return {
                 ok: false,
-                error: `This installation (${st.skuLabel || st.sku}) is not Admin Mode. Use HQ or Vessel login.`,
+                error: `This installation (${st.skuLabel || st.sku}) is not Admin Mode. Use SM or Vessel login.`,
             };
         }
         if (adminOnly) {
@@ -122,7 +122,7 @@ const TVC_License = (function () {
         if (isHq) {
             return {
                 ok: false,
-                error: `This installation (${st.skuLabel || st.sku}) is for vessel use only. HQ login is not allowed.`,
+                error: `This installation (${st.skuLabel || st.sku}) is for vessel use only. SM login is not allowed.`,
             };
         }
         const mode = String(loginMode || '').toUpperCase();

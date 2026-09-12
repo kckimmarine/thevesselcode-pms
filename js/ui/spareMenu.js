@@ -9765,7 +9765,7 @@ const TVC_SpareMenu = (function () {
     async function consumeLogReportApprove() {
         const st = getState();
         if (!isReqListHqUser(st)) {
-            await TVC_Dialog.alert('This action is available in HQ Mode only.');
+            await TVC_Dialog.alert('This action is available in SM Mode only.');
         }
         const m = modState(st);
         const { vesselId } = await vesselScope();
@@ -12816,7 +12816,7 @@ const TVC_SpareMenu = (function () {
 
     function spareHistAccountHint(user) {
         if (window.TVC_RBAC?.isHqAccount?.(user)) {
-            return 'HQ Mode — shows SPARE Export / Import history for the vessel (Master).';
+            return 'SM Mode — shows SPARE Export / Import history for the vessel (Captain).';
         }
         if (typeof TVC_Space !== 'undefined' && TVC_Space.isCaptainHub?.(user)) {
             return 'Hub (Captain) — shows SPARE Export / Import history with stations and Company (HQ).';

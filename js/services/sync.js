@@ -101,7 +101,7 @@ const TVC_Sync = (function () {
                 ? 'Deck export is not applied in Engine Mode.'
                 : 'Engine/Deck export is not applied in the other department Mode.';
         return (
-            `Import station export ZIP in Captain Mode or HQ Mode${deptHint}.\n\n`
+            `Import station export ZIP in Captain Mode or SM Mode${deptHint}.\n\n`
             + `${crossDept}\n\n`
             + 'On Engine/Deck station PCs, use Export to send data to Master — do not import station export ZIP here.'
         );
@@ -124,7 +124,7 @@ const TVC_Sync = (function () {
                 throw new Error(stationExportImportDeniedMessage(fileDept));
             }
             if (!isMaster && !isHq) {
-                throw new Error('Station export ZIP can be imported in Captain Mode or HQ Mode.');
+                throw new Error('Station export ZIP can be imported in Captain Mode or SM Mode.');
             }
             if ((isMaster || isHq) && !activeDept) {
                 throw new Error(`Select the ${fileDept ? TVC_RBAC.getDeptLabel(fileDept) : 'Deck or Engine'} department toggle before Import.`);
@@ -707,7 +707,7 @@ const TVC_Sync = (function () {
             }
         } else if (fileDirection === 'STATION_TO_HUB') {
             if (!isHq) {
-                throw new Error('Import Station export ZIP in Captain Mode or HQ Mode.');
+                throw new Error('Import Station export ZIP in Captain Mode or SM Mode.');
             }
         }
 

@@ -18,8 +18,8 @@
       },
       "vessels": [
         {
-          "vessel_id": "TVC No1",
-          "name": "TVC No1",
+          "vessel_id": "TVC Voyager",
+          "name": "TVC Voyager",
           "code": "1",
           "imo_no": "9999999",
           "delivery": "2003-09-18",
