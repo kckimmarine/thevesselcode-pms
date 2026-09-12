@@ -90,6 +90,11 @@
                 <button type="submit" class="login-submit">Sign In</button>
                 <div id="loginErr" class="login-err" role="alert"></div>
             </form>
+            <p class="login-supplier-register-wrap">
+                <button type="button" id="supplierRegisterOpenBtn" class="login-supplier-register-btn">
+                    🤝 Register as Supplier / Partner
+                </button>
+            </p>
             <div id="loginDownloadSection" class="login-download hidden">
                 <button type="button" id="loginDownloadBtn" class="login-download-btn">
                     Download Vessel Mode (PC installer)
@@ -103,9 +108,10 @@
                     <li><b>Master</b> · captain</li>
                     <li><b>Engine</b> · engineer / ce</li>
                     <li><b>Deck</b> · officer / co</li>
-                    <li><b>HQ</b> · hq (company vessels only · Department not required)</li>
-                    <li><b>HQ</b> · tvc (HQ Mode SKU · all company vessels)</li>
-                    <li><b>Admin</b> · tvc (Admin Mode SKU · Department not required)</li>
+                    <li><b>SM / HQ</b> · hq (company vessels · Department not required)</li>
+                    <li><b>SM / HQ</b> · tvc (all company vessels)</li>
+                    <li><b>Supplier</b> · use <b>Register as Supplier / Partner</b> above</li>
+                    <li><b>Admin</b> · admin (Admin Mode · Department not required)</li>
                 </ul>
             </div>
         </div>
@@ -427,9 +433,119 @@
         onchange="TVC_App.menuXferAppUpdateOnSetupFile(this.files &amp;&amp; this.files[0]); this.value='';">
     <input type="file" id="importDefectUrgent" accept=".zip" hidden onchange="TVC_App.handleDefectImport(this.files[0]);this.value=''">
 </div>
+
+<div id="tvc-supplier-workspace" class="tvc-supplier-workspace hidden" aria-label="Supplier Portal">
+    <header class="supplier-header">
+        <div class="supplier-brand">
+            <img class="supplier-logo" src="icons/extracted/desktop-48.png?v=20260804-menu-logo" alt="" width="40" height="40" draggable="false">
+            <div>
+                <div id="supplierPortalTitle" class="supplier-portal-title">SUPPLIER PORTAL</div>
+                <div id="supplierCompanyName" class="supplier-company-name">—</div>
+                <div id="supplierUserIdLine" class="supplier-user-id-line">—</div>
+            </div>
+        </div>
+        <div class="supplier-header-meta">
+            <span id="supplierUserBadge" class="supplier-user-badge">—</span>
+            <button type="button" id="supplierLogoutBtn" class="btn btn-red">End</button>
+        </div>
+    </header>
+    <nav class="supplier-nav" aria-label="Supplier navigation">
+        <button type="button" class="supplier-nav-btn active" data-supplier-view="rfq">📥 RFQ Inbox</button>
+        <button type="button" class="supplier-nav-btn" data-supplier-view="delivery">📦 Delivery / Repair</button>
+        <button type="button" class="supplier-nav-btn" data-supplier-view="invoices">🧾 Invoices</button>
+        <button type="button" class="supplier-nav-btn" data-supplier-view="account">⚙️ Account</button>
+    </nav>
+    <div id="supplierPipeline" class="supplier-pipeline" aria-label="Workflow pipeline">
+        <span class="supplier-pipe-step active" data-pipeline-step="1">1. Quotation</span>
+        <span class="supplier-pipe-arrow" aria-hidden="true">➔</span>
+        <span class="supplier-pipe-step" data-pipeline-step="2">2. Delivery / Repair</span>
+        <span class="supplier-pipe-arrow" aria-hidden="true">➔</span>
+        <span class="supplier-pipe-step" data-pipeline-step="3">3. Receiving</span>
+        <span class="supplier-pipe-arrow" aria-hidden="true">➔</span>
+        <span class="supplier-pipe-step" data-pipeline-step="4">4. Invoice</span>
+    </div>
+    <main id="supplierMainPane" class="supplier-main"></main>
+</div>
+
+<div id="supplierQuoteDrawer" class="supplier-quote-drawer hidden" aria-label="Quotation entry">
+    <div class="supplier-quote-drawer-panel" id="supplierQuoteDrawerBody" onclick="event.stopPropagation()"></div>
+</div>
 </div><!-- /#tvcAppRoot -->
 
 <!-- Modals -->
+<div id="smRfqWorkspaceModal" class="modal hidden" role="dialog" aria-labelledby="smRfqWorkspaceTitle" aria-modal="true">
+    <div class="modal-box sm-rfq-workspace-box" onclick="event.stopPropagation()">
+        <button type="button" id="smRfqWorkspaceClose" class="modal-x" aria-label="Close">×</button>
+        <h3 id="smRfqWorkspaceTitle">SM RFQ Cases → Supplier</h3>
+        <p class="muted">Toss RFQs to registered suppliers, compare quotes, and issue POs.</p>
+        <div class="sm-rfq-layout">
+            <div id="smRfqCaseList" class="sm-rfq-case-list"></div>
+            <div id="smRfqCaseDetail" class="sm-rfq-case-detail"></div>
+        </div>
+    </div>
+</div>
+<div id="smRfqTossModal" class="modal hidden" role="dialog" aria-labelledby="smRfqTossTitle" aria-modal="true">
+    <div class="modal-box" onclick="event.stopPropagation()">
+        <h3 id="smRfqTossTitle">🚀 Toss to Supplier</h3>
+        <div class="login-field">
+            <label for="smRfqTossSupplier">Supplier</label>
+            <select id="smRfqTossSupplier"></select>
+        </div>
+        <div class="login-field">
+            <label for="smRfqTossDeadline">Response deadline</label>
+            <input id="smRfqTossDeadline" type="date" required>
+        </div>
+        <div class="modal-actions">
+            <button type="button" id="smRfqTossCancel" class="btn">Cancel</button>
+            <button type="button" id="smRfqTossConfirm" class="btn btn-green">Send RFQ</button>
+        </div>
+    </div>
+</div>
+<div id="supplier-register-modal" class="modal hidden supplier-register-modal" role="dialog" aria-labelledby="supplierRegisterTitle" aria-modal="true">
+    <div class="modal-box supplier-register-box" onclick="event.stopPropagation()">
+        <button type="button" id="supplierRegisterCloseBtn" class="modal-x" aria-label="Close">×</button>
+        <h3 id="supplierRegisterTitle">Register as Supplier / Partner</h3>
+        <p class="supplier-register-sub muted">Create your Supplier Portal account. Data is stored locally on this device.</p>
+        <form id="supplierRegisterForm" class="supplier-register-form" novalidate>
+            <div class="login-field">
+                <label for="supplierRegUserId">User ID</label>
+                <input id="supplierRegUserId" type="text" autocomplete="username" required maxlength="64">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegPassword">Password</label>
+                <input id="supplierRegPassword" type="password" autocomplete="new-password" required minlength="4">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegCompany">Supplier / Company Name</label>
+                <input id="supplierRegCompany" type="text" autocomplete="organization" required maxlength="120">
+            </div>
+            <fieldset id="supplierRegScope" class="supplier-scope-fieldset">
+                <legend>Business Scope</legend>
+                <label class="login-check"><input type="checkbox" value="spares"> <span>Spares Supply</span></label>
+                <label class="login-check"><input type="checkbox" value="engine"> <span>Engine Repair</span></label>
+                <label class="login-check"><input type="checkbox" value="stores"> <span>Stores</span></label>
+                <label class="login-check"><input type="checkbox" value="electrical"> <span>Electrical</span></label>
+            </fieldset>
+            <div class="login-field">
+                <label for="supplierRegContact">Contact Person</label>
+                <input id="supplierRegContact" type="text" autocomplete="name" required maxlength="80">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegEmail">Contact Email</label>
+                <input id="supplierRegEmail" type="email" autocomplete="email" required maxlength="120">
+            </div>
+            <div class="login-field">
+                <label for="supplierRegPorts">Service Base Ports</label>
+                <input id="supplierRegPorts" type="text" required maxlength="200" placeholder="e.g. Busan, Singapore">
+            </div>
+            <div id="supplierRegErr" class="login-err" role="alert"></div>
+            <div class="modal-actions supplier-register-actions">
+                <button type="button" id="supplierRegisterCancelBtn" class="btn">Cancel</button>
+                <button type="submit" class="btn btn-green">Create Supplier Account</button>
+            </div>
+        </form>
+    </div>
+</div>
 <div id="jobDetailModal" class="modal hidden" onclick="if(event.target===this)TVC_App.closeModal('jobDetailModal')">
     <div class="modal-box"><button class="modal-x" onclick="TVC_App.closeModal('jobDetailModal')">×</button>
         <div id="jobDetailBody"></div>
@@ -873,6 +989,10 @@
 <script src="js/ui/workPermit.js?v=20260902-hq-attach"></script>
 <script src="js/ui/settings.js?v=20260804-settings"></script>
 <script src="js/ui/outstandingTasks.js?v=20260823-monthly-gate"></script>
+<script src="js/services/supplierRfqPipeline.js?v=20260912-rfq-pipeline"></script>
+<script src="js/ui/rfqWorkspace.js?v=20260912-rfq-pipeline"></script>
+<script src="js/ui/supplierWorkspace.js?v=20260912-rfq-pipeline"></script>
+<script src="js/ui/supplierRegister.js?v=20260912-supplier-portal"></script>
 <script src="js/app.js?v=20260903-web-cloud"></script>
 <script src="js/pwa.js?v=20260902-date-picker"></script>
 </body>

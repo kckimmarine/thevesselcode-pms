@@ -11907,3 +11907,147 @@ body.mobile-nav-open .mobile-nav-backdrop { display: block; }
     }
 }
 
+/* ── Supplier Portal (#tvc-supplier-workspace) — isolated from PMS shell ── */
+.tvc-supplier-workspace {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    background: #f4f6f9;
+    color: #1a202c;
+}
+.tvc-supplier-workspace.hidden { display: none !important; }
+.supplier-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.75rem 1.25rem;
+    background: #1a365d;
+    color: #fff;
+}
+.supplier-brand { display: flex; align-items: center; gap: 0.75rem; }
+.supplier-portal-title { font-weight: 700; letter-spacing: 0.04em; font-size: 1.05rem; }
+.supplier-company-name { font-size: 0.9rem; opacity: 0.9; }
+.supplier-header-meta { display: flex; align-items: center; gap: 0.75rem; }
+.supplier-user-badge {
+    font-size: 0.85rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.15);
+}
+.supplier-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding: 0.6rem 1rem;
+    background: #fff;
+    border-bottom: 1px solid #e2e8f0;
+}
+.supplier-nav-btn {
+    border: 1px solid #cbd5e0;
+    background: #fff;
+    border-radius: 6px;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.88rem;
+    cursor: pointer;
+}
+.supplier-nav-btn.active {
+    border-color: #2b6cb0;
+    background: #ebf8ff;
+    color: #2c5282;
+    font-weight: 600;
+}
+.supplier-pipeline {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.65rem 1rem;
+    background: #edf2f7;
+    font-size: 0.82rem;
+}
+.supplier-pipe-step {
+    padding: 0.35rem 0.55rem;
+    border-radius: 4px;
+    background: #fff;
+    border: 1px solid #e2e8f0;
+}
+.supplier-pipe-step.active {
+    border-color: #3182ce;
+    background: #bee3f8;
+    font-weight: 600;
+}
+.supplier-pipe-arrow { opacity: 0.5; }
+.supplier-main { flex: 1; padding: 1rem 1.25rem 2rem; }
+.supplier-panel {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+}
+.supplier-panel-title { margin: 0 0 0.35rem; font-size: 1.1rem; }
+.supplier-panel-sub { margin: 0 0 1rem; }
+.supplier-table-wrap { overflow-x: auto; }
+.supplier-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+.supplier-table th,
+.supplier-table td { border-bottom: 1px solid #e2e8f0; padding: 0.5rem 0.6rem; text-align: left; }
+.supplier-table th { background: #f7fafc; font-weight: 600; }
+.supplier-table td.num { text-align: right; }
+.supplier-empty { text-align: center; color: #718096; padding: 1.5rem !important; }
+.supplier-user-id-line { font-size: 0.82rem; opacity: 0.85; margin-top: 0.15rem; }
+.supplier-account-dl { margin: 0.5rem 0 0; display: grid; grid-template-columns: 9rem 1fr; gap: 0.35rem 1rem; font-size: 0.9rem; }
+.supplier-account-dl dt { font-weight: 600; color: #4a5568; }
+.supplier-account-dl dd { margin: 0; }
+
+.login-supplier-register-wrap { margin: 0.85rem 0 0; text-align: center; }
+.login-supplier-register-btn {
+    background: none;
+    border: none;
+    color: #2b6cb0;
+    font-size: 0.92rem;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0.35rem 0.5rem;
+}
+.login-supplier-register-btn:hover { color: #1a365d; }
+.tvc-feedback-toast.login-toast { bottom: 2.5rem; z-index: 12000; }
+
+.supplier-register-modal .supplier-register-box { max-width: 28rem; width: 96vw; max-height: 90vh; overflow-y: auto; }
+.supplier-register-sub { margin: 0 0 1rem; font-size: 0.88rem; }
+.supplier-register-form .login-field { margin-bottom: 0.65rem; }
+.supplier-scope-fieldset {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem 0.65rem;
+    margin: 0 0 0.65rem;
+}
+.supplier-scope-fieldset legend { font-size: 0.85rem; font-weight: 600; padding: 0 0.25rem; }
+.supplier-scope-fieldset .login-check { display: block; margin: 0.25rem 0; }
+.supplier-register-actions { justify-content: flex-end; gap: 0.5rem; }
+
+
+/* SM RFQ workspace */
+#smRfqWorkspaceModal.modal { z-index: 12000; }
+.sm-rfq-workspace-box { max-width: 960px; width: min(96vw, 960px); max-height: 90vh; overflow: auto; }
+.sm-rfq-layout { display: grid; grid-template-columns: 220px 1fr; gap: 1rem; min-height: 320px; }
+.sm-rfq-case-btn { display: block; width: 100%; text-align: left; padding: 0.5rem 0.65rem; margin-bottom: 0.35rem; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; cursor: pointer; }
+.sm-rfq-case-btn.active { border-color: #2b6cb0; background: #ebf8ff; }
+.sm-rfq-case-id { font-weight: 600; display: block; }
+.sm-rfq-case-meta { font-size: 0.82rem; color: #718096; }
+.sm-rfq-status-pill { display: inline-block; padding: 0.15rem 0.5rem; border-radius: 999px; background: #edf2f7; font-size: 0.8rem; font-weight: 600; }
+.sm-rfq-detail-actions { margin: 1rem 0; }
+.supplier-quote-drawer { position: fixed; inset: 0; z-index: 13000; background: rgba(15, 23, 42, 0.45); display: flex; justify-content: flex-end; }
+.supplier-quote-drawer.hidden { display: none !important; }
+.supplier-quote-drawer-panel { width: min(480px, 100vw); background: #fff; height: 100%; overflow: auto; padding: 1rem 1.25rem 2rem; box-shadow: -4px 0 24px rgba(0,0,0,0.12); }
+.supplier-quote-line { border-bottom: 1px solid #e2e8f0; padding: 0.75rem 0; }
+.supplier-quote-line-fields { display: grid; gap: 0.5rem; margin-top: 0.5rem; font-size: 0.88rem; }
+.supplier-quote-line-fields input, .supplier-quote-line-fields select { width: 100%; max-width: 100%; }
+.supplier-quote-drawer-actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+.login-supplier-register-wrap { margin-top: 0.75rem; text-align: center; }
+.login-supplier-register-btn { background: none; border: none; color: #2b6cb0; cursor: pointer; text-decoration: underline; font-size: 0.9rem; }
+@media (max-width: 768px) {
+    .sm-rfq-layout { grid-template-columns: 1fr; }
+    .supplier-nav { flex-wrap: wrap; }
+    .supplier-quote-drawer-panel { width: 100vw; }
+}

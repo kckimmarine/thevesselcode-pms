@@ -414,6 +414,7 @@ const TVC_App = (function () {
             } catch (e) { console.warn('[TVC] provisioned accounts sync', e); }
 
             try { TVC_Auth.applySavedIdToLoginForm(); } catch (e) { console.warn('[TVC] saved login id', e); }
+            try { TVC_SupplierRegister?.init(); } catch (e) { console.warn('[TVC] supplier register', e); }
 
             ['loginUser', 'loginPass', 'loginDept'].forEach(id => {
                 document.getElementById(id)?.addEventListener('keydown', e => {
@@ -1131,6 +1132,17 @@ const TVC_App = (function () {
     async function onLogin(user) {
         const role = user.role || TVC_RBAC.resolveUserRole(user);
         state.user = role && role !== user.role ? { ...user, role } : user;
+        if (TVC_RBAC.isSupplierAccount?.(state.user)) {
+            stopHqLiveSync();
+            showSupplierApp();
+            try {
+                await TVC_SupplierWorkspace.open(state.user);
+            } catch (e) {
+                console.error('[TVC] supplier workspace', e);
+            }
+            try { TVC_Config?.applyEmbedChrome?.(); } catch (_) {}
+            return;
+        }
         const isSuperHq = TVC_RBAC.isSuperHqAccount?.(state.user);
         const isHq = TVC_RBAC.isHqAccount(state.user);
         // HQ ↔ Ship data stays isolated until Export/Import (ZIP or cloud sync storage).
@@ -1266,15 +1278,36 @@ const TVC_App = (function () {
         if (typeof TVC_HqLiveSync !== 'undefined') TVC_HqLiveSync.stop();
     }
 
+    function showSupplierApp() {
+        document.getElementById('loginScreen')?.classList.add('hidden');
+        document.getElementById('appShell')?.classList.add('hidden');
+        document.getElementById('tvc-supplier-workspace')?.classList.remove('hidden');
+    }
     function showLogin() {
         document.getElementById('appShell')?.classList.add('hidden');
+        document.getElementById('tvc-supplier-workspace')?.classList.add('hidden');
         document.getElementById('loginScreen')?.classList.remove('hidden');
+        if (typeof TVC_SupplierWorkspace !== 'undefined') TVC_SupplierWorkspace.close();
+        TVC_RfqWorkspace?.close?.();
         setLoginBusy(false);
         syncWindowTitle(null);
     }
     function showApp() {
         document.getElementById('loginScreen')?.classList.add('hidden');
+        document.getElementById('tvc-supplier-workspace')?.classList.add('hidden');
         document.getElementById('appShell')?.classList.remove('hidden');
+    }
+
+    async function openSmRfqWorkspace() {
+        if (!state.user || !TVC_RBAC.isHqAccount(state.user)) {
+            await TVC_Dialog.alert('RFQ Cases are available in SM (HQ) Mode only.');
+            return;
+        }
+        if (typeof TVC_RfqWorkspace === 'undefined') {
+            await TVC_Dialog.alert('RFQ workspace is not loaded.');
+            return;
+        }
+        await TVC_RfqWorkspace.open(state.user);
     }
 
     const TAB_RENDERERS = {
@@ -3324,6 +3357,7 @@ const TVC_App = (function () {
         if (isHq) {
             const hqMonthlyItems = [
                 ...(runningHoursMenuVisible() ? [{ label: 'Check Running Hours', tag: 'C', action: "TVC_App.menuAction('runHour')" }] : []),
+                { label: 'RFQ Cases → Supplier', tag: 'S', action: 'TVC_App.openSmRfqWorkspace()' },
             ];
             const sections = [
                 { key: 'daily', tone: 'daily', title: 'Routine Tasks', items: hqDailyItems },
@@ -9935,6 +9969,7 @@ const TVC_App = (function () {
                 });
                 break;
             case 'backup': openMasterBackupModal('pms'); break;
+            case 'smRfq': void openSmRfqWorkspace(); break;
             case 'defectReport':
                 openNewDefectReportInput();
                 break;
@@ -18792,7 +18827,7 @@ const TVC_App = (function () {
 
     return {
         boot, switchTab, navigate,
-        setDepartment, setCaptainView, setHistView, setHistTab, menuAction, resolveDeptPick,
+        setDepartment, setCaptainView, setHistView, setHistTab, menuAction, openSmRfqWorkspace, resolveDeptPick,
         setFleetView, setFleetSearch, setFleetCompanyFilter, selectVessel,
         openVesselDocsModal, uploadVesselDocsAttachment, removeVesselDocsAttachment,
         setAdminSearch, selectAdminCompany, selectAdminVessel,

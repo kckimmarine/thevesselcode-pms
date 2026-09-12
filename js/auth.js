@@ -125,6 +125,114 @@ const TVC_Auth = (function () {
         return hashPassword(password);
     }
 
+    function normalizeSupplierUsername(raw) {
+        return String(raw || '').trim();
+    }
+
+    function isUsernameTaken(users, username) {
+        const key = normalizeSupplierUsername(username).toLowerCase();
+        if (!key) return true;
+        return users.some(u => u.is_active
+            && normalizeSupplierUsername(u.username).toLowerCase() === key);
+    }
+
+    function makeSupplierId() {
+        const stamp = Date.now().toString(36);
+        const rand = Math.random().toString(36).slice(2, 8);
+        return `SUP_${stamp}_${rand}`.toUpperCase();
+    }
+
+    function slugUserId(username) {
+        return normalizeSupplierUsername(username).replace(/[^a-zA-Z0-9._-]+/g, '_').slice(0, 48) || 'supplier';
+    }
+
+    async function registerSupplier(payload) {
+        const username = normalizeSupplierUsername(payload?.username);
+        const password = String(payload?.password || '');
+        const companyName = String(payload?.company_name || '').trim();
+        const contactPerson = String(payload?.contact_person || '').trim();
+        const contactEmail = String(payload?.contact_email || '').trim().toLowerCase();
+        const servicePorts = String(payload?.service_ports || '').trim();
+        const businessScope = Array.isArray(payload?.business_scope)
+            ? payload.business_scope.map(s => String(s).trim()).filter(Boolean)
+            : [];
+
+        if (!username || username.length < 2) {
+            return { ok: false, error: 'User ID must be at least 2 characters.' };
+        }
+        if (!/^[a-zA-Z0-9._@-]+$/.test(username)) {
+            return { ok: false, error: 'User ID may only use letters, numbers, and . _ @ -' };
+        }
+        if (!password || password.length < 4) {
+            return { ok: false, error: 'Password must be at least 4 characters.' };
+        }
+        if (!companyName) return { ok: false, error: 'Supplier / Company Name is required.' };
+        if (!businessScope.length) {
+            return { ok: false, error: 'Select at least one Business Scope.' };
+        }
+        if (!contactPerson) return { ok: false, error: 'Contact Person is required.' };
+        if (!contactEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contactEmail)) {
+            return { ok: false, error: 'Enter a valid contact email.' };
+        }
+        if (!servicePorts) return { ok: false, error: 'Service Base Ports are required.' };
+
+        const users = await TVC_DB.getAll('users');
+        if (isUsernameTaken(users, username)) {
+            return { ok: false, error: 'This User ID is already registered.' };
+        }
+
+        const supplierId = makeSupplierId();
+        const userId = `supplier-${slugUserId(username)}`;
+        const password_hash = await hashPassword(password);
+        const now = new Date().toISOString();
+
+        const profile = {
+            supplier_id: supplierId,
+            username,
+            company_name: companyName,
+            business_scope: businessScope,
+            contact_person: contactPerson,
+            contact_email: contactEmail,
+            service_ports: servicePorts,
+            sync_status: 'local',
+            updated_at: now,
+            created_at: now,
+        };
+
+        await TVC_DB.put('supplier_profiles', profile);
+        await TVC_DB.put('users', {
+            id: userId,
+            username,
+            display_name: companyName,
+            password_hash,
+            account_type: 'SUPPLIER',
+            role: 'SUPPLIER',
+            department: null,
+            vessel_id: null,
+            supplier_id: supplierId,
+            company_name: companyName,
+            contact_person: contactPerson,
+            contact_email: contactEmail,
+            business_scope: businessScope,
+            service_ports: servicePorts,
+            is_active: true,
+        });
+
+        return { ok: true, username };
+    }
+
+    function portalSessionFields(user, supplierProfile) {
+        const base = {
+            supplier_id: user.supplier_id || null,
+            company_name: supplierProfile?.company_name || user.company_name || null,
+            contact_person: supplierProfile?.contact_person || user.contact_person || null,
+            contact_email: supplierProfile?.contact_email || user.contact_email || null,
+            business_scope: supplierProfile?.business_scope || user.business_scope || null,
+            service_ports: supplierProfile?.service_ports || user.service_ports || null,
+        };
+        return base;
+    }
+
     async function refreshSessionFromDb() {
         const session = getCurrentUser();
         if (!session) return null;
@@ -139,14 +247,21 @@ const TVC_Auth = (function () {
         } else {
             station = session.station || null;
         }
+        let supplierProfile = null;
+        if (user.account_type === 'SUPPLIER' && user.supplier_id) {
+            supplierProfile = await TVC_DB.get('supplier_profiles', user.supplier_id).catch(() => null);
+        }
+        const portal = portalSessionFields(user, supplierProfile);
         const updated = {
             ...session,
             role,
             account_type: user.account_type,
-            department: (user.account_type === 'HQ' || user.account_type === 'ADMIN') ? null : user.department,
+            department: (user.account_type === 'HQ' || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER')
+                ? null : user.department,
             display_name: user.display_name,
             vessel_id: user.vessel_id,
             company_id: user.company_id || null,
+            ...portal,
             station,
             login_mode: session.login_mode || null,
         };
@@ -179,6 +294,25 @@ const TVC_Auth = (function () {
             await TVC_License.refresh();
             const licCheck = TVC_License.assertLoginMode(loginMode, user.account_type);
             if (!licCheck.ok) return licCheck;
+        }
+
+        if (user.account_type === 'SUPPLIER') {
+            if (loginMode) {
+                return { ok: false, error: 'Supplier accounts must sign in without selecting a Department.' };
+            }
+            let supplierProfile = null;
+            if (user.supplier_id) {
+                supplierProfile = await TVC_DB.get('supplier_profiles', user.supplier_id).catch(() => null);
+            }
+            const session = {
+                id: user.id, username: user.username, display_name: user.display_name,
+                account_type: user.account_type, role: sessionRole,
+                department: null, vessel_id: null, company_id: null,
+                station: null, login_mode: null,
+                ...portalSessionFields(user, supplierProfile),
+            };
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+            return { ok: true, user: session };
         }
 
         if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
@@ -309,6 +443,22 @@ const TVC_Auth = (function () {
             }
         }
 
+        if (user.account_type === 'SUPPLIER') {
+            let supplierProfile = null;
+            if (user.supplier_id) {
+                supplierProfile = await TVC_DB.get('supplier_profiles', user.supplier_id).catch(() => null);
+            }
+            const session = {
+                id: user.id, username: user.username, display_name: user.display_name,
+                account_type: user.account_type, role: sessionRole,
+                department: null, vessel_id: null, company_id: null,
+                station: null, login_mode: null,
+                ...portalSessionFields(user, supplierProfile),
+            };
+            sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+            return session;
+        }
+
         if (user.account_type === 'HQ' || user.account_type === 'ADMIN') {
             const session = {
                 id: user.id, username: user.username, display_name: user.display_name,
@@ -391,7 +541,7 @@ const TVC_Auth = (function () {
     }
 
     return {
-        initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, changePassword,
+        initUsers, login, logout, getCurrentUser, refreshSessionFromDb, requirePermission, changePassword, registerSupplier,
         upsertProvisionedUser, hashPasswordForProvision, DEMO_PASSWORD, DEFAULT_USERS,
         getSavedId, setSavedId, clearSavedId, savePersistedAuthSession, clearPersistedAuthSession,
         hasPersistedAuthSession, applySavedIdToLoginForm, restorePersistedAuthSession,
