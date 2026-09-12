@@ -123,6 +123,13 @@ const TVC_Auth = (function () {
         return hashPassword(password);
     }
 
+    function isCompanyPortalAccountType(accountType) {
+        const t = (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeAccountType)
+            ? TVC_RBAC.normalizeAccountType(accountType)
+            : String(accountType || '').toUpperCase();
+        return t === 'SM' || t === 'ADMIN' || t === 'SUPPLIER';
+    }
+
     async function refreshSessionFromDb() {
         const session = getCurrentUser();
         if (!session) return null;
@@ -141,12 +148,16 @@ const TVC_Auth = (function () {
         } else {
             station = session.station || null;
         }
-        const updated = {
+        const account_type = (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeAccountType)
+            ? TVC_RBAC.normalizeAccountType(user.account_type)
+            : user.account_type;
+        const updated = normalizeSessionUser({
             ...session,
-            role,
-            account_type: user.account_type,
-            department: (user.account_type === 'SM' || user.account_type === 'SM'
-                || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER')
+            role: (typeof TVC_LegacySm !== 'undefined' && TVC_LegacySm.normalizeRole)
+                ? TVC_LegacySm.normalizeRole(role)
+                : role,
+            account_type,
+            department: isCompanyPortalAccountType(account_type)
                 ? null : user.department,
             display_name: user.display_name,
             vessel_id: user.vessel_id,
@@ -159,8 +170,8 @@ const TVC_Auth = (function () {
             service_ports: supplierProfile?.service_ports || user.service_ports || null,
             station,
             login_mode: session.login_mode || null,
-        };
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(updated));
+        });
+        persistSession(updated);
         return updated;
     }
 
@@ -264,10 +275,34 @@ const TVC_Auth = (function () {
         return { ok: true, username };
     }
 
+    function normalizeSessionUser(session) {
+        if (!session || typeof session !== 'object') return session;
+        let account_type = session.account_type;
+        let role = session.role;
+        if (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeAccountType) {
+            account_type = TVC_RBAC.normalizeAccountType(account_type);
+        } else if (String(account_type || '').toUpperCase() === 'HQ') {
+            account_type = 'SM';
+        }
+        if (typeof TVC_LegacySm !== 'undefined' && TVC_LegacySm.normalizeRole) {
+            role = TVC_LegacySm.normalizeRole(role);
+        }
+        if (account_type === session.account_type && role === session.role) return session;
+        return { ...session, account_type, role };
+    }
+
+    function persistSession(session) {
+        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    }
+
     function getCurrentUser() {
         try {
             const raw = sessionStorage.getItem(SESSION_KEY);
-            return raw ? JSON.parse(raw) : null;
+            if (!raw) return null;
+            const parsed = JSON.parse(raw);
+            const normalized = normalizeSessionUser(parsed);
+            if (normalized !== parsed) persistSession(normalized);
+            return normalized;
         } catch { return null; }
     }
 
@@ -291,21 +326,23 @@ const TVC_Auth = (function () {
             if (!licCheck.ok) return licCheck;
         }
 
-        if (user.account_type === 'SM' || user.account_type === 'SM'
-            || user.account_type === 'ADMIN' || user.account_type === 'SUPPLIER') {
+        const accountType = (typeof TVC_RBAC !== 'undefined' && TVC_RBAC.normalizeAccountType)
+            ? TVC_RBAC.normalizeAccountType(user.account_type)
+            : user.account_type;
+        if (isCompanyPortalAccountType(accountType)) {
             if (loginMode) {
                 return {
                     ok: false,
-                    error: user.account_type === 'ADMIN'
+                    error: accountType === 'ADMIN'
                         ? 'Admin accounts must sign in without selecting a Department.'
-                        : (user.account_type === 'SUPPLIER'
+                        : (accountType === 'SUPPLIER'
                             ? 'Supplier accounts must sign in without selecting a Department.'
                             : 'Superintendent accounts must sign in without selecting a Department.'),
                 };
             }
-            const session = {
+            const session = normalizeSessionUser({
                 id: user.id, username: user.username, display_name: user.display_name,
-                account_type: user.account_type, role: sessionRole,
+                account_type: accountType, role: sessionRole,
                 department: null, vessel_id: user.vessel_id, company_id: user.company_id || null,
                 supplier_id: user.supplier_id || null,
                 company_name: user.company_name || user.display_name || null,
@@ -314,8 +351,8 @@ const TVC_Auth = (function () {
                 business_scope: user.business_scope || null,
                 service_ports: user.service_ports || null,
                 station: null, login_mode: null,
-            };
-            sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+            });
+            persistSession(session);
             return { ok: true, user: session };
         }
 
@@ -328,13 +365,13 @@ const TVC_Auth = (function () {
             return { ok: false, error: 'Select Department (Captain / Deck / Engine).' };
         }
 
-        const session = {
+        const session = normalizeSessionUser({
             id: user.id, username: user.username, display_name: user.display_name,
-            account_type: user.account_type, role: sessionRole,
+            account_type: accountType, role: sessionRole,
             department: user.department, vessel_id: user.vessel_id,
             station: station || null, login_mode: loginMode || null,
-        };
-        sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+        });
+        persistSession(session);
         return { ok: true, user: session };
     }
 

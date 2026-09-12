@@ -773,11 +773,14 @@ const TVC_RBAC = (function () {
         return false;
     }
 
+    /** @deprecated Use isSmAccount */
+    function isHqAccount(user) { return isSmAccount(user); }
+
     return {
         AccountType, Role, Department, ReportStatus, Action,
         can, assert, getUiFeatures, canTransitionReport, assertReportTransition, getRoleLabel, getRankLabel, getDeptLabel, getAccountTitle, getReportedByLabel, getReportedByLabelForAuthor, getReportedByLabelForWorkReport, getReportedByLabelForRecord, normalizeReportedByLabel,
         getDepartmentConfirmLabel, getConfirmByStoredLabel, resolveConfirmByLabel, canModifyDeleteListReport,
-        isShipAccount, isSmAccount, isSuperSmAccount, isAdminAccount, isTvcPilotAccount, isPms21Account, isFleetMonitorAccount, canMasterExcelAccount, isCompanySmAccount, isSupplierAccount, isSmSku, isApprover,
+        isShipAccount, isSmAccount, isHqAccount, isSuperSmAccount, isAdminAccount, isTvcPilotAccount, isPms21Account, isFleetMonitorAccount, canMasterExcelAccount, isCompanySmAccount, isSupplierAccount, isSmSku, isApprover,
         isDeckApproverRole, isEngineApproverRole, isShipAuthorRole,
         canModifyOriginalPlan, assertModifyOriginalPlan, isMaintPlanEditor,
         canModifySpareInventory, resolveUserRole,
